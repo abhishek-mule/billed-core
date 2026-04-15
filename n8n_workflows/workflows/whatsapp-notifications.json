@@ -1,0 +1,156 @@
+{
+  "name": "WhatsApp Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-notify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - WhatsApp Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "whatsapp-notify"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse notification type and prepare message\nconst body = $input.first().json;\nconst notificationType = body.type || 'welcome';\n\nconst templates = {\n  welcome: {\n    template: 'billed_welcome',\n    message: `Namaste {{1}}! 🎉\n\nAapki shop \"{{2}}\" Billed par live hai!\n\n🌐 URL: {{3}}\n📧 Email: {{4}}\n\nStart billing now!`,\n    params: ['ownerName', 'shopName', 'siteUrl', 'email']\n  },\n  credentials: {\n    template: 'billed_credentials',\n    message: `🔐 Billed Login Credentials\n\n🌐 URL: {{1}}\n📧 Email: {{2}}\n🔑 Password: {{3}}\n\nPlease change password after login.`,\n    params: ['siteUrl', 'email', 'password']\n  },\n  dailySummary: {\n    template: 'billed_daily_summary',\n    message: `📊 Daily Sales Summary - {{1}}\n\n💰 Total Sales: ₹{{2}}\n📄 Invoices: {{3}}\n🏆 Top Item: {{4}}\n\nView detailed reports: {{1}}`,\n    params: ['shopName', 'totalSales', 'invoiceCount', 'topItem']\n  },\n  lowStock: {\n    template: 'billed_low_stock',\n    message: `⚠️ Low Stock Alert - {{1}}\n\n📦 Item: {{2}}\n📊 Current Stock: {{3}}\n🔔 Reorder Level: {{4}}\n\nReorder now to avoid stockouts!`,\n    params: ['shopName', 'itemName', 'currentStock', 'reorderLevel']\n  },\n  planExpiry: {\n    template: 'billed_plan_expiry',\n    message: `⏰ Plan Expiry Reminder - {{1}}\n\n📋 Your {{2}} plan expires on {{3}}\n\nRenew now to continue uninterrupted service.\n\nVisit: billed.in/renew`,\n    params: ['shopName', 'planName', 'expiryDate']\n  }\n};\n\nconst template = templates[notificationType] || templates.welcome;\n\n// Format phone number\nconst rawPhone = body.phone || '';\nconst phone = rawPhone.startsWith('91') ? rawPhone : '91' + rawPhone.replace(/\\D/g, '');\n\nreturn {\n  json: {\n    ...body,\n    notificationType,\n    phone,\n    templateName: template.template,\n    templateParams: [\n      body.ownerName || body.params?.[0] || '',\n      body.shopName || body.params?.[1] || '',\n      body.siteUrl || body.params?.[2] || '',\n      body.email || body.params?.[3] || ''\n    ],\n    message: template.message.replace(\n      /\\{\\{(\\d+)\\}\\}/g,\n      (_, idx) => body[template.params[parseInt(idx) - 1]] || body.params?.[parseInt(idx) - 1] || ''\n    )\n  }\n};"
+      },
+      "id": "parse-notification",
+      "name": "Parse Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.gupshup.io/failsafe/wam/sendTemplateMessage",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "api_key", "value": "={{ $env.GUPSHUP_API_KEY }}" },
+            { "name": "destination", "value": "={{ $json.phone }}" },
+            { "name": "template_id", "value": "={{ $json.templateName }}" },
+            { "name": "params", "value": "={{ $json.templateParams.join(',') }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "gupshup-send",
+      "name": "Send via Gupshup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Notification sent', messageId: $json.messageId } }}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: 'Failed to send notification' } }}"
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format phone for Twilio\nconst body = $input.first().json;\nconst phone = body.phone.startsWith('91') ? body.phone : '91' + body.phone.replace(/\\D/g, '');\n\nreturn {\n  json: {\n    ...body,\n    twilioPhone: '+' + phone\n  }\n};"
+      },
+      "id": "format-twilio",
+      "name": "Format for Twilio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.twilio.com/2010-04-01/Accounts/' + $env.TWILIO_ACCOUNT_SID + '/Messages.json' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Basic ' + $base64.encode($env.TWILIO_ACCOUNT_SID + ':' + $env.TWILIO_AUTH_TOKEN) }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "={{ 'whatsapp:' + $env.TWILIO_FROM_NUMBER }}" },
+            { "name": "To", "value": "={{ 'whatsapp:' + $json.twilioPhone }}" },
+            { "name": "ContentSid", "value": "={{ $json.templateName }}" },
+            { "name": "ContentVariables", "value": "={{ JSON.stringify($json.templateParams) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "twilio-send",
+      "name": "Send via Twilio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 500],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Webhook - WhatsApp Trigger": {
+      "main": [
+        [
+          { "node": "Parse Notification", "type": "main", "index": 0 },
+          { "node": "Format for Twilio", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Notification": {
+      "main": [
+        [{ "node": "Send via Gupshup", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format for Twilio": {
+      "main": [
+        [{ "node": "Send via Twilio", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send via Gupshup": {
+      "main": [
+        [{ "node": "Success Response", "type": "main", "index": 0 }],
+        [{ "node": "Error Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send via Twilio": {
+      "main": [
+        [{ "node": "Success Response", "type": "main", "index": 0 }],
+        [{ "node": "Error Response", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "staticData": null,
+  "tags": ["whatsapp", "notifications", "gupshup", "twilio"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-14T23:05:00.000Z",
+  "versionId": "1"
+}

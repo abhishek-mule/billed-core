@@ -1,0 +1,218 @@
+{
+  "name": "Shop Setup - Main Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-shop",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Setup Shop",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "setup-shop"
+    },
+    {
+      "parameters": {
+        "url": "https://api.gstin.gov.in/calculators/gstin",
+        "method": "GET",
+        "response": {
+          "response": {
+            "output": "{{ $json.gstin }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "gstin-validator",
+      "name": "GSTIN Validator (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate shop slug from shop name\nconst body = $input.first().json;\nconst shopName = body.shopName || 'myshop';\nconst shopSlug = shopName\n  .toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/^-|-$/g, '');\n\n// Generate temporary password\nconst tempPassword = 'Billed@' + Math.random().toString(36).slice(2, 10);\n\nreturn {\n  json: {\n    ...body,\n    shopSlug,\n    tempPassword,\n    siteUrl: `https://${shopSlug}.billed.in`,\n    status: 'validated'\n  }\n};"
+      },
+      "id": "data-transform",
+      "name": "Transform Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "command": "echo 'Site creation command would run here'",
+        "workspaceName": "frappe_docker"
+      },
+      "id": "docker-creator",
+      "name": "Create Frappe Site",
+      "type": "n8n-nodes-base.dockerCreate",
+      "typeVersion": 1,
+      "position": [1000, 300],
+      "credentials": {
+        "dockerApi": {
+          "id": "docker-creds",
+          "name": "Docker API"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "execute",
+        "command": "bench --site {{ $json.shopSlug }}.localhost execute electrical_trader_pack.api.create_company --args '{{ $json | toJson }}'",
+        "additionalArgs": ""
+      },
+      "id": "bench-execute",
+      "name": "Execute Frappe Command",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1000, 500],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "noreply@billed.in",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Your Billed Account is Ready!",
+        "body": "=Hello {{ $json.ownerName }},\n\nYour Billed account is ready!\n\nShop: {{ $json.shopName }}\nURL: {{ $json.siteUrl }}\nLogin: {{ $json.email }}\nPassword: {{ $json.tempPassword }}\n\nLogin and change your password immediately.\n\n- Team Billed"
+      },
+      "id": "send-email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.gupshup.io/failsafe/wam/sendTemplateMessage",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "={{ $env.GUPSHUP_API_KEY }}"
+            },
+            {
+              "name": "destination",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "template_id",
+              "value": "welcome_billed"
+            },
+            {
+              "name": "params",
+              "value": "{{ $json.shopName }},{{ $json.siteUrl }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 500],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Onboarding initiated', data: $json } }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Setup Shop": {
+      "main": [
+        [
+          {
+            "node": "GSTIN Validator (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GSTIN Validator (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Transform Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Data": {
+      "main": [
+        [
+          {
+            "node": "Create Frappe Site",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute Frappe Command",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Frappe Site": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "staticData": null,
+  "tags": ["onboarding", "saas", "setup"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-14T20:00:00.000Z",
+  "versionId": "1"
+}

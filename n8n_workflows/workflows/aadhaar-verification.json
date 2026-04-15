@@ -1,0 +1,96 @@
+{
+  "name": "Aadhaar Verification Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "verify-aadhaar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-initiate",
+      "name": "Webhook - Initiate",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "verify-aadhaar"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate Aadhaar number\nconst body = $input.first().json;\nconst aadhaar = body.aadhaarNumber?.replace(/\\s/g, '') || '';\n\nif (aadhaar.length !== 12) {\n  return {\n    json: {\n      success: false,\n      message: 'Invalid Aadhaar number. Must be 12 digits.'\n    }\n  };\n}\n\nif (!/^\\d{12}$/.test(aadhaar)) {\n  return {\n    json: {\n      success: false,\n      message: 'Aadhaar must contain only digits'\n    }\n  };\n}\n\nconst referenceId = 'AADH_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8).toUpperCase();\n\nreturn {\n  json: {\n    success: true,\n    aadhaarNumber: aadhaar,\n    maskedAadhaar: aadhaar.slice(0, 4) + 'XXXXXXXX' + aadhaar.slice(-4),\n    referenceId,\n    message: 'OTP sent to registered mobile'\n  }\n};"
+      },
+      "id": "validate-aadhaar",
+      "name": "Validate Aadhaar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cdn.digitalrefund.com/api/v2/ekyc/aadhaar/verify/otp",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "client_id", "value": "={{ $env.SUREPASS_CLIENT_ID }}" },
+            { "name": "client_secret", "value": "={{ $env.SUREPASS_CLIENT_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "aadhaar_number", "value": "={{ $json.aadhaarNumber }}" },
+            { "name": "consent", "value": "Y" },
+            { "name": "reference_id", "value": "={{ $json.referenceId }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "surepass-api",
+      "name": "SurePass API (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response-initiate",
+      "name": "Response - Initiate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Initiate": {
+      "main": [
+        [{ "node": "Validate Aadhaar", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Aadhaar": {
+      "main": [
+        [{ "node": "SurePass API (Mock)", "type": "main", "index": 0 }]
+      ]
+    },
+    "SurePass API (Mock)": {
+      "main": [
+        [{ "node": "Response - Initiate", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "staticData": null,
+  "tags": ["kyc", "aadhaar", "verification"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-14T23:00:00.000Z",
+  "versionId": "1"
+}

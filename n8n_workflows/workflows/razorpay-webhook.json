@@ -1,0 +1,124 @@
+{
+  "name": "Razorpay Webhook Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "razorpay-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "razorpay-webhook",
+      "name": "Razorpay Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "razorpay-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify webhook signature\nconst crypto = require('crypto');\nconst webhookSecret = $env.RAZORPAY_WEBHOOK_SECRET;\nconst signature = $input.first().json.headers['x-razorpay-signature'] || '';\nconst payload = JSON.stringify($input.first().json.body);\n\nconst expectedSignature = crypto\n  .createHmac('sha256', webhookSecret)\n  .update(payload)\n  .digest('hex');\n\nconst isValid = signature === expectedSignature;\n\nreturn {\n  json: {\n    event: $input.first().json.body.event,\n    payload: $input.first().json.body.payload,\n    isValid\n  }\n};"
+      },
+      "id": "verify-signature",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if payment was captured\nconst data = $input.first().json;\n\nif (data.event !== 'payment.captured') {\n  return { json: { shouldProceed: false, reason: 'Event not payment.captured' } };\n}\n\nconst payment = data.payload.payment.entity;\nconst order = data.payload.order.entity;\n\nreturn {\n  json: {\n    shouldProceed: true,\n    paymentId: payment.id,\n    orderId: order.id,\n    amount: payment.amount,\n    plan: order.notes?.plan,\n    shopName: order.notes?.shopName,\n    email: order.notes?.email,\n    phone: order.notes?.phone\n  }\n};"
+      },
+      "id": "check-payment",
+      "name": "Check Payment Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true } }}"
+      },
+      "id": "webhook-response",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate shop slug\nconst shopName = $input.first().json.shopName || 'shop';\nconst shopSlug = shopName\n  .toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/^-|-$/g, '');\n\nconst tempPassword = 'Billed@' + Math.random().toString(36).slice(2, 10);\n\nreturn {\n  json: {\n    ...$input.first().json,\n    shopSlug,\n    tempPassword,\n    siteUrl: `https://${shopSlug}.billed.in`\n  }\n};"
+      },
+      "id": "prepare-site-data",
+      "name": "Prepare Site Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 500]
+    },
+    {
+      "parameters": {
+        "operation": "execute",
+        "command": "bench new-site {{ $json.shopSlug }}.localhost --install-app erpnext --install-app india_compliance --install-app electrical_trader_pack --admin-password {{ $json.tempPassword }}",
+        "workspaceName": "frappe_docker"
+      },
+      "id": "create-frappe-site",
+      "name": "Create Frappe Site",
+      "type": "n8n-nodes-base.dockerCreate",
+      "typeVersion": 1,
+      "position": [1250, 500],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "sendEmail",
+        "fromEmail": "noreply@billed.in",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Your Billed Account is Ready! 🎉",
+        "body": "=Hello,\n\nYour Billed account is ready!\n\nShop: {{ $json.shopName }}\nURL: {{ $json.siteUrl }}\nLogin: {{ $json.email }}\nPassword: {{ $json.tempPassword }}\n\nLogin and change your password immediately.\n\n- Team Billed"
+      },
+      "id": "send-email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 4,
+      "position": [1500, 500]
+    }
+  ],
+  "connections": {
+    "Razorpay Webhook": {
+      "main": [
+        [{ "node": "Verify Signature", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [{ "node": "Check Payment Event", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Payment Event": {
+      "main": [
+        [{ "node": "Respond 200", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Site Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Site Data": {
+      "main": [
+        [{ "node": "Create Frappe Site", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Frappe Site": {
+      "main": [
+        [{ "node": "Send Welcome Email", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "staticData": null,
+  "tags": ["razorpay", "payment", "webhook"],
+  "triggerCount": 1,
+  "updatedAt": "2026-04-14T20:30:00.000Z",
+  "versionId": "1"
+}
