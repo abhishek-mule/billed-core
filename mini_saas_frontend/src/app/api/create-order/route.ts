@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || '',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '',
-})
+const getRazorpay = () => {
+  const key_id = process.env.RAZORPAY_KEY_ID
+  const key_secret = process.env.RAZORPAY_KEY_SECRET
+
+  if (!key_id || !key_secret) {
+     console.error('[Billed] Razorpay keys MISSING from environment.')
+  }
+
+  return new Razorpay({
+    key_id: key_id || '',
+    key_secret: key_secret || '',
+  })
+}
 
 export async function POST(request: Request) {
+  const razorpay = getRazorpay()
   try {
     const { plan, shopName, email, phone } = await request.json()
 
