@@ -1,0 +1,55 @@
+{
+ "name": "Technical Attributes",
+ "doctype": "DocType",
+ "module": "Abhishek Electrical",
+ "autoname": "field:attribute_name",
+ "is_submittable": 0,
+ "editable_grid": 1,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "attribute_name",
+   "fieldtype": "Data",
+   "label": "Attribute Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "voltage_range",
+   "fieldtype": "Data",
+   "label": "Voltage Range",
+   "placeholder": "e.g., 220V-240V"
+  },
+  {
+   "fieldname": "phase_type",
+   "fieldtype": "Select",
+   "label": "Phase Type",
+   "options": "Single Phase\nThree Phase\nDual"
+  },
+  {
+   "fieldname": "warranty_months",
+   "fieldtype": "Int",
+   "label": "Warranty (Months)"
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active",
+   "default": "1"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ]
+}

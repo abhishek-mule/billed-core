@@ -1,0 +1,13 @@
+[
+  {
+    "url": "https://github.com/frappe/erpnext",
+    "branch": "version-16"
+  },
+  {
+    "url": "https://github.com/resilient-tech/india-compliance",
+    "branch": "version-16"
+  },
+  {
+    "path": "./electrical_trader_pack"
+  }
+]

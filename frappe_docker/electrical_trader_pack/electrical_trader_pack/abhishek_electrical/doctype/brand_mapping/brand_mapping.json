@@ -1,0 +1,44 @@
+{
+ "name": "Brand Mapping",
+ "doctype": "DocType",
+ "module": "Abhishek Electrical",
+ "autoname": "field:brand_name",
+ "is_submittable": 0,
+ "editable_grid": 1,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "brand_name",
+   "fieldtype": "Select",
+   "label": "Brand Name",
+   "reqd": 1,
+   "options": "Bajaj\nCrompton\nHavells\nSyska\nAnchor\nGreatWhite\nLegrand\nPhilips\nOrient\nBajaj"
+  },
+  {
+   "fieldname": "brand_code",
+   "fieldtype": "Data",
+   "label": "Brand Code",
+   "unique": 1
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active",
+   "default": "1"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ]
+}
