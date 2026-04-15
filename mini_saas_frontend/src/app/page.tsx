@@ -237,7 +237,7 @@ function ShopStep({ onSubmit }: { onSubmit: (data: ShopData) => void }) {
       onSubmit(result.data)
     } else {
       const newErrors: Record<string, string> = {}
-      result.error.errors.forEach((err) => {
+      result.error.issues.forEach((err) => {
         if (err.path[0]) newErrors[err.path[0] as string] = err.message
       })
       setErrors(newErrors)
@@ -281,7 +281,7 @@ function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => 
       onSubmit(result.data)
     } else {
       const newErrors: Record<string, string> = {}
-      result.error.errors.forEach((err) => {
+      result.error.issues.forEach((err) => {
         if (err.path[0]) newErrors[err.path[0] as string] = err.message
       })
       setErrors(newErrors)
