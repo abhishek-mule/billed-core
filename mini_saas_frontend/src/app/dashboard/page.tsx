@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import DataMigration from '@/components/DataMigration'
+import MagicScan from '@/components/MagicScan'
+import DecisionEngine from '@/components/DecisionEngine'
 
 const mockData = {
   stats: [
@@ -26,204 +29,231 @@ const mockData = {
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [showMigration, setShowMigration] = useState(false)
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-indigo-500/30">
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 z-40 h-screen w-64 bg-card border-r border-border flex flex-col transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-        <div className="p-5 border-b border-border">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
-            Billed
+      <aside className={`fixed left-0 top-0 z-40 h-screen w-64 bg-black border-r border-white/5 flex flex-col transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="p-6 border-b border-white/5">
+          <h1 className="text-2xl font-black tracking-tighter bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent italic">
+            BILLED
           </h1>
-          <p className="text-xs text-muted-foreground mt-1">Sharma Electronics</p>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-500/80">System Live</p>
+          </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          <a href="#" className="sidebar-link sidebar-link-active">
+        <nav className="flex-1 p-4 space-y-1">
+          <a href="/dashboard" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 transition font-bold text-white">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
             Dashboard
           </a>
-          <a href="#" className="sidebar-link">
+          <a href="/dashboard/invoices/new" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition font-bold text-gray-400">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             Invoices
           </a>
-          <a href="#" className="sidebar-link">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition font-bold text-gray-400">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             Inventory
           </a>
-          <a href="#" className="sidebar-link">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition font-bold text-gray-400">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
             Customers
           </a>
-          <a href="#" className="sidebar-link">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Reports
-          </a>
         </nav>
 
-        <div className="p-3 border-t border-border">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-medium">
+        <div className="p-4 border-t border-white/5">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-bold">
               RS
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Rajesh Sharma</p>
-              <p className="text-xs text-muted-foreground">Starter Plan</p>
+              <p className="text-sm font-bold truncate">Rajesh Sharma</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Starter Plan</p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="lg:pl-64">
+      <main className="lg:pl-64 min-h-screen">
         {/* Navbar */}
-        <header className="navbar px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 bg-black/60 backdrop-blur-xl border-b border-white/5 px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="btn-ghost p-2 lg:hidden">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 lg:hidden text-gray-400">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
             <div>
-              <h2 className="text-lg font-semibold">Dashboard</h2>
-              <p className="text-xs text-muted-foreground">Welcome back, Rajesh</p>
+              <h2 className="text-lg font-bold">Sharma Electronics</h2>
+              <p className="text-xs text-gray-500 font-medium">Core Platform v1.2</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="btn-ghost p-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
-            <button className="btn-primary">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex items-center gap-4">
+             <button className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition text-sm font-bold">
+               <div className="w-2 h-2 rounded-full bg-indigo-500" />
+               Starter Plan
+             </button>
+             <a href="/dashboard/invoices/new" className="p-2 bg-indigo-600 hover:bg-indigo-500 rounded-full shadow-lg shadow-indigo-600/20 transition">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              New Invoice
-            </button>
+            </a>
           </div>
         </header>
 
         {/* Page Content */}
-        <div className="p-6 space-y-6">
-          {/* Stats Grid */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {mockData.stats.map((stat, i) => (
-              <div key={i} className="stat-card">
-                <p className="stat-label">{stat.label}</p>
-                <p className="stat-value mt-2">{stat.value}</p>
-                <p className={stat.positive ? 'stat-change-positive mt-1' : 'stat-change-negative mt-1'}>
-                  {stat.change}
-                </p>
+        <div className="p-8 space-y-12">
+          
+          {/* ADOPTION BANNER */}
+          {!showMigration ? (
+            <div className="relative overflow-hidden bg-white/[0.03] border border-white/5 p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-8 transition-all hover:bg-white/[0.04]">
+              <div className="relative z-10 flex-1">
+                 <div className="inline-block px-3 py-1 bg-indigo-500/20 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-full mb-4">Adoption Core v1.0</div>
+                 <h2 className="text-3xl font-black tracking-tighter italic uppercase">Switch from Tally?</h2>
+                 <p className="text-gray-500 mt-4 font-medium max-w-lg">Import your legacy Excel or CSV ledgers from Zoho, Tally, or Khatabook in one click.</p>
               </div>
-            ))}
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Recent Invoices */}
-            <div className="lg:col-span-2 card">
-              <div className="p-5 border-b border-border flex items-center justify-between">
-                <h3 className="font-semibold">Recent Invoices</h3>
-                <button className="text-sm text-primary hover:underline">View All</button>
-              </div>
-              <div className="table-container border-0 rounded-none">
-                <table className="table">
-                  <thead className="table-header">
-                    <tr>
-                      <th className="table-head">Invoice</th>
-                      <th className="table-head">Customer</th>
-                      <th className="table-head">Amount</th>
-                      <th className="table-head">Date</th>
-                      <th className="table-head">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockData.recentInvoices.map((invoice) => (
-                      <tr key={invoice.id} className="table-row">
-                        <td className="table-cell font-medium">{invoice.id}</td>
-                        <td className="table-cell text-muted-foreground">{invoice.customer}</td>
-                        <td className="table-cell font-medium">{invoice.amount}</td>
-                        <td className="table-cell text-muted-foreground">{invoice.date}</td>
-                        <td className="table-cell">
-                          <span className={`badge ${
-                            invoice.status === 'Paid' ? 'badge-success' :
-                            invoice.status === 'Pending' ? 'badge-warning' : 'badge-danger'
-                          }`}>
-                            {invoice.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <button 
+                onClick={() => setShowMigration(true)}
+                className="relative z-10 px-8 py-4 bg-white text-black font-black uppercase italic tracking-tighter rounded-xl hover:scale-105 transition"
+              >
+                Start AI Importer
+              </button>
             </div>
+          ) : (
+             <div className="space-y-6">
+               <button onClick={() => setShowMigration(false)} className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition flex items-center gap-2">
+                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                 </svg>
+                 Return to Dashboard
+               </button>
+               <DataMigration />
+             </div>
+          )}
 
-            {/* Top Selling Items */}
-            <div className="card">
-              <div className="p-5 border-b border-border">
-                <h3 className="font-semibold">Top Selling Items</h3>
-              </div>
-              <div className="p-5 space-y-4">
-                {mockData.topItems.map((item, i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-sm font-medium">
-                      {i + 1}
+          {!showMigration && (
+            <>
+              {/* Stats Grid */}
+              <div className="grid gap-4 md:grid-cols-4">
+                {mockData.stats.map((stat, i) => (
+                  <div key={i} className="bg-white/[0.03] border border-white/5 p-6 rounded-2xl hover:border-indigo-500/20 transition group">
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 group-hover:text-indigo-400 transition">{stat.label}</p>
+                    <div className="flex items-baseline justify-between mt-2">
+                      <p className="text-2xl font-black">{stat.value}</p>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded ${stat.positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                        {stat.change}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.sold} sold</p>
-                    </div>
-                    <p className="text-sm font-medium">{item.revenue}</p>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
 
-          {/* Quick Actions */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <button className="card card-hover p-5 text-left">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h4 className="font-medium mb-1">Create Invoice</h4>
-              <p className="text-sm text-muted-foreground">Generate GST invoice for your customer</p>
-            </button>
+              {/* DECISION ENGINE - THE REASONING LAYER */}
+              <DecisionEngine />
 
-            <button className="card card-hover p-5 text-left">
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
-              <h4 className="font-medium mb-1">Update Stock</h4>
-              <p className="text-sm text-muted-foreground">Add new inventory items</p>
-            </button>
+              <div className="grid gap-8 lg:grid-cols-3">
+                {/* Magic Actions */}
+                <div className="lg:col-span-3">
+                   <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-6 flex items-center gap-2">
+                     <div className="w-1 h-1 bg-indigo-500 rounded-full" />
+                     Magic Actions
+                   </h3>
+                   <div className="grid gap-6 md:grid-cols-3">
+                      <MagicScan />
 
-            <button className="card card-hover p-5 text-left">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                      <a href="/dashboard/invoices/new" className="card card-hover p-6 text-left bg-white/[0.03] border-white/5 block group">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center mb-4 group-hover:bg-emerald-500 group-hover:text-black transition-all">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <h4 className="font-bold text-lg mb-1 italic tracking-tight uppercase">Fast GST Invoice</h4>
+                        <p className="text-sm text-gray-500">Scan label or select customer to bill instantly</p>
+                      </a>
+
+                      <button className="card card-hover p-6 text-left bg-white/[0.03] border-white/5 block group">
+                        <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center mb-4 group-hover:bg-amber-500 group-hover:text-black transition-all">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </div>
+                        <h4 className="font-bold text-lg mb-1 italic tracking-tight uppercase">Customer Hub</h4>
+                        <p className="text-sm text-gray-500">Manage leads, dues and transaction history</p>
+                      </button>
+                   </div>
+                </div>
+
+                {/* Recent Invoices */}
+                <div className="lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-3xl overflow-hidden">
+                  <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500">Recent Transactions</h3>
+                    <button className="text-xs font-bold text-indigo-400 hover:underline">View All</button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-[10px] font-black uppercase tracking-widest text-gray-600 border-b border-white/5">
+                          <th className="px-6 py-4">Invoice</th>
+                          <th className="px-6 py-4">Customer</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {mockData.recentInvoices.map((invoice) => (
+                          <tr key={invoice.id} className="hover:bg-white/[0.02] transition">
+                            <td className="px-6 py-4 text-sm font-bold">{invoice.id}</td>
+                            <td className="px-6 py-4 text-sm text-gray-400">{invoice.customer}</td>
+                            <td className="px-6 py-4 text-sm font-black">{invoice.amount}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-400' :
+                                invoice.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'
+                              }`}>
+                                {invoice.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Top Items */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-6">Top Moving Inventory</h3>
+                  <div className="space-y-6">
+                    {mockData.topItems.map((item, i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xs font-black italic text-gray-400">
+                          {i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate tracking-tight">{item.name}</p>
+                          <p className="text-[10px] text-gray-500 font-bold uppercase">{item.sold} units sold</p>
+                        </div>
+                        <p className="text-sm font-black text-indigo-400">{item.revenue}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <h4 className="font-medium mb-1">View Reports</h4>
-              <p className="text-sm text-muted-foreground">Sales analytics and insights</p>
-            </button>
-          </div>
+            </>
+          )}
         </div>
       </main>
     </div>
