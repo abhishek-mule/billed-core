@@ -1,0 +1,151 @@
+{
+ "actions": [],
+ "autoname": "format:GSTR3B-{month_or_quarter}-{year}-{company_gstin}",
+ "creation": "2019-02-04 11:35:55.964639",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "filter_by",
+  "column_break_pvct",
+  "company_gstin",
+  "filing_status",
+  "column_break_ddqq",
+  "year",
+  "enqueue_report",
+  "column_break_vtyi",
+  "month_or_quarter",
+  "generation_status",
+  "section_break_yqh7",
+  "gstr3b_form",
+  "json_output",
+  "missing_field_invoices"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "year",
+   "fieldtype": "Select",
+   "label": "Year",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "json_output",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "JSON Output"
+  },
+  {
+   "fieldname": "missing_field_invoices",
+   "fieldtype": "Small Text",
+   "label": "Invoices with no Place Of Supply",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Generate report in the background.",
+   "fieldname": "enqueue_report",
+   "fieldtype": "Check",
+   "label": "Enqueue Report",
+   "print_hide": 1,
+   "report_hide": 1
+  },
+  {
+   "default": "ITC Claim Period",
+   "description": "Filter purchases by ITC Claim Period or Posting Date",
+   "fieldname": "filter_by",
+   "fieldtype": "Select",
+   "label": "Filter By",
+   "options": "ITC Claim Period\nPosting Date"
+  },
+  {
+   "fieldname": "section_break_yqh7",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "generation_status",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "filing_status",
+   "fieldtype": "Select",
+   "is_virtual": 1,
+   "label": "Filing Status",
+   "options": "Not Filed\nFiled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company_gstin",
+   "fieldtype": "Autocomplete",
+   "label": "Company GSTIN",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "column_break_ddqq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_vtyi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_pvct",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gstr3b_form",
+   "fieldtype": "HTML",
+   "label": "GSTR-3B Form"
+  },
+  {
+   "fieldname": "month_or_quarter",
+   "fieldtype": "Select",
+   "label": "Month or Quarter",
+   "options": "Apr - Jun\nJul - Sep\nOct - Dec\nJan - Mar\nJanuary\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember",
+   "set_only_once": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-02-13 20:43:36.278214",
+ "modified_by": "Administrator",
+ "module": "GST India",
+ "name": "GSTR 3B Report",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

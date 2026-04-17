@@ -1,0 +1,31 @@
+<div class="download_data">
+    {% if typeof(data) == "string" %}
+        <div class="text-center no-preview-available mb-5">{{ data }}</div>
+    {% else %}
+        <table class="table table-bordered table-hover">
+            <thead>
+                <tr>
+                    {% for(let i=0; i<columns.length; i++) { %}
+                        <th class="text-left">{{ columns[i] }}</th>
+                    {% } %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for(let [period, list] of data) { %}
+                    <tr>
+                        <td rowspan="{{ list.length }}" style="width:50%">{{period}}</td>
+                        <td>{{ list[0] }}</td>
+                    </tr>
+
+                    {% for(let i=1;i < list.length;i++){ %}
+                        <tr>
+                            <td>{{ list[i] }}</td>
+                        </tr>
+                    {% } %}
+
+                {% } %}
+
+            </tbody>
+        </table>
+    {% endif %}
+</div>
