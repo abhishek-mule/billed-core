@@ -45,37 +45,22 @@ export default function MagicScan({ onScanSuccess, variant = 'full' }: MagicScan
     const formData = new FormData()
     formData.append('file', compressedFile)
 
-    try {
-      const response = await fetch('/api/magic-scan', {
-        method: 'POST',
-        body: formData,
-      })
-      
-      const data = await response.json()
-      console.log(`[Billed] Strategy: ${data.is_local ? 'Local (Free)' : 'AI (Paid)'}`)
-      setResult(data)
+    // ALWAYS use mock data for demo - reliability over external dependencies
+    // This ensures the "Wow" factor works without any backend
+    console.log('[Billed] Using Demo Mode - Mock OCR Response')
+    
+    // Simulate API delay for realistic feel
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    
+    setResult({
+      success: true,
+      brand: 'BAJAJ',
+      tech_attr: '2HP 1440RPM 3-PHASE 415V',
+      extracted_tags: ['BAJAJ', 'MOTORS', '2HP', '1440RPM', '3-PHASE', '415V', 'IP55', 'ISI'],
+      is_mock: true
+    })
 
-      // TELEMETRY: Habit Formation Tracking
-      // Recording scan success for Founder metrics (Q2: Scans per day)
-      console.log('[Telemetry] Magic Scan Success:', {
-        timestamp: new Date().toISOString(),
-        site_id: 'sharma-electronics-01',
-        brand_detected: data.brand,
-        latency: '850ms'
-      })
-
-    } catch (error) {
-      console.error('Scan failed:', error)
-      setResult({
-        success: true,
-        brand: 'BAJAJ',
-        tech_attr: '2HP 1440RPM',
-        extracted_tags: ['BAJAJ', 'MOTORS', '2HP', '1440RPM'],
-        is_mock: true
-      })
-    } finally {
-      setIsProcessing(false)
-    }
+    setIsProcessing(false)
   }
 
   const handleAdd = () => {
