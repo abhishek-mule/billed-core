@@ -1,0 +1,15 @@
+{
+  "currentContext": "windows",
+  "contexts": {
+    "windows": {
+      "endpoint": "npipe:////./pipe/docker_engine",
+      "stack": "default",
+      "tls": false
+    },
+    "default": {
+      "endpoint": "unix:///var/run/docker.sock",
+      "stack": "default",
+      "tls": false
+    }
+  }
+}

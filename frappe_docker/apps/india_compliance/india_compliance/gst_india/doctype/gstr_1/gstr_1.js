@@ -2950,15 +2950,16 @@ class GSTR1Action extends FileGSTR1Dialog {
     }
 
     toggle_actions(show, action) {
-        const actions = ["Upload", "Reset", "File", "Mark%20as%20Unfiled"];
-        const btns = $(actions.map((action) => `[data-label="${action}"]`).join(","));
+        // Suggestion: Use a more stable way to reference buttons, 
+        // or manage state via a class on the wrapper.
+        const $wrapper = this.frm.page.main_form;
 
         if (show) {
             this.frm.__action_performed = null;
-            btns && btns.removeClass("disabled");
+            $wrapper.find('.primary-action, .inner-group-button').prop('disabled', false);
         } else {
             this.frm.__action_performed = action;
-            btns && btns.addClass("disabled");
+            $wrapper.find('.primary-action, .inner-group-button').prop('disabled', true);
         }
     }
 }

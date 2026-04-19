@@ -55,6 +55,8 @@ services:
   frontend:
     <<: *customizable_image
     platform: linux/amd64
+    ports:
+      - "80:8080"
     command:
       - bash
       - /usr/local/bin/nginx-entrypoint.sh

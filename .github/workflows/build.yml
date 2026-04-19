@@ -6,11 +6,13 @@ on:
     paths:
       - 'electrical_trader_pack/**'
       - 'frappe_docker/images/custom/**'
+      - 'frappe_docker/compose.yaml'
   pull_request:
     branches: [main, master]
     paths:
       - 'electrical_trader_pack/**'
       - 'frappe_docker/images/custom/**'
+      - 'frappe_docker/compose.yaml'
 
 env:
   REGISTRY: ghcr.io
