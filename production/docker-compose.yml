@@ -1,0 +1,161 @@
+version: "3.9"
+
+x-custom-backend: &custom-backend
+  image: frappe/erpnext:v16.13.3
+  pull_policy: always
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis-cache:
+      condition: service_started
+    redis-queue:
+      condition: service_started
+
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - db-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-character-set-client-handshake --skip-innodb-read-only-compressed
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis-cache:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-cache-data:/data
+
+  redis-queue:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+
+  configurator:
+    <<: *custom-backend
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        echo "Waiting for DB...";
+        wait-for-it -t 60 db:3306 -- timeout-seconds 30;
+        wait-for-it -t 60 redis-cache:6379 -- timeout-seconds 30;
+        wait-for-it -t 60 redis-queue:6379 -- timeout-seconds 30;
+        echo "Running configurator...";
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache redis://redis-cache:6379;
+        bench set-config -g redis_queue redis://redis-queue:6379;
+        bench set-config -g redis_socketio redis://redis-queue:6379;
+        bench set-config -gp socketio_port 9000;
+        bench set-config -g chromium_path /usr/bin/chromium-headless-shell;
+        echo "Config complete"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    <<: *custom-backend
+    command: bench serve --port 8000
+    environment:
+      - BACKEND_TRUSTED_IP=127.0.0.1
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  websocket:
+    <<: *custom-backend
+    command: >
+      node /home/frappe/frappe-bench/apps/frappe/socketio.js
+    environment:
+      - FRAPPE_REDIS_CACHE=redis://redis-cache:6379
+      - FRAPPE_REDIS_QUEUE=redis://redis-queue:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  frontend:
+    image: frappe/erpnext:v16.13.3
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    command: >
+      bash /usr/local/bin/nginx-entrypoint.sh
+    environment:
+      - BACKEND=backend:8000
+      - SOCKETIO=websocket:9000
+      - FRAPPE_SITE_NAME_HEADER=${SITE_NAME:-erp.example.com}
+    depends_on:
+      - backend
+
+  queue-short:
+    <<: *custom-backend
+    command: bench worker --queue short,default
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  queue-long:
+    <<: *custom-backend
+    command: bench worker --queue long,default,short
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  scheduler:
+    <<: *custom-backend
+    command: bench schedule
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - EXECUTIONS_MODE=regular
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - GENERIC_TIMEZONE=Asia/Kolkata
+    volumes:
+      - n8n-data:/home/node/.n8n
+
+volumes:
+  sites:
+    name: erp_sites
+  db-data:
+    name: erp_db_data
+  redis-cache-data:
+    name: erp_redis_cache
+  redis-queue-data:
+    name: erp_redis_queue
+  n8n-data:
+    name: erp_n8n_data
+
+networks:
+  default:
+    name: erp_network
+    driver: bridge

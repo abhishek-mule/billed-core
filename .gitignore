@@ -87,3 +87,11 @@ frappe_docker/generated/
 # OS Files
 Thumbs.db
 desktop.ini
+
+# Production data
+production/sites/
+production/logs/
+infra/data/
+infra/data/sites/
+frappe_docker/data/
+frappe_docker/sites/
