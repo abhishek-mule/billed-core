@@ -4,13 +4,13 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'electrical_trader_pack/**'
+      - 'frappe_docker/electrical_trader_pack/**'
       - 'frappe_docker/images/custom/**'
       - 'frappe_docker/compose.yaml'
   pull_request:
     branches: [main, master]
     paths:
-      - 'electrical_trader_pack/**'
+      - 'frappe_docker/electrical_trader_pack/**'
       - 'frappe_docker/images/custom/**'
       - 'frappe_docker/compose.yaml'
 
@@ -56,7 +56,7 @@ jobs:
           echo '[
             {"url": "https://github.com/frappe/erpnext", "branch": "version-15"},
             {"url": "https://github.com/resilient-tech/india_compliance", "branch": "version-15"},
-            {"path": "electrical_trader_pack"}
+            {"path": "frappe_docker/electrical_trader_pack"}
           ]' > apps.json
 
       - name: Build and push image
