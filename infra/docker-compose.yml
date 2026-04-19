@@ -14,8 +14,7 @@ x-depends-on-configurator: &depends_on_configurator
 x-backend-defaults: &backend_defaults
   <<: [*depends_on_configurator, *customizable_image]
   volumes:
-    - ${SITES_VOLUME:-./data/sites}:/home/frappe/frappe-bench/sites
-    - ${ASSETS_VOLUME:-./data/assets}:/home/frappe/frappe-bench/sites/assets
+    - frappe-sites:/home/frappe/frappe-bench/sites
 
 services:
   # Frappe Configurator
@@ -45,18 +44,35 @@ services:
       FRAPPE_REDIS_CACHE: redis://redis-cache:6379
       FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
       SOCKETIO_PORT: 9000
-    depends_on: {}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
     restart: on-failure
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
 
   # Frappe Backend
   backend:
     <<: *backend_defaults
     platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
 
   # Frappe Frontend (Nginx)
   frontend:
     <<: *customizable_image
     platform: linux/amd64
+    ports:
+      - "8080:8080"
     command:
       - bash
       - /usr/local/bin/nginx-entrypoint.sh
@@ -70,15 +86,10 @@ services:
       PROXY_READ_TIMEOUT: ${PROXY_READ_TIMEOUT:-120}
       CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-50m}
     volumes:
-      - ${SITES_VOLUME:-./data/sites}:/home/frappe/frappe-bench/sites
-      - ${ASSETS_VOLUME:-./data/assets}:/home/frappe/frappe-bench/sites/assets
+      - frappe-sites:/home/frappe/frappe-bench/sites
     depends_on:
       - backend
       - websocket
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frappe.rule=Host(`client.localhost`)"
-      - "traefik.http.routers.frappe.entrypoints=web"
 
   # Websocket Server
   websocket:
@@ -91,29 +102,79 @@ services:
       - node
       - /home/frappe/frappe-bench/apps/frappe/socketio.js
     volumes:
-      - ${SITES_VOLUME:-./data/sites}:/home/frappe/frappe-bench/sites
-      - ${ASSETS_VOLUME:-./data/assets}:/home/frappe/frappe-bench/sites/assets
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
 
   # Queue Workers
   queue-short:
     <<: *backend_defaults
     platform: linux/amd64
     command: bench worker --queue short,default
+    depends_on:
+      db:
+        condition: service_healthy
 
   queue-long:
     <<: *backend_defaults
     platform: linux/amd64
     command: bench worker --queue long,default,short
+    depends_on:
+      db:
+        condition: service_healthy
 
   scheduler:
     <<: *backend_defaults
     platform: linux/amd64
     command: bench schedule
+    depends_on:
+      db:
+        condition: service_healthy
 
-  # n8n Orchestrator
+  # Provisioning Sidecar - Security boundary for site creation
+  # This service replaces direct docker.sock access from n8n
+  provisioning-sidecar:
+    image: ${CUSTOM_IMAGE:-frappe/erpnext}:${CUSTOM_TAG:-$ERPNEXT_VERSION}
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - TEMPLATE_SITE=${TEMPLATE_SITE:-template.site}
+      - SITES_DIR=/home/frappe/frappe-bench/sites
+      - BENCH_PATH=/home/frappe/frappe-bench/env/bin/bench
+      - REDIS_HOST=redis-queue
+      - REDIS_PORT=6379
+      - PROVISIONING_API_KEY=${PROVISIONING_API_KEY:-change-me-in-production}
+    volumes:
+      - frappe-sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+    command: >
+      bash -c "pip install fastapi pydantic uvicorn redis httpx &&
+              python -m uvicorn billed_core.api.provisioning_api:app --host 0.0.0.0 --port 8001"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.provisioning.rule=Host(`provisioning.localhost`)"
+      - "traefik.http.routers.provisioning.entrypoints=web"
+      - "traefik.http.services.provisioning.loadbalancer.server.port=8001"
+
+  # n8n Orchestrator - No longer privileged, no docker.sock
   n8n:
     image: n8nio/n8n:latest
-    user: "0:0"
+    user: "1000:1000"
     restart: unless-stopped
     ports:
       - "5678:5678"
@@ -131,19 +192,60 @@ services:
       - EXECUTIONS_MODE=regular
     volumes:
       - n8n_data:/home/node/.n8n
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${SITES_VOLUME:-./data/sites}:/home/frappe/sites:ro
+      - frappe-sites:/home/frappe/sites:ro
     depends_on:
       - backend
+      - provisioning-sidecar
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n.rule=Host(`n8n.localhost`)"
       - "traefik.http.routers.n8n.entrypoints=web"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
 
+  # Database
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - db-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-character-set-client-handshake --skip-innodb-read-only-compressed
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis Cache
+  redis-cache:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-cache-data:/data
+
+  # Redis Queue
+  redis-queue:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+
 networks:
   default:
     name: frappe_docker
+    external: true
 
 volumes:
+  frappe-sites:
+    name: frappe_docker_sites
   n8n_data:
+    name: frappe_docker_n8n_data
+  db-data:
+    name: frappe_docker_db-data
+  redis-cache-data:
+    name: frappe_docker_redis-cache-data
+  redis-queue-data:
+    name: frappe_docker_redis-queue-data
