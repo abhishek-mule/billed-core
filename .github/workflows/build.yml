@@ -56,8 +56,8 @@ jobs:
           echo '[
             {"url": "https://github.com/frappe/erpnext", "branch": "version-15"},
             {"url": "https://github.com/resilient-tech/india_compliance", "branch": "version-15"},
-            {"path": "frappe_docker/electrical_trader_pack"}
-          ]' > apps.json
+            {"path": "electrical_trader_pack"}
+          ]' > frappe_docker/apps.json
 
       - name: Build and push image
         uses: docker/build-push-action@v5
