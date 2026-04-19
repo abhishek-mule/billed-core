@@ -1,0 +1,95 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # ========================================
+  # BILLED-CORE METRICS
+  # ========================================
+  
+  # 1. Traefik (Reverse Proxy)
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+        labels:
+          service: 'traefik'
+
+  # 2. Backend API (Frappe)
+  - job_name: 'frappe-backend'
+    metrics_path: '/api/method/billed_core.metrics.get'
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          service: 'frappe'
+
+  # 3. Provisioning API
+  - job_name: 'provisioning-api'
+    static_configs:
+      - targets: ['api:8001']
+        labels:
+          service: 'provisioning'
+
+  # 4. MariaDB
+  - job_name: 'mariadb'
+    static_configs:
+      - targets: ['db:3306']
+        labels:
+          service: 'database'
+
+  # 5. Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-cache:6379', 'redis-queue:6379']
+        labels:
+          service: 'redis'
+
+  # 6. n8n
+  - job_name: 'n8n'
+    static_configs:
+      - targets: ['n8n:5678']
+        labels:
+          service: 'n8n'
+
+# ========================================
+# RECORSING RULES (Top 5 North Star)
+# ========================================
+groups:
+  - name: billed_core.rules
+    rules:
+      # Webhook Latency p95
+      - record: job:webhook_latency_p95
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket{job="provisioning-api"}[5m])
+          )
+
+      # OCR Success Rate
+      - record: job:ocr_success_rate
+        expr: |
+          sum(rate(ocr_success_total[5m])) / sum(rate(ocr_request_total[5m]))
+
+      # Provisioning Time p95
+      - record: job:provisioning_time_p95
+        expr: |
+          histogram_quantile(0.95, 
+            rate(provisioning_duration_seconds_bucket[5m])
+          )
+
+      # API Error Rate
+      - record: job:api_error_rate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.*"}[5m])) / sum(rate(http_requests_total[5m]))
+
+      # DB Query Latency p95
+      - record: job:db_query_latency_p95
+        expr: |
+          histogram_quantile(0.95,
+            rate(mariadb_query_duration_seconds_bucket[5m])
+          )
