@@ -132,9 +132,7 @@ RUN --mount=type=secret,id=apps_json,target=/opt/frappe/apps.json,uid=1000,gid=1
     /home/frappe/frappe-bench && \
   cd /home/frappe/frappe-bench && \
   echo "{}" > sites/common_site_config.json && \
-  find apps -mindepth 1 -path "*/.git" | xargs rm -fr && \
-  bench build --production --no-compress && \
-  bench build --app frappe --no-compress
+  find apps -mindepth 1 -path "*/.git" | xargs rm -fr
 
 FROM base AS backend
 
@@ -149,6 +147,11 @@ VOLUME [ \
   "/home/frappe/frappe-bench/sites/assets", \
   "/home/frappe/frappe-bench/logs" \
 ]
+
+RUN bash -c '\
+  if [ ! -f /home/frappe/frappe-bench/sites/assets.json ] || [ ! -s /home/frappe/frappe-bench/sites/assets.json ]; then \
+    cd /home/frappe/frappe-bench && bench build --production; \
+  fi'
 
 CMD [ \
   "/home/frappe/frappe-bench/env/bin/gunicorn", \
