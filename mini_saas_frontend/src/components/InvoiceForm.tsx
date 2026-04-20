@@ -41,8 +41,8 @@ export function InvoiceForm({ authToken, onSuccess }: InvoiceFormProps) {
       items: items.map(item => ({
         itemCode: item.itemCode,
         itemName: item.itemName || undefined,
-        quantity: parseInt(item.quantity),
-        rate: parseFloat(item.rate)
+        quantity: Number(item.quantity),
+        rate: Number(item.rate)
       }))
     }
 
@@ -53,9 +53,11 @@ export function InvoiceForm({ authToken, onSuccess }: InvoiceFormProps) {
     }
 
     const result = await createInvoice(payload)
-    if (result?.success) {
+    if (result?.success && result.invoiceNumber) {
       alert(`Invoice ${result.invoiceNumber} created!`)
-      window.open(result.whatsappLink, '_blank')
+      if (result.whatsappLink) {
+        window.open(result.whatsappLink, '_blank')
+      }
       onSuccess?.(result.invoiceNumber)
       setPhone('')
       setCustomerName('')

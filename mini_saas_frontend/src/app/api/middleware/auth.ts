@@ -10,10 +10,6 @@ export interface MerchantContext {
   erpSite: string
 }
 
-/**
- * Extract merchant context from Authorization header
- * Format: Bearer <base64-encoded-merchant-context>
- */
 export async function extractMerchantContext(request: NextRequest): Promise<MerchantContext | null> {
   const authHeader = request.headers.get('authorization')
   
@@ -36,12 +32,9 @@ export async function extractMerchantContext(request: NextRequest): Promise<Merc
   }
 }
 
-/**
- * Middleware wrapper to enforce authentication on routes
- */
-export async function withMerchantAuth(
-  handler: (request: NextRequest, context: MerchantContext) => Promise<NextResponse>
-) {
+type RouteHandler = (request: NextRequest) => Promise<NextResponse>
+
+export function withMerchantAuth(handler: RouteHandler): RouteHandler {
   return async (request: NextRequest) => {
     const merchant = await extractMerchantContext(request)
 
@@ -53,7 +46,7 @@ export async function withMerchantAuth(
     }
 
     try {
-      return await handler(request, merchant)
+      return await handler(request)
     } catch (error) {
       console.error('[Merchant API] Error:', error)
       return NextResponse.json(
@@ -64,9 +57,6 @@ export async function withMerchantAuth(
   }
 }
 
-/**
- * Generate auth token for merchant session
- */
 export function generateMerchantToken(context: MerchantContext): string {
   const encoded = Buffer.from(JSON.stringify(context)).toString('base64')
   return `Bearer ${encoded}`

@@ -1,6 +1,6 @@
 // Merchant Invoice Creation API
 import { NextRequest, NextResponse } from 'next/server'
-import { withMerchantAuth, MerchantContext } from '@/app/api/middleware/auth'
+import { withMerchantAuth, extractMerchantContext, MerchantContext } from '@/app/api/middleware/auth'
 import { 
   validateInvoicePayload, 
   generateInvoiceNumber, 
@@ -11,10 +11,12 @@ import {
 } from '@/lib/merchant'
 import { calculateInvoiceTotal, formatInvoiceForWhatsApp } from '@/lib/gst'
 
-async function handleCreateInvoice(
-  request: NextRequest,
-  merchant: MerchantContext
-): Promise<NextResponse> {
+async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> {
+  const merchant = await extractMerchantContext(request)
+  if (!merchant) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const payload: MerchantInvoicePayload = await request.json()
 
