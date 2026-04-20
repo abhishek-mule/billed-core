@@ -245,7 +245,7 @@ export default function NewInvoicePage() {
               {customerPhone.length >= 3 && (
                 <div className="space-y-1">
                   <button className="w-full text-left p-3 bg-white/5 rounded-xl text-sm hover:bg-white/10">
-                    + {t[lang].addNewCustomer}
+                    + {t[lang].addCustomer}
                   </button>
                 </div>
               )}
