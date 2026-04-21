@@ -24,10 +24,10 @@ const features = [
 ]
 
 const plans = [
-  { name: 'Starter', price: '0', period: 'Forever free', tagline: 'For freelancers just getting started.', features: ['10 invoices/month', 'GSTIN verify (5)', 'PDF export', 'WhatsApp'], cta: 'Get Started Free' },
-  { name: 'Growth', price: '399', period: '/month', tagline: 'For small shops.', features: ['Unlimited', 'GSTIN verify (50)', 'Aadhaar KYC', 'Client portal'], popular: true, cta: 'Start Growth' },
-  { name: 'Pro', price: '999', period: '/month', tagline: 'For startups.', features: ['Everything in Growth', 'Unlimited GSTIN', 'GSTR export', 'Priority'], cta: 'Start Pro' },
-  { name: 'Business', price: '2499', period: '/month', tagline: 'For enterprises.', features: ['Everything in Pro', 'Unlimited Aadhaar', 'API access', 'Dedicated manager'], cta: 'Contact Sales' },
+  { name: 'Starter', price: '0', period: 'Forever free', tagline: 'Perfect for new businesses starting with GST billing.', features: ['25 invoices/month', 'GSTIN verify (10)', 'PDF export', 'WhatsApp delivery'], cta: 'Start Free' },
+  { name: 'Basic', price: '199', period: '/month', tagline: 'Ideal for small shops and individual professionals.', features: ['200 invoices/month', 'GSTIN verify (50)', 'Auto-GST calculation', 'Email support'], popular: true, cta: 'Start Basic' },
+  { name: 'Professional', price: '499', period: '/month', tagline: 'For growing businesses with regular billing needs.', features: ['1000 invoices/month', 'Unlimited GSTIN verify', 'Aadhaar KYC', 'Priority support'], cta: 'Go Pro' },
+  { name: 'Enterprise', price: '1499', period: '/month', tagline: 'For CA firms, distributors and large businesses.', features: ['Unlimited invoices', 'Unlimited Aadhaar KYC', 'API access', 'Dedicated manager'], cta: 'Contact Sales' },
 ]
 
 const securityCards = [
@@ -50,7 +50,7 @@ export default function BillZoLanding() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#fafaf8]/95 backdrop-blur-md border-b border-black/5 px-8 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image src="/billZo_logo.png" alt="BillZo" width={1000} height={1000} className="w-9 h-9 object-contain" />
+            <Image src="/billZo_logo.png" alt="BillZo" width={1000} height={1000} className="w-112 h-112 object-contain" />
             <span className="text-xl font-bold">BillZo</span>
           </div>
           <div className="flex items-center gap-6">
@@ -113,17 +113,17 @@ export default function BillZoLanding() {
                   <span className="text-xs font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-2 py-1 rounded-full">✓ GST Ready</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-emerald-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Revenue</div>
                     <div className="text-xl font-bold text-indigo-900">₹2.4L</div>
                     <div className="text-xs text-emerald-600 font-semibold">↑ 18%</div>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Invoices</div>
                     <div className="text-xl font-bold text-indigo-900">142</div>
                     <div className="text-xs text-emerald-600 font-semibold">↑ 24</div>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-amber-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">GST Due</div>
                     <div className="text-xl font-bold text-indigo-900">₹18.2K</div>
                     <div className="text-xs text-amber-600 font-semibold">Due Dec 20</div>
@@ -197,11 +197,11 @@ export default function BillZoLanding() {
               {activeFeature === 0 && (
                 <div>
                   <div className="flex gap-3 mb-4">
-                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea]">
+                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group">
                       <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Client</div>
-                      <div className="text-sm font-semibold text-[#3a3a3c]">Mehta Textiles</div>
+                      <div className="text-sm font-semibold text-[#3a3a3c] group-hover:text-indigo-600 transition-colors">Mehta Textiles</div>
                     </div>
-                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea]">
+                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-300">
                       <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">No.</div>
                       <div className="text-sm font-semibold text-[#3a3a3c]">BZ-0142</div>
                     </div>
