@@ -384,7 +384,7 @@ export default function BillZoLanding() {
         <div className="max-w-7xl mx-auto flex justify-between items-start gap-10 flex-wrap">
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <div className="relative w-12 h-12">
+              <div className="relative w-20 h-20">
                 <Image src="/logo.svg" alt="BillZo" fill className="object-contain invert brightness-0" />
               </div>
               <div className="flex flex-col">
