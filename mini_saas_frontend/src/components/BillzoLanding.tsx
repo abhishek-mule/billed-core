@@ -47,20 +47,25 @@ export default function BillZoLanding() {
 
   return (
     <div className="min-h-screen bg-[#fafaf8] text-[#1c1c1e] font-sans">
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#fafaf8]/95 backdrop-blur-md border-b border-black/5 px-8 py-4">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-xl border-b border-black/5 px-8 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image src="/billZo_logo.png" alt="BillZo" width={1000} height={1000} className="w-112 h-112 object-contain" />
-            <span className="text-xl font-bold">BillZo</span>
+          <div className="flex items-center gap-3">
+            <div className="relative w-12 h-12">
+              <Image src="/logo.svg" alt="BillZo" fill className="object-contain" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xl font-bold tracking-tight">BillZo</span>
+              <span className="text-[10px] text-indigo-600 font-medium tracking-widest uppercase -mt-0.5">Sahi Bill. Safe Deal.</span>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
-            <Link href="/start" className="text-sm font-medium text-[#3a3a3c]">Features</Link>
-            <Link href="/start" className="text-sm font-medium text-[#3a3a3c]">Pricing</Link>
-            <Link href="/start" className="text-sm font-medium text-[#3a3a3c]">Aadhaar KYC</Link>
+          <div className="hidden md:flex items-center gap-8">
+            <Link href="/start" className="text-sm font-medium text-[#3a3a3c] hover:text-indigo-600 transition-colors">Features</Link>
+            <Link href="/start" className="text-sm font-medium text-[#3a3a3c] hover:text-indigo-600 transition-colors">Pricing</Link>
+            <Link href="/start" className="text-sm font-medium text-[#3a3a3c] hover:text-indigo-600 transition-colors">Aadhaar KYC</Link>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/start" className="px-4 py-2 border border-indigo-300 rounded-lg text-sm font-medium text-indigo-700">Sign In</Link>
-            <Link href="/start" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Start Free →</Link>
+            <Link href="/start" className="px-4 py-2 border-2 border-indigo-200 rounded-xl text-sm font-semibold text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 transition-all">Sign In</Link>
+            <Link href="/start" className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-sm font-bold hover:shadow-lg hover:shadow-indigo-500/30 hover:scale-105 transition-all">Start Free →</Link>
           </div>
         </div>
       </nav>
@@ -113,17 +118,17 @@ export default function BillZoLanding() {
                   <span className="text-xs font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-2 py-1 rounded-full">✓ GST Ready</span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-emerald-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Revenue</div>
                     <div className="text-xl font-bold text-indigo-900">₹2.4L</div>
                     <div className="text-xs text-emerald-600 font-semibold">↑ 18%</div>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Invoices</div>
                     <div className="text-xl font-bold text-indigo-900">142</div>
                     <div className="text-xs text-emerald-600 font-semibold">↑ 24</div>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea] hover:border-amber-400 hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                  <div className="bg-white rounded-xl p-3 border border-[#e5e5ea]">
                     <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">GST Due</div>
                     <div className="text-xl font-bold text-indigo-900">₹18.2K</div>
                     <div className="text-xs text-amber-600 font-semibold">Due Dec 20</div>
@@ -197,11 +202,11 @@ export default function BillZoLanding() {
               {activeFeature === 0 && (
                 <div>
                   <div className="flex gap-3 mb-4">
-                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 cursor-pointer group">
+                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea]">
                       <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">Client</div>
-                      <div className="text-sm font-semibold text-[#3a3a3c] group-hover:text-indigo-600 transition-colors">Mehta Textiles</div>
+                      <div className="text-sm font-semibold text-[#3a3a3c]">Mehta Textiles</div>
                     </div>
-                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea] hover:border-indigo-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-300">
+                    <div className="flex-1 bg-[#f7f6f2] rounded-lg p-3 border border-[#e5e5ea]">
                       <div className="text-xs text-[#8e8e93] font-semibold uppercase mb-1">No.</div>
                       <div className="text-sm font-semibold text-[#3a3a3c]">BZ-0142</div>
                     </div>
@@ -378,11 +383,14 @@ export default function BillZoLanding() {
       <footer className="bg-indigo-950 px-8 py-12 border-t border-white/6">
         <div className="max-w-7xl mx-auto flex justify-between items-start gap-10 flex-wrap">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">B</span>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="relative w-12 h-12">
+                <Image src="/logo.svg" alt="BillZo" fill className="object-contain invert brightness-0" />
               </div>
-              <span className="text-xl font-bold text-white">BillZo</span>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-white tracking-tight">BillZo</span>
+                <span className="text-[10px] text-indigo-400 font-medium tracking-widest uppercase -mt-0.5">Sahi Bill. Safe Deal.</span>
+              </div>
             </div>
             <p className="text-xs text-white/40 max-w-[220px]">Sahi bill. Safe deal. India's most trusted GST billing platform.</p>
           </div>

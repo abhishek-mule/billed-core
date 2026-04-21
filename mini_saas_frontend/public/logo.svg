@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <circle cx="250" cy="250" r="220" fill="none" stroke="#000000" stroke-width="16"/>
+
+  <path d="M 85 180 A 180 180 0 0 1 415 180" fill="none" stroke="#000000" stroke-width="10"/>
+  <path d="M 405 340 A 180 180 0 0 1 95 340" fill="none" stroke="#000000" stroke-width="10"/>
+
+  <text x="250" y="290" 
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-size="120" 
+        font-weight="400" 
+        text-anchor="middle" 
+        fill="#000000" 
+        letter-spacing="-2">BillZo</text>
+
+  <text x="250" y="325" 
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-size="20" 
+        font-weight="600" 
+        text-anchor="middle" 
+        fill="#000000" 
+        letter-spacing="2">· SAHI BILL. SAFE DEAL. ·</text>
+</svg>
