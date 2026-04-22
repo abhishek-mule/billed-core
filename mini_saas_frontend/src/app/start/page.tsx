@@ -79,7 +79,7 @@ export default function StartPage() {
     setIsSubmitting(true)
 
     try {
-      const orderRes = await fetch('/api/create-order', {
+      const orderRes = await fetch('/api/createorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: planId, shopName: shopData?.shopName, email: identityData?.email, phone: identityData?.phone }),
