@@ -114,7 +114,13 @@ export default function Home() {
         }),
       })
 
-      if (!orderRes.ok) throw new Error('Failed to create order')
+      if (!orderRes.ok) {
+        const err = await orderRes.json()
+        console.error('Order creation failed:', err)
+        alert(`Error: ${err.error || err.details || 'Failed to create order'}`)
+        setIsSubmitting(false)
+        return
+      }
       const order = await orderRes.json()
 
       const razorpay = new (window as any).Razorpay({
