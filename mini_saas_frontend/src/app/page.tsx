@@ -1,4 +1,6 @@
-import BillzoLanding from '@/components/BillzoLanding'
+'use client'
+
+import BillzoLanding from '../components/BillzoLanding'
 
 export default function HomePage() {
   return <BillzoLanding />
