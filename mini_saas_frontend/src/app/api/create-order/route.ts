@@ -16,6 +16,7 @@ const getRazorpay = () => {
 }
 
 export async function POST(request: Request) {
+  console.log('[create-order] API called')
   const razorpay = getRazorpay()
   try {
     const { plan, shopName, email, phone } = await request.json()
