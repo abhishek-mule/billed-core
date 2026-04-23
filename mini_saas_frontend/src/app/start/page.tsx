@@ -12,11 +12,11 @@ const shopSchema = z.object({
 })
 
 const identitySchema = z.object({
-  identityType: z.enum(['gstin', 'aadhar']),
-  gstin: z.string().optional(),
-  aadhar: z.string().optional(),
-  ownerName: z.string().min(2),
+  identityType: z.enum(['phone', 'gstin']),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number'),
+  otp: z.string().optional(),
+  gstin: z.string().optional(),
+  ownerName: z.string().min(2),
   email: z.string().email(),
 })
 
@@ -270,8 +270,9 @@ function ShopStep({ onSubmit }: { onSubmit: (data: ShopData) => void }) {
 }
 
 function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => void; onBack: () => void }) {
-  const [form, setForm] = useState({ identityType: 'gstin' as 'gstin' | 'aadhar', gstin: '', aadhar: '', ownerName: '', phone: '', email: '' })
+  const [form, setForm] = useState({ identityType: 'phone' as 'phone' | 'gstin', phone: '', otp: '', gstin: '', ownerName: '', email: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [otpSent, setOtpSent] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -292,15 +293,15 @@ function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="flex gap-3">
           {[
-            { id: 'gstin', label: 'GSTIN', desc: 'Business registration' },
-            { id: 'aadhar', label: 'Aadhar', desc: 'Personal identity' },
+            { id: 'phone', label: 'Mobile', desc: 'Quick verification', icon: 'phone' },
+            { id: 'gstin', label: 'GSTIN', desc: 'Business verification', icon: 'tag' },
           ].map((type) => (
             <motion.button
               key={type.id}
               type="button"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              onClick={() => setForm({ ...form, identityType: type.id as 'gstin' | 'aadhar' })}
+              onClick={() => setForm({ ...form, identityType: type.id as 'phone' | 'gstin' })}
               className={`flex-1 p-4 rounded-xl border transition-all ${
                 form.identityType === type.id
                   ? 'bg-indigo-500/20 border-indigo-500'
@@ -313,7 +314,22 @@ function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => 
           ))}
         </div>
 
-        {form.identityType === 'gstin' ? (
+        {form.identityType === 'phone' ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-300">Mobile Number</label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="9876543210"
+                className="w-full px-4 py-4 rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500/50 outline-none font-mono text-lg"
+              />
+              {errors.phone && <p className="text-red-400 text-sm">{errors.phone}</p>}
+            </div>
+            <p className="text-xs text-gray-500">We'll send an OTP to verify your number</p>
+          </div>
+        ) : (
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-300">GSTIN Number</label>
             <input
@@ -322,21 +338,9 @@ function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => 
               onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase().slice(0, 15) })}
               placeholder="29ABCDE1234F1Z5"
               maxLength={15}
-              className="w-full px-4 py-4 rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500/50 transition-all outline-none uppercase tracking-wider font-mono"
+              className="w-full px-4 py-4 rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500/50 outline-none uppercase font-mono tracking-wider"
             />
             {errors.gstin && <p className="text-red-400 text-sm">{errors.gstin}</p>}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-300">Aadhar Number</label>
-            <input
-              type="text"
-              value={form.aadhar}
-              onChange={(e) => setForm({ ...form, aadhar: e.target.value.replace(/\D/g, '').slice(0, 12) })}
-              placeholder="1234 5678 9012"
-              className="w-full px-4 py-4 rounded-xl bg-white/5 border border-white/10 focus:border-indigo-500/50 transition-all outline-none font-mono text-lg tracking-widest"
-            />
-            {errors.aadhar && <p className="text-red-400 text-sm">{errors.aadhar}</p>}
           </div>
         )}
 
