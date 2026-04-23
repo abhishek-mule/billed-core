@@ -1,0 +1,132 @@
+{
+  "name": "Billed Provisioning Status",
+  "doctype": "DocType",
+  "module": "Billed Core",
+  "autoname": "field:tenant_id",
+  "fields": [
+    {
+      "fieldname": "tenant_id",
+      "fieldtype": "Data",
+      "label": "Tenant ID",
+      "unique": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "pending|creating_site|installing_apps|seeding_data|ready|failed",
+      "default": "pending"
+    },
+    {
+      "fieldname": "started_at",
+      "fieldtype": "Datetime",
+      "label": "Started At"
+    },
+    {
+      "fieldname": "completed_at",
+      "fieldtype": "Datetime",
+      "label": "Completed At"
+    },
+    {
+      "fieldname": "activation_seconds",
+      "fieldtype": "Int",
+      "label": "Activation Seconds"
+    },
+    {
+      "fieldname": "error_message",
+      "fieldtype": "Small Text",
+      "label": "Error Message"
+    },
+    {
+      "fieldname": "retry_count",
+      "fieldtype": "Int",
+      "label": "Retry Count",
+      "default": "0"
+    },
+    {
+      "fieldname": "shop_name",
+      "fieldtype": "Data",
+      "label": "Shop Name"
+    },
+    {
+      "fieldname": "plan",
+      "fieldtype": "Select",
+      "label": "Plan",
+      "options": "Free|Starter|Pro"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}
+
+{
+  "name": "Billed Activation Log",
+  "doctype": "DocType",
+  "module": "Billed Core",
+  "autoname": "field:tenant_id",
+  "fields": [
+    {
+      "fieldname": "tenant_id",
+      "fieldtype": "Link",
+      "label": "Tenant",
+      "options": "Billed Provisioning Status",
+      "unique": 1
+    },
+    {
+      "fieldname": "shop_name",
+      "fieldtype": "Data",
+      "label": "Shop Name"
+    },
+    {
+      "fieldname": "plan",
+      "fieldtype": "Select",
+      "label": "Plan",
+      "options": "Free|Starter|Pro"
+    },
+    {
+      "fieldname": "signup_time",
+      "fieldtype": "Datetime",
+      "label": "Signup Time"
+    },
+    {
+      "fieldname": "activation_seconds",
+      "fieldtype": "Int",
+      "label": "Time to First Invoice (seconds)"
+    },
+    {
+      "fieldname": "first_invoice_time",
+      "fieldtype": "Datetime",
+      "label": "First Invoice Time"
+    },
+    {
+      "fieldname": "first_whatsapp_time",
+      "fieldtype": "Datetime",
+      "label": "First WhatsApp Sent"
+    },
+    {
+      "fieldname": "invoice_count_day1",
+      "fieldtype": "Int",
+      "label": "Invoices Day 1",
+      "default": "0"
+    },
+    {
+      "fieldname": "checklist",
+      "fieldtype": "JSON",
+      "label": "Onboarding Checklist"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}

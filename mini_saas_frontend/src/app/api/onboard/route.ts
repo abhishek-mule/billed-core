@@ -1,8 +1,31 @@
 import { NextResponse } from 'next/server'
+import crypto from 'crypto'
 
+const INTERNAL_SECRET = process.env.INTERNAL_SIGNATURE_SECRET || 'change-this-in-production'
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
 const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
+
+function verifyInternalSignature(req: Request): boolean {
+  const signature = req.headers.get('x-internal-signature')
+  if (!signature) return false
+
+  try {
+    const body = JSON.stringify({ timestamp: Date.now() })
+    const expected = crypto
+      .createHmac('sha256', INTERNAL_SECRET)
+      .update(body)
+      .digest('hex')
+    
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+  } catch {
+    return false
+  }
+}
+
+async function updateProvisioningStatus(tenantId: string, status: string, error?: string) {
+  console.log(`[Provision] ${tenantId}: ${status}${error ? ` - ${error}` : ''}`)
+}
 
 const SEED_CUSTOMER = {
   customer_name: 'Walk-in Customer',
@@ -28,14 +51,6 @@ const SEED_PRODUCT = {
   tax_rate: 18,
 }
 
-const GST_PRESETS = [
-  { name: 'GST 0%', rate: 0, type: 'Zero Rated' },
-  { name: 'GST 5%', rate: 5, type: 'Reduced Rate' },
-  { name: 'GST 12%', rate: 12, type: 'Reduced Rate' },
-  { name: 'GST 18%', rate: 18, type: 'Standard Rate' },
-  { name: 'GST 28%', rate: 28, type: 'Special Rate' },
-]
-
 async function seedCustomer(tenantId: string, shopName: string) {
   try {
     const res = await fetch(`${ERP_URL}/api/resource/Customer`, {
@@ -52,7 +67,7 @@ async function seedCustomer(tenantId: string, shopName: string) {
       }),
     })
     const data = await res.json()
-    console.log(`[Seed] Customer created: ${data.data?.name}`)
+    console.log(`[Seed] Customer: ${data.data?.name}`)
     return data.data?.name
   } catch (error) {
     console.error('[Seed] Customer failed:', error)
@@ -74,7 +89,7 @@ async function seedProduct(tenantId: string) {
       }),
     })
     const data = await res.json()
-    console.log(`[Seed] Product created: ${data.data?.name}`)
+    console.log(`[Seed] Product: ${data.data?.name}`)
     return data.data?.name
   } catch (error) {
     console.error('[Seed] Product failed:', error)
@@ -95,6 +110,7 @@ async function createActivationLog(tenantId: string, shopName: string, plan: str
         shop_name: shopName,
         plan: plan,
         signup_time: new Date().toISOString(),
+        activation_seconds: null,
         first_invoice_time: null,
         first_whatsapp_time: null,
         invoice_count_day1: 0,
@@ -106,7 +122,7 @@ async function createActivationLog(tenantId: string, shopName: string, plan: str
       }),
     })
     const data = await res.json()
-    console.log(`[Activation] Log created: ${data.data?.name}`)
+    console.log(`[Activation] Log: ${data.data?.name}`)
     return data.data?.name
   } catch (error) {
     console.error('[Activation] Log failed:', error)
@@ -115,16 +131,25 @@ async function createActivationLog(tenantId: string, shopName: string, plan: str
 }
 
 export async function POST(request: Request) {
+  const startTime = Date.now()
+  
   try {
     const data = await request.json()
     const { shopName, plan = 'free', tenantId } = data
     
     const actualTenantId = tenantId || `tenant_${Date.now()}`
-    console.log(`[Onboard] Processing: ${shopName} (${actualTenantId})`)
+    console.log(`[Onboard] Starting: ${shopName} (${actualTenantId})`)
 
-    await seedCustomer(actualTenantId, shopName)
-    await seedProduct(actualTenantId)
-    await createActivationLog(actualTenantId, shopName, plan)
+    await updateProvisioningStatus(actualTenantId, 'pending')
+
+    const customerResult = await seedCustomer(actualTenantId, shopName)
+    await updateProvisioningStatus(actualTenantId, 'seeding_customer')
+
+    const productResult = await seedProduct(actualTenantId)
+    await updateProvisioningStatus(actualTenantId, 'seeding_product')
+
+    const activationResult = await createActivationLog(actualTenantId, shopName, plan)
+    await updateProvisioningStatus(actualTenantId, 'ready')
 
     const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL
     if (n8nWebhookUrl) {
@@ -139,10 +164,14 @@ export async function POST(request: Request) {
       }
     }
     
+    const activationMs = Date.now() - startTime
+    console.log(`[Onboard] Completed in ${activationMs}ms`)
+    
     return NextResponse.json({
       success: true,
       tenantId: actualTenantId,
-      message: 'Account ready. Walk-in customer and sample product added.',
+      activationMs,
+      message: 'Account ready.',
       seedData: {
         customer: 'Walk-in Customer',
         product: 'Sample Product - ₹100',
