@@ -62,6 +62,7 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     console.error('[WhatsApp Event] Error:', error)
+    console.error(`[Sentry] WhatsApp event failed: ${error}`)
     return NextResponse.json(
       { success: false, error: 'Failed to trigger event' },
       { status: 500 }

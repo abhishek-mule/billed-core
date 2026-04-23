@@ -193,6 +193,9 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error('[Merchant API] Error:', error)
+    
+    console.error(`[Sentry] Capturing: ${error}`)
+    
     return NextResponse.json({ 
       success: false, 
       error: 'Failed to create invoice' 
