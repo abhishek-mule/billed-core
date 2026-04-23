@@ -1,0 +1,123 @@
+# Usage Logs DocType for ERPNext
+# Run this in your ERPNextbench console:
+# bench get-app billed_core --overwrite
+# bench --site [your-site] migrate
+
+{
+  "name": "Billed Usage Log",
+  "doctype": "DocType",
+  "module": "Billed Core",
+  "autoname": "hash",
+  "is_submittable": 1,
+  "editable_grid": 1,
+  "fields": [
+    {
+      "fieldname": "tenant_id",
+      "fieldtype": "Link",
+      "label": "Tenant",
+      "options": "Billed Tenant"
+    },
+    {
+      "fieldname": "event_type",
+      "fieldtype": "Select",
+      "label": "Event Type",
+      "options": "invoice_created|invoice_sent|whatsapp_sent|api_call|dashboard_view"
+    },
+    {
+      "fieldname": "count",
+      "fieldtype": "Int",
+      "label": "Count",
+      "default": "1"
+    },
+    {
+      "fieldname": "metadata",
+      "fieldtype": "JSON",
+      "label": "Metadata"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}
+
+{
+  "name": "Billed Tenant",
+  "doctype": "DocType",
+  "module": "Billed Core",
+  "autoname": "field:subdomain",
+  "fields": [
+    {
+      "fieldname": "tenant_name",
+      "fieldtype": "Data",
+      "label": "Shop Name"
+    },
+    {
+      "fieldname": "plan",
+      "fieldtype": "Select",
+      "label": "Plan",
+      "options": "Free|Starter|Pro"
+    },
+    {
+      "fieldname": "subdomain",
+      "fieldtype": "Data",
+      "label": "Subdomain"
+    },
+    {
+      "fieldname": "erp_site",
+      "fieldtype": "Data",
+      "label": "ERPNext Site"
+    },
+    {
+      "fieldname": "api_key",
+      "fieldtype": "Data",
+      "label": "API Key"
+    },
+    {
+      "fieldname": "api_secret",
+      "fieldtype": "Password",
+      "label": "API Secret"
+    },
+    {
+      "fieldname": "invoice_limit",
+      "fieldtype": "Int",
+      "label": "Invoice Limit",
+      "default": "50"
+    },
+    {
+      "fieldname": "invoices_used",
+      "fieldtype": "Int",
+      "label": "Invoices Used",
+      "default": "0"
+    },
+    {
+      "fieldname": "whatsapp_limit",
+      "fieldtype": "Int",
+      "label": "WhatsApp Limit",
+      "default": "0"
+    },
+    {
+      "fieldname": "whatsapp_used",
+      "fieldtype": "Int",
+      "label": "WhatsApp Used",
+      "default": "0"
+    },
+    {
+      "fieldname": "is_active",
+      "fieldtype": "Check",
+      "label": "Active"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ]
+}
