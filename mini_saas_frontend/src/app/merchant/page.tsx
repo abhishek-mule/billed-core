@@ -1,228 +1,250 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 
-interface Stats {
-  todaySales: number
-  todayInvoices: number
-  pendingPayments: number
-  lowStockCount: number
+const mockData = {
+  stats: [
+    { label: 'Today Revenue', value: '₹24,580', change: '+12.5%', positive: true },
+    { label: 'Invoices', value: '156', change: '+8 this week', positive: true },
+    { label: 'Customers', value: '89', change: '+5 this month', positive: true },
+    { label: 'Low Stock', value: '12', change: '-3', positive: false },
+  ],
+  recentInvoices: [
+    { id: 'INV-001', customer: 'Sharma Electronics', amount: '₹15,200', date: 'Today', status: 'Paid' },
+    { id: 'INV-002', customer: 'Gupta Hardware', amount: '₹8,450', date: 'Today', status: 'Pending' },
+    { id: 'INV-003', customer: 'Patel Mobile Store', amount: '₹32,000', date: 'Yesterday', status: 'Paid' },
+    { id: 'INV-004', customer: 'Singh Electricals', amount: '₹5,780', date: 'Yesterday', status: 'Overdue' },
+  ],
+  topItems: [
+    { name: 'Bajaj 48" Fan', sold: 45, revenue: '₹1,12,500' },
+    { name: 'Philips LED Bulb 9W', sold: 120, revenue: '₹36,000' },
+    { name: 'Havells Wire 2.5mm', sold: 30, revenue: '₹45,000' },
+  ],
 }
 
-interface RecentInvoice {
-  name: string
-  customer_name: string
-  total: number
-  outstanding_amount: number
-  docstatus: number
-  creation: string
-}
-
-const mockStats: Stats = {
-  todaySales: 15680,
-  todayInvoices: 12,
-  pendingPayments: 3,
-  lowStockCount: 5
-}
-
-const mockRecentInvoices: RecentInvoice[] = [
-  { name: 'INV-2024-001', customer_name: 'Rajesh Kumar', total: 4500, outstanding_amount: 0, docstatus: 1, creation: '2024-01-15T10:30:00' },
-  { name: 'INV-2024-002', customer_name: 'Amit Sharma', total: 2800, outstanding_amount: 2800, docstatus: 1, creation: '2024-01-15T11:45:00' },
-  { name: 'INV-2024-003', customer_name: 'Suresh Gupta', total: 7200, outstanding_amount: 0, docstatus: 1, creation: '2024-01-14T16:20:00' },
+const navItems = [
+  { icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', label: 'Dashboard' },
+  { icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', label: 'Invoices' },
+  { icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', label: 'Products' },
+  { icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z', label: 'Customers' },
+  { icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01', label: 'Settings' },
 ]
 
-export default function MerchantDashboard() {
-  const [stats, setStats] = useState<Stats>(mockStats)
-  const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>(mockRecentInvoices)
-  const [lang, setLang] = useState<'en' | 'hi'>('en')
+export default function Dashboard() {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  const t = {
-    en: {
-      todaySales: "Today's Sales",
-      invoices: 'Invoices',
-      pending: 'Pending',
-      lowStock: 'Low Stock',
-      quickActions: 'Quick Actions',
-      newInvoice: 'New Invoice',
-      scanBill: 'Scan Bill',
-      customers: 'Customers',
-      recentSales: 'Recent Sales',
-      viewAll: 'View All',
-      paid: 'Paid',
-      due: 'Due',
-      createFirstInvoice: 'Create your first invoice',
-      goToInvoice: 'Create Invoice →',
-    },
-    hi: {
-      todaySales: 'आज की बिक्री',
-      invoices: 'बिल',
-      pending: 'बकाया',
-      lowStock: 'कम स्टॉक',
-      quickActions: 'त्वरित कार्य',
-      newInvoice: 'नया बिल',
-      scanBill: 'बिल स्कैन करें',
-      customers: 'ग्राहक',
-      recentSales: 'हाल की बिक्री',
-      viewAll: 'सभी देखें',
-      paid: 'भुगतान',
-      due: 'देय',
-      createFirstInvoice: 'अपना पहला बिल बनाएं',
-      goToInvoice: 'बिल बनाएं →',
+  const StatusBadge = ({ status }: { status: string }) => {
+    const styles = {
+      Paid: 'bg-emerald-500/10 text-emerald-400',
+      Pending: 'bg-amber-500/10 text-amber-400',
+      Overdue: 'bg-rose-500/10 text-rose-400',
     }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', { 
-      style: 'currency', 
-      currency: 'INR',
-      maximumFractionDigits: 0 
-    }).format(amount)
-  }
-
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
-    return date.toLocaleDateString('en-IN')
+    return (
+      <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${styles[status as keyof typeof styles]}`}>
+        {status}
+      </span>
+    )
   }
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="grid grid-cols-2 gap-3">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="col-span-2 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/20 rounded-2xl p-5"
-        >
-          <p className="text-xs font-medium text-emerald-400/80 uppercase tracking-wider">
-            {t[lang].todaySales}
-          </p>
-          <p className="text-3xl font-black mt-1 tracking-tight">
-            {formatCurrency(stats.todaySales)}
-          </p>
-          <p className="text-xs text-emerald-400/60 mt-1">
-            {stats.todayInvoices} {t[lang].invoices} today
-          </p>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white/5 border border-white/5 rounded-2xl p-4"
-        >
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-xl font-bold">{stats.pendingPayments}</p>
-          <p className="text-[10px] text-gray-500 font-medium uppercase">{t[lang].pending}</p>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="bg-white/5 border border-white/5 rounded-2xl p-4"
-        >
-          <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center mb-3">
-            <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          </div>
-          <p className="text-xl font-bold">{stats.lowStockCount}</p>
-          <p className="text-[10px] text-gray-500 font-medium uppercase">{t[lang].lowStock}</p>
-        </motion.div>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-            {t[lang].quickActions}
-          </h2>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Link href="/merchant/invoice/new" className="flex flex-col items-center gap-2 p-4 bg-indigo-600 rounded-2xl">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+    <div className="min-h-screen bg-[#0f0f12] text-white">
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 z-40 h-screen w-60 bg-[#16161a] border-r border-white/5 flex flex-col transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="p-5 border-b border-white/5">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <span className="text-white font-bold text-sm">Z</span>
             </div>
-            <span className="text-xs font-bold text-white">{t[lang].newInvoice}</span>
-          </Link>
-
-          <button className="flex flex-col items-center gap-2 p-4 bg-white/5 border border-white/5 rounded-2xl">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+            <div>
+              <span className="font-semibold text-sm text-white">BillZo</span>
+              <p className="text-[10px] text-gray-500">Business Dashboard</p>
             </div>
-            <span className="text-xs font-bold text-gray-400">{t[lang].scanBill}</span>
-          </button>
-
-          <Link href="/merchant/customers" className="flex flex-col items-center gap-2 p-4 bg-white/5 border border-white/5 rounded-2xl">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-bold text-gray-400">{t[lang].customers}</span>
           </Link>
         </div>
-      </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-            {t[lang].recentSales}
-          </h2>
-          <button className="text-xs font-bold text-indigo-400">{t[lang].viewAll}</button>
-        </div>
-        
-        {recentInvoices.length === 0 ? (
-          <div className="text-center py-12 bg-white/[0.02] border-2 border-dashed border-white/5 rounded-2xl">
-            <p className="text-gray-500 font-medium">{t[lang].createFirstInvoice}</p>
-            <Link href="/merchant/invoice/new" className="text-indigo-400 text-sm font-bold mt-2 inline-block">
-              {t[lang].goToInvoice}
+        <nav className="flex-1 p-3 space-y-0.5">
+          {navItems.map((item, i) => (
+            <Link
+              key={item.label}
+              href={i === 0 ? '/merchant' : i === 1 ? '/merchant/invoice/new' : '#'}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                i === 0
+                  ? 'bg-indigo-500/10 text-indigo-400'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
+              </svg>
+              <span className="text-sm font-medium">{item.label}</span>
             </Link>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t border-white/5">
+          <div className="flex items-center gap-3 p-2.5 rounded-lg bg-white/5">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-semibold">
+              RS
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">Rajesh Sharma</p>
+              <p className="text-[10px] text-gray-500">Starter Plan</p>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {recentInvoices.map((invoice, i) => (
-              <motion.div 
-                key={invoice.name}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-xl"
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="lg:pl-60 min-h-screen">
+        {/* Top Bar */}
+        <header className="sticky top-0 z-30 bg-[#0f0f12]/80 backdrop-blur-xl border-b border-white/5 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden p-2 text-gray-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-base font-semibold text-white">Sharma Electronics</h1>
+                <p className="text-xs text-gray-500">Overview</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/merchant/invoice/new"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm truncate">{invoice.customer_name}</p>
-                  <p className="text-xs text-gray-500">{formatTime(invoice.creation)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-sm">{formatCurrency(invoice.total)}</p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    invoice.outstanding_amount === 0 
-                      ? 'bg-emerald-500/10 text-emerald-400' 
-                      : 'bg-amber-500/10 text-amber-400'
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Invoice
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <div className="p-6 space-y-6">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {mockData.stats.map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-[#16161a] border border-white/5 rounded-xl p-4"
+              >
+                <p className="text-xs font-medium text-gray-500 mb-1">{stat.label}</p>
+                <div className="flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{stat.value}</p>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                    stat.positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
                   }`}>
-                    {invoice.outstanding_amount === 0 ? t[lang].paid : t[lang].due}
+                    {stat.change}
                   </span>
                 </div>
               </motion.div>
             ))}
           </div>
-        )}
-      </div>
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link href="/merchant/invoice/new" className="bg-[#16161a] border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-indigo-500/30 transition-colors group">
+              <div className="w-10 h-10 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">New Invoice</p>
+                <p className="text-xs text-gray-500">Create GST invoice</p>
+              </div>
+            </Link>
+
+            <Link href="/merchant/customers" className="bg-[#16161a] border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-indigo-500/30 transition-colors group">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">Customers</p>
+                <p className="text-xs text-gray-500">Manage your customers</p>
+              </div>
+            </Link>
+
+            <button className="bg-[#16161a] border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-indigo-500/30 transition-colors group text-left">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">Quick Scan</p>
+                <p className="text-xs text-gray-500">Scan product barcode</p>
+              </div>
+            </button>
+          </div>
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Recent Invoices */}
+            <div className="lg:col-span-2 bg-[#16161a] border border-white/5 rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white">Recent Invoices</h2>
+                <Link href="/merchant/invoice/new" className="text-xs text-indigo-400 hover:text-indigo-300">View All</Link>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-xs text-gray-500 border-b border-white/5">
+                      <th className="px-4 py-3 font-medium">Invoice</th>
+                      <th className="px-4 py-3 font-medium">Customer</th>
+                      <th className="px-4 py-3 font-medium">Amount</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {mockData.recentInvoices.map((invoice) => (
+                      <tr key={invoice.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-sm font-medium text-white">{invoice.id}</td>
+                        <td className="px-4 py-3 text-sm text-gray-400">{invoice.customer}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-white">{invoice.amount}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{invoice.date}</td>
+                        <td className="px-4 py-3"><StatusBadge status={invoice.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Top Products */}
+            <div className="bg-[#16161a] border border-white/5 rounded-xl p-4">
+              <h2 className="text-sm font-semibold text-white mb-4">Top Products</h2>
+              <div className="space-y-4">
+                {mockData.topItems.map((item, i) => (
+                  <div key={item.name} className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs font-medium text-gray-400">
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{item.name}</p>
+                      <p className="text-xs text-gray-500">{item.sold} sold</p>
+                    </div>
+                    <p className="text-sm font-medium text-white">{item.revenue}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   )
 }
