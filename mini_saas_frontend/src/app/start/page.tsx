@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { z } from 'zod'
 import { loadRazorpay, RAZORPAY_KEY } from '@/lib/razorpay'
+import { Icon, Icons } from '@/components/Icons'
 
 const shopSchema = z.object({
   shopName: z.string().min(2, 'Shop name must be at least 2 characters'),
@@ -23,14 +24,11 @@ type ShopData = z.infer<typeof shopSchema>
 type IdentityData = z.infer<typeof identitySchema>
 
 const categories = [
-  { id: 'electrical', name: 'Electrical Retailer', icon: '⚡' },
-  { id: 'mobile', name: 'Mobile & Electronics', icon: '📱' },
-  { id: 'grocery', name: 'Grocery & Kirana', icon: '🛒' },
-  { id: 'pharmacy', name: 'Pharmacy', icon: '💊' },
-  { id: 'clothing', name: 'Clothing & Fashion', icon: '👕' },
-  { id: 'hardware', name: 'Hardware & Tools', icon: '🔧' },
-  { id: 'auto', name: 'Auto Parts', icon: '🚗' },
-  { id: 'other', name: 'Other', icon: '📦' },
+{ id: 'electrical', name: 'Electrical Retailer', icon: 'bolt' },
+
+  { id: 'mobile', name: 'Mobile & Electronics', icon: 'phone' },
+
+  { id: 'other', name: 'Other', icon: 'box' },
 ]
 
 const plans = [
@@ -250,7 +248,7 @@ function ShopStep({ onSubmit }: { onSubmit: (data: ShopData) => void }) {
                     : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:border-white/20'
                 }`}
               >
-                <span className="text-2xl">{cat.icon}</span>
+                <Icon name={cat.icon as keyof typeof Icons} size={24} />
                 <span className="text-xs font-medium">{cat.name}</span>
               </motion.button>
             ))}
@@ -487,9 +485,9 @@ function SuccessStep({ shopName, plan }: { shopName: string; plan: string }) {
       <p className="text-gray-400 mb-4">
         {shopName} ready with {selectedPlan.name} plan
       </p>
-      <p className="text-indigo-400 text-sm mb-6">
-        🎯 Create your first invoice to get started →
-      </p>
+<p className="text-indigo-400 text-sm mb-6 flex items-center gap-2">
+          <Icon name="activity" size={16} /> Create your first invoice to get started →
+        </p>
 
       <div className="bg-white/5 rounded-2xl p-6 max-w-sm mx-auto border border-white/10">
         <div className="flex items-center justify-between py-3 border-b border-white/10">
