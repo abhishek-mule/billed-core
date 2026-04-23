@@ -484,8 +484,11 @@ function SuccessStep({ shopName, plan }: { shopName: string; plan: string }) {
       </motion.div>
       
       <h2 className="text-3xl font-bold mb-2">Welcome to BillZo!</h2>
-      <p className="text-gray-400 mb-8">
-        {shopName} is ready with {selectedPlan.name} plan
+      <p className="text-gray-400 mb-4">
+        {shopName} ready with {selectedPlan.name} plan
+      </p>
+      <p className="text-indigo-400 text-sm mb-6">
+        🎯 Create your first invoice to get started →
       </p>
 
       <div className="bg-white/5 rounded-2xl p-6 max-w-sm mx-auto border border-white/10">
@@ -506,10 +509,10 @@ function SuccessStep({ shopName, plan }: { shopName: string; plan: string }) {
       <motion.button
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        onClick={() => window.location.href = '/dashboard'}
+        onClick={() => window.location.href = '/merchant/invoice/new'}
         className="mt-8 w-full py-4 bg-white text-black font-semibold rounded-xl hover:bg-gray-100 transition-colors text-lg"
       >
-        Go to Dashboard
+        Create First Invoice →
       </motion.button>
     </motion.div>
   )
