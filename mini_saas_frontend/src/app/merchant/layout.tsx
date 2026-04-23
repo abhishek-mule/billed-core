@@ -33,7 +33,7 @@ export default function MerchantLayout({ children }: { children: React.ReactNode
       <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <span className="text-xs font-black italic">B</span>
+            <span className="text-xs font-black italic">Z</span>
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight">Sharma Electronics</h1>
