@@ -145,18 +145,18 @@ export default function BillZoLanding() {
                 onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(83,72,240,0.45)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(83,72,240,0.35)'; }}
               >Start Free <span style={{ fontSize: '16px' }}>→</span></Link>
-              <button className="px-7 py-3.5 text-base font-medium transition-all border bg-white" 
+              <Link href="/demo" className="px-7 py-3.5 text-base font-medium transition-all border bg-white no-underline" 
                 style={{ borderColor: '#e8e4dc', borderRadius: '14px', color: '#3d3d45' }}
                 onMouseOver={(e) => { e.currentTarget.style.borderColor = '#3d3d45'; e.currentTarget.style.color = '#0e0e10'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e8e4dc'; e.currentTarget.style.color = '#3d3d45'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
               >
                 <span className="inline-flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#0e0e10] flex items-center justify-center">
-                    <span className="border-l-2 border-t border-transparent border-b-transparent w-0 h-0" style={{ borderLeftWidth: '6px', marginLeft: '2px' }} />
+                  <span className="w-6 h-6 rounded-full bg-[#0e0e10] flex items-center justify-center text-white">
+                    ▶
                   </span>
-                  Watch Demo
+                  Try Demo Billing
                 </span>
-              </button>
+              </Link>
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex items-center gap-7 mt-12">
               <div className="flex">
