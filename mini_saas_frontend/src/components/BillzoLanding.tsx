@@ -25,16 +25,15 @@ const tokens = {
 }
 
 const features = [
-  { num: '01 / GST Invoicing', title: 'GST invoices in 60 seconds', desc: 'Auto-calculate CGST, SGST, IGST. Add HSN codes, discount rows, and send via WhatsApp or email in one tap.' },
-  { num: '02 / GSTIN Verify', title: 'Verify any GSTIN instantly', desc: 'Check vendor GSTIN before payment. Live lookup from GSTN portal with auto-fill of business details.' },
-  { num: '03 / Aadhaar KYC', title: 'OTP-based Aadhaar onboarding', desc: 'Add verified Aadhaar as business identity. Instant customer KYC with full UIDAI-compliant verification.' },
+  { num: '01 / Fast Billing', title: 'GST invoice in 10 seconds', desc: 'Select customer, add items, send. Auto-calculate CGST, SGST, IGST with HSN codes. Works on mobile.' },
+  { num: '02 / WhatsApp Auto', title: 'Reminders sent automatically', desc: 'Invoice goes to WhatsApp instantly. Payment reminders. Daily summaries. No follow-up calls needed.' },
+  { num: '03 / ERP Power', title: 'Enterprise accounting hidden', desc: 'Ledger ready. GST reports ready. Powered by enterprise accounting engine. Your data stays safe.' },
 ]
 
 const plans = [
-  { name: 'Starter', price: '0', period: 'Forever free', tagline: 'Perfect for new businesses starting with GST billing.', features: ['25 invoices/month', 'GSTIN verify (10/mo)', 'PDF export', 'WhatsApp delivery'], cta: 'Start Free' },
-  { name: 'Basic', price: '199', period: '/month', tagline: 'Ideal for small shops and individual professionals.', features: ['200 invoices/month', 'GSTIN verify (50/mo)', 'Auto-GST calculation', 'Email support'], popular: true, cta: 'Start Basic' },
-  { name: 'Professional', price: '499', period: '/month', tagline: 'For growing businesses with regular billing needs.', features: ['1,000 invoices/month', 'Unlimited GSTIN verify', 'Aadhaar KYC included', 'Priority support'], cta: 'Go Pro' },
-  { name: 'Enterprise', price: '1499', period: '/month', tagline: 'For CA firms, distributors and large businesses.', features: ['Unlimited invoices', 'Unlimited Aadhaar KYC', 'API access', 'Dedicated manager'], cta: 'Contact Sales' },
+  { name: 'Free', price: '0', period: 'Forever', tagline: 'Perfect for starting out.', features: ['50 invoices/day', 'Basic reminders', 'Mobile billing'], cta: 'Start Free' },
+  { name: 'Starter', price: '₹199', period: '/month', tagline: 'For small shops.', features: ['300 invoices/day', 'WhatsApp automation', 'Inventory alerts'], popular: true, cta: 'Start Starter' },
+  { name: 'Pro', price: '₹499', period: '/month', tagline: 'For growing businesses.', features: ['2000 invoices/day', 'Analytics', 'Priority support'], cta: 'Go Pro' },
 ]
 
 const securityCards = [
@@ -81,7 +80,7 @@ export default function BillZoLanding() {
           <Link href="/" className="flex items-center gap-3 no-underline">
             <div className="w-9 h-9 rounded-[10px] flex items-center justify-center font-display text-lg text-white font-italic shadow-lg" 
               style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)', boxShadow: '0 4px 12px rgba(83,72,240,0.35)' }}>
-              B
+              Z
             </div>
             <div className="flex flex-col">
               <span className="text-base font-semibold tracking-tight" style={{ letterSpacing: '-0.5px' }}>BillZo</span>
@@ -108,7 +107,7 @@ export default function BillZoLanding() {
               style={{ background: '#5548f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(83,72,240,0.35)' }}
               onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(83,72,240,0.4)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(83,72,240,0.35)'; }}
-            >Start Free →</Link>
+            >Start Free Billing →</Link>
           </div>
         </div>
       </nav>
@@ -129,8 +128,8 @@ export default function BillZoLanding() {
             <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} 
               className="text-5xl font-bold mb-4 font-display leading-tight" style={{ letterSpacing: '-1.5px' }}>
               Billing that<br />
-              <em className="text-[#5548f0]" style={{ fontStyle: 'italic' }}>understands</em><br />
-              <span className="relative">Indian business
+              <em className="text-[#5548f0]" style={{ fontStyle: 'italic' }}>follows up</em><br />
+              <span className="relative">automatically
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#c5a55a' }} />
               </span>
             </motion.h1>
@@ -138,7 +137,7 @@ export default function BillZoLanding() {
               className="text-xl font-display italic mb-6" style={{ color: '#4338ca' }}>Sahi bill. Safe deal.</motion.p>
             <motion.p initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} 
               className="text-base leading-relaxed mb-8 max-w-md" style={{ color: '#3d3d45', fontWeight: 300 }}>
-              Create GST invoices, verify GSTIN and Aadhaar, manage your taxes—all in one clean workspace built for how India actually works.
+              GST billing in 10 seconds. WhatsApp reminders sent automatically. Built for Indian shop owners who want payments on time.
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="flex gap-4">
               <Link href="/start" className="px-8 py-3.5 text-base font-semibold text-white no-underline transition-all" 
