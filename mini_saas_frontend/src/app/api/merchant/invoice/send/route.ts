@@ -23,6 +23,20 @@ const ERP_URL = process.env.ERP_URL || 'http://localhost'
 const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
 const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
 
+async function getTodayInvoiceCount(tenantId?: string): Promise<number> {
+  if (!tenantId) return 0
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const res = await fetch(`${ERP_URL}/api/resource/Sales Invoice?filters=[["creation", "like", "${today}%"]]&fields=["count(name)"]`, {
+      headers: { 'Authorization': `token ${ERP_API_KEY}:${ERP_API_SECRET}` },
+    })
+    const data = await res.json()
+    return data.message?.count || 0
+  } catch {
+    return 0
+  }
+}
+
 async function createERPInvoice(customer: Customer, items: LineItem[], totals: any, paymentMode: string) {
   const invoiceData = {
     doctype: 'Sales Invoice',
@@ -110,12 +124,35 @@ async function sendWhatsAppMessage(phone: string, invoiceData: any) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { customer, items, totals, paymentMode = 'cash', enableReminder = true } = body as { 
+    const { customer, items, totals, paymentMode = 'cash', enableReminder = true, tenantId, plan = 'free' } = body as { 
       customer: Customer
       items: LineItem[]
       totals: { subtotal: number; cgst: number; sgst: number; gst: number; total: number }
       paymentMode?: string
       enableReminder?: boolean
+      tenantId?: string
+      plan?: string
+    }
+
+    const USAGE_LIMITS: Record<string, number> = {
+      free: 50,
+      starter: 300,
+      pro: 2000,
+      unlimited: Infinity,
+    }
+    
+    const limit = USAGE_LIMITS[plan] || 50
+    if (limit !== Infinity) {
+      const todayInvoices = await getTodayInvoiceCount(tenantId)
+      if (todayInvoices >= limit) {
+        return NextResponse.json({
+          success: false,
+          error: `${plan} plan limit (${limit} invoices/day) reached`,
+          upgrade_required: true,
+          used: todayInvoices,
+          limit,
+        }, { status: 403 })
+      }
     }
 
     if (!customer?.phone) {
