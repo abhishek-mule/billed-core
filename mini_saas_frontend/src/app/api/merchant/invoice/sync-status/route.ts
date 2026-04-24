@@ -3,7 +3,7 @@ import { withSessionAuth, Session } from '@/lib/session'
 import { query } from '@/lib/db/client'
 import { getErpSyncHistory, getErpWriteAttempt, ErpWriteAttempt } from '@/lib/invoice/erp-sync'
 
-export async function GET(request: Request, session: Session) {
+async function handleGetSyncStatus(request: Request, session: Session) {
   const { tenantId } = session
   const { searchParams } = new URL(request.url)
   const limit = searchParams.get('limit') || '10'
@@ -62,4 +62,4 @@ export async function GET(request: Request, session: Session) {
   }
 }
 
-export const GET = withSessionAuth(GET)
+export const GET = withSessionAuth(handleGetSyncStatus)
