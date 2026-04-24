@@ -1,0 +1,135 @@
+{
+  "name": "Frappe Site Provisioning - HTTP Based",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "provision-site",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook - Site Provision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\n\nconst shopName = body.shopName || 'myshop';\nconst shopSlug = shopName\n  .toLowerCase()\n  .replace(/[^a-z0-9]+/g, '-')\n  .replace(/^-|-$/g, '')\n  .substring(0, 50);\n\nconst chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';\nlet tempPassword = 'Billed@';\nfor (let i = 0; i < 10; i++) {\n  tempPassword += chars[Math.floor(Math.random() * chars.length)];\n}\n\nconst domain = 'localhost';\nconst siteUrl = `http://${shopSlug}.localhost`;\n\nreturn {\n  json: {\n    ...body,\n    shopSlug,\n    tempPassword,\n    siteUrl,\n    fullSiteName: `${shopSlug}.${domain}`,\n    status: 'initiated',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "slug-generator",
+      "name": "Generate Slug & Password",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FRAPPE_API_URL || 'http://backend:8000' }}/api/resource/Site",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.FRAPPE_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "site_name", "value": "={{ $json.fullSiteName }}" },
+            { "name": "password", "value": "={{ $json.tempPassword }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-site",
+      "name": "Create Site via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FRAPPE_API_URL || 'http://backend:8000' }}/api/resource/Site/{{ $json.fullSiteName }}/install_app",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.FRAPPE_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "app", "value": "erpnext" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "install-app",
+      "name": "Install ERPNext",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, site: $json.fullSiteName, shopSlug: $json.shopSlug, password: $json.tempPassword }) }}"
+      },
+      "id": "success",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error || 'Failed' }) }}"
+      },
+      "id": "error",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "Webhook - Site Provision": {
+      "main": [[{ "node": "Generate Slug & Password", "type": "main", "index": 0 }]]
+    },
+    "Generate Slug & Password": {
+      "main": [[{ "node": "Create Site via API", "type": "main", "index": 0 }]]
+    },
+    "Create Site via API": {
+      "main": [[{ "node": "Wait 30s", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "Error Response", "type": "main", "index": 0 }]]
+    },
+    "Wait 30s": {
+      "main": [[{ "node": "Install ERPNext", "type": "main", "index": 0 }]]
+    },
+    "Install ERPNext": {
+      "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "Error Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  }
+}

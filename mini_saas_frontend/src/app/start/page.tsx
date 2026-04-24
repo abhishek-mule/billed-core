@@ -118,7 +118,9 @@ export default function StartPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...shopData, ...identityData, plan: planId, paymentId }),
       })
-      if (response.ok) setStep(4)
+      if (response.ok) {
+        setStep(4)
+      }
     } catch (error) {
       console.error(error)
     } finally {

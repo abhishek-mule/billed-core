@@ -1,6 +1,7 @@
-// Merchant Invoice Creation API
+// Merchant Invoice API
 import { NextRequest, NextResponse } from 'next/server'
-import { withMerchantAuth, extractMerchantContext, MerchantContext } from '@/app/api/middleware/auth'
+import { withSessionAuth, Session } from '@/lib/session'
+import { withCsrfProtection } from '@/lib/middleware/csrf'
 import { 
   validateInvoicePayload, 
   generateInvoiceNumber, 
@@ -10,12 +11,53 @@ import {
   MerchantInvoiceResponse 
 } from '@/lib/merchant'
 import { calculateInvoiceTotal, formatInvoiceForWhatsApp } from '@/lib/gst'
+import { getCachedCredentials } from '@/lib/db/credentials'
 
-async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> {
-  const merchant = await extractMerchantContext(request)
-  if (!merchant) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+const ERP_URL = process.env.ERP_URL || 'http://localhost'
+
+async function handleListInvoices(request: Request, session: Session) {
+  const { tenantId } = session
+  const creds = await getCachedCredentials(tenantId)
+  
+  const apiKey = creds?.apiKey || process.env.ERP_API_KEY || 'administrator'
+  const apiSecret = creds?.apiSecret || process.env.ERP_API_SECRET || 'admin'
+
+  const { searchParams } = new URL(request.url)
+  const limit = searchParams.get('limit') || '10'
+
+  try {
+    const res = await fetch(
+      `${ERP_URL}/api/resource/Sales Invoice?fields=["name","customer_name","grand_total","posting_date","outstanding_amount"]&filters=[["custom_tenant_id", "=", "${tenantId}"]]&limit=${limit}&order_by=creation desc`,
+      {
+        headers: { 'Authorization': `token ${apiKey}:${apiSecret}` },
+      }
+    )
+
+    const data = await res.json()
+    const invoices = Array.isArray(data.message) ? data.message : []
+
+    return NextResponse.json({ invoices })
+  } catch (error) {
+    console.error('[Invoice List] Error:', error)
+    return NextResponse.json({ invoices: [] }, { status: 500 })
   }
+}
+
+async function handleCreateInvoice(request: NextRequest, session: Session) {
+  const { tenantId, role } = session
+  
+  if (!['owner', 'cashier', 'accountant'].includes(role)) {
+    return NextResponse.json(
+      { success: false, error: 'Permission denied' },
+      { status: 403 }
+    )
+  }
+  
+  const creds = await getCachedCredentials(tenantId)
+  
+  const apiKey = creds?.apiKey || process.env.ERP_API_KEY || 'administrator'
+  const apiSecret = creds?.apiSecret || process.env.ERP_API_SECRET || 'admin'
+  const erpSite = creds?.erpSite || 'default'
 
   try {
     const payload: MerchantInvoicePayload = await request.json()
@@ -44,7 +86,7 @@ async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> 
       doctype: 'Sales Invoice',
       customer: customerId,
       customer_name: payload.customerName || `Customer ${formatPhone(payload.customerPhone)}`,
-      company: merchant.companyName,
+      company: erpSite,
       posting_date: new Date().toISOString().slice(0, 10),
       due_date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       items: summary.items.map((item) => ({
@@ -56,33 +98,31 @@ async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> 
       })),
       custom_invoice_number: invoiceNumber,
       remarks: payload.notes || '',
+      custom_tenant_id: tenantId,
       is_pos: 0,
       do_not_submit: false,
     }
 
-    const sidecarUrl = process.env.PROVISIONING_SIDECAR_URL || 'http://localhost:8001'
-    const frappe_call = await fetch(`${sidecarUrl}/api/invoices/create`, {
+    const frappeRes = await fetch(`${ERP_URL}/api/resource/Sales Invoice`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Merchant-Site': merchant.siteName,
-        'X-Merchant-Company': merchant.companyName,
-        'Authorization': `Bearer ${merchant.apiKey}`,
+        'Authorization': `token ${apiKey}:${apiSecret}`,
       },
       body: JSON.stringify(invoiceData),
     })
 
-    if (!frappe_call.ok) {
-      const errorData = await frappe_call.json().catch(() => ({}))
-      console.error('[Invoice API] Frappe error:', errorData)
+    if (!frappeRes.ok) {
+      const errorData = await frappeRes.json().catch(() => ({}))
+      console.error('[Invoice] Frappe error:', errorData)
       return NextResponse.json(
         { success: false, error: 'Failed to create invoice in billing system' },
         { status: 500 }
       )
     }
 
-    const frappeResponse = await frappe_call.json()
-    const invoiceId = frappeResponse.data?.name || invoiceNumber
+    const frappeData = await frappeRes.json()
+    const invoiceId = frappeData.data?.name || invoiceNumber
 
     const whatsappMessage = formatInvoiceForWhatsApp(summary, invoiceNumber)
     const encodedMessage = encodeURIComponent(whatsappMessage)
@@ -100,12 +140,12 @@ async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> 
           customerName: payload.customerName,
           total: summary.total,
           merchant: {
-            tenantId: merchant.tenantId,
-            companyName: merchant.companyName,
+            tenantId,
+            erpSite,
           },
           timestamp: new Date().toISOString(),
         }),
-      }).catch((err) => console.warn('[Invoice API] n8n webhook failed:', err))
+      }).catch((err) => console.warn('[Invoice] n8n webhook failed:', err))
     }
 
     const response: MerchantInvoiceResponse = {
@@ -118,7 +158,7 @@ async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> 
 
     return NextResponse.json(response, { status: 201 })
   } catch (error) {
-    console.error('[Invoice API] Unexpected error:', error)
+    console.error('[Invoice] Unexpected error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -126,4 +166,8 @@ async function handleCreateInvoice(request: NextRequest): Promise<NextResponse> 
   }
 }
 
-export const POST = withMerchantAuth(handleCreateInvoice)
+const authHandler = await withSessionAuth(handleListInvoices)
+const createHandler = await withSessionAuth(handleCreateInvoice)
+
+export const GET = withCsrfProtection(authHandler)
+export const POST = withCsrfProtection(createHandler)

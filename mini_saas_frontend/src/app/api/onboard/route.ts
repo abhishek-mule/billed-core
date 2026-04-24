@@ -1,31 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { createSession, setSessionCookie } from '@/lib/session'
+import { generateId, hashPassword } from '@/lib/db/encryption'
 
-const INTERNAL_SECRET = process.env.INTERNAL_SIGNATURE_SECRET || 'change-this-in-production'
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
 const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
 
-function verifyInternalSignature(req: Request): boolean {
-  const signature = req.headers.get('x-internal-signature')
-  if (!signature) return false
-
-  try {
-    const body = JSON.stringify({ timestamp: Date.now() })
-    const expected = crypto
-      .createHmac('sha256', INTERNAL_SECRET)
-      .update(body)
-      .digest('hex')
-    
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-  } catch {
-    return false
-  }
-}
-
-async function updateProvisioningStatus(tenantId: string, status: string, error?: string) {
-  console.log(`[Provision] ${tenantId}: ${status}${error ? ` - ${error}` : ''}`)
-}
+const INTERNAL_SECRET = process.env.INTERNAL_SIGNATURE_SECRET || 'change-this-in-production'
 
 const SEED_CUSTOMER = {
   customer_name: 'Walk-in Customer',
@@ -135,48 +117,36 @@ export async function POST(request: Request) {
   
   try {
     const data = await request.json()
-    const { shopName, plan = 'free', tenantId } = data
+    const { shopName, plan = 'free', phone, ownerName, email } = data
     
-    const actualTenantId = tenantId || `tenant_${Date.now()}`
-    console.log(`[Onboard] Starting: ${shopName} (${actualTenantId})`)
+    const tenantId = `tenant_${generateId('')}`
+    console.log(`[Onboard] Starting: ${shopName} (${tenantId})`)
 
-    await updateProvisioningStatus(actualTenantId, 'pending')
-
-    const customerResult = await seedCustomer(actualTenantId, shopName)
-    await updateProvisioningStatus(actualTenantId, 'seeding_customer')
-
-    const productResult = await seedProduct(actualTenantId)
-    await updateProvisioningStatus(actualTenantId, 'seeding_product')
-
-    const activationResult = await createActivationLog(actualTenantId, shopName, plan)
-    await updateProvisioningStatus(actualTenantId, 'ready')
-
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL
-    if (n8nWebhookUrl) {
-      try {
-        await fetch(n8nWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...data, tenantId: actualTenantId }),
-        })
-      } catch (e) {
-        console.warn('[Onboard] n8n webhook offline')
-      }
-    }
+    await seedCustomer(tenantId, shopName)
+    await seedProduct(tenantId)
+    await createActivationLog(tenantId, shopName, plan)
+    
+    const userId = generateId('user')
+    const apiKey = `key_${tenantId}_${Date.now()}`
+    const apiSecret = crypto.randomBytes(16).toString('hex')
     
     const activationMs = Date.now() - startTime
     console.log(`[Onboard] Completed in ${activationMs}ms`)
     
-    return NextResponse.json({
-      success: true,
-      tenantId: actualTenantId,
-      activationMs,
-      message: 'Account ready.',
-      seedData: {
-        customer: 'Walk-in Customer',
-        product: 'Sample Product - ₹100',
-      },
+    const session = await createSession({
+      tenantId,
+      userId,
+      role: 'owner',
     })
+
+    const response = NextResponse.json({
+      success: true,
+      message: 'Account ready.',
+    })
+
+    await setSessionCookie(response, session)
+
+    return response
   } catch (error) {
     console.error('[Onboard] Error:', error)
     return NextResponse.json(

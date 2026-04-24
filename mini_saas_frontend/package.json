@@ -14,8 +14,12 @@
   "description": "",
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.2",
+    "@upstash/redis": "^1.22.0",
+    "@upstash/qstash": "^1.1.0",
     "framer-motion": "^12.38.0",
     "next": "^16.2.3",
+    "pino": "^9.0.0",
+    "pg": "^8.11.0",
     "razorpay": "^2.9.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
