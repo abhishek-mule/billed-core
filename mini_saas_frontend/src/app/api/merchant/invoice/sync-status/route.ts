@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
-import { withSessionAuth, Session } from '@/lib/session'
+import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
-import { getErpSyncHistory, getErpWriteAttempt, ErpWriteAttempt } from '@/lib/invoice/erp-sync'
+import { getErpWriteAttempt } from '@/lib/invoice/erp-sync'
 
-async function handleGetSyncStatus(request: Request, session: Session) {
+async function handler(request: Request) {
+  const session = await getSessionFromRequest(request)
+  
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { tenantId } = session
   const { searchParams } = new URL(request.url)
   const limit = searchParams.get('limit') || '10'
@@ -16,13 +22,7 @@ async function handleGetSyncStatus(request: Request, session: Session) {
         status as invoice_status,
         erp_sync_status,
         erp_synced_at,
-        erp_sync_error,
-        COALESCE(
-          (SELECT MAX(attempt_number) FROM (
-            SELECT 1 as attempt_number, tenant_id, invoice_id FROM erp_attempt
-          ) WHERE tenant_id = $1 AND invoice_id = invoices.id
-          ), 0
-        ) as sync_attempts
+        erp_sync_error
       FROM invoices 
       WHERE tenant_id = $1
       ORDER BY created_at DESC
@@ -33,14 +33,12 @@ async function handleGetSyncStatus(request: Request, session: Session) {
       invoices.map(async (inv: any) => {
         let syncStatus: 'PENDING' | 'SYNCING' | 'RETRYING' | 'SYNCED' | 'FAILED' = inv.erp_sync_status || 'PENDING'
         
-        if (inv.sync_attempts > 0) {
-          const attempt = await getErpWriteAttempt(tenantId, inv.id)
-          if (attempt) {
-            if (attempt.status === 'PENDING') syncStatus = 'SYNCING'
-            else if (attempt.status === 'RETRY') syncStatus = 'RETRYING'
-            else if (attempt.status === 'SYNCED') syncStatus = 'SYNCED'
-            else if (attempt.status === 'FAILED') syncStatus = 'FAILED'
-          }
+        const attempt = await getErpWriteAttempt(tenantId, inv.id)
+        if (attempt) {
+          if (attempt.status === 'PENDING') syncStatus = 'SYNCING'
+          else if (attempt.status === 'RETRY') syncStatus = 'RETRYING'
+          else if (attempt.status === 'SYNCED') syncStatus = 'SYNCED'
+          else if (attempt.status === 'FAILED') syncStatus = 'FAILED'
         }
 
         return {
@@ -50,7 +48,6 @@ async function handleGetSyncStatus(request: Request, session: Session) {
           syncStatus,
           syncedAt: inv.erp_synced_at,
           error: inv.erp_sync_error,
-          syncAttempts: inv.sync_attempts,
         }
       })
     )
@@ -62,4 +59,4 @@ async function handleGetSyncStatus(request: Request, session: Session) {
   }
 }
 
-export const GET = withSessionAuth(handleGetSyncStatus)
+export { handler as GET }
