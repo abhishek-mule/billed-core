@@ -15,7 +15,7 @@
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.2",
     "@upstash/redis": "^1.22.0",
-    "@upstash/qstash": "^1.1.0",
+    "@upstash/qstash": "^2.10.1",
     "framer-motion": "^12.38.0",
     "next": "^16.2.3",
     "pino": "^9.0.0",
