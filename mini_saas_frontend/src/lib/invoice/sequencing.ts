@@ -1,23 +1,12 @@
-import { Redis } from '@upstash/redis'
+import { createRedisClient, IRedis } from '../redis-factory'
 
-let redis: Redis | null = null
+let redisClient: IRedis | null = null
 
-function getRedis(): Redis | null {
-  if (!redis) {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    
-    if (!url || !token || !url.startsWith('https')) {
-      console.warn('[Redis] UPSTASH_REDIS_REST_URL not configured, using memory fallback')
-      return null
-    }
-    
-    redis = new Redis({
-      url,
-      token,
-    })
+function getRedis(): IRedis {
+  if (!redisClient) {
+    redisClient = createRedisClient()
   }
-  return redis
+  return redisClient
 }
 
 const LOCK_TTL = 5000

@@ -90,6 +90,41 @@ CREATE TABLE IF NOT EXISTS invoices (
   UNIQUE(tenant_id, invoice_number)
 );
 
+-- Customers table
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  customer_name TEXT NOT NULL,
+  gstin TEXT,
+  phone TEXT,
+  email TEXT,
+  address_line1 TEXT,
+  address_line2 TEXT,
+  city TEXT,
+  state TEXT,
+  pincode TEXT,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, customer_name)
+);
+
+-- Products table
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  item_code TEXT NOT NULL,
+  item_name TEXT NOT NULL,
+  hsn_code TEXT,
+  standard_rate NUMERIC(15, 2) DEFAULT 0,
+  gst_rate NUMERIC(5, 2) DEFAULT 18,
+  stock_qty NUMERIC(15, 3) DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(tenant_id, item_code)
+);
+
 -- Invoice line items
 CREATE TABLE IF NOT EXISTS invoice_items (
   id TEXT PRIMARY KEY,
@@ -243,3 +278,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at TIMESTAMPTZ DEFAULT NOW(),
   rollback_sql TEXT
 );
+
+-- Invoice sequence
+CREATE SEQUENCE IF NOT EXISTS invoice_seq;

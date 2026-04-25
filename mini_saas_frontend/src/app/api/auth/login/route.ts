@@ -12,7 +12,7 @@ interface TenantUser {
   name: string
   phone: string
   password_hash: string
-  role: string
+  role: 'owner' | 'cashier' | 'accountant'
   is_active: boolean
 }
 
@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
       tenantId: user.tenant_id,
       userId: user.id,
       role: user.role,
+      companyName: tenantRow.company_name,
+      plan: 'free', // Defaulting to free, should ideally come from tenantRow
       ipAddress: request.headers.get('x-forwarded-for') || '127.0.0.1',
       userAgent: request.headers.get('user-agent') || 'unknown',
     })

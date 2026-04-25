@@ -1,29 +1,26 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FileText, ChevronRight, ArrowUpRight, Search, SlidersHorizontal } from 'lucide-react'
+import { FileText, ChevronLeft, ChevronRight, MoreHorizontal, CheckCircle2, Clock, AlertCircle, RotateCw } from 'lucide-react'
 import Link from 'next/link'
 
 interface Invoice {
-  name: string
+  id: string
+  created_at: string
   customer_name: string
-  grand_total: number
-  posting_date: string
-  outstanding_amount: number
-  status: 'Paid' | 'Unpaid' | 'Failed'
+  amount: number
+  payment_status: 'PAID' | 'PENDING' | 'UNPAID'
+  sync_status: 'SYNCED' | 'RETRYING' | 'FAILED'
 }
 
 export function RecentInvoices() {
-  const [invoices, setInvoices] = useState<Invoice[]>([
-    // Mocking some data for immediate visual feedback as per screenshot
-    { name: 'INV-842', customer_name: 'Anjali Sharma', grand_total: 4200, posting_date: new Date().toISOString(), outstanding_amount: 4200, status: 'Failed' },
-    { name: 'INV-841', customer_name: 'Rahul Verma', grand_total: 1850, posting_date: new Date().toISOString(), outstanding_amount: 1850, status: 'Unpaid' },
-    { name: 'INV-840', customer_name: 'Sneha Patil', grand_total: 950, posting_date: new Date().toISOString(), outstanding_amount: 950, status: 'Unpaid' },
-    { name: 'INV-839', customer_name: 'Amit Kumar', grand_total: 3400, posting_date: new Date().toISOString(), outstanding_amount: 0, status: 'Paid' },
-    { name: 'INV-838', customer_name: 'Vikram Singh', grand_total: 5600, posting_date: new Date().toISOString(), outstanding_amount: 0, status: 'Paid' },
+  const [invoices] = useState<Invoice[]>([
+    { id: 'INV-23-0145', created_at: '2 mins ago', customer_name: 'Arjun Kumar', amount: 18306, payment_status: 'PAID', sync_status: 'SYNCED' },
+    { id: 'INV-23-0144', created_at: '15 mins ago', customer_name: 'TechCorp Solutions', amount: 45200, payment_status: 'PENDING', sync_status: 'SYNCED' },
+    { id: 'INV-23-0143', created_at: '1 hour ago', customer_name: 'Meera Sharma', amount: 2150, payment_status: 'PAID', sync_status: 'RETRYING' },
+    { id: 'INV-23-0142', created_at: '3 hours ago', customer_name: 'Walk-in Customer', amount: 850, payment_status: 'PAID', sync_status: 'FAILED' },
+    { id: 'INV-23-0141', created_at: '4 hours ago', customer_name: 'Ramesh Hardware', amount: 12400, payment_status: 'UNPAID', sync_status: 'SYNCED' },
   ])
-  const [loading, setLoading] = useState(false)
-  const [filter, setFilter] = useState<'All' | 'Today' | 'Unpaid'>('All')
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -33,73 +30,99 @@ export function RecentInvoices() {
     }).format(amount)
   }
 
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  const getPaymentBadge = (status: string) => {
+    switch (status) {
+      case 'PAID': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+      case 'PENDING': return 'bg-amber-50 text-amber-600 border-amber-100'
+      case 'UNPAID': return 'bg-rose-50 text-rose-600 border-rose-100'
+      default: return 'bg-gray-50 text-gray-600 border-gray-100'
+    }
   }
 
-  const getStatusColor = (status: string) => {
+  const getSyncBadge = (status: string) => {
     switch (status) {
-      case 'Paid': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
-      case 'Unpaid': return 'bg-rose-50 text-rose-600 border-rose-100'
-      case 'Failed': return 'bg-amber-50 text-amber-600 border-amber-100'
-      default: return 'bg-slate-50 text-slate-600 border-slate-100'
+      case 'SYNCED': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+      case 'RETRYING': return 'bg-amber-50 text-amber-600 border-amber-100'
+      case 'FAILED': return 'bg-rose-50 text-rose-600 border-rose-100'
+      default: return 'bg-gray-50 text-gray-600 border-gray-100'
     }
   }
 
   return (
-    <div className="space-y-4">
-      {/* Filters - Matching Screenshot 4 */}
-      <div className="flex items-center gap-2 px-1">
-        {['All', 'Today', 'Unpaid'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f as any)}
-            className={`px-6 py-2 rounded-full text-xs font-bold transition-all border ${
-              filter === f 
-                ? 'bg-black text-white border-black' 
-                : 'bg-slate-100 text-slate-600 border-transparent hover:bg-slate-200'
-            }`}
-          >
-            {f}
+    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-5 border-b border-gray-50 flex items-center justify-between">
+        <h2 className="text-xl font-black text-gray-900 tracking-tight">Recent Invoices & Sync Status</h2>
+        <button className="text-xs font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+          View All
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50/50">
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Created</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">ERP Ledger Sync</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {invoices.map((inv) => (
+              <tr key={inv.id} className="hover:bg-gray-50/50 transition-colors group">
+                <td className="px-6 py-4">
+                  <span className="text-sm font-bold text-gray-900 group-hover:text-primary transition-colors cursor-pointer">{inv.id}</span>
+                </td>
+                <td className="px-6 py-4 text-xs font-medium text-gray-500">{inv.created_at}</td>
+                <td className="px-6 py-4 text-sm font-bold text-gray-700">{inv.customer_name}</td>
+                <td className="px-6 py-4">
+                  <span className="text-sm font-black text-gray-900">{formatCurrency(inv.amount)}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getPaymentBadge(inv.payment_status)}`}>
+                    {inv.payment_status === 'PAID' && <CheckCircle2 className="w-3 h-3" />}
+                    {inv.payment_status === 'PENDING' && <Clock className="w-3 h-3" />}
+                    {inv.payment_status === 'UNPAID' && <AlertCircle className="w-3 h-3" />}
+                    {inv.payment_status}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getSyncBadge(inv.sync_status)}`}>
+                    {inv.sync_status === 'SYNCED' && <CheckCircle2 className="w-3 h-3" />}
+                    {inv.sync_status === 'RETRYING' && <RotateCw className="w-3 h-3 animate-spin" />}
+                    {inv.sync_status === 'FAILED' && <AlertCircle className="w-3 h-3" />}
+                    {inv.sync_status}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-400">Showing 1 to 5 of 142 entries</span>
+        <div className="flex items-center gap-2">
+          <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all active:scale-95">
+            <ChevronLeft className="w-4 h-4" />
           </button>
-        ))}
-      </div>
-
-      {/* Sync Failure Banner - Matching Screenshot 4 */}
-      <div className="flex items-center justify-between bg-amber-50 border-y border-amber-100 px-4 py-2">
-        <div className="flex items-center gap-2 text-amber-900 font-bold text-[11px]">
-          <SlidersHorizontal className="w-4 h-4 rotate-90" />
-          <span>1 FAILED SYNC</span>
+          <div className="flex items-center gap-1">
+             <button className="w-8 h-8 rounded-lg bg-primary text-white text-xs font-bold shadow-sm shadow-primary/20">1</button>
+             <button className="w-8 h-8 rounded-lg hover:bg-gray-50 text-gray-500 text-xs font-bold transition-all">2</button>
+             <button className="w-8 h-8 rounded-lg hover:bg-gray-50 text-gray-500 text-xs font-bold transition-all">3</button>
+          </div>
+          <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all active:scale-95">
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
-        <button className="text-amber-900 font-black text-[11px] tracking-tight">RETRY ALL</button>
-      </div>
-
-      {/* Invoice List */}
-      <div className="divide-y divide-slate-100 bg-white">
-        {invoices.map((invoice) => (
-          <Link
-            key={invoice.name}
-            href={`/merchant/invoice/${invoice.name}`}
-            className="flex items-center justify-between px-4 py-4 hover:bg-slate-50 active:bg-slate-100 transition-colors"
-          >
-            <div className="flex flex-col gap-1">
-              <h3 className="text-base font-bold text-[#1A1C1E] tracking-tight">{invoice.customer_name}</h3>
-              <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500">
-                <span>{invoice.name}</span>
-                <span className="w-1 h-1 rounded-full bg-slate-300" />
-                <span>Today, {formatTime(invoice.posting_date)}</span>
-              </div>
-            </div>
-            
-            <div className="flex flex-col items-end gap-1.5">
-              <span className="text-base font-bold text-[#1A1C1E]">{formatCurrency(invoice.grand_total)}</span>
-              <span className={`px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border ${getStatusColor(invoice.status)}`}>
-                {invoice.status}
-              </span>
-            </div>
-          </Link>
-        ))}
       </div>
     </div>
   )

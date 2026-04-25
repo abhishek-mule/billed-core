@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    const [todayStats, pendingSync, failedSync] = await Promise.all([
+    const [todayStatsResult, pendingSyncResult, failedSyncResult] = await Promise.all([
       query(`
         SELECT 
           COALESCE(SUM(grand_total), 0) as revenue,
@@ -41,6 +41,10 @@ export async function GET(request: Request) {
         AND status NOT IN ('CANCELLED', 'DELETED_LOGICAL')
       `, [tenantId]),
     ])
+
+    const todayStats = todayStatsResult as any[]
+    const pendingSync = pendingSyncResult as any[]
+    const failedSync = failedSyncResult as any[]
 
     return NextResponse.json({
       revenue_today: parseFloat(todayStats[0]?.revenue || 0),

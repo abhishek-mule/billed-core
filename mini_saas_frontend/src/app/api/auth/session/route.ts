@@ -14,6 +14,7 @@ async function handleSession(request: Request) {
       companyName: session.companyName,
       role: session.role,
       plan: session.plan,
+      erpMode: process.env.ERP_MODE || 'live'
     }
   })
 }

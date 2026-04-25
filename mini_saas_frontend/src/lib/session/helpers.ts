@@ -38,33 +38,43 @@ function getMemoryFallback() {
     store: new Map<string, Session>(),
     tenantSessions: new Map<string, Set<string>>(),
     
-    async get(id: string): Promise<Session | null> {
+    async get(id: string): Promise<Session | null | string> {
       const session = this.store.get(id)
       if (!session) return null
-      if (Date.now() > session.expiresAt) {
-        await this.delete(id)
+      if (typeof session !== 'string' && Date.now() > session.expiresAt) {
+        await this.del(id)
         return null
       }
       return session
     },
     
-    async set(id: string, session: Session): Promise<void> {
+    async set(id: string, value: string | Session): Promise<void> {
+      const session = typeof value === 'string' ? JSON.parse(value) : value
       this.store.set(id, session)
-      if (!this.tenantSessions.has(session.tenantId)) {
-        this.tenantSessions.set(session.tenantId, new Set())
+      if (session.tenantId) {
+        if (!this.tenantSessions.has(session.tenantId)) {
+          this.tenantSessions.set(session.tenantId, new Set())
+        }
+        this.tenantSessions.get(session.tenantId)!.add(id)
       }
-      this.tenantSessions.get(session.tenantId)!.add(id)
     },
     
-    async delete(id: string): Promise<void> {
+    async del(id: string): Promise<void> {
       const session = this.store.get(id)
-      if (session) {
+      if (session && typeof session !== 'string') {
         this.store.delete(id)
         const tenantSet = this.tenantSessions.get(session.tenantId)
         if (tenantSet) {
           tenantSet.delete(id)
         }
+      } else {
+        this.store.delete(id)
       }
+    },
+    
+    async keys(pattern: string): Promise<string[]> {
+      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$')
+      return Array.from(this.store.keys()).filter(k => regex.test(k))
     },
     
     async getTenantSessions(tenantId: string): Promise<Set<string> | null> {

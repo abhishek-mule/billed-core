@@ -16,7 +16,10 @@ import {
   Camera,
   Plus,
   Settings as SettingsIcon,
-  User
+  User,
+  BarChart3,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -24,6 +27,7 @@ interface SessionInfo {
   tenantId: string
   companyName: string
   role: string
+  erpMode: 'live' | 'mock'
 }
 
 const SessionContext = createContext<SessionInfo | null>(null)
@@ -77,14 +81,17 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 const navItems = [
   { href: '/merchant', label: 'Home', Icon: Home },
-  { href: '/merchant/invoice', label: 'Invoices', Icon: Receipt },
+  { href: '/merchant/invoice', label: 'Sales', Icon: Receipt },
+  { href: '/merchant/purchases', label: 'Purchases', Icon: Camera },
+  { href: '/merchant/parties', label: 'Parties', Icon: Users },
+  { href: '/merchant/products', label: 'Inventory', Icon: Package },
+  { href: '/merchant/reports', label: 'Reports', Icon: BarChart3 },
   { href: '/merchant/settings', label: 'Settings', Icon: SettingsIcon },
 ]
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const session = useSession()
-  const [lang, setLang] = useState<'en' | 'hi'>('en')
   const [isOnline, setIsOnline] = useState(true)
   const [searchFocused, setSearchFocused] = useState(false)
 
@@ -105,116 +112,112 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     window.location.href = '/start'
   }
 
-  const isHome = pathname === '/merchant'
+  const isMock = session?.erpMode === 'mock'
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1C1E] font-sans selection:bg-blue-500/30 selection:text-blue-900 pb-24 lg:pb-0 lg:pl-72">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30 selection:text-primary">
+      {/* Global Mock Banner */}
+      <AnimatePresence>
+        {isMock && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }} 
+            animate={{ height: 'auto', opacity: 1 }}
+            className="bg-amber-500 text-white text-[10px] font-black uppercase tracking-[0.2em] py-2 text-center sticky top-0 z-[60] flex items-center justify-center gap-2"
+          >
+            <AlertCircle className="w-3 h-3" />
+            Demo Mode — Data not saved to real accounting system
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Sidebar for Desktop */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 flex-col shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-            <span className="text-xl font-black italic">B</span>
+      <aside className="sidebar hidden lg:flex">
+        <div className="sidebar-brand">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
+            <span className="text-xl font-black italic tracking-tighter">B</span>
           </div>
-          <span className="text-2xl font-bold text-[#1A1C1E] tracking-tight">BillZo</span>
+          <span className="text-2xl font-bold text-white tracking-tight">BillZo</span>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="sidebar-nav">
           {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href))
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                  isActive 
-                    ? 'bg-blue-50 text-blue-600 shadow-sm' 
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-[#1A1C1E]'
-                }`}
+                className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''}`}
               >
-                <item.Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                {item.label}
+                <item.Icon className="w-5 h-5" />
+                <span className="font-bold">{item.label}</span>
               </Link>
             )
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="sidebar-footer">
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="flex items-center gap-3">
+               <div className="w-10 h-10 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-muted border border-sidebar-accent/50 overflow-hidden">
+                <User className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-white truncate w-32">{session?.companyName || 'Rahul Sharma'}</span>
+                <span className="text-[10px] text-sidebar-muted uppercase font-black tracking-widest">{session?.role || 'Superadmin'}</span>
+              </div>
+            </div>
+            <button onClick={() => window.location.href = '/merchant/settings'} className="text-sidebar-muted hover:text-white transition-colors">
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-all"
+            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-all uppercase tracking-widest"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4 h-4" />
             Logout
           </button>
         </div>
       </aside>
 
-      {/* Header */}
-      <header className={`sticky top-0 z-40 bg-white border-b border-slate-200 px-4 py-4 transition-all duration-300 ${searchFocused ? 'py-2' : 'py-4'}`}>
-        <div className="flex items-center justify-between max-w-5xl mx-auto">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-[#1A1C1E] tracking-tight">BillZo</h1>
+      {/* Mobile Top Header */}
+      <header className="lg:hidden sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100 px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
+            <span className="text-sm font-black italic tracking-tighter">B</span>
           </div>
-          <div className="flex items-center gap-3">
-             <button className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 border border-slate-200">
-              <User className="w-5 h-5" />
-            </button>
-          </div>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">BillZo</h1>
         </div>
-
-        {/* Search Bar - Matching Screenshot 4 */}
-        <div className="mt-4 max-w-5xl mx-auto px-1">
-          <div className={`relative flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2.5 border transition-all duration-200 ${searchFocused ? 'border-blue-500 ring-2 ring-blue-500/10 bg-white' : 'border-transparent'}`}>
-            <Search className={`w-5 h-5 ${searchFocused ? 'text-blue-500' : 'text-slate-400'}`} />
-            <input 
-              type="text" 
-              placeholder="Search name or amount..." 
-              className="flex-1 bg-transparent border-none focus:outline-none text-sm font-medium text-[#1A1C1E] placeholder:text-slate-400"
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-            />
-            <button className="p-1 text-slate-400 hover:text-slate-600">
-              <Mic className="w-4 h-4" />
-            </button>
-            <button className="p-1 text-slate-400 hover:text-slate-600 border-l border-slate-200 pl-2 ml-1">
-              <Camera className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+           {!isOnline && <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+           <button className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-600 border border-gray-100">
+             <Bell className="w-5 h-5" />
+           </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="mx-auto w-full max-w-5xl px-4 py-4 min-h-[calc(100vh-200px)]">
-        {children}
+      {/* Main Content Area */}
+      <main className="lg:pl-64 min-h-screen">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+          {children}
+        </div>
       </main>
 
-      {/* FAB - Matching Screenshot 4 */}
-      <Link 
-        href="/merchant/invoice/new"
-        className="fixed right-6 bottom-24 lg:bottom-10 z-50 w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 active:scale-95 transition-transform group"
-      >
-        <Plus className="w-8 h-8 group-hover:rotate-90 transition-transform duration-300" />
-        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white" />
-      </Link>
-
-      {/* Bottom Nav for Mobile */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 safe-area-pb">
-        <div className="flex items-center justify-around px-2 py-2">
-          {navItems.map((item) => {
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="lg:hidden fixed bottom-6 left-4 right-4 z-50 bg-[#0B0E14] border border-[#1F2937] rounded-2xl shadow-2xl shadow-black/20 pb-safe">
+        <div className="flex items-center justify-around p-1.5">
+          {navItems.slice(0, 5).map((item) => {
             const isActive = pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href))
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 min-w-[64px] py-2 transition-all ${
-                  isActive ? 'text-blue-600' : 'text-slate-400'
+                className={`flex flex-col items-center justify-center gap-1 min-w-[64px] py-2 rounded-xl transition-all ${
+                  isActive ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-gray-500'
                 }`}
               >
-                <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-blue-50' : ''}`}>
-                  <item.Icon className="w-6 h-6" />
-                </div>
-                <span className={`text-[10px] font-bold tracking-tight ${isActive ? 'opacity-100' : 'opacity-70'}`}>
-                  {item.label}
+                <item.Icon className="w-5 h-5" />
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'opacity-100' : 'opacity-60'}`}>
+                  {item.label.split(' ')[0]}
                 </span>
               </Link>
             )

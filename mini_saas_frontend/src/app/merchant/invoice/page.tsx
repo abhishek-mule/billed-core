@@ -2,122 +2,162 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Badge } from '../sheets/Base'
+import { 
+  Search, 
+  Filter, 
+  Download, 
+  Plus, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle, 
+  MoreHorizontal,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react'
 
 const mockInvoices = [
-  { name: 'Anjali Sharma', id: 'INV-842', time: 'Today, 09:15 AM', amount: 4200, status: 'FAILED' },
-  { name: 'Rahul Verma', id: 'INV-841', time: 'Today, 10:30 AM', amount: 1850, status: 'UNPAID' },
-  { name: 'Sneha Patil', id: 'INV-840', time: 'Today, 11:45 AM', amount: 950, status: 'UNPAID' },
-  { name: 'Amit Kumar', id: 'INV-839', time: 'Today, 12:10 PM', amount: 3400, status: 'PAID' },
-  { name: 'Vikram Singh', id: 'INV-838', time: 'Today, 01:20 PM', amount: 5600, status: 'PAID' },
-  { name: 'Priya Gupta', id: 'INV-837', time: 'Today, 02:05 PM', amount: 1200, status: 'PAID' },
-  { name: 'Mohammad Ali', id: 'INV-836', time: 'Today, 03:30 PM', amount: 2100, status: 'UNPAID' },
+  { id: 'INV-23-0145', date: '2 mins ago', customer: 'Arjun Kumar', amount: 18306, payment: 'PAID', sync: 'SYNCED' },
+  { id: 'INV-23-0144', date: '15 mins ago', customer: 'TechCorp Solutions', amount: 45200, payment: 'PENDING', sync: 'SYNCED' },
+  { id: 'INV-23-0143', date: '1 hour ago', customer: 'Meera Sharma', amount: 2150, payment: 'PAID', sync: 'RETRYING' },
+  { id: 'INV-23-0142', date: '3 hours ago', customer: 'Walk-in Customer', amount: 850, payment: 'PAID', sync: 'FAILED' },
+  { id: 'INV-23-0141', date: '4 hours ago', customer: 'Ramesh Hardware', amount: 12400, payment: 'UNPAID', sync: 'SYNCED' },
+  { id: 'INV-23-0140', date: 'Yesterday', customer: 'Suresh & Co', amount: 9200, payment: 'PAID', sync: 'SYNCED' },
 ]
 
-const formatCurrency = (n: number) => '₹' + n.toLocaleString('en-IN')
-
 export default function InvoiceListPage() {
-  const [filter, setFilter] = useState('Today')
   const [search, setSearch] = useState('')
 
-  const filters = ['All', 'Today', 'Unpaid']
-  const failedSyncCount = 1
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(amount)
+  }
 
-  const filtered = mockInvoices.filter(inv => {
-    const matchesSearch = inv.name.toLowerCase().includes(search.toLowerCase()) || 
-                      inv.id.toLowerCase().includes(search.toLowerCase())
-    const matchesFilter = filter === 'All' || 
-                     (filter === 'Today' && inv.time.startsWith('Today')) ||
-                     (filter === 'Unpaid' && inv.status === 'UNPAID')
-    return matchesSearch && matchesFilter
-  })
-
-  const total = filtered.reduce((sum, inv) => sum + inv.amount, 0)
+  const getBadgeStyle = (status: string) => {
+    switch (status) {
+      case 'PAID':
+      case 'SYNCED': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+      case 'PENDING':
+      case 'RETRYING': return 'bg-amber-50 text-amber-600 border-amber-100'
+      case 'UNPAID':
+      case 'FAILED': return 'bg-rose-50 text-rose-600 border-rose-100'
+      default: return 'bg-gray-50 text-gray-600 border-gray-100'
+    }
+  }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="space-y-8 animate-in">
       {/* Header */}
-      <div className="px-5">
-        <div className="flex justify-between items-center mb-4">
-          <span className="text-2xl font-black">BillZo</span>
-          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg">
-            👤
-          </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Sales Invoices</h1>
+          <p className="text-gray-500 text-sm font-medium italic">Manage and track your customer billing history.</p>
         </div>
-
-        {/* Search */}
-        <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-4 py-3 mb-3">
-          <span className="text-gray-400">🔍</span>
-          <span className="text-gray-400 flex-1 text-base">Search name or amount...</span>
-          <span className="text-gray-400">🎙️</span>
-          <span className="text-gray-400">📷</span>
-        </div>
-      </div>
-
-      {/* Today banner */}
-      <div className="bg-blue-50 px-5 py-2 flex items-center gap-2">
-        <span>📈</span>
-        <span className="text-blue-600 font-semibold text-sm">Today: {formatCurrency(28450)}</span>
-      </div>
-
-      {/* Filters */}
-      <div className="px-5 py-3 flex gap-2">
-        {filters.map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className="px-4 py-2 rounded-full text-sm font-semibold"
-            style={{
-              background: filter === f ? '#111' : '#F0F2F7',
-              color: filter === f ? '#fff' : '#555',
-            }}
-          >
-            {f}
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all">
+            <Download className="w-4 h-4" />
+            Export CSV
           </button>
-        ))}
-      </div>
-
-      {/* Failed sync banner */}
-      {failedSyncCount > 0 && (
-        <div className="bg-amber-50 px-5 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span>📡</span>
-            <span className="font-semibold text-sm">{failedSyncCount} Failed Sync</span>
-          </div>
-          <button className="text-blue-600 font-bold text-sm">RETRY ALL</button>
-        </div>
-      )}
-
-      {/* List */}
-      <div className="flex-1 overflow-y-auto px-5">
-        {filtered.map((inv, i) => (
-          <Link
-            key={i}
-            href={`/merchant/invoice/${inv.id}`}
-            className="flex justify-between items-center py-4 border-b border-gray-100"
+          <Link 
+            href="/merchant/invoice/new"
+            className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95"
           >
-            <div>
-              <div className="font-bold text-base">{inv.name}</div>
-              <div className="text-xs text-gray-400 mt-0.5">
-                {inv.id} &nbsp;•&nbsp; {inv.time}
-              </div>
-            </div>
-            <div className="text-right flex flex-col items-end gap-1">
-              <span className="font-extrabold text-base">{formatCurrency(inv.amount)}</span>
-              <Badge status={inv.status} />
-            </div>
+            <Plus className="w-4 h-4" />
+            New Invoice
           </Link>
-        ))}
+        </div>
       </div>
 
-      {/* FAB */}
-      <Link
-        href="/merchant/invoice/new"
-        className="fixed bottom-20 right-5 w-14 h-14 rounded-full bg-blue-600 text-white text-3xl flex items-center justify-center shadow-lg"
-        style={{ boxShadow: '0 4px 20px rgba(27,107,245,.4)' }}
-      >
-        +
-      </Link>
+      {/* Search & Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 relative group">
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-300 group-focus-within:text-primary transition-colors" />
+          <input 
+            type="text" 
+            placeholder="Search by invoice ID or customer name..." 
+            className="w-full bg-white border border-gray-100 rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold focus:outline-none ring-4 ring-primary/0 focus:ring-primary/5 transition-all"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="lg:col-span-4 bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-3 flex items-center justify-between">
+           <div className="flex flex-col">
+             <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Sales (Today)</span>
+             <span className="text-xl font-black text-indigo-700">₹28,450</span>
+           </div>
+           <ArrowUpRight className="w-6 h-6 text-indigo-300" />
+        </div>
+      </div>
+
+      {/* Main Table */}
+      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50/50">
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Sync</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest w-16"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {mockInvoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-gray-50/50 transition-colors group cursor-pointer">
+                  <td className="px-6 py-5">
+                    <p className="text-sm font-black text-gray-900 group-hover:text-primary transition-colors">{inv.id}</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{inv.date}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="text-sm font-bold text-gray-700">{inv.customer}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <p className="text-sm font-black text-gray-900">{formatCurrency(inv.amount)}</p>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.payment)}`}>
+                      {inv.payment === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                      {inv.payment}
+                    </div>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.sync)}`}>
+                      {inv.sync === 'SYNCED' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                      {inv.sync}
+                    </div>
+                  </td>
+                  <td className="px-6 py-5 text-right">
+                    <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-300 transition-colors">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
+          <span className="text-xs font-medium text-gray-400">Showing 6 of 1,248 invoices</span>
+          <div className="flex items-center gap-2">
+            <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1">
+               <button className="w-8 h-8 rounded-lg bg-primary text-white text-xs font-bold">1</button>
+               <button className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 text-xs font-bold transition-all">2</button>
+            </div>
+            <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

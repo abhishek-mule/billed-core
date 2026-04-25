@@ -1,22 +1,13 @@
+import { createRedisClient, IRedis } from '../redis-factory'
 import { Redis } from '@upstash/redis'
 
-let redis: Redis | null = null
+let redisClient: IRedis | null = null
 
-function getRedis(): Redis | null {
-  if (!redis) {
-    const url = process.env.UPSTASH_REDIS_REST_URL
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN
-    
-    if (!url || !token || !url.startsWith('https')) {
-      return null
-    }
-    
-    redis = new Redis({
-      url,
-      token,
-    })
+function getRedis(): IRedis {
+  if (!redisClient) {
+    redisClient = createRedisClient()
   }
-  return redis
+  return redisClient
 }
 
 export type ErpSyncStatus = 'PENDING' | 'SYNCED' | 'FAILED' | 'RETRY' | 'CONFIRMED'

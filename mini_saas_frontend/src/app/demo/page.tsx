@@ -3,20 +3,28 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import Image from 'next/image'
+
+const products = [
+  { name: 'Sample Product', price: 100, hsn: '850440' },
+  { name: 'Labour Charge', price: 200, hsn: '999999' },
+  { name: 'Installation', price: 150, hsn: '999999' },
+  { name: 'Transport', price: 100, hsn: '999999' },
+]
 
 export default function DemoBillingPage() {
   const [step, setStep] = useState(1)
   const [customer, setCustomer] = useState('')
-  const [items, setItems] = useState<{name: string; qty: number; price: number}[]>([])
+  const [items, setItems] = useState<{name: string; qty: number; price: number; hsn: string}[]>([])
   const [isSent, setIsSent] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const addItem = (name: string, price: number) => {
+  const addItem = (name: string, price: number, hsn: string) => {
     const existing = items.find(i => i.name === name)
     if (existing) {
       setItems(items.map(i => i.name === name ? {...i, qty: i.qty + 1} : i))
     } else {
-      setItems([...items, {name, qty: 1, price}])
+      setItems([...items, {name, qty: 1, price, hsn}])
     }
   }
 
@@ -35,18 +43,58 @@ export default function DemoBillingPage() {
   }
 
   const subtotal = items.reduce((sum, i) => sum + (i.price * i.qty), 0)
-  const gst = subtotal * 0.18
-  const total = subtotal + gst
+  const cgst = subtotal * 0.09
+  const sgst = subtotal * 0.09
+  const igst = 0
+  const total = subtotal + cgst + sgst + igst
 
-  const handleSend = () => {
-    setIsSent(true)
+  const handleSend = async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/v2/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: customer || 'Walk-in Customer',
+          items: items.map(item => ({
+            itemCode: item.name.toUpperCase().replace(/\s/g, '-'),
+            itemName: item.name,
+            qty: item.qty,
+            rate: item.price,
+            amount: item.price * item.qty,
+            hsnCode: item.hsn,
+          })),
+          subtotal,
+          cgst,
+          sgst,
+          igst,
+          total,
+          paymentMode: 'cash',
+          placeOfSupply: 'Maharashtra',
+        }),
+      })
+
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create invoice')
+      }
+
+      setIsSent(true)
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const formatCurrency = (amt: number) => `₹${amt.toLocaleString('en-IN')}`
+  const formatCurrency = (amt: number) => `₹${amt.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
   if (isSent) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center p-6">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -62,14 +110,13 @@ export default function DemoBillingPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </motion.div>
-          <h2 className="text-2xl font-bold mb-2">Demo Invoice Sent!</h2>
-          <p className="text-gray-400 mb-8">WhatsApp message simulated</p>
+          <h2 className="text-2xl font-bold mb-2">Demo Invoice Created!</h2>
+          <p className="text-gray-400 mb-8">Invoice synced to ERPNext (mock mode)</p>
           
           <div className="bg-white/5 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto">
-            <p className="text-sm text-gray-300">🧾 Invoice INV-DEMO-001</p>
-            <p className="text-sm text-gray-400">To: {customer || 'Walk-in Customer'}</p>
+            <p className="text-sm text-gray-300">🧾 Invoice to: {customer || 'Walk-in Customer'}</p>
             <p className="text-lg font-bold mt-2">{formatCurrency(total)}</p>
-            <p className="text-xs text-green-400 mt-1">Sent via WhatsApp</p>
+            <p className="text-xs text-green-400 mt-1">✓ Synced to ERP (Demo)</p>
           </div>
 
           <div className="space-y-3">
@@ -86,25 +133,31 @@ export default function DemoBillingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-4 py-3">
+    <div className="min-h-screen bg-black text-white">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5 px-4 py-3">
         <div className="flex items-center justify-between max-w-md mx-auto">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
               <span className="text-white font-bold text-sm">Z</span>
             </div>
             <span className="font-semibold">BillZo Demo</span>
           </Link>
-          <span className="text-xs text-gray-500">Try Billing Free</span>
+          <span className="text-xs text-blue-400">Mock Mode</span>
         </div>
       </header>
 
       <div className="pt-20 px-4 pb-32 max-w-md mx-auto space-y-4">
         <div className="flex gap-2 mb-6">
           {[1, 2, 3].map(s => (
-            <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-indigo-500' : 'bg-gray-800'}`} />
+            <div key={s} className={`h-1 flex-1 rounded-full ${s <= step ? 'bg-blue-600' : 'bg-gray-800'}`} />
           ))}
         </div>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
 
         {step === 1 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -114,12 +167,12 @@ export default function DemoBillingPage() {
               value={customer}
               onChange={e => setCustomer(e.target.value)}
               placeholder="Customer name or phone"
-              className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-lg outline-none focus:border-indigo-500"
+              className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-lg outline-none focus:border-blue-500"
               onKeyDown={e => e.key === 'Enter' && setStep(2)}
             />
             <button
               onClick={() => setStep(2)}
-              disabled={!customer.trim()}
+              disabled={!customer.trim() && items.length === 0}
               className="w-full mt-4 py-4 bg-white text-black font-semibold rounded-xl disabled:opacity-50"
             >
               Continue
@@ -131,19 +184,14 @@ export default function DemoBillingPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <h2 className="text-xl font-bold mb-4">Add items</h2>
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { name: 'Sample Product', price: 100 },
-                { name: 'Labour Charge', price: 200 },
-                { name: 'Installation', price: 150 },
-                { name: 'transport', price: 100 },
-              ].map(item => (
+              {products.map(item => (
                 <button
                   key={item.name}
-                  onClick={() => addItem(item.name, item.price)}
-                  className="p-4 bg-white/5 border border-white/10 rounded-xl text-left hover:border-indigo-500 transition"
+                  onClick={() => addItem(item.name, item.price, item.hsn)}
+                  className="p-4 bg-white/5 border border-white/10 rounded-xl text-left hover:border-blue-500 transition"
                 >
                   <p className="font-medium">{item.name}</p>
-                  <p className="text-indigo-400 font-bold">₹{item.price}</p>
+                  <p className="text-blue-400 font-bold">₹{item.price}</p>
                 </button>
               ))}
             </div>
@@ -191,20 +239,32 @@ export default function DemoBillingPage() {
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">GST (18%)</span>
-                <span>{formatCurrency(gst)}</span>
+                <span className="text-gray-400">CGST (9%)</span>
+                <span>{formatCurrency(cgst)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">SGST (9%)</span>
+                <span>{formatCurrency(sgst)}</span>
               </div>
               <div className="flex justify-between text-lg font-bold pt-3 border-t border-white/10">
                 <span>Total</span>
-                <span className="text-indigo-400">{formatCurrency(total)}</span>
+                <span className="text-blue-400">{formatCurrency(total)}</span>
               </div>
             </div>
 
             <button
               onClick={handleSend}
-              className="w-full py-4 bg-green-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full py-4 bg-green-500 text-white font-semibold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              📱 Send via WhatsApp
+              {loading ? (
+                <span className="animate-pulse">Creating...</span>
+              ) : (
+                <>
+                  <span>📱</span>
+                  Create Invoice
+                </>
+              )}
             </button>
 
             <button onClick={() => setStep(2)} className="w-full mt-3 py-3 text-gray-400">

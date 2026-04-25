@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const tenantId = `test_tenant_${Date.now()}`
-    const userId = generateId()
+    const userId = generateId('user')
     const { hash: passwordHash, salt } = hashPassword('test123')
     const storedHash = JSON.stringify({ hash: passwordHash, salt })
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       `INSERT INTO tenant_credentials (id, tenant_id, erp_api_key_encrypted, erp_api_secret_encrypted)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (tenant_id) DO NOTHING`,
-      [generateId(), tenantId, 'test_key', 'test_secret']
+      [generateId('cred'), tenantId, 'test_key', 'test_secret']
     )
 
     return NextResponse.json({

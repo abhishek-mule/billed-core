@@ -17,6 +17,8 @@ export interface SessionData {
   expiresAt: number
   refreshUntil: number
   rotatedFrom?: string
+  ipAddress?: string
+  userAgent?: string
 }
 
 interface TenantCredentials {
