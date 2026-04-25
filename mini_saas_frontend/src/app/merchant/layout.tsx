@@ -32,7 +32,7 @@ interface SessionInfo {
 
 const SessionContext = createContext<SessionInfo | null>(null)
 
-export function useSession() {
+function useSession() {
   return useContext(SessionContext)
 }
 
