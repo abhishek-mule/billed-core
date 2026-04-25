@@ -116,7 +116,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30 selection:text-primary">
-      {/* Global Mock Banner */}
       <AnimatePresence>
         {isMock && (
           <motion.div 
@@ -129,7 +128,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Sidebar for Desktop */}
       <aside className="sidebar hidden lg:flex">
         <div className="sidebar-brand">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
@@ -179,7 +177,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Top Header */}
       <header className="lg:hidden sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100 px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
@@ -195,14 +192,12 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="lg:pl-64 min-h-screen">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
           {children}
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
       <nav className="lg:hidden fixed bottom-6 left-4 right-4 z-50 bg-[#0B0E14] border border-[#1F2937] rounded-2xl shadow-2xl shadow-black/20 pb-safe">
         <div className="flex items-center justify-around p-1.5">
           {navItems.slice(0, 5).map((item) => {
