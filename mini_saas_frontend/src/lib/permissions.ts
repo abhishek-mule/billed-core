@@ -30,12 +30,12 @@ export type Permission = keyof typeof permissions
 export type Role = 'owner' | 'cashier' | 'accountant' | 'manager' | 'auditor'
 
 export function hasPermission(role: Role, permission: Permission): boolean {
-  const allowed = permissions[permission]
+  const allowed = permissions[permission] as readonly Role[]
   return allowed.includes(role)
 }
 
 export function getUserPermissions(role: Role): Permission[] {
   return Object.entries(permissions)
-    .filter(([_, roles]) => roles.includes(role))
+    .filter(([_, roles]) => (roles as readonly Role[]).includes(role))
     .map(([perm]) => perm as Permission)
 }

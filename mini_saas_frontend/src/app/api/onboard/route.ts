@@ -137,6 +137,8 @@ export async function POST(request: Request) {
       tenantId,
       userId,
       role: 'owner',
+      companyName: shopName,
+      plan,
     })
 
     const response = NextResponse.json({

@@ -1,10 +1,30 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import Link from 'next/link'
 import Image from 'next/image'
+import { 
+  CheckCircle2, 
+  ShieldCheck, 
+  Zap, 
+  Smartphone, 
+  Building2, 
+  ArrowRight, 
+  Play, 
+  ExternalLink, 
+  Lock, 
+  MessageSquare,
+  BarChart3,
+  Search,
+  Check,
+  ChevronRight,
+  Shield,
+  Clock,
+  LayoutDashboard
+} from 'lucide-react'
 
+// Constants & Content
 const tokens = {
   ink: '#0e0e10',
   inkSoft: '#3d3d45',
@@ -18,28 +38,83 @@ const tokens = {
   indigoPale: '#eeedfb',
   emerald: '#059669',
   emeraldPale: '#d1fae5',
-  radiusSm: '8px',
-  radiusMd: '14px',
-  radiusLg: '22px',
-  radiusXl: '32px',
+  gold: '#c5a55a',
 }
 
 const features = [
-  { num: '01 / Fast Billing', title: 'GST invoice in 10 seconds', desc: 'Select customer, add items, send. Auto-calculate CGST, SGST, IGST with HSN codes. Works on mobile.' },
-  { num: '02 / WhatsApp Auto', title: 'Reminders sent automatically', desc: 'Invoice goes to WhatsApp instantly. Payment reminders. Daily summaries. No follow-up calls needed.' },
-  { num: '03 / ERP Power', title: 'Enterprise accounting hidden', desc: 'Ledger ready. GST reports ready. Powered by enterprise accounting engine. Your data stays safe.' },
+  { 
+    id: 'billing',
+    icon: <Clock className="w-5 h-5" />,
+    num: '01 / Fast Billing', 
+    title: 'GST invoice in 10 seconds', 
+    desc: 'Select customer, add items, send. Auto-calculate CGST, SGST, IGST with HSN codes. Works flawlessly on mobile browsers.',
+    detail: 'GST-Compliant / Mobile-First / HSN Lookup'
+  },
+  { 
+    id: 'whatsapp',
+    icon: <MessageSquare className="w-5 h-5" />,
+    num: '02 / WhatsApp Auto', 
+    title: 'Reminders sent automatically', 
+    desc: 'Invoice goes to WhatsApp instantly. Automated payment reminders. Daily business summaries. Stop chasing payments.',
+    detail: '98% Open Rate / Instant PDF / Auto-Followup'
+  },
+  { 
+    id: 'erp',
+    icon: <LayoutDashboard className="w-5 h-5" />,
+    num: '03 / ERP Power', 
+    title: 'Enterprise accounting hidden', 
+    desc: 'Ledgers, GST reports, and inventory management—all running on an enterprise-grade accounting engine while you just bill.',
+    detail: 'Ledger-Ready / GST Portal Ready / Secure'
+  },
 ]
 
 const plans = [
-  { name: 'Free', price: '0', period: 'Forever', tagline: 'Perfect for starting out.', features: ['50 invoices/day', 'Basic reminders', 'Mobile billing'], cta: 'Start Free' },
-  { name: 'Starter', price: '₹199', period: '/month', tagline: 'For small shops.', features: ['300 invoices/day', 'WhatsApp automation', 'Inventory alerts'], popular: true, cta: 'Start Starter' },
-  { name: 'Pro', price: '₹499', period: '/month', tagline: 'For growing businesses.', features: ['2000 invoices/day', 'Analytics', 'Priority support'], cta: 'Go Pro' },
+  { 
+    name: 'Free', 
+    price: '0', 
+    period: 'Forever', 
+    tagline: 'Perfect for small shops starting their digital journey.', 
+    features: ['50 invoices/month', 'Basic WhatsApp reminders', 'Mobile-friendly billing', 'GST calculation'], 
+    cta: 'Start Free' 
+  },
+  { 
+    name: 'Starter', 
+    price: '₹199', 
+    period: '/month', 
+    tagline: 'For growing retailers who need automation.', 
+    features: ['300 invoices/month', 'WhatsApp automation', 'Basic inventory alerts', 'GSTIN live lookup'], 
+    popular: true, 
+    cta: 'Start Starter' 
+  },
+  { 
+    name: 'Pro', 
+    price: '₹499', 
+    period: '/month', 
+    tagline: 'Full power for high-volume businesses.', 
+    features: ['Unlimited invoices', 'Priority WhatsApp support', 'Advanced Analytics', 'Aadhaar KYC credits'], 
+    cta: 'Go Pro' 
+  },
 ]
 
 const securityCards = [
-  { icon: '🔐', title: 'Bank-grade Encryption', desc: 'Every piece of data is encrypted at rest and in transit using AES-256 and TLS 1.3 — the same standards used by major banks.', chip: 'AES-256·TLS 1.3' },
-  { icon: '🇮🇳', title: 'India Data Residency', desc: 'All your data stays within Indian borders. Fully compliant with DPDP 2023 and MeitY data localisation guidelines.', chip: 'DPDP 2023·MeitY' },
-  { icon: '📋', title: 'GST & UIDAI Compliance', desc: 'GSTN-certified integration for live GSTIN lookups. Aadhaar verification via official UIDAI APIs — no third-party middlemen.', chip: 'GSTN·UIDAI' },
+  { 
+    icon: <Lock className="w-8 h-8 text-indigo-600" />, 
+    title: 'Bank-grade Encryption', 
+    desc: 'Every piece of data is encrypted at rest and in transit using AES-256 and TLS 1.3 standards.', 
+    chip: 'AES-256·TLS 1.3' 
+  },
+  { 
+    icon: <ShieldCheck className="w-8 h-8 text-emerald-600" />, 
+    title: 'India Data Residency', 
+    desc: 'All your data stays within Indian borders. Fully compliant with DPDP 2023 and MeitY guidelines.', 
+    chip: 'DPDP 2023·MeitY' 
+  },
+  { 
+    icon: <Building2 className="w-8 h-8 text-indigo-900" />, 
+    title: 'GSTN & UIDAI Certified', 
+    desc: 'Live GSTN integration and official UIDAI APIs for Aadhaar verification—zero third-party middlemen.', 
+    chip: 'GSTN·UIDAI' 
+  },
 ]
 
 export default function BillZoLanding() {
@@ -47,7 +122,9 @@ export default function BillZoLanding() {
   const [gstinInput, setGstinInput] = useState('')
   const [gstinResult, setGstinResult] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-
+  const { scrollYProgress } = useScroll()
+  const opacity = useTransform(scrollYProgress, [0, 0.05], [1, 0.9])
+  
   const showGstinResult = () => {
     if (gstinInput.trim().length >= 5) setGstinResult(true)
   }
@@ -59,543 +136,590 @@ export default function BillZoLanding() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#faf9f7] text-[#0e0e10] font-sans" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#faf9f7] text-[#0e0e10] selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
+      {/* Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-      
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap');
+      <style jsx global>{`
         .font-display { font-family: 'Instrument Serif', Georgia, serif; }
+        .font-sans { font-family: 'DM Sans', system-ui, sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(250, 249, 247, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); }
+        @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .animate-marquee { animation: marquee 30s linear infinite; }
       `}</style>
 
-      {/* NAV */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'py-3 shadow-lg' : 'py-4'}`}
-        style={{ 
-          background: 'rgba(250,249,247,0.85)',
-          backdropFilter: 'blur(24px) saturate(150%)',
-          borderBottom: '1px solid rgba(0,0,0,0.06)',
-          padding: scrolled ? '12px 48px' : '18px 48px'
-        }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 no-underline">
-            <div className="w-9 h-9 rounded-[10px] flex items-center justify-center font-display text-lg text-white font-italic shadow-lg" 
-              style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)', boxShadow: '0 4px 12px rgba(83,72,240,0.35)' }}>
+      {/* NAVIGATION */}
+      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? 'py-3 border-b border-black/5 bg-white/80 backdrop-blur-xl' : 'py-6 bg-transparent'}`}>
+        <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 no-underline group">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display text-xl text-white italic font-medium shadow-lg transition-transform group-hover:scale-105" 
+              style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)' }}>
               Z
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-semibold tracking-tight" style={{ letterSpacing: '-0.5px' }}>BillZo</span>
-              <span className="text-[9px] tracking-widest uppercase" style={{ color: '#4338ca', marginTop: '2px' }}>Sahi Bill. Safe Deal.</span>
+              <span className="text-lg font-bold tracking-tight text-[#0e0e10]">BillZo</span>
+              <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-indigo-600">Sahi Bill. Safe Deal.</span>
             </div>
           </Link>
-          <ul className="flex gap-9 list-none" style={{ display: 'flex', gap: '36px' }}>
-            {['Features', 'Pricing', 'Security', 'Aadhaar KYC'].map(l => (
-              <li key={l}>
-                <Link href="/start" className="text-sm font-normal no-underline transition-colors" style={{ color: '#3d3d45' }}
-                  onMouseOver={(e) => e.currentTarget.style.color = '#0e0e10'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#3d3d45'}
-                >{l}</Link>
-              </li>
+          
+          <div className="hidden lg:flex items-center gap-10">
+            {['Features', 'Pricing', 'Security', 'KYC'].map(item => (
+              <Link key={item} href={`#${item.toLowerCase()}`} className="text-sm font-medium text-[#3d3d45] hover:text-indigo-600 transition-colors no-underline">
+                {item}
+              </Link>
             ))}
-          </ul>
-          <div className="flex gap-3">
-            <Link href="/start" className="px-5 py-2.5 text-sm font-medium no-underline transition-all border" 
-              style={{ borderColor: '#e8e4dc', borderRadius: '8px', color: '#3d3d45' }}
-              onMouseOver={(e) => { e.currentTarget.style.borderColor = '#4338ca'; e.currentTarget.style.color = '#4338ca'; e.currentTarget.style.background = '#eeedfb'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e8e4dc'; e.currentTarget.style.color = '#3d3d45'; e.currentTarget.style.background = 'transparent'; }}
-            >Sign In</Link>
-            <Link href="/start" className="px-5 py-2.5 text-sm font-semibold text-white no-underline transition-all border-none" 
-              style={{ background: '#5548f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(83,72,240,0.35)' }}
-              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(83,72,240,0.4)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(83,72,240,0.35)'; }}
-            >Start Free Billing →</Link>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Link href="/start" className="hidden sm:block text-sm font-semibold text-[#3d3d45] hover:text-[#0e0e10] no-underline">
+              Sign In
+            </Link>
+            <Link href="/start" className="px-6 py-2.5 rounded-full bg-[#5548f0] text-white text-sm font-bold shadow-xl shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 transition-all no-underline">
+              Start Free Billing
+            </Link>
           </div>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section className="min-h-screen pt-36 pb-24 px-12" style={{ position: 'relative', overflow: 'hidden' }}>
-        <div className="absolute top-1/2 right-[-100px] w-[600px] h-[600px] rounded-full pointer-events-none" 
-          style={{ background: 'radial-gradient(circle, rgba(83,72,240,0.08) 0%, transparent 70%)', transform: 'translateY(-50%)' }} />
-        <div className="absolute top-[20%] left-[-80px] w-[400px] h-[400px] rounded-full pointer-events-none" 
-          style={{ background: 'radial-gradient(circle, rgba(197,165,90,0.07) 0%, transparent 70%)' }} />
-        
-        <div className="max-w-7xl mx-auto grid grid-cols-2 gap-20 items-center">
-          <div>
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center gap-2 bg-white border rounded-full px-4 py-2 text-sm font-medium mb-7 shadow-sm" 
-              style={{ borderColor: 'rgba(83,72,240,0.2)', color: '#4338ca', borderRadius: '100px' }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> GST-Ready · Aadhaar Verified · DPDP Compliant
-            </motion.div>
-            <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} 
-              className="text-5xl font-bold mb-4 font-display leading-tight" style={{ letterSpacing: '-1.5px' }}>
-              Billing that<br />
-              <em className="text-[#5548f0]" style={{ fontStyle: 'italic' }}>follows up</em><br />
-              <span className="relative">automatically
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: '#c5a55a' }} />
+      {/* HERO SECTION */}
+      <section className="relative pt-44 pb-24 px-6 md:px-12">
+        {/* Background Decorative Elements */}
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-indigo-50/50 rounded-full blur-[120px] -z-10 translate-x-1/4 -translate-y-1/4" />
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-50/50 rounded-full blur-[100px] -z-10 -translate-x-1/4 translate-y-1/4" />
+
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+            <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold uppercase tracking-wider mb-8">
+              <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+              GST Ready · Aadhaar Verified · DPDP Compliant
+            </div>
+            
+            <h1 className="text-6xl md:text-7xl font-bold font-display leading-[0.95] tracking-[-0.03em] mb-8">
+              Billing that <br />
+              <span className="italic text-[#5548f0]">follows up</span><br />
+              <span className="relative">
+                automatically
+                <motion.svg width="100%" height="12" viewBox="0 0 300 12" fill="none" className="absolute -bottom-2 left-0 w-full"
+                  initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, delay: 0.5 }}>
+                  <path d="M2 10C60 4 180 4 298 10" stroke="#c5a55a" strokeWidth="4" strokeLinecap="round" />
+                </motion.svg>
               </span>
-            </motion.h1>
-            <motion.p initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} 
-              className="text-xl font-display italic mb-6" style={{ color: '#4338ca' }}>Sahi bill. Safe deal.</motion.p>
-            <motion.p initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} 
-              className="text-base leading-relaxed mb-8 max-w-md" style={{ color: '#3d3d45', fontWeight: 300 }}>
-              GST billing in 10 seconds. WhatsApp reminders sent automatically. Built for Indian shop owners who want payments on time.
-            </motion.p>
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="flex gap-4">
-              <Link href="/start" className="px-8 py-3.5 text-base font-semibold text-white no-underline transition-all" 
-                style={{ background: '#5548f0', borderRadius: '14px', boxShadow: '0 6px 20px rgba(83,72,240,0.35)' }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(83,72,240,0.45)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(83,72,240,0.35)'; }}
-              >Start Free <span style={{ fontSize: '16px' }}>→</span></Link>
-              <Link href="/demo" className="px-7 py-3.5 text-base font-medium transition-all border bg-white no-underline" 
-                style={{ borderColor: '#e8e4dc', borderRadius: '14px', color: '#3d3d45' }}
-                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#3d3d45'; e.currentTarget.style.color = '#0e0e10'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e8e4dc'; e.currentTarget.style.color = '#3d3d45'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#0e0e10] flex items-center justify-center text-white">
-                    ▶
-                  </span>
-                  Try Demo Billing
-                </span>
+            </h1>
+
+            <p className="text-xl text-[#3d3d45] leading-relaxed mb-10 max-w-lg font-sans font-light">
+              GST billing in 10 seconds. WhatsApp reminders sent automatically. Built for Indian shop owners who value their time and cashflow.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-5 mb-14">
+              <Link href="/start" className="px-10 py-5 bg-[#5548f0] text-white rounded-2xl font-bold text-lg shadow-2xl shadow-indigo-200 hover:shadow-indigo-400 hover:-translate-y-1 transition-all flex items-center justify-center gap-3 no-underline">
+                Create First Bill Free <ArrowRight className="w-5 h-5" />
               </Link>
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex items-center gap-7 mt-12">
-              <div className="flex">
-                {['AK', 'RS', 'PM', 'VG', '+∞'].map((a, i) => (
-                  <div key={i} className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-xs font-semibold -ml-2 first:ml-0" 
-                    style={{ background: i === 4 ? '#4338ca' : '#eeedfb', color: i === 4 ? 'white' : '#4338ca' }}>{a}</div>
-                ))}
-              </div>
-              <p className="text-sm" style={{ color: '#7a7a8c' }}>Trusted by <strong style={{ color: '#0e0e10' }}>50,000+</strong> Indian businesses</p>
-            </motion.div>
-          </div>
-
-          <motion.div initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 }} style={{ position: 'relative' }}>
-            <div className="absolute top-[-20px] right-[-36px] bg-white rounded-[14px] p-4 shadow-xl border z-10 min-w-[160px]"
-              style={{ borderColor: 'rgba(0,0,0,0.07)', boxShadow: '0 12px 40px rgba(0,0,0,0.1)' }}>
-              <div className="text-[10px] font-semibold uppercase mb-1" style={{ color: '#7a7a8c' }}>GSTIN Status</div>
-              <div className="text-sm font-bold" style={{ color: '#0e0e10' }}>27AABCU9603R1ZX</div>
-              <div className="mt-2 text-xs font-semibold flex items-center gap-1" style={{ color: '#059669' }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active & Verified
-              </div>
+              <Link href="/demo" className="px-10 py-5 bg-white border border-black/5 rounded-2xl font-bold text-lg text-[#3d3d45] hover:bg-indigo-50/50 hover:border-indigo-100 transition-all flex items-center justify-center gap-3 no-underline shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white"><Play className="w-3 h-3 fill-white ml-0.5" /></div>
+                Try Interactive Demo
+              </Link>
             </div>
 
-            <div className="bg-white rounded-[22px] shadow-2xl overflow-hidden transition-transform duration-500" 
-              style={{ transform: 'perspective(1200px) rotateY(-4deg) rotateX(2deg)' }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'perspective(1200px) rotateY(-1deg) rotateX(0deg)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'perspective(1200px) rotateY(-4deg) rotateX(2deg)'}>
-              <div className="px-4 py-3 flex items-center gap-3" style={{ background: '#1a1025' }}>
-                <div className="flex gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
-                </div>
-                <div className="flex-1 rounded h-5 flex items-center px-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono', monospace" }}>app.billzo.in/dashboard</span>
-                </div>
-              </div>
-              <div className="p-6" style={{ background: '#f5f3ef' }}>
-                <div className="flex items-center justify-between mb-5">
-                  <span className="text-lg font-bold" style={{ color: '#1e1657' }}>BillZo</span>
-                  <span className="text-[10px] font-semibold text-white px-2 py-1 rounded-full" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>✓ GST Ready</span>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {[
-                    { label: 'Revenue', val: '₹2.4L', delta: '↑ 18% this month', up: true },
-                    { label: 'Invoices', val: '142', delta: '↑ 24 new', up: true },
-                    { label: 'GST Due', val: '₹18.2K', delta: 'Due Dec 20', up: false },
-                  ].map((stat, i) => (
-                    <div key={i} className="bg-white rounded-[14px] p-3.5 border transition-all" style={{ borderColor: 'rgba(0,0,0,0.06)' }}
-                      onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
-                      <div className="text-[10px] font-semibold uppercase" style={{ color: '#7a7a8c', marginBottom: '6px' }}>{stat.label}</div>
-                      <div className="text-xl font-bold" style={{ color: '#1e1657' }}>{stat.val}</div>
-                      <div className="text-[11px] font-semibold mt-1" style={{ color: stat.up ? '#10b981' : '#d97706' }}>{stat.delta}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-[14px] p-4 flex items-center gap-3" style={{ background: 'linear-gradient(135deg, #1e1657, #2d1f6e)' }}>
-                  <div className="w-9 h-9 rounded-[10px] flex items-center justify-center text-xl" style={{ background: 'rgba(255,255,255,0.1)' }}>🏢</div>
-                  <div className="flex-1">
-                    <div className="text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>Your GSTIN</div>
-                    <div className="text-sm font-bold text-white font-mono" style={{ letterSpacing: '0.04em' }}>27AABCU9603R1ZX</div>
+            <div className="flex items-center gap-6">
+              <div className="flex -space-x-3">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center overflow-hidden">
+                    <img src={`https://i.pravatar.cc/100?u=${i}`} alt="User" />
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: 'rgba(16,185,129,0.2)', color: '#34d399' }}>✓ Verified</span>
+                ))}
+                <div className="w-10 h-10 rounded-full border-2 border-white bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white">
+                  50k+
                 </div>
               </div>
+              <p className="text-sm text-[#7a7a8c] font-medium">
+                Trusted by <span className="text-[#0e0e10]">50,000+</span> Indian SMEs
+              </p>
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1, delay: 0.2 }} className="relative">
+            <div className="relative z-10 rounded-3xl overflow-hidden shadow-[0_48px_100px_-24px_rgba(0,0,0,0.15)] border border-white/20">
+              <img src="/images/dashboard-preview.png" alt="BillZo Dashboard Preview" className="w-full h-auto" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-transparent pointer-events-none" />
             </div>
 
-            <div className="absolute bottom-[-20px] left-[-36px] bg-white rounded-[14px] p-4 shadow-xl border flex items-center gap-3 animate-bounce" 
-              style={{ borderColor: 'rgba(0,0,0,0.07)' }}>
-              <span className="text-2xl">🎉</span>
-              <div>
-                <div className="text-sm font-bold" style={{ color: '#0e0e10' }}>Invoice Sent!</div>
-                <div className="text-[11px]" style={{ color: '#7a7a8c' }}>₹12,400 · via WhatsApp</div>
+            {/* Floating Badges */}
+            <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} 
+              className="absolute -top-6 -right-6 glass p-4 rounded-2xl shadow-xl z-20 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-            </div>
+              <div>
+                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">GST Verified</div>
+                <div className="text-xs font-bold text-[#0e0e10]">27AABCU9603R1ZX</div>
+              </div>
+            </motion.div>
+
+            <motion.div animate={{ y: [0, 10, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }} 
+              className="absolute -bottom-8 -left-8 glass p-5 rounded-2xl shadow-xl z-20 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#0e0e10]">WhatsApp Sent!</div>
+                <div className="text-[10px] font-medium text-[#7a7a8c]">PDF Invoice · Mehta Textiles</div>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* MARQUEE */}
-      <div className="px-0 py-4 flex overflow-hidden" style={{ background: '#1e1657' }}>
-        <div className="flex animate-marquee whitespace-nowrap" style={{ animation: 'marquee 25s linear infinite' }}>
+      {/* TRUST MARQUEE */}
+      <div className="bg-[#1e1657] py-8 border-y border-white/5 relative overflow-hidden">
+        <div className="flex animate-marquee whitespace-nowrap">
           {Array(2).fill(0).map((_, i) => (
-            <div key={i} className="flex items-center gap-8 px-10" style={{ borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+            <div key={i} className="flex items-center gap-16 px-8">
               {[
-                { icon: '👥', text: '50,000+ businesses trust BillZo' },
-                { icon: '🧾', text: '12 lakh+ invoices created' },
-                { icon: '⚡', text: 'Invoice in under 60 seconds' },
-                { icon: '🔒', text: 'AES-256 bank-grade encryption' },
-                { icon: '🇮🇳', text: 'DPDP 2023 compliant' },
-                { icon: '✅', text: 'GSTN certified portal' },
-                { icon: '📱', text: 'WhatsApp & email delivery' },
+                { icon: <CheckCircle2 className="w-5 h-5 text-emerald-400" />, text: "GSTN Certified Portal" },
+                { icon: <Shield className="w-5 h-5 text-indigo-400" />, text: "Bank-Grade AES-256 Encryption" },
+                { icon: <MessageSquare className="w-5 h-5 text-emerald-400" />, text: "Official WhatsApp Business API" },
+                { icon: <Building2 className="w-5 h-5 text-indigo-400" />, text: "DPDP 2023 Compliant" },
+                { icon: <Smartphone className="w-5 h-5 text-emerald-400" />, text: "Android & iOS Progressive App" },
+                { icon: <Zap className="w-5 h-5 text-yellow-400" />, text: "12 Lakh+ Invoices Created" },
               ].map((item, j) => (
-                <div key={j} className="flex items-center gap-3 whitespace-nowrap">
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    {item.text.split(' ').map((word, k) => (
-                      <span key={k} style={word.includes('+') || word === 'BillZo' ? { color: 'white', fontWeight: 600 } : {}}>{word} </span>
-                    ))}
-                  </span>
+                <div key={j} className="flex items-center gap-3">
+                  {item.icon}
+                  <span className="text-white font-bold text-sm tracking-wide opacity-80">{item.text}</span>
                 </div>
               ))}
             </div>
           ))}
         </div>
-        <style>{`@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
       </div>
 
-      {/* FEATURES */}
-      <section className="py-24 px-12" id="features">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 gap-20">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#4338ca' }}>Core Features</div>
-            <h2 className="text-4xl font-bold font-display mb-8" style={{ letterSpacing: '-1px' }}>Built for how<br /><em style={{ fontStyle: 'italic', color: '#5548f0' }}>India</em> actually works</h2>
-            <div className="flex flex-col gap-2">
-              {features.map((f, i) => (
-                <button key={i} onClick={() => setActiveFeature(i)}
-                  className={`p-5 rounded-[14px] text-left transition-all border ${activeFeature === i ? 'bg-white shadow-md' : 'border-transparent hover:bg-white/50'}`}
-                  style={{ borderColor: activeFeature === i ? 'rgba(67,56,202,0.15)' : 'transparent' }}
-                >
-                  <div className="text-[11px] font-bold mb-1.5 font-mono" style={{ color: '#7a7a8c' }}>{f.num}</div>
-                  <div className="text-lg font-bold mb-1.5">{f.title}</div>
-                  <div className="text-sm leading-relaxed" style={{ color: '#7a7a8c', fontWeight: 300 }}>{f.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[32px] shadow-2xl border overflow-hidden sticky top-24" style={{ borderColor: 'rgba(0,0,0,0.06)', minHeight: '380px' }}>
-            <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#1a1025' }}>
-              <div className="flex gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+      {/* FEATURES REVEAL */}
+      <section className="py-32 px-6 md:px-12 bg-white" id="features">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-12 gap-20">
+            <div className="lg:col-span-5">
+              <div className="text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4">The Workflow</div>
+              <h2 className="text-5xl font-bold font-display mb-10 tracking-tight leading-[1.1]">Built for how India <br /><em className="italic text-[#c5a55a]">actually works.</em></h2>
+              
+              <div className="space-y-4">
+                {features.map((f, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setActiveFeature(i)}
+                    className={`w-full group p-6 rounded-3xl text-left transition-all relative overflow-hidden border-2 ${activeFeature === i ? 'bg-[#faf9f7] border-indigo-100 shadow-xl' : 'bg-white border-transparent hover:bg-[#faf9f7]/50'}`}
+                  >
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${activeFeature === i ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-indigo-50 text-indigo-600'}`}>
+                        {f.icon}
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold text-[#7a7a8c] uppercase tracking-widest">{f.num}</div>
+                        <h3 className="text-xl font-bold">{f.title}</h3>
+                      </div>
+                    </div>
+                    <p className={`text-sm leading-relaxed transition-all ${activeFeature === i ? 'text-[#3d3d45] font-medium' : 'text-[#7a7a8c]'}`}>{f.desc}</p>
+                    {activeFeature === i && (
+                      <motion.div layoutId="indicator" className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600" />
+                    )}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="p-8">
-              {activeFeature === 0 && (
-                <div>
-                  <div className="flex justify-between items-start mb-6 pb-5 border-b" style={{ borderColor: '#e8e4dc' }}>
-                    <div>
-                      <div className="font-display text-xl italic" style={{ color: '#1e1657' }}>BillZo</div>
-                      <div className="text-xs mt-1" style={{ color: '#7a7a8c' }}>Tax Invoice</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-xs" style={{ color: '#7a7a8c' }}>BZ-0142</div>
-                      <div className="text-xs" style={{ color: '#7a7a8c', marginTop: '2px' }}>Dec 15, 2024</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-5 mb-5">
-                    <div className="flex-1">
-                      <div className="text-[10px] font-bold uppercase mb-1" style={{ color: '#7a7a8c' }}>Bill To</div>
-                      <div className="text-sm font-semibold">Mehta Textiles Pvt Ltd</div>
-                      <div className="text-xs font-mono" style={{ color: '#7a7a8c' }}>27AABCU9603R1ZX</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-4 py-2 border-b mb-2" style={{ borderColor: '#f2f0ec' }}>
-                    <span className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Item</span>
-                    <span className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Qty</span>
-                    <span className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Rate</span>
-                    <span className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Amt</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-4 py-2 border-b mb-3" style={{ borderColor: '#f2f0ec' }}>
-                    <span className="text-sm">Linen Fabric</span>
-                    <span className="text-sm">12m</span>
-                    <span className="text-sm text-right">₹2,200</span>
-                    <span className="text-sm text-right font-semibold">₹26,400</span>
-                  </div>
-                  <div className="flex gap-2 mb-4 flex-wrap">
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: '#d1fae5', color: '#065f46' }}>CGST 9% = ₹2,376</span>
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: '#d1fae5', color: '#065f46' }}>SGST 9% = ₹2,376</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-4 border-t-2" style={{ borderColor: '#e8e4dc' }}>
-                    <span className="text-sm" style={{ color: '#7a7a8c' }}>Total Amount</span>
-                    <span className="text-2xl font-bold" style={{ color: '#1e1657' }}>₹31,152</span>
-                  </div>
-                  <div className="flex gap-3 mt-5">
-                    <button className="flex-1 py-2.5 text-sm font-semibold rounded-[8px]" style={{ background: '#25d366', color: 'white' }}>📱 WhatsApp</button>
-                    <button className="flex-1 py-2.5 text-sm font-semibold rounded-[8px]" style={{ background: '#eeedfb', color: '#4338ca' }}>✉ Email PDF</button>
-                  </div>
-                </div>
-              )}
-              {activeFeature === 1 && (
-                <div>
-                  <div className="text-[12px] font-bold uppercase mb-3" style={{ color: '#7a7a8c' }}>GSTIN Lookup</div>
-                  <div className="flex gap-3 mb-5">
-                    <input value={gstinInput} onChange={(e) => setGstinInput(e.target.value)} placeholder="27AABCU9603R1ZX"
-                      className="flex-1 px-4 py-3 font-mono text-sm rounded-[8px] border outline-none"
-                      style={{ background: '#f2f0ec', borderColor: '#e8e4dc' }}
-                      onFocus={(e) => { e.target.style.borderColor = '#4338ca'; e.target.style.background = 'white'; }}
-                    />
-                    <button onClick={showGstinResult} className="px-5 py-3 text-sm font-semibold rounded-[8px] text-white"
-                      style={{ background: '#4338ca' }}>Verify →</button>
-                  </div>
-                  {gstinResult && (
-                    <div className="p-5 rounded-[14px]" style={{ background: '#f2f0ec', animation: 'panelIn 0.35s ease' }}>
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: '#d1fae5', color: '#065f46' }}>✓ Active</span>
-                        <span className="text-lg font-bold" style={{ color: '#1e1657' }}>Mehta Textiles Pvt Ltd</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div><div className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>State</div><div className="text-sm font-semibold">Maharashtra</div></div>
-                        <div><div className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Status</div><div className="text-sm font-semibold" style={{ color: '#059669' }}>Active ✓</div></div>
-                        <div><div className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Reg. Type</div><div className="text-sm font-semibold">Regular</div></div>
-                        <div><div className="text-[10px] font-bold uppercase" style={{ color: '#7a7a8c' }}>Category</div><div className="text-sm font-semibold">Business</div></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {activeFeature === 2 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="rounded-[6px] w-12 h-8 flex items-center justify-center text-xs font-bold text-white" 
-                      style={{ background: 'linear-gradient(135deg, #ff9933, #138808)', color: '#000080' }}>आधार</div>
-                    <div>
-                      <div className="text-base font-bold">Aadhaar Verification</div>
-                      <div className="text-xs" style={{ color: '#7a7a8c' }}>UIDAI-compliant KYC</div>
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <div className="text-[11px] font-bold uppercase mb-2" style={{ color: '#7a7a8c' }}>Aadhaar Number</div>
-                    <input value="XXXX  XXXX  4821" readOnly className="w-full px-4 py-3 font-mono text-base tracking-widest rounded-[8px] border outline-none" 
-                      style={{ background: '#f2f0ec', borderColor: '#e8e4dc' }} />
-                  </div>
-                  <div className="mb-4">
-                    <div className="text-[11px] font-bold uppercase mb-2" style={{ color: '#7a7a8c' }}>One-Time Password</div>
-                    <div className="flex gap-2">
-                      {['8','4','2','1','',''].map((v, i) => (
-                        <div key={i} className={`w-12 h-14 rounded-[8px] flex items-center justify-center text-xl font-bold ${v ? 'border-2 border-[#4338ca]/30 bg-[#eeedfb]' : 'border-2 border-[#e8e4dc] bg-[#f2f0ec]'}`}>
-                          {v || '_'}
+
+            <div className="lg:col-span-7 flex flex-col justify-center">
+              <div className="bg-[#faf9f7] rounded-[40px] p-2 shadow-2xl shadow-black/5 border border-black/5 relative min-h-[500px] flex items-center justify-center">
+                <AnimatePresence mode="wait">
+                  {activeFeature === 0 && (
+                    <motion.div key="f1" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-md p-8 bg-white rounded-3xl shadow-inner border border-black/5">
+                      <div className="flex justify-between items-start mb-10 pb-6 border-b border-black/5">
+                        <div className="font-display text-2xl italic text-indigo-900">BillZo</div>
+                        <div className="text-right">
+                          <div className="font-mono text-[10px] text-gray-400 uppercase tracking-widest">INV-2024-082</div>
+                          <div className="text-xs font-bold mt-1">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                  <button className="w-full py-3.5 text-base font-bold rounded-[8px] text-white transition-all"
-                    style={{ background: 'linear-gradient(135deg, #5548f0, #4338ca)' }}
-                    onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(83,72,240,0.35)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-                  >🔒 Verify with Aadhaar</button>
+                      </div>
+                      <div className="mb-8">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Billed To</div>
+                        <div className="text-base font-bold">Mehta Textiles Pvt Ltd</div>
+                        <div className="text-xs font-mono text-indigo-600 mt-1 uppercase tracking-tight">27AABCU9603R1ZX</div>
+                      </div>
+                      <div className="space-y-4 mb-8">
+                        <div className="flex justify-between text-sm font-medium pb-2 border-b border-gray-50">
+                          <span>Cotton Fabric (20m)</span>
+                          <span>₹8,400.00</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400 font-medium">
+                          <span>SGST 9%</span>
+                          <span>₹756.00</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400 font-medium">
+                          <span>CGST 9%</span>
+                          <span>₹756.00</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center py-4 px-5 rounded-2xl bg-indigo-50 border border-indigo-100">
+                        <span className="text-sm font-bold text-indigo-900 uppercase tracking-wider">Grand Total</span>
+                        <span className="text-3xl font-black text-indigo-600">₹9,912.00</span>
+                      </div>
+                      <div className="mt-8 grid grid-cols-2 gap-4">
+                        <div className="h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 text-xs font-bold gap-2">
+                          <CheckCircle2 className="w-4 h-4" /> WhatsApp Sent
+                        </div>
+                        <div className="h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xs font-bold gap-2">
+                          <ExternalLink className="w-4 h-4" /> Download PDF
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeFeature === 1 && (
+                    <motion.div key="f2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="w-full max-w-sm">
+                      <div className="bg-[#1e1657] rounded-[32px] overflow-hidden shadow-2xl border-4 border-[#0e0e10]">
+                        <div className="bg-[#2d1f6e] p-4 flex items-center gap-3 border-b border-white/5">
+                          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                            <Smartphone className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-white text-xs font-bold">Mehta Textiles</div>
+                            <div className="text-emerald-400 text-[10px] font-bold">Online</div>
+                          </div>
+                        </div>
+                        <div className="p-6 h-[400px] bg-[#0c0a1a] flex flex-col gap-6 overflow-y-auto">
+                          <div className="self-end bg-[#5548f0] text-white p-4 rounded-2xl rounded-tr-none text-sm max-w-[80%] shadow-lg">
+                            Namaste! Your invoice for Oct 12 is ready. View it here: billzo.in/inv/8271
+                          </div>
+                          <div className="self-start bg-white/5 text-white p-4 rounded-2xl rounded-tl-none text-sm max-w-[80%] border border-white/10 italic opacity-50">
+                            Mehta Textiles is typing...
+                          </div>
+                          <div className="mt-auto">
+                            <div className="bg-white/10 rounded-2xl p-4 border border-white/10">
+                              <div className="flex items-center gap-3 mb-2">
+                                <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center text-white text-[10px] font-bold">PDF</div>
+                                <div className="text-white text-xs font-bold">Tax-Invoice-BZ82.pdf</div>
+                              </div>
+                              <div className="text-[10px] text-white/40">124 KB · 2:14 PM</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-[#2d1f6e] flex items-center gap-3">
+                          <div className="flex-1 h-10 rounded-full bg-white/5 border border-white/10 flex items-center px-4">
+                            <span className="text-white/20 text-xs">Reply to Mehta...</span>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                            <Zap className="w-5 h-5 fill-white" />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeFeature === 2 && (
+                    <motion.div key="f3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full max-w-md space-y-6">
+                      <div className="bg-white rounded-3xl p-6 shadow-xl border border-indigo-50">
+                        <div className="flex items-center gap-3 mb-6">
+                          <BarChart3 className="w-6 h-6 text-indigo-600" />
+                          <h4 className="text-base font-bold">Hidden Accounting Core</h4>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-indigo-50 rounded-2xl p-4">
+                            <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Total Sales</div>
+                            <div className="text-2xl font-black text-indigo-900">₹8.42L</div>
+                            <div className="text-[10px] font-bold text-emerald-600 mt-1">↑ 14.2% growth</div>
+                          </div>
+                          <div className="bg-emerald-50 rounded-2xl p-4">
+                            <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">GST Ready</div>
+                            <div className="text-2xl font-black text-emerald-900">₹1.14L</div>
+                            <div className="text-[10px] font-bold text-emerald-700 mt-1">GSTR-1 Generated</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-[#1e1657] rounded-3xl p-6 text-white shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                            <Shield className="w-4 h-4 text-emerald-400" />
+                          </div>
+                          <span className="text-sm font-bold">Ledger-Safe Infrastructure</span>
+                        </div>
+                        <div className="space-y-3">
+                          {[
+                            "Double-entry system (Hidden)",
+                            "Real-time Inventory sync",
+                            "Auto-Journal entries",
+                            "Compliance-first architecture"
+                          ].map(t => (
+                            <div key={t} className="flex items-center gap-2 text-xs opacity-70">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> {t}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                
+                {/* Floating Decorative Icon */}
+                <div className="absolute top-[-20px] right-[-20px] w-12 h-12 rounded-2xl bg-[#c5a55a] shadow-xl flex items-center justify-center text-white">
+                  <Zap className="w-6 h-6 fill-white" />
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* GSTIN SECTION */}
-      <section className="py-24 px-12 text-white" style={{ background: '#1e1657', position: 'relative', overflow: 'hidden' }}>
-        <div className="absolute top-[-200px] right-[-200px] w-[600px] h-[600px] rounded-full pointer-events-none" 
-          style={{ background: 'radial-gradient(circle, rgba(83,72,240,0.3) 0%, transparent 70%)' }} />
-        <div className="max-w-7xl mx-auto grid grid-cols-2 gap-20 items-center relative z-10">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#34d399' }}>GSTIN Intelligence</div>
-            <h2 className="text-4xl font-bold mb-4 font-display">Know who you're<br />dealing with</h2>
-            <p className="text-base leading-relaxed mb-8 max-w-md" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Instantly verify any GSTIN before raising an invoice. BillZo pulls live data from the GSTN portal in under 2 seconds.
-            </p>
-            <div className="flex flex-col gap-4">
-              {[
-                'Live GSTN lookup — real-time data from government portal',
-                'Auto-fills invoice — business name, address populated instantly',
-                'Flags suspicious GSTINs — cancelled or invalid registrations flagged',
-                'HSN code validation — ensure correct tax classification',
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.25)' }}>
-                    <span className="w-2 h-1 border-l-2 border-b border-[#34d399]" style={{ transform: 'rotate(-45deg) translateY(-1px)' }} />
-                  </div>
-                  <div className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                    {item.split(' — ').map((part, j) => (
-                      <span key={j} style={j === 0 ? { fontWeight: 600, color: 'white' } : {}}>{part}</span>
-                    ))}
-                  </div>
+      {/* GSTIN INSTANT CHECKER */}
+      <section className="py-32 bg-[#faf9f7]" id="kyc">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          <div className="bg-[#0e0e10] rounded-[60px] p-12 md:p-20 relative overflow-hidden shadow-3xl">
+            <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none" 
+              style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #5548f0, transparent 40%)' }} />
+            
+            <div className="grid lg:grid-cols-2 gap-20 items-center relative z-10">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-6">
+                  Live GSTN Portal Access
                 </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="rounded-[32px] p-9 border" style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(24px)' }}>
-              <div className="text-lg font-bold text-white mb-6">GSTIN Instant Check</div>
-              <input placeholder="Enter GSTIN e.g. 27AABCU9603R1ZX"
-                className="w-full px-5 py-4 mb-4 text-sm font-mono rounded-[8px] outline-none"
-                style={{ background: 'rgba(255,255,255,0.07)', borderColor: 'rgba(255,255,255,0.12)', color: 'white' }}
-              />
-              <button className="w-full py-4 text-base font-bold rounded-[8px] text-white transition-all"
-                style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(16,185,129,0.4)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-              >→ Verify Now</button>
+                <h2 className="text-5xl font-bold font-display text-white mb-8 tracking-tight">Know exactly who you are dealing with.</h2>
+                <p className="text-lg text-white/50 mb-10 leading-relaxed font-sans font-light">
+                  Instantly verify any GSTIN before raising an invoice. Pull live business names, trade addresses, and registration status directly from the government portal.
+                </p>
+                
+                <div className="space-y-6">
+                  {[
+                    "Live status check (Active / Inactive / Suspended)",
+                    "Auto-fills billing address instantly",
+                    "Validates HSN codes for correct tax rates",
+                    "Reduces input errors by 94%"
+                  ].map(item => (
+                    <div key={item} className="flex items-center gap-4 text-white/80 font-medium text-sm">
+                      <div className="w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                        <Check className="w-3 h-3" />
+                      </div>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-[40px] p-8 md:p-12 backdrop-blur-xl">
+                <div className="text-sm font-bold text-white/40 uppercase tracking-widest mb-6">GSTIN Quick-Verify</div>
+                <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                  <div className="flex-1 relative">
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 27AABCU9603R1ZX"
+                      value={gstinInput}
+                      onChange={(e) => setGstinInput(e.target.value.toUpperCase())}
+                      className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl px-6 text-white font-mono text-lg focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-white/10"
+                    />
+                    <Search className="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+                  </div>
+                  <button 
+                    onClick={showGstinResult}
+                    className="h-16 px-8 rounded-2xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-900/40"
+                  >
+                    Verify Now
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {gstinResult && (
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-8 rounded-3xl bg-white text-[#0e0e10] shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Live Status: Active
+                        </div>
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                      </div>
+                      <div className="text-2xl font-bold mb-6 leading-tight">Abhishek Electricals & Traders</div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">State</div>
+                          <div className="text-sm font-bold">Maharashtra</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Reg. Type</div>
+                          <div className="text-sm font-bold">Regular</div>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Address</div>
+                          <div className="text-sm font-medium leading-relaxed">Shop 4, Gandhi Nagar, Market Area, Pune - 411001</div>
+                        </div>
+                      </div>
+                      <div className="mt-8 pt-6 border-t border-gray-100">
+                        <button className="w-full h-12 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-sm hover:bg-indigo-100 transition-all flex items-center justify-center gap-2">
+                          Add to Customer Master <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* PRICING */}
-      <section className="py-24 px-12" style={{ background: '#faf9f7' }} id="pricing">
+      <section className="py-32 px-6 md:px-12" id="pricing">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#4338ca' }}>Pricing</div>
-            <h2 className="text-4xl font-bold font-display mb-4">Transparent pricing.<br /><em style={{ fontStyle: 'italic', color: '#5548f0' }}>No surprises.</em></h2>
-            <p className="text-base max-w-md mx-auto" style={{ color: '#7a7a8c' }}>Start free, grow as you scale. Every plan includes GST calculation, PDF export, and WhatsApp delivery.</p>
+          <div className="text-center mb-20">
+            <div className="text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4">Pricing</div>
+            <h2 className="text-5xl font-bold font-display mb-6 tracking-tight">Transparent plans. No hidden fees.</h2>
+            <p className="text-lg text-[#3d3d45] max-w-lg mx-auto font-sans font-light">
+              Start free, grow as you scale. Every plan includes GST calculation, PDF export, and WhatsApp delivery.
+            </p>
           </div>
-          
-          <div className="grid grid-cols-4 gap-5">
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {plans.map((plan, i) => (
-              <div key={i} className={`bg-white rounded-[22px] p-7 border transition-all relative overflow-hidden ${plan.popular ? 'shadow-lg' : ''}`}
-                style={{ borderColor: plan.popular ? '#5548f0' : '#e8e4dc' }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 24px 60px rgba(0,0,0,0.1)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = plan.popular ? '0 8px 32px rgba(83,72,240,0.15)' : 'none'; }}
+              <div 
+                key={i} 
+                className={`group relative bg-white rounded-[40px] p-10 border transition-all duration-500 hover:-translate-y-2 ${plan.popular ? 'border-indigo-600 shadow-[0_32px_64px_-16px_rgba(85,72,240,0.2)]' : 'border-black/5 hover:border-black/10 shadow-sm'}`}
               >
-                {plan.popular && <div className="absolute top-4 right-4 text-[10px] font-bold px-3 py-1 rounded-full text-white" style={{ background: '#5548f0' }}>⚡ Most Popular</div>}
-                <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#7a7a8c' }}>{plan.name}</div>
-                <div className="flex items-baseline gap-1 mb-1">
-                  <span className="text-lg font-semibold" style={{ color: '#4338ca', marginTop: '6px' }}>₹</span>
-                  <span className="text-5xl font-bold" style={{ color: '#1e1657', letterSpacing: '-2px' }}>{plan.price}</span>
+                {plan.popular && (
+                  <div className="absolute top-0 right-10 -translate-y-1/2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-lg">
+                    Most Popular
+                  </div>
+                )}
+                <div className="text-sm font-black text-[#7a7a8c] uppercase tracking-widest mb-6">{plan.name}</div>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-6xl font-black text-[#0e0e10] tracking-tighter">{plan.price}</span>
+                  <span className="text-sm font-bold text-[#7a7a8c]">{plan.period}</span>
                 </div>
-                <div className="text-xs mb-4" style={{ color: '#7a7a8c' }}>{plan.period}</div>
-                <div className="text-sm mb-6 min-h-[40px] leading-relaxed" style={{ color: '#7a7a8c', fontWeight: 300 }}>{plan.tagline}</div>
-                <div className="h-px mb-6" style={{ background: '#e8e4dc' }} />
-                <div className="flex flex-col gap-2.5 mb-7">
+                <p className="text-sm text-[#7a7a8c] font-medium leading-relaxed mb-8 min-h-[40px]">{plan.tagline}</p>
+                <div className="h-px bg-black/5 mb-8" />
+                <div className="space-y-4 mb-10">
                   {plan.features.map((f, j) => (
-                    <div key={j} className="flex items-start gap-2.5 text-sm" style={{ color: '#7a7a8c' }}>
-                      <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: '#d1fae5' }}>
-                        <span className="w-1 h-1 border-l border-b border-[#059669]" style={{ transform: 'rotate(-45deg) translateY(-0.5px)' }} />
-                      </span>
+                    <div key={j} className="flex items-center gap-3 text-sm font-medium text-[#3d3d45]">
+                      <div className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <Check className="w-3 h-3" />
+                      </div>
                       {f}
                     </div>
                   ))}
                 </div>
-                <button className={`w-full py-3 rounded-[8px] text-sm font-semibold transition-all ${plan.popular ? 'text-white' : 'border'}`}
-                  style={plan.popular ? { background: '#5548f0', boxShadow: '0 4px 16px rgba(83,72,240,0.3)' } : { borderColor: 'rgba(83,72,240,0.3)', color: '#4338ca' }}
-                  onMouseOver={(e) => { if (!plan.popular) e.currentTarget.style.background = '#eeedfb'; else e.currentTarget.style.background = '#4338ca'; }}
-                  onMouseLeave={(e) => { if (!plan.popular) e.currentTarget.style.background = 'transparent'; else e.currentTarget.style.background = '#5548f0'; }}
-                >{plan.cta}</button>
+                <button className={`w-full py-5 rounded-2xl font-bold text-base transition-all ${plan.popular ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 hover:bg-indigo-700' : 'bg-[#faf9f7] text-[#0e0e10] border border-black/5 hover:bg-black/5'}`}>
+                  {plan.cta}
+                </button>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* SECURITY */}
-      <section className="py-24 px-12" style={{ background: '#f2f0ec' }} id="security">
+      {/* SECURITY GRID */}
+      <section className="py-32 px-6 md:px-12 bg-[#1e1657]" id="security">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-16 max-w-xl">
-            <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#4338ca' }}>Security & Compliance</div>
-            <h2 className="text-4xl font-bold font-display">Your data is<br /><em style={{ fontStyle: 'italic', color: '#5548f0' }}>safer here</em></h2>
-            <p className="text-base mt-4 max-w-md" style={{ color: '#7a7a8c', fontWeight: 300 }}>Built on Indian data infrastructure with the same encryption standards used by banks.</p>
+          <div className="max-w-xl mb-20">
+            <div className="text-indigo-400 text-xs font-black uppercase tracking-[0.2em] mb-4">Security & Trust</div>
+            <h2 className="text-5xl font-bold font-display text-white mb-6 tracking-tight leading-tight">Your data is safer with us than <em className="italic text-emerald-400">any ledger.</em></h2>
+            <p className="text-lg text-white/50 leading-relaxed font-sans font-light">
+              Built on sovereign Indian infrastructure with bank-grade security protocols. We take compliance as seriously as you take your business.
+            </p>
           </div>
-          
-          <div className="grid grid-cols-3 gap-6">
+
+          <div className="grid md:grid-cols-3 gap-8">
             {securityCards.map((card, i) => (
-              <div key={i} className="bg-white rounded-[22px] p-9 border transition-all relative overflow-hidden"
-                style={{ borderColor: '#e8e4dc' }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.1)'; e.currentTarget.style.borderColor = 'rgba(83,72,240,0.1)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e8e4dc'; }}
-              >
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 transition-transform origin-left duration-400" 
-                  style={{ background: 'linear-gradient(to right, #5548f0, #c5a55a)', transform: 'scaleX(0)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scaleX(1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scaleX(0)'} />
-                <div className="w-15 h-15 rounded-[14px] flex items-center justify-center text-3xl mb-5" style={{ background: '#eeedfb' }}>{card.icon}</div>
-                <div className="text-lg font-bold mb-2" style={{ letterSpacing: '-0.3px' }}>{card.title}</div>
-                <div className="text-sm leading-relaxed mb-4" style={{ color: '#7a7a8c', fontWeight: 300 }}>{card.desc}</div>
-                <span className="inline-block px-3 py-1 rounded-full text-xs font-medium" style={{ background: '#eeedfb', color: '#4338ca', fontFamily: "'JetBrains Mono', monospace" }}>{card.chip}</span>
+              <div key={i} className="bg-white/5 border border-white/10 rounded-[40px] p-10 backdrop-blur-md hover:bg-white/[0.08] transition-all group">
+                <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center mb-8 shadow-2xl group-hover:scale-105 transition-transform">
+                  {card.icon}
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-4 leading-tight">{card.title}</h3>
+                <p className="text-white/50 text-sm leading-relaxed mb-6 font-medium">{card.desc}</p>
+                <div className="inline-block px-3 py-1 rounded-full bg-white/10 text-white/40 text-[10px] font-black uppercase tracking-widest font-mono">
+                  {card.chip}
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-32 px-12 text-center relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e1657, #2d1f6e, #4338ca)' }}>
-        <div className="absolute inset-0 pointer-events-none" 
-          style={{ background: 'radial-gradient(ellipse, rgba(83,72,240,0.5) 0%, transparent 70%)', transform: 'translate(-50%, -50%)', left: '50%', top: '50%' }} />
-        <div className="absolute inset-0 pointer-events-none" 
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
-        <div className="relative z-10">
-          <div className="text-xs font-bold uppercase tracking-widest mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>Get started today</div>
-          <h2 className="text-5xl font-bold text-white mb-5 font-display" style={{ letterSpacing: '-1.5px' }}>Shuru karo <em style={{ fontStyle: 'italic', color: '#a5b4fc' }}>aaj.</em></h2>
-          <p className="text-lg mb-12" style={{ color: 'rgba(255,255,255,0.5)' }}>First invoice free. No credit card. No setup fee.</p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <button className="px-10 py-4 text-base font-bold rounded-[14px] text-[#1e1657] transition-all"
-              style={{ background: 'white' }}
-              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(255,255,255,0.2)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-            >Create Free Account →</button>
-            <button className="px-9 py-4 text-base font-medium rounded-[14px] border transition-all"
-              style={{ borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)' }}
-              onMouseOver={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)'; e.currentTarget.style.color = 'white'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-            >Talk to Expert</button>
-          </div>
-          <p className="text-sm mt-6" style={{ color: 'rgba(255,255,255,0.3)' }}>No credit card required · No setup fee · Cancel anytime</p>
+      {/* CTA SECTION */}
+      <section className="py-40 px-6 md:px-12 text-center relative overflow-hidden bg-white">
+        <div className="max-w-4xl mx-auto relative z-10">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}>
+            <h2 className="text-6xl md:text-7xl font-bold font-display tracking-tight mb-8">
+              Shuru karo <em className="italic text-indigo-600">aaj hi.</em>
+            </h2>
+            <p className="text-xl text-[#3d3d45] mb-12 font-sans font-light">
+              First 50 invoices are completely free. No credit card. No setup fee. No excuses.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-5 justify-center items-center">
+              <Link href="/start" className="w-full sm:w-auto px-12 py-6 bg-[#0e0e10] text-white rounded-2xl font-bold text-lg shadow-3xl hover:bg-indigo-600 transition-all no-underline">
+                Create Free Account
+              </Link>
+              <button className="w-full sm:w-auto px-12 py-6 bg-white border-2 border-[#0e0e10] text-[#0e0e10] rounded-2xl font-bold text-lg hover:bg-black/5 transition-all">
+                Talk to Sales Expert
+              </button>
+            </div>
+            <p className="text-xs text-[#7a7a8c] mt-10 font-bold uppercase tracking-widest">
+              Available on Web · Mobile · Tablet
+            </p>
+          </motion.div>
         </div>
+        
+        {/* Background Decorative Pattern */}
+        <div className="absolute inset-0 -z-10 opacity-[0.03] pointer-events-none" 
+          style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, black 1px, transparent 0)', backgroundSize: '40px 40px' }} />
       </section>
 
       {/* FOOTER */}
-      <footer className="py-18 px-12" style={{ background: '#0c0a1a', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <div className="max-w-7xl mx-auto grid grid-cols-5 gap-12 mb-16">
-          <div className="col-span-1">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-base font-bold text-white italic" 
-                style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)' }}>B</div>
-              <div className="flex flex-col">
-                <span className="text-base font-semibold text-white" style={{ letterSpacing: '-0.5px' }}>BillZo</span>
-                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>Sahi Bill. Safe Deal.</span>
-              </div>
-            </div>
-            <p className="text-xs leading-relaxed max-w-[200px]" style={{ color: 'rgba(255,255,255,0.35)', fontWeight: 300 }}>India's most trusted GST billing platform. Built for the way India works.</p>
-          </div>
-          {[
-            { title: 'Product', links: ['Invoicing', 'GSTIN Verify', 'Aadhaar KYC', 'Pricing', 'API Access'] },
-            { title: 'Company', links: ['About', 'Blog', 'Careers', 'Press'] },
-            { title: 'Support', links: ['Help Center', 'API Docs', 'Status', 'Contact'] },
-            { title: 'Legal', links: ['Privacy Policy', 'Terms of Service', 'DPDP Compliance', 'Refund Policy'] },
-          ].map((col, i) => (
-            <div key={i}>
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>{col.title}</div>
-              <div className="flex flex-col gap-3">
-                {col.links.map(link => (
-                  <Link key={link} href="/start" className="text-sm no-underline transition-colors" style={{ color: 'rgba(255,255,255,0.45)', fontWeight: 300 }}
-                    onMouseOver={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.85)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
-                  >{link}</Link>
+      <footer className="py-24 px-6 md:px-12 bg-[#faf9f7] border-t border-black/5">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-16 mb-20">
+            <div className="lg:col-span-2">
+              <Link href="/" className="flex items-center gap-3 no-underline mb-8">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center font-display text-base text-white italic font-medium" 
+                  style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)' }}>
+                  Z
+                </div>
+                <span className="text-xl font-bold text-[#0e0e10]">BillZo</span>
+              </Link>
+              <p className="text-[#3d3d45] text-sm leading-relaxed max-w-sm font-medium mb-8">
+                India's most trusted GST billing platform. Built with the speed of a shopkeeper and the security of a bank.
+              </p>
+              <div className="flex gap-4">
+                {[MessageSquare, Smartphone, BarChart3].map((Icon, i) => (
+                  <div key={i} className="w-10 h-10 rounded-full border border-black/10 flex items-center justify-center text-[#3d3d45] hover:bg-indigo-600 hover:text-white transition-all cursor-pointer">
+                    <Icon className="w-5 h-5" />
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
-        </div>
-        <div className="max-w-7xl mx-auto flex justify-between items-center pt-8 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>© 2024 BillZo Technologies Pvt Ltd · Made with ♥ in India 🇮🇳</p>
-          <div className="flex gap-2">
-            {['GSTN', 'UIDAI', 'DPDP', 'MeitY'].map(cert => (
-              <span key={cert} className="text-[11px] font-semibold px-3 py-1 rounded-full" 
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono', monospace" }}>
-                {cert}
-              </span>
+            
+            {[
+              { title: 'Product', links: ['Invoicing', 'GSTIN Verify', 'Aadhaar KYC', 'API Access'] },
+              { title: 'Support', links: ['Help Center', 'API Docs', 'Status', 'Contact'] },
+              { title: 'Legal', links: ['Privacy Policy', 'Terms', 'DPDP Compliance'] },
+            ].map((col, i) => (
+              <div key={i}>
+                <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#0e0e10] mb-8">{col.title}</h5>
+                <ul className="space-y-4 list-none p-0">
+                  {col.links.map(l => (
+                    <li key={l}>
+                      <Link href="#" className="text-sm font-medium text-[#7a7a8c] hover:text-indigo-600 transition-colors no-underline">
+                        {l}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
+          </div>
+          
+          <div className="pt-12 border-t border-black/5 flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="text-xs font-medium text-[#7a7a8c]">
+              © 2024 BillZo Technologies Pvt Ltd · Made with ❤️ in India 🇮🇳
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {['GSTN Certified', 'UIDAI Integration', 'MeitY Compliant', 'DPDP Ready'].map(badge => (
+                <span key={badge} className="px-4 py-1.5 rounded-full bg-white border border-black/5 text-[10px] font-black text-[#0e0e10] uppercase tracking-widest shadow-sm">
+                  {badge}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </footer>

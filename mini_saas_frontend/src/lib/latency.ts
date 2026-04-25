@@ -74,8 +74,8 @@ export async function recordErpLatency(
 
 class LatencyTracker {
   private startTime: number
-  private tenantId: string
-  private stage: string
+  private tenantId: string = ''
+  private stage: 'reservation' | 'persistence' | 'erp_sync' | 'total'
   
   constructor(stage: 'reservation' | 'persistence' | 'erp_sync' | 'total') {
     this.startTime = Date.now()

@@ -2,11 +2,19 @@ import { Redis } from '@upstash/redis'
 
 let redis: Redis | null = null
 
-function getRedis(): Redis {
+function getRedis(): Redis | null {
   if (!redis) {
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+    
+    if (!url || !token || !url.startsWith('https')) {
+      console.warn('[Redis] UPSTASH_REDIS_REST_URL not configured, using memory fallback')
+      return null
+    }
+    
     redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      url,
+      token,
     })
   }
   return redis

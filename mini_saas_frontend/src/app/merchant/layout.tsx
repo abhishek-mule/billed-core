@@ -1,13 +1,35 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, createContext, useContext } from 'react'
 import Link from 'next/link'
+import { 
+  Home, 
+  Receipt, 
+  Users, 
+  Package, 
+  LogOut, 
+  Languages, 
+  Bell,
+  Search,
+  Mic,
+  Camera,
+  Plus,
+  Settings as SettingsIcon,
+  User
+} from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface SessionInfo {
   tenantId: string
   companyName: string
   role: string
+}
+
+const SessionContext = createContext<SessionInfo | null>(null)
+
+export function useSession() {
+  return useContext(SessionContext)
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -40,8 +62,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -53,35 +75,18 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>
 }
 
-import { createContext } from 'react'
-
-const SessionContext = createContext<SessionInfo | null>(null)
-
 const navItems = [
-  { href: '/merchant', label: 'Home', labelHi: 'होम', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-  { href: '/merchant/invoice/new', label: 'Invoice', labelHi: 'बिल', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { href: '/merchant/customers', label: 'Customers', labelHi: 'ग्राहक', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-  { href: '/merchant/products', label: 'Products', labelHi: 'सामान', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+  { href: '/merchant', label: 'Home', Icon: Home },
+  { href: '/merchant/invoice', label: 'Invoices', Icon: Receipt },
+  { href: '/merchant/settings', label: 'Settings', Icon: SettingsIcon },
 ]
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [session, setSession] = useState<SessionInfo | null>(null)
+  const session = useSession()
   const [lang, setLang] = useState<'en' | 'hi'>('en')
   const [isOnline, setIsOnline] = useState(true)
-
-  useEffect(() => {
-    async function loadSession() {
-      try {
-        const res = await fetch('/api/auth/session')
-        if (res.ok) {
-          const data = await res.json()
-          setSession(data.session)
-        }
-      } catch {}
-    }
-    loadSession()
-  }, [])
+  const [searchFocused, setSearchFocused] = useState(false)
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -100,61 +105,116 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     window.location.href = '/start'
   }
 
+  const isHome = pathname === '/merchant'
+
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white safe-area-pb">
-      <header className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-            <span className="text-xs font-black italic">Z</span>
+    <div className="min-h-screen bg-[#F8F9FA] text-[#1A1C1E] font-sans selection:bg-blue-500/30 selection:text-blue-900 pb-24 lg:pb-0 lg:pl-72">
+      {/* Sidebar for Desktop */}
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 flex-col shadow-sm">
+        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+            <span className="text-xl font-black italic">B</span>
           </div>
-          <div>
-            <h1 className="text-base font-bold tracking-tight">{session?.companyName || 'BillZo'}</h1>
-            <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {isOnline ? 'Online' : 'Offline'}
-            </p>
-          </div>
+          <span className="text-2xl font-bold text-[#1A1C1E] tracking-tight">BillZo</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleLogout}
-            className="px-3 py-1.5 text-xs text-gray-400 hover:text-white"
-          >
-            Logout
-          </button>
-          <button
-            onClick={() => setLang(lang === 'en' ? 'hi' : 'en')}
-            className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-bold"
-          >
-            {lang === 'en' ? 'हिं' : 'EN'}
-          </button>
-        </div>
-      </header>
 
-      <main className="pb-24">
-        {children}
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/95 backdrop-blur-md border-t border-white/5 px-2 py-2 safe-area-pb">
-        <div className="flex items-center justify-around">
+        <nav className="flex-1 p-4 space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || 
-              (item.href !== '/merchant' && pathname.startsWith(item.href))
+            const isActive = pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href))
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all min-w-[64px] ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
                   isActive 
-                    ? 'text-indigo-400 bg-indigo-500/10' 
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? 'bg-blue-50 text-blue-600 shadow-sm' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-[#1A1C1E]'
                 }`}
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                </svg>
-                <span className="text-[10px] font-bold">
-                  {lang === 'en' ? item.label : item.labelHi}
+                <item.Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-slate-100">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-all"
+          >
+            <LogOut className="w-5 h-5" />
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Header */}
+      <header className={`sticky top-0 z-40 bg-white border-b border-slate-200 px-4 py-4 transition-all duration-300 ${searchFocused ? 'py-2' : 'py-4'}`}>
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-[#1A1C1E] tracking-tight">BillZo</h1>
+          </div>
+          <div className="flex items-center gap-3">
+             <button className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 border border-slate-200">
+              <User className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Search Bar - Matching Screenshot 4 */}
+        <div className="mt-4 max-w-5xl mx-auto px-1">
+          <div className={`relative flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2.5 border transition-all duration-200 ${searchFocused ? 'border-blue-500 ring-2 ring-blue-500/10 bg-white' : 'border-transparent'}`}>
+            <Search className={`w-5 h-5 ${searchFocused ? 'text-blue-500' : 'text-slate-400'}`} />
+            <input 
+              type="text" 
+              placeholder="Search name or amount..." 
+              className="flex-1 bg-transparent border-none focus:outline-none text-sm font-medium text-[#1A1C1E] placeholder:text-slate-400"
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+            />
+            <button className="p-1 text-slate-400 hover:text-slate-600">
+              <Mic className="w-4 h-4" />
+            </button>
+            <button className="p-1 text-slate-400 hover:text-slate-600 border-l border-slate-200 pl-2 ml-1">
+              <Camera className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="mx-auto w-full max-w-5xl px-4 py-4 min-h-[calc(100vh-200px)]">
+        {children}
+      </main>
+
+      {/* FAB - Matching Screenshot 4 */}
+      <Link 
+        href="/merchant/invoice/new"
+        className="fixed right-6 bottom-24 lg:bottom-10 z-50 w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 active:scale-95 transition-transform group"
+      >
+        <Plus className="w-8 h-8 group-hover:rotate-90 transition-transform duration-300" />
+        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-white" />
+      </Link>
+
+      {/* Bottom Nav for Mobile */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 safe-area-pb">
+        <div className="flex items-center justify-around px-2 py-2">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href))
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center gap-1 min-w-[64px] py-2 transition-all ${
+                  isActive ? 'text-blue-600' : 'text-slate-400'
+                }`}
+              >
+                <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-blue-50' : ''}`}>
+                  <item.Icon className="w-6 h-6" />
+                </div>
+                <span className={`text-[10px] font-bold tracking-tight ${isActive ? 'opacity-100' : 'opacity-70'}`}>
+                  {item.label}
                 </span>
               </Link>
             )

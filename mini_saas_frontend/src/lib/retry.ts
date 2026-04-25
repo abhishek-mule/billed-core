@@ -27,7 +27,7 @@ export const RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504]
 
 export function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
-    return RETRYABLE_ERRORS.includes(error.code || '')
+    return RETRYABLE_ERRORS.includes((error as any).code || '')
   }
   return false
 }

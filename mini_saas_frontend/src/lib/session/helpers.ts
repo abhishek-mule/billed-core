@@ -22,11 +22,15 @@ function generateId(): string {
 }
 
 function getRedis() {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  
+  if (!url || !token || !url.startsWith('https')) {
+    return null
+  }
+  
   const { Redis } = require('@upstash/redis')
-  return new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
+  return new Redis({ url, token })
 }
 
 function getMemoryFallback() {
@@ -63,7 +67,7 @@ function getMemoryFallback() {
       }
     },
     
-    async getTenantSessions(tenantId: string): Promise<Set<string> | null {
+    async getTenantSessions(tenantId: string): Promise<Set<string> | null> {
       return this.tenantSessions.get(tenantId) || null
     },
     
@@ -84,8 +88,14 @@ let redisClient: any = null
 async function getClient() {
   if (!redisClient) {
     try {
-      redisClient = getRedis()
-      await redisClient.ping()
+      const redis = getRedis()
+      if (redis) {
+        await redis.ping()
+        redisClient = redis
+      } else {
+        console.warn('[Session] Redis not configured, using memory fallback')
+        redisClient = getMemoryFallback()
+      }
     } catch {
       console.warn('[Session] Redis unavailable, using memory fallback')
       redisClient = getMemoryFallback()

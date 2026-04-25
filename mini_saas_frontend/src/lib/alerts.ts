@@ -36,8 +36,8 @@ export async function checkAlerts(): Promise<Alert[]> {
   const failedAttempts: { tenantId: string; status: string }[] = []
 
   for (const key of failedKeys) {
-    const attempt = await redis.get(key)
-    if (attempt && typeof attempt !== 'string' && attempt.status === 'FAILED') {
+    const attempt = await redis.get(key) as any
+    if (attempt && attempt.status === 'FAILED') {
       failedAttempts.push({
         tenantId: attempt.tenantId,
         status: attempt.status,
@@ -63,8 +63,8 @@ export async function checkAlerts(): Promise<Alert[]> {
 
   const circuitKeys = await redis.keys('circuit:*')
   for (const key of circuitKeys) {
-    const circuit = await redis.get(key)
-    if (circuit && typeof circuit !== 'string' && circuit.isOpen) {
+    const circuit = await redis.get(key) as any
+    if (circuit && circuit.isOpen) {
       const tenantId = key.replace('circuit:', '')
       alerts.push({
         id: `alert_${now}_circuit_${tenantId}`,

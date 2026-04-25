@@ -52,7 +52,7 @@ async function checkRLSEnabled(table: string): Promise<boolean> {
       SELECT rowsecurity 
       FROM pg_tables 
       WHERE tablename = $1
-    `, [table])
+    `, [table]) as any[]
     
     return result[0]?.rowsecurity === true
   } catch {

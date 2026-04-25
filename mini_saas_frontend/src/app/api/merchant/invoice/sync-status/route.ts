@@ -3,6 +3,15 @@ import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
 import { getErpWriteAttempt } from '@/lib/invoice/erp-sync'
 
+interface SyncRow {
+  id: string
+  invoice_number: string
+  invoice_status: string
+  erp_sync_status: 'PENDING' | 'SYNCED' | 'FAILED' | 'RETRY' | null
+  erp_synced_at: string | null
+  erp_sync_error: string | null
+}
+
 async function handler(request: Request) {
   const session = await getSessionFromRequest(request)
   
@@ -12,10 +21,10 @@ async function handler(request: Request) {
 
   const { tenantId } = session
   const { searchParams } = new URL(request.url)
-  const limit = searchParams.get('limit') || '10'
+  const limit = Number(searchParams.get('limit') || '10')
 
   try {
-    const invoices = await query(`
+    const invoices = await query<SyncRow>(`
       SELECT 
         id,
         invoice_number,
@@ -30,8 +39,12 @@ async function handler(request: Request) {
     `, [tenantId, limit])
 
     const enriched = await Promise.all(
-      invoices.map(async (inv: any) => {
-        let syncStatus: 'PENDING' | 'SYNCING' | 'RETRYING' | 'SYNCED' | 'FAILED' = inv.erp_sync_status || 'PENDING'
+      invoices.map(async (inv) => {
+        let syncStatus: 'PENDING' | 'SYNCING' | 'RETRYING' | 'SYNCED' | 'FAILED' = 'PENDING'
+        if (inv.erp_sync_status === 'SYNCED') syncStatus = 'SYNCED'
+        else if (inv.erp_sync_status === 'FAILED') syncStatus = 'FAILED'
+        else if (inv.erp_sync_status === 'RETRY') syncStatus = 'RETRYING'
+        else if (inv.erp_sync_status === 'PENDING') syncStatus = 'PENDING'
         
         const attempt = await getErpWriteAttempt(tenantId, inv.id)
         if (attempt) {

@@ -7,14 +7,6 @@ export const logger = pino({
   formatters: {
     level: (label) => ({ level: label }),
   },
-  levels: {
-    fatal: 60,
-    error: 50,
-    warn: 40,
-    info: 30,
-    debug: 20,
-    trace: 10,
-  },
 }, isProduction ? undefined : pino.destination(1))
 
 export function createTenantLogger(tenantId: string, userId?: string) {
@@ -89,8 +81,8 @@ export function logSecurityEvent(meta: {
   details?: string
 }) {
   logger.warn({
-    type: 'security',
     ...meta,
+    category: 'security',
     timestamp: new Date().toISOString(),
   })
 }

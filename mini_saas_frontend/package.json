@@ -17,6 +17,7 @@
     "@upstash/qstash": "^2.10.1",
     "@upstash/redis": "^1.22.0",
     "framer-motion": "^12.38.0",
+    "lucide-react": "^1.9.0",
     "next": "^16.2.3",
     "pg": "^8.11.0",
     "pino": "^9.0.0",

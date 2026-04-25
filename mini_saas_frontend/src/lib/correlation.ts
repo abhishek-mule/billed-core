@@ -4,9 +4,9 @@ export function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
 }
 
-export function getRequestId(): string | null {
+export async function getRequestId(): Promise<string | null> {
   try {
-    const headersList = headers()
+    const headersList = await headers()
     return headersList.get('x-request-id')
   } catch {
     return null

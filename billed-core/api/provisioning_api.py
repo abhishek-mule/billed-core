@@ -258,7 +258,7 @@ def provision_tenant_async(tenant_id: str, domain: str, plan: str, gstin: str, a
         if is_healthy:
             log_audit("provisioning_completed", tenant_id, "active", {"domain": domain})
         else:
-            log_audit("provisioning_health_check_failed", tenant_id", "warning")
+            log_audit("provisioning_health_check_failed", tenant_id, "warning")
             
     except Exception as e:
         log_audit("provisioning_error", tenant_id, "failed", error=str(e))

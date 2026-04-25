@@ -15,7 +15,7 @@ async function getPg() {
 
 export async function GET() {
   const redis = await getRedis()
-  const pg = getPg()
+  const pg = await getPg()
   
   try {
     const [
@@ -42,8 +42,8 @@ export async function GET() {
 
     const failedSyncInvoices: { tenantId: string; invoiceNumber: string; attempts: number }[] = []
     for (const key of failedSyncs.slice(0, 20)) {
-      const attempt = await redis.get(key)
-      if (attempt && typeof attempt !== 'string' && attempt.status === 'FAILED') {
+      const attempt = await redis.get(key) as any
+      if (attempt && attempt.status === 'FAILED') {
         failedSyncInvoices.push({
           tenantId: attempt.tenantId,
           invoiceNumber: attempt.invoiceNumber,
@@ -54,8 +54,8 @@ export async function GET() {
 
     const pendingReservationsList: { tenantId: string; invoiceNumber: string; age: number }[] = []
     for (const key of pendingReservations.slice(0, 20)) {
-      const res = await redis.get(key)
-      if (res && typeof res !== 'string' && !res.confirmedAt) {
+      const res = await redis.get(key) as any
+      if (res && !res.confirmedAt) {
         pendingReservationsList.push({
           tenantId: key.split(':')[1],
           invoiceNumber: res.invoiceNumber,
@@ -64,13 +64,13 @@ export async function GET() {
       }
     }
 
-    const totalInvoicesCount = totalInvoices.rows[0]?.count || 0
-    const activeTenantsCount = activeTenants.rows[0]?.count || 0
-    const last24hCount = last24hInvoices.rows[0]?.count || 0
-    const retryAttemptsCount = retryAttempts || 0
+    const totalInvoicesCount = (totalInvoices as any).rows[0]?.count || 0
+    const activeTenantsCount = (activeTenants as any).rows[0]?.count || 0
+    const last24hCount = (last24hInvoices as any).rows[0]?.count || 0
+    const retryAttemptsCount = (retryAttempts as any) || 0
 
     const syncSuccessRate = totalInvoicesCount > 0 
-      ? Math.round(((totalInvoicesCount - failedSyncInvoices.length) / totalInvoicesCount) * 100)
+      ? Math.round(((parseInt(totalInvoicesCount) - failedSyncInvoices.length) / parseInt(totalInvoicesCount)) * 100)
       : 100
 
     return NextResponse.json({
@@ -96,6 +96,6 @@ export async function GET() {
       pendingReservations: pendingReservationsList.slice(0, 10),
     })
   } finally {
-    pg.end()
+    await pg.end()
   }
 }

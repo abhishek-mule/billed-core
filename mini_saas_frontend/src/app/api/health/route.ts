@@ -4,12 +4,16 @@ import { Pool } from 'pg'
 
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 
-async function checkRedis(): Promise<'ok' | 'error'> {
+async function checkRedis(): Promise<'ok' | 'error' | 'not_configured'> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  
+  if (!url || !token || !url.startsWith('https')) {
+    return 'not_configured'
+  }
+  
   try {
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+    const redis = new Redis({ url, token })
     await redis.ping()
     return 'ok'
   } catch {
@@ -17,7 +21,11 @@ async function checkRedis(): Promise<'ok' | 'error'> {
   }
 }
 
-async function checkPostgres(): Promise<'ok' | 'error'> {
+async function checkPostgres(): Promise<'ok' | 'error' | 'not_configured'> {
+  if (!process.env.DATABASE_URL) {
+    return 'not_configured'
+  }
+  
   try {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL })
     await pool.query('SELECT 1')
@@ -28,7 +36,11 @@ async function checkPostgres(): Promise<'ok' | 'error'> {
   }
 }
 
-async function checkErpNext(): Promise<'ok' | 'error'> {
+async function checkErpNext(): Promise<'ok' | 'error' | 'not_configured'> {
+  if (!ERP_URL || ERP_URL === 'http://localhost') {
+    return 'not_configured'
+  }
+  
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3000)
@@ -51,10 +63,11 @@ export async function GET() {
     checkErpNext(),
   ])
 
-  const allOk = redis === 'ok' && postgres === 'ok'
+  const healthy = redis === 'ok' && postgres === 'ok'
+  const partiallyHealthy = redis === 'ok' || postgres === 'ok' || redis === 'not_configured' || postgres === 'not_configured'
   
   return NextResponse.json({
-    status: allOk ? 'healthy' : 'unhealthy',
+    status: healthy ? 'healthy' : partiallyHealthy ? 'degraded' : 'unhealthy',
     timestamp: new Date().toISOString(),
     services: {
       redis,
@@ -62,6 +75,6 @@ export async function GET() {
       erpnext,
     },
   }, {
-    status: allOk ? 200 : 503,
+    status: healthy ? 200 : 503,
   })
 }

@@ -2,98 +2,122 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { Badge } from '../sheets/Base'
 
 const mockInvoices = [
-  { id: 'INV-2024-001', customer: 'Sharma Electronics', amount: 15200, date: '2024-01-15', status: 'Paid', items: 3 },
-  { id: 'INV-2024-002', customer: 'Gupta Hardware', amount: 8450, date: '2024-01-15', status: 'Pending', items: 2 },
-  { id: 'INV-2024-003', customer: 'Patel Mobile', amount: 32000, date: '2024-01-14', status: 'Paid', items: 5 },
-  { id: 'INV-2024-004', customer: 'Singh Electricals', amount: 5780, date: '2024-01-14', status: 'Overdue', items: 1 },
-  { id: 'INV-2024-005', customer: 'Jain Sanitation', amount: 18900, date: '2024-01-13', status: 'Paid', items: 4 },
-  { id: 'INV-2024-006', customer: 'Agarwal Traders', amount: 12400, date: '2024-01-13', status: 'Pending', items: 2 },
+  { name: 'Anjali Sharma', id: 'INV-842', time: 'Today, 09:15 AM', amount: 4200, status: 'FAILED' },
+  { name: 'Rahul Verma', id: 'INV-841', time: 'Today, 10:30 AM', amount: 1850, status: 'UNPAID' },
+  { name: 'Sneha Patil', id: 'INV-840', time: 'Today, 11:45 AM', amount: 950, status: 'UNPAID' },
+  { name: 'Amit Kumar', id: 'INV-839', time: 'Today, 12:10 PM', amount: 3400, status: 'PAID' },
+  { name: 'Vikram Singh', id: 'INV-838', time: 'Today, 01:20 PM', amount: 5600, status: 'PAID' },
+  { name: 'Priya Gupta', id: 'INV-837', time: 'Today, 02:05 PM', amount: 1200, status: 'PAID' },
+  { name: 'Mohammad Ali', id: 'INV-836', time: 'Today, 03:30 PM', amount: 2100, status: 'UNPAID' },
 ]
 
+const formatCurrency = (n: number) => '₹' + n.toLocaleString('en-IN')
+
 export default function InvoiceListPage() {
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState('Today')
   const [search, setSearch] = useState('')
 
+  const filters = ['All', 'Today', 'Unpaid']
+  const failedSyncCount = 1
+
   const filtered = mockInvoices.filter(inv => {
-    const matchesSearch = inv.customer.toLowerCase().includes(search.toLowerCase()) || inv.id.toLowerCase().includes(search.toLowerCase())
-    const matchesFilter = filter === 'all' || inv.status.toLowerCase() === filter
+    const matchesSearch = inv.name.toLowerCase().includes(search.toLowerCase()) || 
+                      inv.id.toLowerCase().includes(search.toLowerCase())
+    const matchesFilter = filter === 'All' || 
+                     (filter === 'Today' && inv.time.startsWith('Today')) ||
+                     (filter === 'Unpaid' && inv.status === 'UNPAID')
     return matchesSearch && matchesFilter
   })
 
   const total = filtered.reduce((sum, inv) => sum + inv.amount, 0)
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-white">Invoices</h1>
-        <Link href="/merchant/invoice/new" className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg">
-          + New Invoice
-        </Link>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-5">
+        <div className="flex justify-between items-center mb-4">
+          <span className="text-2xl font-black">BillZo</span>
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg">
+            👤
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-4 py-3 mb-3">
+          <span className="text-gray-400">🔍</span>
+          <span className="text-gray-400 flex-1 text-base">Search name or amount...</span>
+          <span className="text-gray-400">🎙️</span>
+          <span className="text-gray-400">📷</span>
+        </div>
       </div>
 
-      <input
-        type="text"
-        placeholder="Search invoices..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm outline-none focus:border-indigo-500"
-      />
+      {/* Today banner */}
+      <div className="bg-blue-50 px-5 py-2 flex items-center gap-2">
+        <span>📈</span>
+        <span className="text-blue-600 font-semibold text-sm">Today: {formatCurrency(28450)}</span>
+      </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {['all', 'paid', 'pending', 'overdue'].map((f) => (
+      {/* Filters */}
+      <div className="px-5 py-3 flex gap-2">
+        {filters.map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white/5 text-gray-400'
-            }`}
+            className="px-4 py-2 rounded-full text-sm font-semibold"
+            style={{
+              background: filter === f ? '#111' : '#F0F2F7',
+              color: filter === f ? '#fff' : '#555',
+            }}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f}
           </button>
         ))}
       </div>
 
-      <div className="space-y-2">
-        {filtered.map((invoice) => (
+      {/* Failed sync banner */}
+      {failedSyncCount > 0 && (
+        <div className="bg-amber-50 px-5 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span>📡</span>
+            <span className="font-semibold text-sm">{failedSyncCount} Failed Sync</span>
+          </div>
+          <button className="text-blue-600 font-bold text-sm">RETRY ALL</button>
+        </div>
+      )}
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto px-5">
+        {filtered.map((inv, i) => (
           <Link
-            key={invoice.id}
-            href={`/merchant/invoice/${invoice.id}`}
-            className="block p-4 bg-white/5 border border-white/10 rounded-xl hover:border-white/20 transition"
+            key={i}
+            href={`/merchant/invoice/${inv.id}`}
+            className="flex justify-between items-center py-4 border-b border-gray-100"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-white">{invoice.id}</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                invoice.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-400' :
-                invoice.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' :
-                'bg-rose-500/10 text-rose-400'
-              }`}>
-                {invoice.status}
-              </span>
+            <div>
+              <div className="font-bold text-base">{inv.name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {inv.id} &nbsp;•&nbsp; {inv.time}
+              </div>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">{invoice.customer}</span>
-              <span className="font-semibold text-white">₹{invoice.amount.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-              <span>{invoice.items} items</span>
-              <span>{invoice.date}</span>
+            <div className="text-right flex flex-col items-end gap-1">
+              <span className="font-extrabold text-base">{formatCurrency(inv.amount)}</span>
+              <Badge status={inv.status} />
             </div>
           </Link>
         ))}
       </div>
 
-      {filtered.length > 0 && (
-        <div className="p-4 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">Total ({filtered.length} invoices)</span>
-            <span className="text-lg font-semibold text-white">₹{total.toLocaleString()}</span>
-          </div>
-        </div>
-      )}
+      {/* FAB */}
+      <Link
+        href="/merchant/invoice/new"
+        className="fixed bottom-20 right-5 w-14 h-14 rounded-full bg-blue-600 text-white text-3xl flex items-center justify-center shadow-lg"
+        style={{ boxShadow: '0 4px 20px rgba(27,107,245,.4)' }}
+      >
+        +
+      </Link>
     </div>
   )
 }

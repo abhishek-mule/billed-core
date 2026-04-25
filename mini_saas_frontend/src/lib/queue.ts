@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis'
-import { Qstash } from '@upstash/qstash'
+import { Client as Qstash } from '@upstash/qstash'
 
 let redis: Redis | null = null
 let qstash: Qstash | null = null

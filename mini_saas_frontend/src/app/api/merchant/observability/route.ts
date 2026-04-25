@@ -3,14 +3,21 @@ import { getSessionFromRequest } from '@/lib/session'
 import { Redis } from '@upstash/redis'
 import { Pool } from 'pg'
 
-async function getRedis() {
-  return new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
+async function getRedis(): Promise<Redis | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  
+  if (!url || !token || !url.startsWith('https')) {
+    return null
+  }
+  
+  return new Redis({ url, token })
 }
 
 async function getPg() {
+  if (!process.env.DATABASE_URL) {
+    return null
+  }
   return new Pool({ connectionString: process.env.DATABASE_URL })
 }
 
@@ -23,46 +30,59 @@ export async function GET(request: Request) {
 
   const { tenantId } = session
   const redis = await getRedis()
-  const pg = getPg()
+  const pg = await getPg()
+  
+  if (!pg) {
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
+      tenantId,
+      metrics: {
+        totalInvoices: 0,
+        invoicesLast30d: 0,
+        failedSyncs: 0,
+        totalCustomers: 0,
+        averageLatencyMs: 0,
+      },
+      erpStatus: {
+        circuitOpen: false,
+        recentFailures: 0,
+      },
+      alerts: ['Database not configured'],
+    })
+  }
   
   try {
-    const [
-      totalInvoices,
-      last30dInvoices,
-      failedSyncs,
-      totalCustomers,
-      averageLatency,
-    ] = await Promise.all([
-      pg.query(`
-        SELECT COUNT(*) as count FROM invoices WHERE tenant_id = $1
-      `, [tenantId]),
-      pg.query(`
-        SELECT COUNT(*) as count FROM invoices 
-        WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '30 days'
-      `, [tenantId]),
-      redis.keys(`erp_attempt:${tenantId}:*`),
+    const [totalInvoices, last30dInvoices, totalCustomers] = await Promise.all([
+      pg.query(`SELECT COUNT(*) as count FROM invoices WHERE tenant_id = $1`, [tenantId]),
+      pg.query(`SELECT COUNT(*) as count FROM invoices WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '30 days'`, [tenantId]),
       pg.query(`SELECT COUNT(*) as count FROM customers WHERE tenant_id = $1`, [tenantId]),
-      redis.get(`latency:invoices:${tenantId}`),
     ])
 
-    const failedSyncInvoices: { invoiceNumber: string; attempts: number; error: string }[] = []
-    for (const key of failedSyncs.slice(0, 20)) {
-      const attempt = await redis.get(key)
-      if (attempt && typeof attempt !== 'string' && attempt.status === 'FAILED') {
-        failedSyncInvoices.push({
-          invoiceNumber: attempt.invoiceNumber,
-          attempts: attempt.attemptNumber,
-          error: attempt.error,
-        })
+    let failedSyncInvoices: { invoiceNumber: string; attempts: number; error: string }[] = []
+    let circuitOpen = false
+    let avgLatency = 0
+
+    if (redis) {
+      const failedSyncs = await redis.keys(`erp_attempt:${tenantId}:*`)
+      for (const key of failedSyncs.slice(0, 20)) {
+        const attempt = await redis.get(key) as any
+        if (attempt && attempt.status === 'FAILED') {
+          failedSyncInvoices.push({
+            invoiceNumber: attempt.invoiceNumber,
+            attempts: attempt.attemptNumber,
+            error: attempt.error,
+          })
+        }
+      }
+
+      const syncStatus = await redis.get(`circuit:${tenantId}`) as any
+      circuitOpen = syncStatus && syncStatus.isOpen
+
+      const averageLatency = await redis.get(`latency:invoices:${tenantId}`) as any
+      if (averageLatency) {
+        avgLatency = Math.round(parseInt(averageLatency) / 100) / 10
       }
     }
-
-    const syncStatus = await redis.get(`circuit:${tenantId}`)
-    const circuitOpen = syncStatus && typeof syncStatus !== 'string' && syncStatus.isOpen
-
-    const avgLatency = averageLatency 
-      ? Math.round(parseInt(averageLatency) / 100) / 10 
-      : 0
 
     const totalCount = totalInvoices.rows[0]?.count || 0
     const last30dCount = last30dInvoices.rows[0]?.count || 0
@@ -78,7 +98,7 @@ export async function GET(request: Request) {
         averageLatencyMs: avgLatency,
       },
       erpStatus: {
-        circuitOpen: circuitOpen || false,
+        circuitOpen,
         recentFailures: failedSyncInvoices.length,
       },
       alerts: [
@@ -87,6 +107,6 @@ export async function GET(request: Request) {
       ].filter(Boolean),
     })
   } finally {
-    pg.end()
+    await pg.end()
   }
 }
