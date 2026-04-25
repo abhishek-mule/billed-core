@@ -41,4 +41,9 @@ export async function POST(request: Request) {
   }
 }
 
-export { verificationStore }
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Aadhaar verification endpoint - use POST',
+    mock: true 
+  })
+}
