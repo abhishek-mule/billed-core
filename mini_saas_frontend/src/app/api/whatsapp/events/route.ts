@@ -62,7 +62,6 @@ export async function POST(req: Request) {
     })
   } catch (error) {
     console.error('[WhatsApp Event] Error:', error)
-    console.error(`[Sentry] WhatsApp event failed: ${error}`)
     return NextResponse.json(
       { success: false, error: 'Failed to trigger event' },
       { status: 500 }
@@ -70,36 +69,9 @@ export async function POST(req: Request) {
   }
 }
 
-export async function triggerInvoiceCreated(tenantId: string, phone: string, invoiceData: {
-  invoice_id: string
-  customer_name: string
-  amount: number
-  items: string[]
-}) {
-  return triggerWorkflow({
-    tenant_id: tenantId,
-    event_type: 'invoice.created',
-    phone,
-    data: {
-      ...invoiceData,
-      message: `🧾 New Invoice Created\n\nCustomer: ${invoiceData.customer_name}\nAmount: ₹${invoiceData.amount}\nItems: ${invoiceData.items.join(', ')}`,
-    },
-  })
-}
-
-export async function triggerPaymentReminder(tenantId: string, phone: string, data: {
-  customer_name: string
-  invoice_id: string
-  amount: number
-  days_overdue: number
-}) {
-  return triggerWorkflow({
-    tenant_id: tenantId,
-    event_type: 'payment.reminder',
-    phone,
-    data: {
-      ...data,
-      message: `⏰ Payment Reminder\n\n${data.customer_name}, your payment of ₹${data.amount} is ${data.days_overdue} days overdue.`,
-    },
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'WhatsApp events endpoint - use POST',
+    events: Object.keys(EVENT_WORKFLOWS)
   })
 }
