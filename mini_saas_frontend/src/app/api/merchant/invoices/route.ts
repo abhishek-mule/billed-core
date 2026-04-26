@@ -81,6 +81,31 @@ async function handleCreateInvoice(request: Request, session: SessionData) {
     )
   }
   
+  // Enforce idempotency key
+  const idempotencyKey = request.headers.get('x-idempotency-key')
+  if (!idempotencyKey || idempotencyKey.trim().length === 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Idempotency key required',
+        hint: 'Send x-idempotency-key header with a unique key (e.g., inv_timestamp_uuid)',
+      },
+      { status: 400 }
+    )
+  }
+  
+  // Validate key format
+  if (!idempotencyKey.startsWith('inv_') || idempotencyKey.length < 20) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Invalid idempotency key format',
+        hint: 'Key should be: inv_timestamp_uuid (e.g., inv_1704067200000_a1b2c3d4)',
+      },
+      { status: 400 }
+    )
+  }
+  
   try {
     const payload: MerchantInvoicePayload = await request.json()
 
@@ -101,11 +126,11 @@ async function handleCreateInvoice(request: Request, session: SessionData) {
       }))
     )
 
-    const idempotencyKey = request.headers.get('x-idempotency-key') || undefined
+    // Use validated idempotency key from above
     const orchestration = await orchestrateInvoiceCreation({
       tenantId,
       payload,
-      idempotencyKey,
+      idempotencyKey: idempotencyKey || undefined,
     })
 
     const whatsappMessage = formatInvoiceForWhatsApp(summary, orchestration.invoiceNumber)

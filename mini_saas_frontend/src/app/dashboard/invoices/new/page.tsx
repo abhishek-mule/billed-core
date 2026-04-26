@@ -38,11 +38,17 @@ export default function NewInvoicePage() {
 
   const handleSubmit = async () => {
     if (items.length === 0) return
+    
+    const idempotencyKey = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    
     setIsSubmitting(true)
     try {
       const res = await fetch('/api/merchant/invoices/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
+        },
         body: JSON.stringify({
           customerName,
           customerPhone,
