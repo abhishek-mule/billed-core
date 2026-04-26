@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { OfflineIndicator } from '@/components/OfflineIndicator'
 
 interface SessionInfo {
   tenantId: string
@@ -116,6 +117,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30 selection:text-primary">
+      <OfflineIndicator />
       <AnimatePresence>
         {isMock && (
           <motion.div 

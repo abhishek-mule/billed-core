@@ -16,9 +16,12 @@ import {
   Coins,
   History,
   Barcode,
-  Sparkles
+  Sparkles,
+  Wifi,
+  WifiOff
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useOfflineQueue } from '@/hooks/useOfflineQueue'
 
 export default function NewInvoicePage() {
   const [items, setItems] = useState<any[]>([])
@@ -27,8 +30,10 @@ export default function NewInvoicePage() {
   const [paymentMode, setPaymentMode] = useState('cash')
   const [lang, setLang] = useState<'en' | 'hi'>('en')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<'SYNCED' | 'RETRY' | null>(null)
+  const [syncStatus, setSyncStatus] = useState<'SYNCED' | 'RETRY' | 'OFFLINE' | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
+
+  const { enqueue, isOnline, pendingCount, syncQueue } = useOfflineQueue()
 
   const totals = items.reduce((acc, item) => ({
     subtotal: acc.subtotal + (item.rate * item.qty),
@@ -40,26 +45,38 @@ export default function NewInvoicePage() {
     if (items.length === 0) return
     
     const idempotencyKey = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    const payload = {
+      customerName,
+      customerPhone,
+      paymentMode,
+      items: items.map(i => ({
+        itemCode: i.name || 'ITEM-GENERIC',
+        itemName: i.name,
+        quantity: i.qty,
+        rate: i.rate
+      }))
+    }
     
     setIsSubmitting(true)
+    
     try {
+      if (!isOnline) {
+        // Offline: queue locally
+        await enqueue('invoice:create', payload)
+        setSyncStatus('OFFLINE')
+        setIsSuccess(true)
+        setIsSubmitting(false)
+        return
+      }
+
+      // Online: submit normally
       const res = await fetch('/api/merchant/invoices/create', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'x-idempotency-key': idempotencyKey,
         },
-        body: JSON.stringify({
-          customerName,
-          customerPhone,
-          paymentMode,
-          items: items.map(i => ({
-            itemCode: i.name || 'ITEM-GENERIC',
-            itemName: i.name,
-            quantity: i.qty,
-            rate: i.rate
-          }))
-        })
+        body: JSON.stringify(payload)
       })
 
       const data = await res.json()
@@ -70,11 +87,25 @@ export default function NewInvoicePage() {
         alert('Error: ' + data.error)
       }
     } catch (err) {
-      alert('Network error')
+      // Network error: try to queue offline
+      if (!isOnline) {
+        await enqueue('invoice:create', payload)
+        setSyncStatus('OFFLINE')
+        setIsSuccess(true)
+      } else {
+        alert('Network error')
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  // Auto-sync when back online
+  useEffect(() => {
+    if (isOnline && pendingCount > 0) {
+      syncQueue()
+    }
+  }, [isOnline, pendingCount, syncQueue])
 
   const addItem = () => {
     setItems([...items, { id: Math.random(), name: '', qty: 1, rate: 0 }])
