@@ -1,23 +1,37 @@
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
 
+export const dynamic = 'force-dynamic'
+
 const getRazorpay = () => {
   const key_id = process.env.RAZORPAY_KEY_ID
   const key_secret = process.env.RAZORPAY_KEY_SECRET
 
   if (!key_id || !key_secret) {
-     console.error('[Billed] Razorpay keys MISSING from environment.')
+    console.error('[BillZo] Razorpay keys MISSING from environment.')
+    throw new Error('Razorpay not configured')
   }
 
   return new Razorpay({
-    key_id: key_id || '',
-    key_secret: key_secret || '',
+    key_id,
+    key_secret,
   })
 }
 
 export async function POST(request: Request) {
-  console.log('[create-order] API called')
-  const razorpay = getRazorpay()
+  console.log('[BillZo] Creating order...')
+  
+  let razorpay
+  try {
+    razorpay = getRazorpay()
+  } catch (error: any) {
+    console.error('[BillZo] Razorpay not configured:', error.message)
+    return NextResponse.json(
+      { error: 'Payment not configured', details: error.message },
+      { status: 503 }
+    )
+  }
+  
   try {
     const { plan, shopName, email, phone } = await request.json()
 
@@ -52,6 +66,7 @@ export async function POST(request: Request) {
       }
     })
 
+    console.log('[BillZo] Order created:', order.id)
     return NextResponse.json({
       id: order.id,
       amount: order.amount,
@@ -59,7 +74,7 @@ export async function POST(request: Request) {
       status: order.status
     })
   } catch (error: any) {
-    console.error('[Billed] Razorpay order creation failed:', error.message || error)
+    console.error('[BillZo] Razorpay order creation failed:', error.message || error)
     return NextResponse.json(
       { error: error.message || 'Failed to create order', details: error.message },
       { status: 500 }

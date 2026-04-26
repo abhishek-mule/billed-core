@@ -3,6 +3,8 @@ import crypto from 'crypto'
 import { createSession, setSessionCookie } from '@/lib/session'
 import { generateId, hashPassword } from '@/lib/db/encryption'
 
+export const dynamic = 'force-dynamic'
+
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
 const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
