@@ -1,116 +1,138 @@
-import { Redis } from '@upstash/redis'
+import { getRedis } from './queue'
 
-let redis: Redis | null = null
+export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN'
 
-function getRedis(): Redis {
-  if (!redis) {
-    redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
-  }
-  return redis
+export interface CircuitBreakerConfig {
+  failureThreshold: number
+  successThreshold: number
+  timeout: number
 }
 
-interface CircuitState {
+const DEFAULT_CONFIG: CircuitBreakerConfig = {
+  failureThreshold: 5,
+  successThreshold: 2,
+  timeout: 30000,
+}
+
+export interface CircuitBreakerStats {
+  state: CircuitState
   failures: number
-  lastFailure: number
-  isOpen: boolean
+  successes: number
+  nextAttempt: number
+  lastFailure?: string
 }
 
-const CIRCUIT_WINDOW = 30000
-const CIRCUIT_THRESHOLD = 5
-const CIRCUIT_PAUSE = 60000
+const circuits: Map<string, { state: CircuitState; failures: number; successes: number; nextAttempt: number; lastFailure?: string }> = new Map()
 
-export async function recordErpFailure(tenantId: string): Promise<void> {
-  const redis = getRedis()
-  const now = Date.now()
-  const key = `circuit:${tenantId}`
+export function getCircuitBreaker(name: string, config: CircuitBreakerConfig = DEFAULT_CONFIG) {
+  let circuit = circuits.get(name)
   
-  const current = await redis.get<CircuitState>(key)
-  
-  if (!current || now - current.lastFailure > CIRCUIT_WINDOW) {
-    await redis.set(key, JSON.stringify({
-      failures: 1,
-      lastFailure: now,
-      isOpen: false,
-    }), { ex: 300 })
-    return
-  }
-  
-  const newFailures = current.failures + 1
-  const isOpen = newFailures >= CIRCUIT_THRESHOLD
-  
-  await redis.set(key, JSON.stringify({
-    failures: newFailures,
-    lastFailure: now,
-    isOpen,
-  }), { ex: isOpen ? CIRCUIT_PAUSE / 1000 : 300 })
-}
-
-export async function isCircuitOpen(tenantId: string): Promise<boolean> {
-  const redis = getRedis()
-  const key = `circuit:${tenantId}`
-  
-  const state = await redis.get<CircuitState>(key)
-  
-  if (!state) return false
-  
-  const now = Date.now()
-  
-  if (state.isOpen && now - state.lastFailure > CIRCUIT_PAUSE) {
-    await redis.set(key, JSON.stringify({
+  if (!circuit) {
+    circuit = {
+      state: 'CLOSED',
       failures: 0,
-      lastFailure: now,
-      isOpen: false,
-    }), { ex: 300 })
-    return false
+      successes: 0,
+      nextAttempt: 0,
+    }
+    circuits.set(name, circuit)
   }
-  
-  return state.isOpen
+
+  return {
+    async execute<T>(operation: () => Promise<T>): Promise<T> {
+      const now = Date.now()
+      
+      if (circuit!.state === 'OPEN') {
+        if (now < circuit!.nextAttempt) {
+          throw new Error(`Circuit breaker OPEN for ${name}. Retry after ${Math.ceil((circuit!.nextAttempt - now) / 1000)}s`)
+        }
+        circuit!.state = 'HALF_OPEN'
+      }
+
+      try {
+        const result = await operation()
+        
+        if (circuit!.state === 'HALF_OPEN') {
+          circuit!.successes++
+          if (circuit!.successes >= config.successThreshold) {
+            circuit!.state = 'CLOSED'
+            circuit!.failures = 0
+            circuit!.successes = 0
+            console.log(`[Circuit] ${name} CLOSED`)
+          }
+        } else {
+          circuit!.failures = 0
+        }
+        
+        return result
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        
+        circuit!.failures++
+        circuit!.lastFailure = message
+        
+        if (circuit!.failures >= config.failureThreshold) {
+          circuit!.state = 'OPEN'
+          circuit!.nextAttempt = now + config.timeout
+          console.warn(`[Circuit] ${name} OPEN after ${circuit!.failures} failures`)
+        }
+        
+        throw error
+      }
+    },
+
+    getState(): CircuitBreakerStats {
+      return {
+        state: circuit!.state,
+        failures: circuit!.failures,
+        successes: circuit!.successes,
+        nextAttempt: circuit!.nextAttempt,
+        lastFailure: circuit!.lastFailure,
+      }
+    },
+
+    reset() {
+      circuit!.state = 'CLOSED'
+      circuit!.failures = 0
+      circuit!.successes = 0
+      circuit!.nextAttempt = 0
+      circuit!.lastFailure = undefined
+    },
+  }
 }
 
-export async function recordErpSuccess(tenantId: string): Promise<void> {
-  const redis = getRedis()
-  const key = `circuit:${tenantId}`
-  
-  const current = await redis.get<CircuitState>(key)
-  
-  if (current) {
-    await redis.set(key, JSON.stringify({
-      failures: 0,
-      lastFailure: 0,
-      isOpen: false,
-    }), { ex: 60 })
-  }
-}
+export const ERP_CIRCUIT = 'erp-api'
 
-export async function withCircuitBreaker<T>(
-  tenantId: string,
-  fn: () => Promise<T>
+export async function callWithCircuitBreaker<T>(
+  operation: () => Promise<T>,
+  circuitName: string = ERP_CIRCUIT
 ): Promise<T> {
-  const open = await isCircuitOpen(tenantId)
-  
-  if (open) {
-    throw new Error('ERP temporarily unavailable. Please try again in a moment.')
-  }
-  
-  try {
-    const result = await fn()
-    await recordErpSuccess(tenantId)
-    return result
-  } catch (error) {
-    await recordErpFailure(tenantId)
-    throw error
-  }
+  const breaker = getCircuitBreaker(circuitName)
+  return breaker.execute(operation)
 }
 
-export async function getCircuitStatus(tenantId: string): Promise<{ status: 'closed' | 'open' | 'half-open'; failures: number }> {
-  const state = await getRedis().get<CircuitState>(`circuit:${tenantId}`)
+export function getCircuitBreakerStats(): Record<string, CircuitBreakerStats> {
+  const stats: Record<string, CircuitBreakerStats> = {}
   
-  if (!state) return { status: 'closed', failures: 0 }
+  for (const [name, circuit] of circuits) {
+    stats[name] = {
+      state: circuit.state,
+      failures: circuit.failures,
+      successes: circuit.successes,
+      nextAttempt: circuit.nextAttempt,
+      lastFailure: circuit.lastFailure,
+    }
+  }
   
-  if (state.isOpen) return { status: 'open', failures: state.failures }
-  
-  return { status: 'half-open', failures: state.failures }
+  return stats
+}
+
+export function resetAllCircuits() {
+  for (const circuit of circuits.values()) {
+    circuit.state = 'CLOSED'
+    circuit.failures = 0
+    circuit.successes = 0
+    circuit.nextAttempt = 0
+    circuit.lastFailure = undefined
+  }
+  console.log('[Circuit] All circuits reset')
 }

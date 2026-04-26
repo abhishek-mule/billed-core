@@ -84,7 +84,7 @@ export async function withRetryAndCircuit<T>(
   fn: () => Promise<T>,
   config: RetryConfig = DEFAULT_RETRY_CONFIG
 ): Promise<T> {
-  const circuits = await import('./circuits')
+  const { callWithCircuitBreaker } = await import('./circuits')
   
-  return withRetry<T>(() => circuits.withCircuitBreaker(tenantId, fn), config)
+  return withRetry<T>(() => callWithCircuitBreaker(fn, `tenant-${tenantId}`), config)
 }

@@ -44,42 +44,54 @@ export enum ERPMode {
   MOCK = 'mock'
 }
 
+async function makeErpRequest<T>(
+  url: string,
+  options: RequestInit,
+  operationName: string
+): Promise<T> {
+  const { callWithCircuitBreaker, ERP_CIRCUIT } = await import('@/lib/circuits')
+  
+  return callWithCircuitBreaker(async () => {
+    const response = await fetch(url, options)
+    
+    if (!response.ok) {
+      const errorPayload = await response.text().catch(() => '')
+      throw new Error(`ERP_ERROR: ${response.status} - ${errorPayload}`)
+    }
+    
+    return response.json()
+  }, ERP_CIRCUIT) as Promise<T>
+}
+
 export async function createFrappeSalesInvoice(
   credentials: FrappeCredentials,
   payload: FrappeSalesInvoicePayload
 ): Promise<{ invoiceId: string }> {
   const ERP_MODE = (process.env.ERP_MODE || 'live') as ERPMode
 
-  // Explicit Mock Mode
   if (ERP_MODE === ERPMode.MOCK) {
     console.warn('⚠️ [ERP MOCK] Simulation used for invoice:', payload.custom_invoice_number)
-    // In mock mode, we still simulate a delay to maintain UX consistency
     await new Promise(resolve => setTimeout(resolve, 800))
     return { invoiceId: `MOCK-SINV-${Math.floor(Math.random() * 100000)}` }
   }
 
-  // Live Mode: No Fallback
   const baseUrl = normalizeSiteUrl(credentials.siteUrl)
   
   try {
-    const response = await fetch(`${baseUrl}/api/resource/Sales Invoice`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `token ${credentials.apiKey}:${credentials.apiSecret}`,
+    const response = await makeErpRequest(
+      `${baseUrl}/api/resource/Sales Invoice`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `token ${credentials.apiKey}:${credentials.apiSecret}`,
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    })
+      'createSalesInvoice'
+    )
 
-    if (!response.ok) {
-      const errorPayload = await response.text().catch(() => '')
-      console.error('❌ [ERP FAILURE]', { status: response.status, error: errorPayload })
-      
-      // We throw a specific error so the orchestrator can mark it as PENDING/RETRY
-      throw new Error(`ERP_UNAVAILABLE: ${response.status}`)
-    }
-
-    const json = (await response.json()) as FrappeInsertResponse
+    const json = response as FrappeInsertResponse
     const invoiceId = json.data?.name
     
     if (!invoiceId) {
@@ -88,7 +100,12 @@ export async function createFrappeSalesInvoice(
 
     return { invoiceId }
   } catch (error) {
-    // Critical: Do NOT fallback to mock here. Let the error propagate.
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    
+    if (message.includes('Circuit breaker OPEN')) {
+      throw new Error(`ERP_CIRCUIT_OPEN: ${message}`)
+    }
+    
     console.error('🚨 [ERP CONNECTION ERROR]', error)
     throw error
   }
