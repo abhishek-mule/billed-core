@@ -1,0 +1,1 @@
+export const verificationStore = new Map<string, { aadhaar: string; expires: number }>()

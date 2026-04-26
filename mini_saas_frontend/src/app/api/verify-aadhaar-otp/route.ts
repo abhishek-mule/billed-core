@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { verificationStore } from '../verify-aadhaar/route'
+import { verificationStore } from '@/lib/aadhaar/store'
 
 const MOCK_DATA = {
   name: 'Rajesh Kumar Sharma',
