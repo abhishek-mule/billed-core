@@ -297,7 +297,7 @@ export async function GET(request: NextRequest) {
     queryStr += ' ORDER BY created_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2)
     params.push(limit, offset)
 
-    const invoices = await query(queryStr, params)
+    const invoices = await query<any>(queryStr, params)
 
     return NextResponse.json({
       success: true,
