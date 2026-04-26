@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const verificationStore = new Map<string, { aadhaar: string; expires: number }>()
+export const verificationStore = new Map<string, { aadhaar: string; expires: number }>()
 
 export async function POST(request: Request) {
   try {
