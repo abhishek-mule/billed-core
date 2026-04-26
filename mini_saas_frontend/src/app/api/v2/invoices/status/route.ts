@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/session'
 import { query, queryOne } from '@/lib/db/client'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionFromRequest(request)
@@ -58,9 +60,9 @@ export async function GET(request: NextRequest) {
       success: true,
       summary: {
         total: stats.reduce((sum: number, s: any) => sum + parseInt(s.count), 0),
-        synced: parseInt(synced?.count || 0),
-        pending: parseInt(pending?.count || 0),
-        failed: parseInt(failed?.count || 0),
+        synced: parseInt((synced as any)?.count || 0),
+        pending: parseInt((pending as any)?.count || 0),
+        failed: parseInt((failed as any)?.count || 0),
       },
     })
 

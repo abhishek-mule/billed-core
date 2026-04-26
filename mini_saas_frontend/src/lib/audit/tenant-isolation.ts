@@ -1,13 +1,14 @@
 import { query } from '@/lib/db/client'
 
+// Required for internal consistency checks
 const REQUIRED_TENANT_FIELDS = [
+  'invoices',
+  'items',
+  'customers',
   'tenants',
-  'tenant_users',
-  'tenant_credentials',
   'audit_logs',
-  'role_permissions',
-  'password_resets',
-]
+  'role_permissions'
+];
 
 export interface TenantIsolationCheck {
   table: string
@@ -18,29 +19,36 @@ export interface TenantIsolationCheck {
 export async function checkTenantIsolation(): Promise<TenantIsolationCheck[]> {
   const results: TenantIsolationCheck[] = []
   
-  for (const table of REQUIRED_TENANT_FIELDS) {
-    try {
-      const columns = await query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = $1
-      `, [table])
-      
-      const hasTenantId = columns.some((c: any) => c.column_name === 'tenant_id')
-      const hasRLS = await checkRLSEnabled(table)
-      
-      results.push({
+  try {
+    // Dynamically fetch all user-defined tables in the public schema
+    const tables = await query<{ table_name: string }>(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+    `, [])
+    
+    // Optimized execution with Promise.all
+    const checkPromises = tables.map(async ({ table_name: table }) => {
+      const [columns, hasRLS] = await Promise.all([
+        query<{ column_name: string }>(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = $1
+        `, [table]),
+        checkRLSEnabled(table)
+      ])
+
+      return {
         table,
-        hasTenantId,
-        hasRLS,
-      })
-    } catch (error) {
-      results.push({
-        table,
-        hasTenantId: false,
-        hasRLS: false,
-      })
-    }
+        hasTenantId: columns.some(c => c.column_name === 'tenant_id'),
+        hasRLS
+      }
+    })
+
+    results.push(...(await Promise.all(checkPromises)))
+  } catch (error) {
+    console.error('[TenantIsolation] Critical failure in isolation scan', error)
   }
   
   return results

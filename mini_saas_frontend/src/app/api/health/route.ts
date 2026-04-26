@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { Redis } from '@upstash/redis'
 import { Pool } from 'pg'
 
+export const dynamic = 'force-dynamic'
+
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 
 async function checkRedis(): Promise<'ok' | 'error' | 'not_configured'> {

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { Redis } from '@upstash/redis'
 import { Pool } from 'pg'
 
+export const dynamic = 'force-dynamic'
+
 async function getRedis() {
   return new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL!,
