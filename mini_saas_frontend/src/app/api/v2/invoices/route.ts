@@ -38,7 +38,6 @@ function getErpCredentials() {
 function getGstStateCode(stateName: string): string {
   const stateMap: Record<string, string> = {
     'maharashtra': '27',
-    'maharashtra': '27',
     'delhi': '07',
     'karnataka': '29',
     'tamil nadu': '33',
