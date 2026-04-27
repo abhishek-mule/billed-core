@@ -124,7 +124,7 @@ export default function StartPage() {
   const completeOnboarding = async (planId: string, paymentId: string | null) => {
     setIsSubmitting(true)
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout for payment flow
     
     try {
       const response = await fetch('/api/onboard', {
@@ -150,13 +150,14 @@ export default function StartPage() {
       }
     } catch (error: any) {
       clearTimeout(timeoutId)
-      console.error('Onboarding error:', error)
       if (error.name === 'AbortError') {
-        alert('Request timed out. Please check your internet and try again.')
+        console.log('Request timed out but account might be created - refreshing...')
+        router.refresh()
       } else {
+        console.error('Onboarding error:', error)
         alert('Connection error. Please check your internet and try again.')
+        setIsSubmitting(false)
       }
-      setIsSubmitting(false)
     }
   }
 

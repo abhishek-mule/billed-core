@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- Tenant users
-CREATE TABLE IF NOT EXISTS tenant_users (
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
   id VARCHAR(255) PRIMARY KEY,
   tenant_id VARCHAR(255) REFERENCES tenants(id),
   name VARCHAR(255) NOT NULL,
@@ -77,9 +77,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   sgst DECIMAL(12,2) DEFAULT 0,
   igst DECIMAL(12,2) DEFAULT 0,
   total DECIMAL(12,2),
+  grand_total DECIMAL(12,2),
   notes TEXT,
   payment_mode VARCHAR(50) DEFAULT 'cash',
   payment_status VARCHAR(50) DEFAULT 'PENDING',
+  status VARCHAR(50) DEFAULT 'ACTIVE',
   erp_sync_status VARCHAR(50) DEFAULT 'PENDING',
   erp_invoice_id VARCHAR(255),
   due_date DATE,
@@ -120,7 +122,7 @@ CREATE TABLE IF NOT EXISTS payments (
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_tenants_phone ON tenants(phone);
 CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email);
-CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant_id ON tenant_users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_products_tenant_id ON products(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_tenant_id ON invoices(tenant_id);
