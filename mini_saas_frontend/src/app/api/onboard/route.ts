@@ -12,21 +12,13 @@ import {
   IDEMPOTENT_OPERATIONS
 } from '@/lib/idempotency'
 import { enqueueJob, QUEUES } from '@/lib/queue'
+import { validateRequest, OnboardSchema, type OnboardingRequest } from '@/lib/schemas/api'
 
 export const dynamic = 'force-dynamic'
 
 const ERP_URL = process.env.ERP_URL || 'http://localhost'
 const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
 const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
-
-interface OnboardingRequest {
-  shopName: string
-  idempotencyKey?: string
-  phone: string
-  ownerName: string
-  email: string
-  plan?: string
-}
 
 interface OnboardingResponse {
   success: boolean
@@ -174,19 +166,22 @@ async function checkExistingTenant(phone: string, email: string): Promise<string
   return existing[0]?.id || null
 }
 
-async function handleOnboarding(request: OnboardingRequest, correlationId: string): Promise<OnboardingResponse> {
-  const { shopName, phone, ownerName, email, plan = 'free' } = request
+async function handleOnboarding(values: OnboardingRequest, correlationId: string): Promise<OnboardingResponse> {
+  const { shopName, phone, ownerName, email, plan = 'free' } = values
+  
+  const phoneNum = phone || ''
+  const emailStr = email || ''
   
   logger.info({ 
     shopName, 
-    phone: phone.slice(-4), 
-    email: email.split('@')[0], 
+    phone: phoneNum.slice(-4), 
+    email: emailStr.split('@')[0], 
     plan,
     correlationId 
   }, 'onboarding_started')
 
   // Check for existing tenant - critical for deduplication
-  const existingTenantId = await checkExistingTenant(phone, email)
+  const existingTenantId = await checkExistingTenant(phoneNum, emailStr)
   if (existingTenantId) {
     logger.warn({ existingTenantId, correlationId }, 'duplicate_onboarding_attempt')
     
@@ -260,7 +255,7 @@ async function handleOnboarding(request: OnboardingRequest, correlationId: strin
     userId: result.userId,
     role: 'owner',
     companyName: shopName,
-    plan,
+    plan: plan as string,
   })
 
   logger.info({ 
@@ -285,24 +280,34 @@ export async function POST(request: NextRequest) {
   try {
     // Parse and validate request
     const data = await request.json()
-    const { shopName, phone, ownerName, email, plan, idempotencyKey } = data as OnboardingRequest
     
-    // Validate input
-    const validation = validateOnboardingRequest({ shopName, phone, ownerName, email })
-    if (!validation.valid) {
+    // Validate with Zod
+    const validation = validateRequest(OnboardSchema, data) as any
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: validation.errors.join(', ') },
+        { success: false, error: validation.error },
         { status: 400 }
       )
     }
     
-    // Generate idempotency key if not provided
+    const dto = validation.data
+    const shopName = dto.shopName || ''
+    const phone = dto.phone || ''
+    const ownerName = dto.ownerName || ''
+    const email = dto.email || ''
+    const plan = dto.plan || 'free'
+    const idempotencyKey = dto.idempotencyKey
+    
+    // Generate idempotency key
     const key = idempotencyKey || generateIdempotencyKey({ phone, email, shopName })
+    const finalPlan = plan || 'free'
+    const finalEmail = email || ''
+    const finalOwnerName = ownerName || ''
     
     logger.info({ 
       idempotencyKey: key, 
       correlationId,
-      phone: phone?.slice(-4)
+      phone: phone.slice(-4)
     }, 'onboarding_request')
     
     // Acquire lock to prevent concurrent onboarding for same identity
@@ -320,7 +325,7 @@ export async function POST(request: NextRequest) {
       const result = await withIdempotency<OnboardingResponse>(
         key,
         IDEMPOTENT_OPERATIONS.onboard,
-        () => handleOnboarding({ shopName, phone, ownerName, email, plan }, correlationId),
+        () => handleOnboarding({ shopName, phone, ownerName: finalOwnerName, email: finalEmail, plan: finalPlan }, correlationId),
         () => ({ 
           success: false, 
           message: 'Request already processing',
