@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "buildCommand": "pnpm run build",
   "outputDirectory": ".next",
-  "installCommand": "pnpm install"
+  "installCommand": "pnpm install",
+  "crons": [
+    {
+      "path": "/api/cron/erp-sync",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
