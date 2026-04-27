@@ -72,9 +72,9 @@ function getMemoryFallback() {
       }
     },
     
-    async keys(pattern: string): Promise<string[]> {
+async keys(pattern: string): Promise<string[]> {
       const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$')
-      return Array.from(this.store.keys()).filter(k => regex.test(k))
+      return Array.from(this.store.keys() as Iterable<string>).filter((k: string) => regex.test(k))
     },
     
     async getTenantSessions(tenantId: string): Promise<Set<string> | null> {
