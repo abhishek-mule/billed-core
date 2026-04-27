@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { z } from 'zod'
 import { loadRazorpay, RAZORPAY_KEY } from '@/lib/razorpay'
 import { Icon, Icons } from '@/components/Icons'
+import { useRouter } from 'next/navigation'
 
 const shopSchema = z.object({
   shopName: z.string().min(2, 'Shop name must be at least 2 characters'),
@@ -46,10 +47,20 @@ export default function StartPage() {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     loadRazorpay().then((loaded) => setRazorpayLoaded(loaded))
   }, [])
+
+  useEffect(() => {
+    if (step === 4) {
+      const timer = setTimeout(() => {
+        router.push('/merchant/invoice/new')
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [step, router])
 
   const handleShopSubmit = (data: ShopData) => {
     setShopData(data)
