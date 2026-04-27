@@ -19,7 +19,8 @@ import {
   User,
   BarChart3,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { OfflineIndicator } from '@/components/OfflineIndicator'
@@ -82,9 +83,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 const navItems = [
   { href: '/merchant', label: 'Home', Icon: Home },
+  { href: '/merchant/pos', label: 'POS', Icon: Zap },
   { href: '/merchant/invoice', label: 'Sales', Icon: Receipt },
   { href: '/merchant/purchases', label: 'Purchases', Icon: Camera },
-  { href: '/merchant/parties', label: 'Parties', Icon: Users },
+  { href: '/merchant/customers', label: 'Customers', Icon: Users },
   { href: '/merchant/products', label: 'Inventory', Icon: Package },
   { href: '/merchant/reports', label: 'Reports', Icon: BarChart3 },
   { href: '/merchant/settings', label: 'Settings', Icon: SettingsIcon },
