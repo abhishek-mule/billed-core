@@ -123,18 +123,39 @@ export default function StartPage() {
 
   const completeOnboarding = async (planId: string, paymentId: string | null) => {
     setIsSubmitting(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+    
     try {
       const response = await fetch('/api/onboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...shopData, ...identityData, plan: planId, paymentId }),
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeoutId)
+      
       if (response.ok) {
-        setStep(4)
+        const data = await response.json()
+        if (data.redirect) {
+          router.push(data.redirect)
+        } else {
+          setStep(4)
+        }
+      } else {
+        const err = await response.json()
+        alert(`Error: ${err.error || 'Please try again'}`)
+        setIsSubmitting(false)
       }
-    } catch (error) {
-      console.error(error)
-    } finally {
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+      console.error('Onboarding error:', error)
+      if (error.name === 'AbortError') {
+        alert('Request timed out. Please check your internet and try again.')
+      } else {
+        alert('Connection error. Please check your internet and try again.')
+      }
       setIsSubmitting(false)
     }
   }
@@ -421,6 +442,12 @@ function IdentityStep({ onSubmit, onBack }: { onSubmit: (data: IdentityData) => 
 function PlanStep({ onSelect, onBack, isSubmitting }: { onSelect: (planId: string) => void; onBack: () => void; isSubmitting: boolean }) {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+      {isSubmitting && (
+        <div className="mb-6 p-4 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3" />
+          <p className="text-indigo-300 text-sm">Processing payment...</p>
+        </div>
+      )}
       <div className="space-y-4">
         {plans.map((plan, index) => (
           <motion.div
@@ -428,12 +455,12 @@ function PlanStep({ onSelect, onBack, isSubmitting }: { onSelect: (planId: strin
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            onClick={() => onSelect(plan.id)}
+            onClick={() => !isSubmitting && onSelect(plan.id)}
             className={`relative p-6 rounded-2xl border transition-all cursor-pointer group ${
               plan.popular
                 ? 'bg-gradient-to-br from-indigo-500/20 to-violet-500/10 border-indigo-500/50 hover:border-indigo-400'
                 : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20'
-            }`}
+            } ${isSubmitting ? 'opacity-50 pointer-events-none' : ''}`}
           >
             {plan.popular && (
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-xs font-medium rounded-full text-white">
@@ -464,7 +491,7 @@ function PlanStep({ onSelect, onBack, isSubmitting }: { onSelect: (planId: strin
                 ? 'bg-indigo-600 text-white group-hover:bg-indigo-500'
                 : 'bg-white/10 text-white group-hover:bg-white/20'
             }`}>
-              {isSubmitting ? 'Processing...' : plan.id === 'free' ? 'Start Free' : `Pay ₹${plan.price}/mo`}
+              {plan.id === 'free' ? 'Start Free' : `Pay ₹${plan.price}/mo`}
             </div>
           </motion.div>
         ))}
