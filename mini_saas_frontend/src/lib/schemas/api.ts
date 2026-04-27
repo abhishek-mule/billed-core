@@ -7,7 +7,8 @@ export const OnboardSchema = z.object({
   email: z.string().email('Invalid email'),
   plan: z.enum(['free', 'starter', 'pro']).optional(),
   idempotencyKey: z.string().optional(),
-}).strict()
+  // Allow extra fields (but don't fail on them)
+}).passthrough()
 
 export const InvoiceCreateSchema = z.object({
   customerName: z.string().min(1, 'Customer name required'),
