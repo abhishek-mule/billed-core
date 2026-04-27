@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.5",
     "@upstash/redis": "^1.21.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.309.0",
@@ -18,6 +20,8 @@
     "razorpay": "^2.9.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-hook-form": "^7.74.0",
+    "sonner": "^2.0.7",
     "zod": "^3.22.0"
   },
   "devDependencies": {
