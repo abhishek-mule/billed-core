@@ -1,245 +1,370 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Plus, Minus, Send, QrCode, User, CreditCard, Banknote, RefreshCw, Package, WifiOff, CheckCircle } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useOfflinePOS } from '@/hooks/useOfflinePOS'
+import { type ReactNode, useMemo, useState } from 'react'
+import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X } from 'lucide-react'
 
-interface Product {
+type Product = {
   id: string
-  itemCode: string
-  itemName: string
-  rate: number
-  available: number
+  name: string
+  price: number
+  stock: number
+  unit: string
+  hsn?: string
+  gst: number
 }
 
-interface CartItem {
-  productId: string
-  productName: string
-  productCode: string
-  qty: number
-  rate: number
-  amount: number
+type CartItem = Product & { qty: number }
+
+const mockProducts: Product[] = [
+  { id: 'p1', name: 'Parle-G Biscuit 100g', price: 10, stock: 142, unit: 'pc', hsn: '1905', gst: 5 },
+  { id: 'p2', name: 'Amul Milk 500ml', price: 32, stock: 56, unit: 'pc', hsn: '0401', gst: 0 },
+  { id: 'p3', name: 'Tata Salt 1kg', price: 28, stock: 78, unit: 'pc', hsn: '2501', gst: 5 },
+  { id: 'p4', name: 'Surf Excel 1kg', price: 245, stock: 22, unit: 'pc', hsn: '3402', gst: 18 },
+  { id: 'p5', name: 'Maggi 70g', price: 14, stock: 220, unit: 'pc', hsn: '1902', gst: 12 },
+  { id: 'p6', name: 'Coca Cola 750ml', price: 40, stock: 48, unit: 'pc', hsn: '2202', gst: 28 },
+  { id: 'p7', name: 'Britannia Bread', price: 50, stock: 18, unit: 'pc', hsn: '1905', gst: 5 },
+  { id: 'p8', name: 'Aashirvaad Atta 5kg', price: 285, stock: 12, unit: 'pc', hsn: '1101', gst: 5 },
+  { id: 'p9', name: 'Colgate Toothpaste', price: 95, stock: 34, unit: 'pc', hsn: '3306', gst: 18 },
+  { id: 'p10', name: 'Haldiram Bhujia 200g', price: 70, stock: 60, unit: 'pc', hsn: '2106', gst: 12 },
+  { id: 'p11', name: 'Dettol Soap 75g', price: 38, stock: 88, unit: 'pc', hsn: '3401', gst: 18 },
+  { id: 'p12', name: 'Tropicana Juice 1L', price: 110, stock: 26, unit: 'pc', hsn: '2009', gst: 12 },
+]
+
+const mockParties = [
+  { id: 'c1', name: 'Anjali Sharma', phone: '98765 43210', pending: 4200, type: 'customer' },
+  { id: 'c2', name: 'Rahul Mehta', phone: '98123 45678', pending: 0, type: 'customer' },
+  { id: 'c3', name: 'Priya Stores', phone: '99887 76655', pending: 12400, type: 'customer' },
+  { id: 'c4', name: 'Mohan Traders', phone: '97654 32109', pending: 6710, type: 'customer' },
+  { id: 'c5', name: 'Walk-in Customer', phone: '', pending: 0, type: 'customer' },
+]
+
+const formatINR = (amount: number) => `Rs ${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+
+function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className={`flex justify-between ${bold ? 'border-t border-border pt-1.5 text-base font-bold' : 'text-muted-foreground'}`}>
+      <span>{label}</span>
+      <span className="number-display text-foreground">{value}</span>
+    </div>
+  )
+}
+
+function Sheet({
+  children,
+  onClose,
+  title,
+}: {
+  children: ReactNode
+  onClose: () => void
+  title: string
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-background/70 backdrop-blur animate-fade-in lg:items-center lg:justify-center" onClick={onClose}>
+      <div
+        className="w-full rounded-t-3xl border border-border bg-card p-6 shadow-elegant animate-slide-up lg:max-w-md lg:rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="text-lg font-bold">{title}</h3>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 export default function POSPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
-  const [customer, setCustomer] = useState<{name: string; phone: string} | null>(null)
-  const [showCustomerModal, setShowCustomerModal] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [lastSale, setLastSale] = useState<{amount: number; offline: boolean} | null>(null)
-  
-  const { isOnline, pendingCount, createInvoice } = useOfflinePOS()
+  const [customer, setCustomer] = useState('Walk-in Customer')
+  const [, setCustomerPhone] = useState<string | undefined>(undefined)
+  const [showCustomer, setShowCustomer] = useState(false)
+  const [showPay, setShowPay] = useState(false)
+  const [success, setSuccess] = useState<{ id: string; number: string; amount: number } | null>(null)
 
-  useEffect(() => { fetchProducts() }, [])
+  const filtered = useMemo(
+    () => mockProducts.filter((product) => product.name.toLowerCase().includes(query.toLowerCase())),
+    [query],
+  )
 
-  const fetchProducts = async () => {
-    try {
-      const res = await fetch('/api/merchant/products?limit=100')
-      if (res.ok) {
-        const data = await res.json()
-        setProducts(data.data || [])
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const tax = cart.reduce((sum, item) => sum + (item.price * item.qty * item.gst) / 100, 0)
+  const total = subtotal + tax
+
+  const addToCart = (product: Product) => {
+    setCart((current) => {
+      const existing = current.find((item) => item.id === product.id)
+      if (existing) {
+        return current.map((item) => (item.id === product.id ? { ...item, qty: item.qty + 1 } : item))
       }
-    } catch (e) { console.error(e) }
-  }
 
-  const subtotal = cart.reduce((s, i) => s + i.amount, 0)
-  const cgst = Math.round(subtotal * 0.09)
-  const sgst = Math.round(subtotal * 0.09)
-  const total = subtotal + cgst + sgst
-
-  const addToCart = (p: Product) => {
-    setCart(prev => {
-      const ex = prev.find(i => i.productId === p.id)
-      if (ex && ex.qty < p.available) {
-        return prev.map(i => i.productId === p.id ? {...i, qty: i.qty + 1, amount: (i.qty + 1) * i.rate} : i)
-      }
-      if (ex) return prev
-      return [...prev, {productId: p.id, productName: p.itemName, productCode: p.itemCode, qty: 1, rate: p.rate, amount: p.rate}]
+      return [...current, { ...product, qty: 1 }]
     })
   }
 
-  const updateQty = (pid: string, delta: number) => {
-    setCart(prev => prev.map(i => {
-      if (i.productId === pid) {
-        const n = Math.max(0, i.qty + delta)
-        return {...i, qty: n, amount: n * i.rate}
-      }
-      return i
-    }).filter(i => i.qty > 0))
+  const updateQty = (id: string, delta: number) => {
+    setCart((current) =>
+      current.flatMap((item) =>
+        item.id === id ? (item.qty + delta <= 0 ? [] : [{ ...item, qty: item.qty + delta }]) : [item],
+      ),
+    )
   }
 
-  const completeSale = async (pm: string) => {
-    if (cart.length === 0 || loading) return
-    setLoading(true)
-    try {
-      const r = await createInvoice({
-        customerName: customer?.name || 'Cash Customer',
-        customerPhone: customer?.phone || '',
-        items: cart.map(i => ({itemCode: i.productCode, itemName: i.productName, qty: i.qty, rate: i.rate, amount: i.amount})),
-        subtotal, cgst, sgst, total, paymentMode: pm
-      })
-      if (r.success) {
-        setCart([])
-        setCustomer(null)
-        setShowPaymentModal(false)
-        setLastSale({amount: total, offline: r.offline})
-        setTimeout(() => setLastSale(null), 4000)
-      }
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+  const handlePay = (_method: 'upi' | 'cash' | 'udhar') => {
+    setShowPay(false)
+    if (navigator.vibrate) navigator.vibrate(80)
+    setSuccess({
+      id: `live-${Date.now()}`,
+      number: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+      amount: Math.round(total),
+    })
   }
 
-  const filtered = products.filter(p => 
-    p.itemName?.toLowerCase().includes(search.toLowerCase()) ||
-    p.itemCode?.toLowerCase().includes(search.toLowerCase())
-  )
+  const closeSuccess = () => {
+    setSuccess(null)
+    setCart([])
+    setCustomer('Walk-in Customer')
+    setCustomerPhone(undefined)
+  }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-3 h-full">
-      {/* Products Panel */}
-      <div className="flex-1 flex flex-col bg-white rounded-xl overflow-hidden shadow-sm">
-        <div className="p-3 border-b flex items-center gap-3 bg-gray-50">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <div className="mx-auto max-w-7xl px-4 py-5 lg:px-8 lg:py-8">
+      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+        <div>
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              type="text"
-              placeholder="Search products..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search products... (instant)"
+              className="h-14 w-full rounded-xl border-2 border-input bg-card pl-11 pr-4 text-base font-medium transition-base focus:border-primary focus:outline-none"
             />
           </div>
-          <div className="flex items-center gap-1.5 text-xs">
-            {isOnline ? <div className="w-2 h-2 rounded-full bg-green-500" /> : <WifiOff className="w-3 h-3 text-amber-500" />}
-            <span className="text-gray-500">{isOnline ? 'Online' : 'Offline'}</span>
-            {pendingCount > 0 && <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">{pendingCount}</span>}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-            {filtered.slice(0, 48).map(p => {
-              const c = cart.find(i => i.productId === p.id)
+
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {filtered.map((product) => {
+              const inCart = cart.find((item) => item.id === product.id)
+
               return (
                 <button
-                  key={p.id}
-                  onClick={() => addToCart(p)}
-                  disabled={!p.available}
-                  className={`p-3 rounded-xl text-left transition-all ${!p.available ? 'bg-gray-50 border border-gray-100 opacity-50' : c ? 'bg-indigo-50 border-2 border-indigo-500' : 'bg-white border border-gray-200 hover:border-indigo-300'}`}
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  className={`rounded-2xl border bg-card p-4 text-left transition-spring active:scale-95 hover:border-primary/40 hover:shadow-md ${inCart ? 'border-primary shadow-glow' : 'border-border'}`}
                 >
-                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 mb-2">
-                    <Package className="w-4 h-4 text-indigo-600" />
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{product.name}</h3>
+                    {inCart && (
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                        {inCart.qty}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs font-semibold text-gray-900 truncate">{p.itemName}</p>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-sm font-bold text-indigo-600">₹{p.rate}</span>
-                    {c && <span className="text-xs bg-indigo-600 text-white px-1.5 py-0.5 rounded">{c.qty}</span>}
+                  <div className="mt-3 flex items-end justify-between">
+                    <div>
+                      <div className="number-display text-lg font-bold">{formatINR(product.price)}</div>
+                      <div className="text-[11px] text-muted-foreground">GST {product.gst}%</div>
+                    </div>
+                    <div className={`text-[11px] font-medium ${product.stock < 20 ? 'text-warning' : 'text-success'}`}>
+                      {product.stock} {product.unit}
+                    </div>
                   </div>
-                  {p.available < 5 && p.available > 0 && <p className="text-[10px] text-amber-600 mt-1">Only {p.available} left</p>}
-                  {p.available === 0 && <p className="text-[10px] text-red-500 mt-1">Out of stock</p>}
                 </button>
               )
             })}
           </div>
         </div>
-      </div>
 
-      {/* Cart Panel */}
-      <div className="w-full lg:w-80 xl:w-96 flex flex-col bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-600">Cart ({cart.length})</span>
-          {lastSale && (
-            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} className="flex items-center gap-1.5 text-green-600 text-xs">
-              <CheckCircle className="w-3 h-3" />₹{lastSale.amount}
-            </motion.div>
-          )}
-        </div>
-        <button onClick={() => setShowCustomerModal(true)} className="p-3 border-b flex items-center gap-3 hover:bg-gray-50">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-            <User className="w-4 h-4 text-indigo-600" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-medium text-gray-900">{customer?.name || 'Cash Customer'}</p>
-            <p className="text-xs text-gray-400">{customer?.phone || 'No phone'}</p>
-          </div>
-        </button>
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {cart.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-gray-400">
-              <div className="text-center">
-                <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Cart empty</p>
+        <div className="hidden lg:block">
+          <div className="sticky top-24 flex max-h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border p-4">
+              <h2 className="font-semibold">Cart</h2>
+              {cart.length > 0 && (
+                <button onClick={() => setCart([])} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3 w-3" /> Clear
+                </button>
+              )}
+            </div>
+
+            <button onClick={() => setShowCustomer(true)} className="m-3 mb-0 flex items-center gap-2.5 rounded-lg bg-secondary p-3 text-left transition-base hover:bg-secondary/80">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs text-muted-foreground">Customer</div>
+                <div className="truncate text-sm font-medium">{customer}</div>
               </div>
-            </div>
-          ) : (
-            <div className="divide-y">
-              <AnimatePresence>
-                {cart.map(i => (
-                  <motion.div key={i.productId} initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} exit={{opacity: 0}} className="flex items-center gap-2 p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{i.productName}</p>
-                      <p className="text-xs text-gray-400">₹{i.rate} × {i.qty}</p>
+              <span className="text-xs font-medium text-primary">Change</span>
+            </button>
+
+            <div className="flex-1 space-y-2 overflow-y-auto p-3">
+              {cart.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">Tap a product to add it</div>
+              ) : (
+                cart.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm font-medium leading-snug">{item.name}</div>
+                      <div className="number-display whitespace-nowrap text-sm font-bold">
+                        {formatINR(item.price * item.qty)}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => updateQty(i.productId, -1)} className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center">−</button>
-                      <span className="w-6 text-center text-xs font-medium">{i.qty}</span>
-                      <button onClick={() => updateQty(i.productId, 1)} className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center">+</button>
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="text-[11px] text-muted-foreground">
+                        {formatINR(item.price)} x {item.qty}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => updateQty(item.id, -1)} className="grid h-7 w-7 place-items-center rounded-md bg-secondary hover:bg-secondary/70">
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="number-display w-7 text-center text-sm font-semibold">{item.qty}</span>
+                        <button onClick={() => updateQty(item.id, 1)} className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90">
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="w-14 text-right text-sm font-semibold">₹{i.amount}</span>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                  </div>
+                ))
+              )}
             </div>
-          )}
+
+            {cart.length > 0 && (
+              <div className="space-y-3 border-t border-border bg-secondary/30 p-4">
+                <div className="space-y-1.5 text-sm">
+                  <Row label="Subtotal" value={formatINR(subtotal)} />
+                  <Row label="GST" value={formatINR(tax)} />
+                  <Row label="Total" value={formatINR(total)} bold />
+                </div>
+                <button onClick={() => setShowPay(true)} className="w-full rounded-xl bg-gradient-primary py-4 text-base font-bold text-primary-foreground shadow-glow transition-base hover:opacity-90">
+                  Generate & Send
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="p-3 border-t space-y-1 bg-gray-50">
-          <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>₹{subtotal}</span></div>
-          <div className="flex justify-between text-xs text-gray-500"><span>CGST (9%)</span><span>₹{cgst}</span></div>
-          <div className="flex justify-between text-xs text-gray-500"><span>SGST (9%)</span><span>₹{sgst}</span></div>
-          <div className="flex justify-between text-base font-bold pt-1 border-t"><span>Total</span><span className="text-indigo-600">₹{total}</span></div>
-        </div>
-        <button onClick={() => setShowPaymentModal(true)} disabled={cart.length === 0 || loading} className="m-3 mt-0 py-3 bg-indigo-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:bg-indigo-700 flex items-center justify-center gap-2">
-          {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Complete Sale</>}
-        </button>
       </div>
 
-      {/* Customer Modal */}
-      {showCustomerModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowCustomerModal(false)}>
-          <div className="bg-white rounded-t-2xl w-full p-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold mb-3">Select Customer</h3>
-            <button onClick={() => {setCustomer({name: 'Cash Customer', phone: ''}); setShowCustomerModal(false)}} className="w-full p-3 text-left bg-gray-50 rounded-lg mb-2">
-              <p className="font-medium">Cash Customer</p>
-              <p className="text-xs text-gray-400">Walk-in</p>
-            </button>
-            <button onClick={() => setShowCustomerModal(false)} className="w-full py-3 border rounded-lg mt-2">Cancel</button>
-          </div>
+      {cart.length > 0 && (
+        <div className="fixed bottom-20 left-0 right-0 z-30 px-4 animate-slide-up lg:hidden">
+          <button
+            onClick={() => setShowPay(true)}
+            className="flex w-full items-center justify-between rounded-2xl bg-gradient-primary p-4 text-primary-foreground shadow-glow"
+          >
+            <span className="text-sm font-medium">{cart.reduce((sum, item) => sum + item.qty, 0)} items</span>
+            <span className="number-display text-lg font-bold">{formatINR(total)} {'->'}</span>
+          </button>
         </div>
       )}
 
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowPaymentModal(false)}>
-          <div className="bg-white rounded-t-2xl w-full p-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-semibold mb-3">Payment Mode</h3>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <button onClick={() => completeSale('cash')} disabled={loading} className="p-4 rounded-xl flex flex-col items-center gap-2 bg-green-50 border border-green-200">
-                <Banknote className="w-6 h-6 text-green-600" />
-                <span className="text-sm font-medium">Cash</span>
-              </button>
-              <button onClick={() => completeSale('upi')} disabled={loading} className="p-4 rounded-xl flex flex-col items-center gap-2 bg-purple-50 border border-purple-200">
-                <QrCode className="w-6 h-6 text-purple-600" />
-                <span className="text-sm font-medium">UPI</span>
-              </button>
-              <button onClick={() => completeSale('card')} disabled={loading} className="p-4 rounded-xl flex flex-col items-center gap-2 bg-blue-50 border border-blue-200">
-                <CreditCard className="w-6 h-6 text-blue-600" />
-                <span className="text-sm font-medium">Card</span>
+      {showPay && (
+        <Sheet onClose={() => setShowPay(false)} title="Collect payment">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-xl bg-secondary p-4">
+              <div>
+                <div className="text-xs text-muted-foreground">To collect</div>
+                <div className="number-display mt-1 text-3xl font-bold">{formatINR(total)}</div>
+              </div>
+              <button onClick={() => setShowCustomer(true)} className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                <User className="h-3 w-3" /> {customer}
               </button>
             </div>
-            <button onClick={() => setShowPaymentModal(false)} className="w-full py-3 border rounded-lg">Cancel</button>
+
+            {[
+              { label: 'UPI', desc: 'QR / link to customer', method: 'upi' as const },
+              { label: 'Cash', desc: 'Mark as paid', method: 'cash' as const },
+              { label: 'Udhar (Credit)', desc: 'Add to ledger', method: 'udhar' as const },
+            ].map((option) => (
+              <button
+                key={option.method}
+                onClick={() => handlePay(option.method)}
+                className="flex w-full items-center justify-between rounded-xl border-2 border-input p-4 text-left transition-base hover:border-primary hover:bg-secondary/40"
+              >
+                <div>
+                  <div className="font-semibold">{option.label}</div>
+                  <div className="text-xs text-muted-foreground">{option.desc}</div>
+                </div>
+                <span className="text-sm font-medium text-primary">{'->'}</span>
+              </button>
+            ))}
+
+            <label className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-input p-3 hover:bg-secondary/40">
+              <Printer className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Auto-print receipt after billing</span>
+            </label>
+          </div>
+        </Sheet>
+      )}
+
+      {showCustomer && (
+        <Sheet onClose={() => setShowCustomer(false)} title="Select customer">
+          <div className="space-y-1">
+            <button
+              onClick={() => {
+                setCustomer('Walk-in Customer')
+                setCustomerPhone(undefined)
+                setShowCustomer(false)
+              }}
+              className="w-full rounded-lg p-3 text-left hover:bg-secondary"
+            >
+              <div className="text-sm font-medium">Walk-in Customer</div>
+              <div className="text-xs text-muted-foreground">No details</div>
+            </button>
+
+            {mockParties
+              .filter((party) => party.type === 'customer')
+              .map((party) => (
+                <button
+                  key={party.id}
+                  onClick={() => {
+                    setCustomer(party.name)
+                    setCustomerPhone(party.phone.replace(/\s/g, ''))
+                    setShowCustomer(false)
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg p-3 text-left hover:bg-secondary"
+                >
+                  <div>
+                    <div className="text-sm font-medium">{party.name}</div>
+                    <div className="text-xs text-muted-foreground">{party.phone}</div>
+                  </div>
+                  {party.pending > 0 && (
+                    <span className="text-xs font-semibold text-warning">{formatINR(party.pending)} due</span>
+                  )}
+                </button>
+              ))}
+          </div>
+        </Sheet>
+      )}
+
+      {success && (
+        <div className="fixed inset-0 z-50 flex items-end bg-background/80 backdrop-blur animate-fade-in lg:items-center lg:justify-center" onClick={closeSuccess}>
+          <div
+            className="w-full rounded-t-3xl border border-border bg-card p-6 shadow-elegant animate-slide-up lg:max-w-md lg:rounded-3xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="text-center">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-success text-success-foreground shadow-success">
+                <CheckCircle2 className="h-7 w-7" />
+              </div>
+              <h2 className="mt-3 text-xl font-bold">Invoice {success.number}</h2>
+              <div className="number-display mt-1 text-3xl font-bold">{formatINR(success.amount)}</div>
+              <div className="mt-2 text-sm text-success">Synced successfully</div>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => window.open(`/print/${success.id}`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">
+                <Printer className="h-4 w-4" /> Print
+              </button>
+              <button onClick={() => window.open(`/share/${success.id}`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-medium text-primary-foreground transition-base hover:opacity-90">
+                Send via WhatsApp
+              </button>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={closeSuccess} className="flex-1 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">
+                New sale
+              </button>
+            </div>
           </div>
         </div>
       )}

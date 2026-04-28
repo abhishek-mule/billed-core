@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import Link from 'next/link'
+import type { MerchantInvoicePayload, MerchantInvoiceResponse } from '@/lib/merchant'
 
 interface LineItem {
   id: string
@@ -18,7 +19,8 @@ interface LineItem {
 }
 
 interface Customer {
-  name: string
+  id?: string
+  name?: string
   customer_name: string
   phone: string
   gstin?: string
@@ -43,12 +45,16 @@ export default function NewInvoicePage() {
   const router = useRouter()
   const [items, setItems] = useState<LineItem[]>([])
   const [customer, setCustomer] = useState<Customer | null>(null)
+  const [customers, setCustomers] = useState<Customer[]>(mockCustomers)
+  const [products, setProducts] = useState(mockProducts)
   const [customerPhone, setCustomerPhone] = useState('')
   const [showCustomerSearch, setShowCustomerSearch] = useState(false)
   const [showProductSearch, setShowProductSearch] = useState(false)
   const [productQuery, setProductQuery] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isSent, setIsSent] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [whatsAppLink, setWhatsAppLink] = useState<string | null>(null)
   const [lang, setLang] = useState<'en' | 'hi'>('en')
   const [gstRate, setGstRate] = useState(18)
   const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'card' | 'credit'>('cash')
@@ -127,6 +133,90 @@ export default function NewInvoicePage() {
       productInputRef.current.focus()
     }
   }, [showProductSearch])
+
+  useEffect(() => {
+    if (!showCustomerSearch) return
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ limit: '10' })
+        if (customerPhone.trim()) {
+          params.set('q', customerPhone.trim())
+        }
+
+        const response = await fetch(`/api/merchant/customers?${params.toString()}`, {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) return
+
+        const data = await response.json()
+        if (data.success && Array.isArray(data.data)) {
+          setCustomers(
+            data.data.map((entry: any) => ({
+              id: entry.id,
+              name: entry.name,
+              customer_name: entry.name,
+              phone: entry.phone || '',
+              gstin: entry.gstin || '',
+              address: entry.billingAddress || entry.shippingAddress || '',
+            })),
+          )
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('Failed to load customers:', error)
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [customerPhone, showCustomerSearch])
+
+  useEffect(() => {
+    if (!showProductSearch) return
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ limit: '20' })
+        if (productQuery.trim()) {
+          params.set('search', productQuery.trim())
+        }
+
+        const response = await fetch(`/api/merchant/products?${params.toString()}`, {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) return
+
+        const data = await response.json()
+        if (data.success && Array.isArray(data.data)) {
+          setProducts(
+            data.data.map((entry: any) => ({
+              item_code: entry.itemCode,
+              item_name: entry.itemName,
+              hsn_code: entry.hsnCode,
+              rate: Number(entry.rate || 0),
+            })),
+          )
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('Failed to load products:', error)
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [productQuery, showProductSearch])
 
   const addItem = (product: any) => {
     const newItem: LineItem = {
@@ -209,37 +299,78 @@ export default function NewInvoicePage() {
       return
     }
     setIsSending(true)
+    setSendError(null)
     try {
-      const res = await fetch('/api/merchant/invoice/send', {
+      const payload: MerchantInvoicePayload = {
+        customerPhone: customer.phone,
+        customerName: customer.customer_name,
+        items: items.map((item) => ({
+          itemCode: item.item_code,
+          itemName: item.item_name,
+          quantity: item.qty,
+          rate: item.rate,
+        })),
+      }
+
+      const idempotencyKey = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+      const createRes = await fetch('/api/merchant/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const createData: MerchantInvoiceResponse = await createRes.json()
+      if (!createRes.ok || !createData.invoiceId) {
+        throw new Error(createData.error || 'Failed to create invoice')
+      }
+
+      setWhatsAppLink(createData.whatsappLink || null)
+
+      const sendRes = await fetch('/api/merchant/invoice/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          customer, 
-          items,
-          totals,
-          paymentMode,
-          enableReminder
-        })
+        body: JSON.stringify({
+          invoiceId: createData.invoiceId,
+          channel: 'whatsapp',
+        }),
       })
-      if (res.ok) setIsSent(true)
+
+      if (!sendRes.ok) {
+        const sendData = await sendRes.json().catch(() => ({}))
+        throw new Error(sendData.error || 'Invoice created, but send failed')
+      }
+
+      setIsSent(true)
+      setTimeout(() => {
+        if (createData.whatsappLink) {
+          window.open(createData.whatsappLink, '_blank', 'noopener,noreferrer')
+        }
+      }, 150)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send invoice'
+      setSendError(message)
+      alert(message)
     } finally { 
       setIsSending(false) 
     }
   }
 
   const filteredProducts = productQuery 
-    ? mockProducts.filter(p => 
+    ? products.filter(p => 
         p.item_name.toLowerCase().includes(productQuery.toLowerCase()) ||
         p.item_code.toLowerCase().includes(productQuery.toLowerCase())
       )
-    : mockProducts
+    : products
 
   const filteredCustomers = customerPhone
-    ? mockCustomers.filter(c => 
+    ? customers.filter(c => 
         c.phone.includes(customerPhone) ||
         c.customer_name.toLowerCase().includes(customerPhone.toLowerCase())
       )
-    : mockCustomers
+    : customers
 
   return (
     <div className="min-h-screen bg-[#faf9f7] text-[#0e0e10] font-sans pb-48">

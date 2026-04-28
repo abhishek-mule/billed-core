@@ -42,6 +42,21 @@ function verifyCsrf(request: Request): boolean {
   return cookies[CSRF_COOKIE] === tokenHeader
 }
 
+function isSameOriginRequest(request: Request): boolean {
+  const origin = request.headers.get('origin')
+  const host = request.headers.get('host')
+
+  if (!origin || !host) {
+    return true
+  }
+
+  try {
+    return new URL(origin).host === host
+  } catch {
+    return false
+  }
+}
+
 export function withCsrfProtection(
   handler: (request: Request) => Promise<NextResponse>
 ): (request: Request) => Promise<NextResponse> {
@@ -49,7 +64,7 @@ export function withCsrfProtection(
     const method = request.method
     
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      if (!verifyCsrf(request)) {
+      if (!isSameOriginRequest(request) && !verifyCsrf(request)) {
         return NextResponse.json(
           { error: 'CSRF token required' },
           { status: 403 }

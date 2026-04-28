@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Package, 
   Search, 
@@ -12,20 +12,101 @@ import {
   MoreHorizontal,
   History,
   TrendingUp,
-  BoxSelect
+  BoxSelect,
+  X,
+  Loader2
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+
+interface Product {
+  id: string
+  itemCode: string
+  itemName: string
+  hsnCode?: string
+  gstRate: number
+  rate: number
+  mrp: number
+  stock: number
+  reserved: number
+  available: number
+  category: string
+  unit: string
+}
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('')
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [stats, setStats] = useState({ total: 0, lowStock: 0, value: 0 })
 
-  const mockProducts = [
-    { item_code: 'FAN-001', item_name: 'Bajaj 48" Fan', stock: 25, rate: 2500, category: 'Electronics', trend: 'up' },
-    { item_code: 'LED-001', item_name: 'Philips LED Bulb 9W', stock: 120, rate: 300, category: 'Lighting', trend: 'up' },
-    { item_code: 'WIRE-001', item_name: 'Havells Wire 2.5mm (90m)', stock: 3, rate: 1500, category: 'Electrical', trend: 'down' },
-    { item_code: 'SWITCH-001', item_name: 'Polycab Switch Board', stock: 45, rate: 750, category: 'Electrical', trend: 'up' },
-    { item_code: 'CABLE-001', item_name: 'HDMI Cable 1.5m', stock: 60, rate: 450, category: 'Electronics', trend: 'up' },
-  ]
+  useEffect(() => {
+    fetchProducts()
+  }, [search])
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      params.set('limit', '100')
+      
+      const res = await fetch(`/api/merchant/products?${params}`)
+      const data = await res.json()
+      
+      if (data.success) {
+        setProducts(data.data)
+        
+        const total = data.data.length
+        const lowStock = data.data.filter((p: Product) => p.available < 10).length
+        const value = data.data.reduce((acc: number, p: Product) => acc + (p.rate * p.stock), 0)
+        setStats({ total, lowStock, value })
+      }
+    } catch (error) {
+      console.error('Failed to fetch products:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setSubmitting(true)
+    
+    const formData = new FormData(e.currentTarget)
+    const payload = {
+      itemCode: formData.get('itemCode'),
+      itemName: formData.get('itemName'),
+      hsnCode: formData.get('hsnCode'),
+      gstRate: parseFloat(formData.get('gstRate') as string) || 18,
+      rate: parseFloat(formData.get('rate') as string) || 0,
+      mrp: parseFloat(formData.get('mrp') as string) || 0,
+      stock: parseFloat(formData.get('stock') as string) || 0,
+      category: formData.get('category'),
+      unit: formData.get('unit') || 'pcs'
+    }
+
+    try {
+      const res = await fetch('/api/merchant/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        setShowAddModal(false)
+        fetchProducts()
+      } else {
+        alert(data.error)
+      }
+    } catch (error) {
+      console.error('Failed to add product:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -48,7 +129,10 @@ export default function ProductsPage() {
             <History className="w-4 h-4" />
             Stock History
           </button>
-          <button className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95">
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95"
+          >
             <Plus className="w-4 h-4" />
             Add Product
           </button>
@@ -63,7 +147,7 @@ export default function ProductsPage() {
             </div>
             <div>
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Total SKUs</span>
-              <span className="text-xl font-black text-gray-900">2,148</span>
+              <span className="text-xl font-black text-gray-900">{stats.total.toLocaleString()}</span>
             </div>
          </div>
          <div className="bg-rose-50 border border-rose-100 rounded-3xl p-6 flex items-center gap-4">
@@ -72,7 +156,7 @@ export default function ProductsPage() {
             </div>
             <div>
               <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest block">Low Stock Alerts</span>
-              <span className="text-xl font-black text-rose-700">14 Items</span>
+              <span className="text-xl font-black text-rose-700">{stats.lowStock} Items</span>
             </div>
          </div>
          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex items-center gap-4">
@@ -81,7 +165,7 @@ export default function ProductsPage() {
             </div>
             <div>
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Stock Value</span>
-              <span className="text-xl font-black text-gray-900">₹8,45,200</span>
+              <span className="text-xl font-black text-gray-900">{formatCurrency(stats.value)}</span>
             </div>
          </div>
       </div>
@@ -119,36 +203,42 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {mockProducts.filter(p => 
-                p.item_name.toLowerCase().includes(search.toLowerCase()) ||
-                p.item_code.toLowerCase().includes(search.toLowerCase())
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-300" />
+                  </td>
+                </tr>
+              ) : products.filter(p => 
+                p.itemName.toLowerCase().includes(search.toLowerCase()) ||
+                p.itemCode.toLowerCase().includes(search.toLowerCase())
               ).map((product) => (
-                <tr key={product.item_code} className="hover:bg-gray-50/50 transition-colors group">
+                <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100">
                         <Package className="w-5 h-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-gray-900 leading-tight mb-0.5">{product.item_name}</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{product.item_code}</p>
+                        <p className="text-sm font-black text-gray-900 leading-tight mb-0.5">{product.itemName}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{product.itemCode}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                    <span className="px-3 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest">{product.category}</span>
+                    <span className="px-3 py-1 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest">{product.category || 'General'}</span>
                   </td>
                   <td className="px-6 py-5 text-center">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${
-                      product.stock < 10 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                      product.available < 10 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
                     }`}>
-                      {product.stock < 10 ? <AlertCircle className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
-                      {product.stock < 10 ? 'LOW STOCK' : 'HEALTHY'}
+                      {product.available < 10 ? <AlertCircle className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
+                      {product.available < 10 ? 'LOW STOCK' : 'HEALTHY'}
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right font-black text-gray-900">
-                    <span className={product.stock < 10 ? 'text-rose-600' : 'text-gray-900'}>{product.stock}</span>
-                    <span className="text-gray-400 text-[10px] ml-1 uppercase">Units</span>
+                    <span className={product.available < 10 ? 'text-rose-600' : 'text-gray-900'}>{product.available}</span>
+                    <span className="text-gray-400 text-[10px] ml-1 uppercase">/ {product.stock}</span>
                   </td>
                   <td className="px-6 py-5 text-right font-black text-gray-900">
                     {formatCurrency(product.rate)}
@@ -165,13 +255,101 @@ export default function ProductsPage() {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
-          <span className="text-xs font-medium text-gray-400 italic">Total Inventory Valuation: ₹1,42,500</span>
+          <span className="text-xs font-medium text-gray-400 italic">Total Inventory Valuation: {formatCurrency(stats.value)}</span>
           <button className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
             View Analytics
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Add Product Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowAddModal(false)}
+            />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              className="relative w-full md:max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-black text-gray-900">Add New Product</h2>
+                <button 
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-xl"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddProduct} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Item Code *</label>
+                    <input name="itemCode" required placeholder="e.g., FAN-001" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Category</label>
+                    <input name="category" placeholder="e.g., Electronics" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Item Name *</label>
+                  <input name="itemName" required placeholder="Product name" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Sales Rate (₹)</label>
+                    <input name="rate" type="number" step="0.01" placeholder="0.00" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">MRP (₹)</label>
+                    <input name="mrp" type="number" step="0.01" placeholder="0.00" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">GST Rate (%)</label>
+                    <input name="gstRate" type="number" defaultValue={18} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Initial Stock</label>
+                    <input name="stock" type="number" defaultValue={0} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">Unit</label>
+                    <input name="unit" defaultValue="pcs" placeholder="pcs" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-1">HSN Code</label>
+                  <input name="hsnCode" placeholder="e.g., 8415" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none ring-2 ring-primary/5" />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={submitting}
+                  className="w-full bg-primary text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Add Product'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

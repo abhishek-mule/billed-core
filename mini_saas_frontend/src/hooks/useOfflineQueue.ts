@@ -176,7 +176,7 @@ export function useOfflineQueue() {
         const endpoint = action.type === 'invoice:create' 
           ? '/api/merchant/invoices/create'
           : action.type === 'customer:create'
-          ? '/api/merchant/customer'
+          ? '/api/merchant/customers'
           : '/api/unknown'
 
         const response = await fetch(endpoint, {

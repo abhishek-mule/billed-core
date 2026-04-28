@@ -67,11 +67,11 @@ export async function incrementNotificationAttempt(args: {
   const rows = await query<InvoiceNotification>(
     `UPDATE invoice_notifications
      SET attempt = attempt + 1,
-         status = $4,
+         status = $4::varchar,
          provider = COALESCE($5, provider),
          error_code = NULL,
          metadata = COALESCE($6::jsonb, metadata),
-         delivered_at = CASE WHEN $4 = 'delivered' THEN NOW() ELSE delivered_at END
+         delivered_at = CASE WHEN $4::varchar = 'delivered' THEN NOW() ELSE delivered_at END
      WHERE tenant_id = $1 AND invoice_id = $2 AND channel = $3
      RETURNING *`,
     [
@@ -97,11 +97,11 @@ export async function updateNotificationStatus(args: {
 }): Promise<void> {
   await query(
     `UPDATE invoice_notifications
-     SET status = $4,
+     SET status = $4::varchar,
          provider_message_id = COALESCE($5, provider_message_id),
          error_code = $6,
          metadata = COALESCE($7::jsonb, metadata),
-         delivered_at = CASE WHEN $4 = 'delivered' THEN NOW() ELSE delivered_at END
+         delivered_at = CASE WHEN $4::varchar = 'delivered' THEN NOW() ELSE delivered_at END
      WHERE tenant_id = $1 AND invoice_id = $2 AND channel = $3`,
     [
       args.tenantId,
