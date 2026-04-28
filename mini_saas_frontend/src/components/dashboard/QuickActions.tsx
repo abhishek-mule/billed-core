@@ -39,7 +39,7 @@ export function QuickActions() {
         return (
           <Link
             key={action.label}
-            href={action.href}
+            href={action.href || '/'}
             className={cx(
               'group flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl transition-all duration-200 active:scale-[0.98] ring-1 ring-inset',
               action.primary

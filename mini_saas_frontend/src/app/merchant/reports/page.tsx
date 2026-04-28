@@ -1,198 +1,254 @@
 'use client'
 
+import React, { useState } from 'react'
 import { 
-  BarChart3, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell,
+  Legend
+} from 'recharts'
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  FileText, 
+  Users, 
+  Clock, 
   Download, 
-  Share2, 
-  AlertTriangle, 
-  Calendar, 
-  ChevronDown, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  TrendingUp,
-  Package,
-  Users2,
-  FileText,
-  Send,
-  ShieldCheck
+  ChevronDown,
+  Filter,
+  MoreVertical,
+  ArrowUpRight,
+  ShieldCheck,
+  Send
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { CAPackage } from '@/components/reports/CAPackage'
+
+// Data based on the provided dashboard image
+const CATEGORY_DATA = [
+  { name: 'Electronics', value: 45, color: '#6366f1' },
+  { name: 'Groceries', value: 30, color: '#10b981' },
+  { name: 'Apparel', value: 15, color: '#f59e0b' },
+  { name: 'Others', value: 10, color: '#94a3b8' },
+]
+
+const TOP_CUSTOMERS = [
+  { name: 'Anjali Sharma', orders: 12, total: 45200 },
+  { name: 'Arjun Kumar', orders: 8, total: 32150 },
+  { name: 'Meera Gupta', orders: 15, total: 28400 },
+  { name: 'TechCorp Solutions', orders: 5, total: 24500 },
+]
+
+const REVENUE_EXPENSE_DATA = [
+  { month: 'Jan', revenue: 45000, expense: 32000 },
+  { month: 'Feb', revenue: 52000, expense: 38000 },
+  { month: 'Mar', revenue: 48000, expense: 41000 },
+  { month: 'Apr', revenue: 61000, expense: 45000 },
+  { month: 'May', revenue: 55000, expense: 42000 },
+  { month: 'Jun', revenue: 67000, expense: 48000 },
+  { month: 'Jul', revenue: 72000, expense: 51000 },
+]
 
 export default function ReportsPage() {
+  const [showCAPackage, setShowCAPackage] = useState(false)
+  const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`
+
   return (
     <div className="space-y-8 pb-10 animate-in">
-      {/* Header */}
+      {showCAPackage && <CAPackage onClose={() => setShowCAPackage(false)} />}
+
+      {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Reports & GSTR</h1>
-          <p className="text-gray-500 text-sm font-medium italic">Tax readiness and business performance insights.</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Financial Reports</h1>
+          <p className="text-slate-500 text-sm font-medium">Detailed overview of your business performance.</p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
-           <button className="px-4 py-2 rounded-xl text-xs font-bold text-gray-900 bg-gray-100">This Month</button>
-           <button className="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 hover:bg-gray-50 transition-colors">Last Month</button>
-           <button className="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 hover:bg-gray-50 transition-colors flex items-center gap-2">
-             Custom
-             <ChevronDown className="w-3 h-3" />
-           </button>
-           <div className="w-[1px] h-6 bg-gray-100 mx-1" />
-           <button className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95">
-             <Share2 className="w-3.5 h-3.5" />
-             Share with CA
-           </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowCAPackage(true)}
+            className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-600 px-5 py-2.5 rounded-xl font-black text-xs hover:bg-indigo-100 transition-all shadow-sm"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Generate CA Package
+          </button>
+          <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+            <Download className="w-4 h-4" />
+            Download PDF
+          </button>
+          <button className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-lg shadow-slate-200 hover:scale-[1.02] transition-all active:scale-95">
+            <Filter className="w-4 h-4" />
+            Filter
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Tax Readiness */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white rounded-3xl border-l-8 border-l-amber-400 border border-gray-100 p-8 shadow-sm relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-gray-900 tracking-tight">GSTR-1 Readiness (Oct 2023)</h3>
-                  <p className="text-xs text-gray-400 font-medium">Checked 42 invoices and 24 purchases for compliance.</p>
-                </div>
+      {/* Top Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[
+          { label: 'Total Revenue', value: 242000, change: '+12.5%', icon: DollarSign, color: 'indigo' },
+          { label: 'Net Profit', value: 84500, change: '+8.2%', icon: TrendingUp, color: 'emerald' },
+          { label: 'Total Invoices', value: 1248, change: '+5%', icon: FileText, color: 'slate' },
+          { label: 'Pending Payments', value: 33786, change: '-2.4%', icon: Clock, color: 'rose' },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+            <div className="flex justify-between items-center mb-4">
+              <div className={`p-3 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600`}>
+                <stat.icon className="w-5 h-5" />
               </div>
-              <span className="text-3xl font-black text-amber-500 tracking-tighter italic">92%</span>
-            </div>
-
-            <div className="h-3 w-full bg-amber-50 rounded-full overflow-hidden mb-8">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: '92%' }}
-                transition={{ duration: 1, ease: 'easeOut' }}
-                className="h-full bg-amber-400 rounded-full" 
-              />
-            </div>
-
-            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5 flex items-center justify-between group-hover:bg-amber-100 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-amber-500 shadow-sm">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div>
-                   <h4 className="text-sm font-black text-amber-900 tracking-tight uppercase">Action Required</h4>
-                   <p className="text-xs text-amber-700 font-medium tracking-tight">3 Invoices missing HSN codes. Tax may be incorrectly calculated.</p>
-                </div>
+              <div className={`flex items-center gap-1 text-[10px] font-black ${stat.change.startsWith('+') ? 'text-emerald-500' : 'text-rose-500'}`}>
+                {stat.change.startsWith('+') ? <ArrowUpRight className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                {stat.change}
               </div>
-              <button className="bg-white border border-amber-200 px-4 py-2 rounded-xl text-[10px] font-black text-amber-700 uppercase tracking-widest hover:bg-amber-50 transition-colors shadow-sm">Fix Now</button>
             </div>
+            <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">{stat.label}</p>
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight">{stat.label.includes('Invoices') ? stat.value.toLocaleString() : formatCurrency(stat.value)}</h3>
           </div>
+        ))}
+      </div>
 
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">GSTR Core (Accountant View)</h3>
+      {/* Middle Row: Category Pie and Top Customers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Revenue by Category */}
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Revenue by Category</h3>
+            <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-black text-gray-900 tracking-tight">GSTR-1 Summary</h4>
-                <Download className="w-4 h-4 text-gray-300 hover:text-gray-500 cursor-pointer" />
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500 font-medium">B2B Sales (Taxable)</span>
-                  <span className="font-bold text-gray-900">₹1,42,500.00</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-[-10px] pl-4">
-                  <span>To 12 Parties</span>
-                  <span>Tax: ₹25,650.00</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-500 font-medium">B2C Sales (Taxable)</span>
-                  <span className="font-bold text-gray-900">₹45,200.00</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-[-10px] pl-4">
-                  <span>Registered</span>
-                  <span>Tax: ₹8,136.00</span>
-                </div>
-                <div className="pt-4 border-t border-gray-50 flex justify-between items-center">
-                  <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Taxable Value</span>
-                  <span className="text-lg font-black text-indigo-600">₹1,87,700.00</span>
-                </div>
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <div className="h-[220px] w-full md:w-1/2 relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={CATEGORY_DATA}
+                    innerRadius={70}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {CATEGORY_DATA.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-3xl font-black text-slate-900">74%</span>
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Growth</span>
               </div>
             </div>
-
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-6">
-               <div className="flex items-center justify-between">
-                 <h4 className="text-sm font-black text-gray-900 tracking-tight">GSTR-3B (Est. Liability)</h4>
-                 <Download className="w-4 h-4 text-gray-300 hover:text-gray-500 cursor-pointer" />
-               </div>
-               <div className="space-y-4">
-                 <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex justify-between items-center">
-                   <div className="flex flex-col">
-                     <span className="text-[10px] text-rose-500 font-black uppercase tracking-widest">Output Tax</span>
-                     <span className="text-xs text-rose-400 font-medium">(Collected)</span>
-                   </div>
-                   <span className="text-sm font-black text-rose-600">₹33,786.00</span>
-                 </div>
-                 <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex justify-between items-center">
-                   <div className="flex flex-col">
-                     <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Input Tax Credit</span>
-                     <span className="text-xs text-emerald-400 font-medium">(ITC)</span>
-                   </div>
-                   <span className="text-sm font-black text-emerald-600">₹24,150.00</span>
-                 </div>
-                 <div className="pt-4 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex justify-between items-center">
-                   <span className="text-xs font-black text-indigo-500 uppercase tracking-widest">Net GST Payable</span>
-                   <span className="text-xl font-black text-indigo-700">₹9,636.00</span>
-                 </div>
-               </div>
+            
+            <div className="w-full md:w-1/2 space-y-4">
+              {CATEGORY_DATA.map((item, i) => (
+                <div key={i} className="flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">{item.name}</span>
+                  </div>
+                  <span className="text-sm font-black text-slate-900">{item.value}%</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Right Column: Deadlines & Insights */}
-        <div className="lg:col-span-4 space-y-8">
-          <div className="bg-[#0B0E14] rounded-3xl p-8 shadow-xl shadow-gray-900/10 text-white relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform" />
-             <div className="relative z-10">
-                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 block">Next Filing Due</span>
-                <h3 className="text-2xl font-black tracking-tight mb-1">11 November 2023</h3>
-                <p className="text-xs text-gray-500 font-bold mb-8">GSTR-1 (October Period)</p>
-                
-                <div className="flex items-center gap-6 mb-8">
-                  <div className="flex flex-col">
-                    <span className="text-4xl font-black text-emerald-400 tracking-tighter">12</span>
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Days Left</span>
-                  </div>
-                  <div className="w-[1px] h-10 bg-gray-800" />
-                  <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400">
-                    <Calendar className="w-6 h-6" />
-                  </div>
-                </div>
-
-                <button className="w-full flex items-center justify-center gap-3 bg-indigo-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 active:scale-95">
-                  <Send className="w-4 h-4" />
-                  Send to CA
-                </button>
-             </div>
+        {/* Top Customers */}
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Top Customers</h3>
+            <button className="text-xs font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+              View All
+            </button>
           </div>
-
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1 block">Business Insights</span>
-
-          <div className="space-y-4">
-             {[
-               { label: 'Sales vs Purchase', icon: TrendingUp, val: '₹2,21,486.00', color: 'indigo' },
-               { label: 'Inventory Health', icon: Package, val: '₹45,200.00', color: 'emerald', sub: 'Dead Stock Value' },
-               { label: 'Outstanding Dues', icon: Users2, val: '₹1,12,400.00', color: 'rose', sub: 'To Receive (Market)' }
-             ].map((insight, i) => (
-               <div key={i} className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm flex items-center justify-between group cursor-pointer hover:shadow-md transition-all">
-                 <div className="flex items-center gap-4">
-                   <div className={`w-12 h-12 rounded-2xl bg-${insight.color}-50 text-${insight.color}-500 flex items-center justify-center transition-transform group-hover:scale-110`}>
-                     <insight.icon className="w-6 h-6" />
-                   </div>
-                   <div className="flex flex-col">
-                     <span className="text-xs font-bold text-gray-400 mb-1">{insight.label}</span>
-                     <span className="text-lg font-black text-gray-900 tracking-tight">{insight.val}</span>
-                     {insight.sub && <span className={`text-[10px] font-bold text-${insight.color}-500 uppercase tracking-widest mt-1`}>{insight.sub}</span>}
-                   </div>
-                 </div>
-                 <ArrowUpRight className="w-5 h-5 text-gray-200 group-hover:text-primary transition-colors" />
-               </div>
-             ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Orders</th>
+                  <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total Spent</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {TOP_CUSTOMERS.map((customer, i) => (
+                  <tr key={i} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400">
+                          {customer.name[0]}
+                        </div>
+                        <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{customer.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 text-center font-bold text-slate-600 text-sm">
+                      {customer.orders}
+                    </td>
+                    <td className="px-8 py-5 text-right font-black text-slate-900 text-sm">
+                      {formatCurrency(customer.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </div>
+      </div>
+
+      {/* Bottom Row: Revenue vs Expense Bar Chart */}
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Revenue vs Expense</h3>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Monthly comparison</p>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-indigo-500 shadow-sm shadow-indigo-100" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Revenue</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-slate-200" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expense</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={REVENUE_EXPENSE_DATA} barGap={8}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis 
+                dataKey="month" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }} 
+              />
+              <YAxis 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }}
+                tickFormatter={(val) => `₹${val/1000}k`}
+              />
+              <Tooltip 
+                cursor={{ fill: '#f8fafc' }}
+                contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'black' }}
+              />
+              <Bar dataKey="revenue" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={20} />
+              <Bar dataKey="expense" fill="#e2e8f0" radius={[6, 6, 0, 0]} barSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

@@ -12,36 +12,48 @@ import {
   LogOut,
   Bell,
   Moon,
-  Shield
+  Shield,
+  Receipt,
+  ScanLine,
+  Package,
+  CreditCard
 } from 'lucide-react'
 
 const menuGroups = [
   {
     label: 'Transactions',
     items: [
-      { href: '/merchant/invoice', label: 'All Invoices', icon: FileText, desc: 'View & manage invoices' },
-      { href: '/merchant/purchases', label: 'Purchases', icon: ShoppingBag, desc: 'Track supplier bills' },
+      { to: '/merchant/invoice', label: 'All Invoices', icon: Receipt, desc: 'View & manage sales invoices' },
+      { to: '/merchant/purchases', label: 'Purchases', icon: ShoppingBag, desc: 'Track supplier bills' },
+      { to: '/merchant/pos', label: 'POS Billing', icon: ScanLine, desc: 'Quick billing mode' },
     ],
   },
   {
     label: 'Master Data',
     items: [
-      { href: '/merchant/products', label: 'Products', icon: BarChart3, desc: 'Inventory & pricing' },
-      { href: '/merchant/parties', label: 'Parties', icon: Users, desc: 'Customers & suppliers' },
+      { to: '/merchant/products', label: 'Products', icon: Package, desc: 'Inventory & pricing' },
+      { to: '/merchant/parties', label: 'Parties', icon: Users, desc: 'Customers & suppliers' },
+    ],
+  },
+  {
+    label: 'Reports',
+    items: [
+      { to: '/merchant/reports', label: 'Sales Reports', icon: BarChart3, desc: 'Analytics & insights' },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { href: '/merchant/settings', label: 'Settings', icon: Settings, desc: 'App preferences' },
-      { href: '/merchant/settings', label: 'Notifications', icon: Bell, desc: 'WhatsApp & alerts' },
+      { to: '/merchant/settings', label: 'App Settings', icon: Settings, desc: 'Shop preferences' },
+      { to: '/merchant/settings', label: 'Notifications', icon: Bell, desc: 'WhatsApp & alerts' },
+      { to: '/merchant/settings', label: 'Payment Setup', icon: CreditCard, desc: 'UPI, razorpay config' },
     ],
   },
   {
     label: 'Help',
     items: [
-      { href: '/merchant/settings', label: 'Help & Support', icon: HelpCircle, desc: 'FAQs & contact' },
-      { href: '/merchant/settings', label: 'Privacy Policy', icon: Shield, desc: 'Data & security' },
+      { to: '/merchant/settings', label: 'Help & Support', icon: HelpCircle, desc: 'FAQs & contact' },
+      { to: '/merchant/settings', label: 'Privacy & Security', icon: Shield, desc: 'Data protection' },
     ],
   },
 ]
@@ -67,7 +79,7 @@ export default function MorePage() {
             {group.items.map((item, index) => (
               <Link
                 key={item.label}
-                href={item.href}
+                href={item.to || '/'}
                 className={`flex items-center gap-4 p-4 hover:bg-muted/40 transition-base ${
                   index < group.items.length - 1 ? 'border-b border-border' : ''
                 }`}

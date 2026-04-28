@@ -2,28 +2,128 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #F3F4F6;
-  --foreground: #111827;
-  --card: #FFFFFF;
-  --card-foreground: #111827;
-  --primary: #4F46E5;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F3F4F6;
-  --secondary-foreground: #111827;
-  --muted: #F9FAFB;
-  --muted-foreground: #6B7280;
-  --accent: #EEF2FF;
-  --accent-foreground: #4F46E5;
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --border: #E5E7EB;
-  --input: #E5E7EB;
-  --ring: #4F46E5;
+/* BillZo — Trust-first fintech design system. All colors HSL. */
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 210 40% 99%;
+    --foreground: 222 35% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 35% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 35% 12%;
+
+    /* Brand: deep trust blue */
+    --primary: 222 70% 22%;
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 222 78% 38%;
+
+    /* Money / success: emerald */
+    --success: 158 64% 38%;
+    --success-foreground: 158 80% 96%;
+    --success-soft: 158 70% 94%;
+
+    /* Warn (failed sync, pending) */
+    --warning: 35 92% 50%;
+    --warning-foreground: 35 100% 12%;
+    --warning-soft: 40 95% 94%;
+
+    --secondary: 215 35% 96%;
+    --secondary-foreground: 222 47% 18%;
+
+    --muted: 215 30% 95%;
+    --muted-foreground: 215 16% 42%;
+
+    --accent: 158 70% 94%;
+    --accent-foreground: 158 64% 22%;
+
+    --destructive: 0 75% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 90%;
+    --input: 215 25% 90%;
+    --ring: 222 70% 22%;
+
+    --radius: 0.75rem;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(222 70% 22%), hsl(222 78% 38%));
+    --gradient-success: linear-gradient(135deg, hsl(158 64% 38%), hsl(170 70% 42%));
+    --gradient-hero: linear-gradient(180deg, hsl(210 40% 99%), hsl(215 50% 96%));
+    --gradient-card: linear-gradient(135deg, hsl(222 70% 22%), hsl(222 60% 32%));
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(222 47% 12% / 0.04);
+    --shadow-md: 0 4px 12px -2px hsl(222 47% 12% / 0.08);
+    --shadow-lg: 0 12px 32px -8px hsl(222 47% 12% / 0.12);
+    --shadow-glow: 0 8px 32px -8px hsl(222 78% 38% / 0.35);
+    --shadow-success: 0 8px 24px -8px hsl(158 64% 38% / 0.4);
+
+    /* Motion */
+    --transition-base: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: all 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* Sidebar */
+    --sidebar-background: 222 50% 14%;
+    --sidebar-foreground: 215 25% 85%;
+    --sidebar-primary: 158 64% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 45% 20%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 222 40% 22%;
+    --sidebar-ring: 158 64% 42%;
+  }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+  h1, h2, h3, h4 { @apply font-semibold tracking-tight; }
 }
+
+@layer components {
+  .number-display {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-primary { background: var(--gradient-primary); }
+  .bg-gradient-success { background: var(--gradient-success); }
+  .bg-gradient-hero { background: var(--gradient-hero); }
+  .bg-gradient-card { background: var(--gradient-card); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .shadow-success { box-shadow: var(--shadow-success); }
+  .shadow-elegant { box-shadow: var(--shadow-lg); }
+  .transition-base { transition: var(--transition-base); }
+  .transition-spring { transition: var(--transition-spring); }
+}
+
+/* OTP shake */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+.animate-shake { animation: shake 0.3s ease-in-out; }
+
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+/* App animations */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fade-in 200ms ease-out; }
+.animate-scale-in { animation: scale-in 250ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-slide-up { animation: slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1); }

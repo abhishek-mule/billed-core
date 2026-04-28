@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp } from 'lucide-react'
+import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Receipt, Settings, HelpCircle, LogOut } from 'lucide-react'
 
 const todayStats = {
   revenue: 28450,
@@ -12,12 +12,12 @@ const todayStats = {
 }
 
 const mockInvoices = [
-  { id: '1', number: 'INV-0034', party: 'Anjali Sharma', amount: 4200, status: 'pending', date: 'Today, 4:12 PM' },
-  { id: '2', number: 'INV-0033', party: 'Rahul Mehta', amount: 1850, status: 'synced', date: 'Today, 3:48 PM' },
-  { id: '3', number: 'INV-0032', party: 'Walk-in Customer', amount: 320, status: 'synced', date: 'Today, 3:30 PM' },
-  { id: '4', number: 'INV-0031', party: 'Priya Stores', amount: 12400, status: 'failed', date: 'Today, 2:15 PM' },
-  { id: '5', number: 'INV-0030', party: 'Kumar General', amount: 870, status: 'synced', date: 'Today, 1:02 PM' },
-  { id: '6', number: 'INV-0029', party: 'Sita Devi', amount: 2100, status: 'synced', date: 'Today, 12:40 PM' },
+  { id: '1', number: 'INV-2026-0034', party: 'Anjali Sharma', amount: 4200, status: 'pending', date: 'Today, 4:12 PM' },
+  { id: '2', number: 'INV-2026-0033', party: 'Rahul Mehta', amount: 1850, status: 'synced', date: 'Today, 3:48 PM' },
+  { id: '3', number: 'INV-2026-0032', party: 'Walk-in Customer', amount: 320, status: 'synced', date: 'Today, 3:30 PM' },
+  { id: '4', number: 'INV-2026-0031', party: 'Priya Stores', amount: 12400, status: 'failed', date: 'Today, 2:15 PM' },
+  { id: '5', number: 'INV-2026-0030', party: 'Kumar General', amount: 870, status: 'synced', date: 'Today, 1:02 PM' },
+  { id: '6', number: 'INV-2026-0029', party: 'Sita Devi', amount: 2100, status: 'synced', date: 'Today, 12:40 PM' },
 ]
 
 const formatINR = (n: number) => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
@@ -39,14 +39,16 @@ export default function DashboardPage() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,hsl(var(--success)),transparent_50%)]" />
         </div>
         <div className="relative">
-          <div className="text-sm opacity-80">Today's revenue</div>
+          <div className="text-sm opacity-80">Today&apos;s revenue</div>
           <div className="mt-2 text-5xl lg:text-6xl font-bold number-display tracking-tight">
             {formatINR(todayStats.revenue)}
           </div>
           <div className="mt-3 flex items-center gap-4 text-sm opacity-90">
             <span>{todayStats.invoiceCount} invoices</span>
             <span className="opacity-50">•</span>
-            <span className="inline-flex items-center gap-1"><TrendingUp className="h-3.5 w-3.5" /> +18% vs yesterday</span>
+            <span className="inline-flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5" /> +18% vs yesterday
+            </span>
           </div>
         </div>
       </div>
@@ -73,25 +75,34 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <div className="grid grid-cols-4 gap-3">
-        {[
-          { href: '/merchant/pos', label: 'Bill', icon: Plus, primary: true },
-          { href: '/merchant/purchases', label: 'Scan', icon: ScanLine },
-          { href: '/merchant/products', label: 'Products', icon: Package },
-          { href: '/merchant/parties', label: 'Parties', icon: Users },
-        ].map(({ href, label, icon: Icon, primary }) => (
-          <Link
-            key={label}
-            href={href}
-            className={`rounded-2xl p-4 flex flex-col items-center gap-2 border transition-spring active:scale-95 ${
-              primary
-                ? 'bg-gradient-primary text-primary-foreground border-transparent shadow-glow'
-                : 'bg-card border-border hover:border-primary/30 hover:shadow-md'
-            }`}
-          >
-            <Icon className="h-5 w-5" />
-            <span className="text-xs font-semibold">{label}</span>
-          </Link>
-        ))}
+        <Link
+          href="/merchant/pos"
+          className="rounded-2xl p-4 flex flex-col items-center gap-2 border transition-spring active:scale-95 bg-gradient-primary text-primary-foreground border-transparent shadow-glow"
+        >
+          <Plus className="h-5 w-5" />
+          <span className="text-xs font-semibold">Bill</span>
+        </Link>
+        <Link
+          href="/merchant/purchases"
+          className="rounded-2xl p-4 flex flex-col items-center gap-2 border transition-spring active:scale-95 bg-card border-border hover:border-primary/30 hover:shadow-md"
+        >
+          <ScanLine className="h-5 w-5" />
+          <span className="text-xs font-semibold">Scan</span>
+        </Link>
+        <Link
+          href="/merchant/products"
+          className="rounded-2xl p-4 flex flex-col items-center gap-2 border transition-spring active:scale-95 bg-card border-border hover:border-primary/30 hover:shadow-md"
+        >
+          <Package className="h-5 w-5" />
+          <span className="text-xs font-semibold">Products</span>
+        </Link>
+        <Link
+          href="/merchant/parties"
+          className="rounded-2xl p-4 flex flex-col items-center gap-2 border transition-spring active:scale-95 bg-card border-border hover:border-primary/30 hover:shadow-md"
+        >
+          <Users className="h-5 w-5" />
+          <span className="text-xs font-semibold">Parties</span>
+        </Link>
       </div>
 
       {/* Recent invoices */}
@@ -102,7 +113,7 @@ export default function DashboardPage() {
             View all <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
-        <ul className="divide-y divide-border">
+        <ul className="divide-y divide-border max-h-80 overflow-y-auto">
           {mockInvoices.slice(0, 6).map((inv) => (
             <li key={inv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-base">
               <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-sm font-semibold">

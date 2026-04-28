@@ -97,7 +97,7 @@ export default function PartiesPage() {
         {mockParties.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).map((party) => (
           <Link 
             key={party.id} 
-            href={`/merchant/parties/${party.id}`}
+            href={party.id ? `/merchant/parties/${party.id}` : '/'}
             className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
           >
             <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 opacity-[0.03] transition-transform group-hover:scale-110 ${

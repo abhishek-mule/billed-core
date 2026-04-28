@@ -25,10 +25,17 @@ type ShopData = z.infer<typeof shopSchema>
 type IdentityData = z.infer<typeof identitySchema>
 
 const categories = [
-{ id: 'electrical', name: 'Electrical Retailer', icon: 'bolt' },
-
-  { id: 'mobile', name: 'Mobile & Electronics', icon: 'phone' },
-
+  { id: 'electrical', name: 'Electrical', icon: 'zap' },
+  { id: 'mobile', name: 'Mobile & Electronics', icon: 'smartphone' },
+  { id: 'hardware', name: 'Hardware', icon: 'tool' },
+  { id: 'clothing', name: 'Clothing & Fashion', icon: 'shirt' },
+  { id: 'grocery', name: 'Grocery & Kirana', icon: 'shopping-cart' },
+  { id: 'pharma', name: 'Pharmacy', icon: 'pill' },
+  { id: 'restaurant', name: 'Restaurant & Food', icon: 'utensils' },
+  { id: 'mobile-repair', name: 'Mobile Repair', icon: 'cpu' },
+  { id: 'jewellery', name: 'Jewellery', icon: 'gem' },
+  { id: 'footwear', name: 'Footwear', icon: 'footprints' },
+  { id: 'books', name: 'Books & Stationery', icon: 'book-open' },
   { id: 'other', name: 'Other', icon: 'box' },
 ]
 

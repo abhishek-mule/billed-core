@@ -15,18 +15,54 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
+import { InvoiceDetailsModal } from '@/components/invoice/InvoiceDetailsModal'
 
 const mockInvoices = [
-  { id: 'INV-23-0145', date: '2 mins ago', customer: 'Arjun Kumar', amount: 18306, payment: 'PAID', sync: 'SYNCED' },
-  { id: 'INV-23-0144', date: '15 mins ago', customer: 'TechCorp Solutions', amount: 45200, payment: 'PENDING', sync: 'SYNCED' },
-  { id: 'INV-23-0143', date: '1 hour ago', customer: 'Meera Sharma', amount: 2150, payment: 'PAID', sync: 'RETRYING' },
-  { id: 'INV-23-0142', date: '3 hours ago', customer: 'Walk-in Customer', amount: 850, payment: 'PAID', sync: 'FAILED' },
-  { id: 'INV-23-0141', date: '4 hours ago', customer: 'Ramesh Hardware', amount: 12400, payment: 'UNPAID', sync: 'SYNCED' },
-  { id: 'INV-23-0140', date: 'Yesterday', customer: 'Suresh & Co', amount: 9200, payment: 'PAID', sync: 'SYNCED' },
+  { 
+    id: 'INV-0034', 
+    date: '4:12 PM', 
+    customerName: 'Anjali Sharma', 
+    customerPhone: '919876543210',
+    amount: 4671, 
+    paymentStatus: 'UNPAID' as const, 
+    syncStatus: 'LOCAL' as const,
+    items: [
+      { name: 'Surf Excel 1kg', qty: 4, rate: 245, gst: 18, hsn: '3402' },
+      { name: 'Aashirvaad Atta 5kg', qty: 8, rate: 285, gst: 5, hsn: '1101' },
+      { name: 'Colgate Toothpaste', qty: 10, rate: 95, gst: 18, hsn: '3306' },
+    ]
+  },
+  { 
+    id: 'INV-23-0145', 
+    date: '2 mins ago', 
+    customerName: 'Arjun Kumar', 
+    customerPhone: '918888888888',
+    amount: 18306, 
+    paymentStatus: 'PAID' as const, 
+    syncStatus: 'SYNCED' as const,
+    items: [{ name: 'Monitor X', qty: 1, rate: 18306, gst: 18, hsn: '8471' }]
+  },
+  { 
+    id: 'INV-23-0144', 
+    date: '15 mins ago', 
+    customerName: 'TechCorp Solutions', 
+    customerPhone: '917777777777',
+    amount: 45200, 
+    paymentStatus: 'PENDING' as const, 
+    syncStatus: 'SYNCED' as const,
+    items: [{ name: 'Laptop Pro', qty: 2, rate: 22600, gst: 18, hsn: '8471' }]
+  },
 ]
 
 export default function InvoiceListPage() {
   const [search, setSearch] = useState('')
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  const handleRowClick = (inv: any) => {
+    setSelectedInvoice(inv)
+    setIsModalOpen(true)
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -41,7 +77,7 @@ export default function InvoiceListPage() {
       case 'PAID':
       case 'SYNCED': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
       case 'PENDING':
-      case 'RETRYING': return 'bg-amber-50 text-amber-600 border-amber-100'
+      case 'LOCAL': return 'bg-amber-50 text-amber-600 border-amber-100'
       case 'UNPAID':
       case 'FAILED': return 'bg-rose-50 text-rose-600 border-rose-100'
       default: return 'bg-gray-50 text-gray-600 border-gray-100'
@@ -50,6 +86,12 @@ export default function InvoiceListPage() {
 
   return (
     <div className="space-y-8 animate-in">
+      <InvoiceDetailsModal 
+        invoice={selectedInvoice} 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -108,27 +150,31 @@ export default function InvoiceListPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {mockInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-gray-50/50 transition-colors group cursor-pointer">
+                <tr 
+                  key={inv.id} 
+                  onClick={() => handleRowClick(inv)}
+                  className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
+                >
                   <td className="px-6 py-5">
                     <p className="text-sm font-black text-gray-900 group-hover:text-primary transition-colors">{inv.id}</p>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{inv.date}</p>
                   </td>
                   <td className="px-6 py-5">
-                    <p className="text-sm font-bold text-gray-700">{inv.customer}</p>
+                    <p className="text-sm font-bold text-gray-700">{inv.customerName}</p>
                   </td>
                   <td className="px-6 py-5">
                     <p className="text-sm font-black text-gray-900">{formatCurrency(inv.amount)}</p>
                   </td>
                   <td className="px-6 py-5">
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.payment)}`}>
-                      {inv.payment === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                      {inv.payment}
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.paymentStatus)}`}>
+                      {inv.paymentStatus === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                      {inv.paymentStatus}
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.sync)}`}>
-                      {inv.sync === 'SYNCED' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {inv.sync}
+                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.syncStatus)}`}>
+                      {inv.syncStatus === 'SYNCED' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                      {inv.syncStatus}
                     </div>
                   </td>
                   <td className="px-6 py-5 text-right">
@@ -143,7 +189,7 @@ export default function InvoiceListPage() {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
-          <span className="text-xs font-medium text-gray-400">Showing 6 of 1,248 invoices</span>
+          <span className="text-xs font-medium text-gray-400">Showing {mockInvoices.length} of 1,248 invoices</span>
           <div className="flex items-center gap-2">
             <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
               <ChevronLeft className="w-4 h-4" />

@@ -48,7 +48,7 @@ export default function Dashboard() {
           {navItems.map((item, i) => (
             <Link
               key={item.label}
-              href={item.href}
+              href={item.href || '/'}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
                 i === 0
                   ? 'bg-indigo-500/10 text-indigo-400'

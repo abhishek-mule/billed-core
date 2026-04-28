@@ -1,93 +1,76 @@
-import { NextResponse } from 'next/server'
-import { withSessionAuth, getTenantApiCredentials, SessionData } from '@/lib/session'
+import { NextRequest, NextResponse } from 'next/server'
+import { getSessionFromRequest } from '@/lib/session'
+import { query, queryOne } from '@/lib/db/client'
 
-const ERP_URL = process.env.ERP_URL || 'http://localhost'
-const ERP_API_KEY = process.env.ERP_API_KEY || 'administrator'
-const ERP_API_SECRET = process.env.ERP_API_SECRET || 'admin'
+export const dynamic = 'force-dynamic'
 
-async function getSalesStats(tenantId: string, creds: any) {
-  const today = new Date().toISOString().split('T')[0]
-  
-  const apiKey = creds?.apiKey || ERP_API_KEY
-  const apiSecret = creds?.apiSecret || ERP_API_SECRET
-  
+export async function GET(request: NextRequest) {
   try {
-    const [invoicesRes, pendingRes] = await Promise.all([
-      fetch(`${ERP_URL}/api/resource/Sales Invoice?fields=["sum(grand_total)","count(name)"]&filters=[[" posting_date", "=", "${today}"], ["custom_tenant_id", "=", "${tenantId}"]]`, {
-        headers: { 'Authorization': `token ${apiKey}:${apiSecret}` },
-      }),
-      fetch(`${ERP_URL}/api/resource/Sales Invoice?filters=[[" outstanding_amount", ">", 0], ["custom_tenant_id", "=", "${tenantId}"]]`, {
-        headers: { 'Authorization': `token ${apiKey}:${apiSecret}` },
-      }),
-    ])
-
-    const invoices = await invoicesRes.json()
-    const pendingArr = await pendingRes.json()
-
-    const pendingList = Array.isArray(pendingArr.message) ? pendingArr.message : []
-    const pendingSum = pendingList.reduce((sum: number, inv: any) => sum + (inv.outstanding_amount || 0), 0)
-
-    return {
-      todaySales: invoices.message?.sum?.grand_total || 0,
-      todayInvoices: invoices.message?.count || 0,
-      pendingPayments: pendingSum,
-      pendingCount: pendingList.length,
+    const session = await getSessionFromRequest(request)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-  } catch (error) {
-    console.error('[Stats] ERP fetch failed:', error)
-    return { todaySales: 0, todayInvoices: 0, pendingPayments: 0, pendingCount: 0 }
-  }
-}
 
-async function getCustomerCount(tenantId: string, creds: any) {
-  const apiKey = creds?.apiKey || ERP_API_KEY
-  const apiSecret = creds?.apiSecret || ERP_API_SECRET
-  
-  try {
-    const res = await fetch(`${ERP_URL}/api/resource/Customer?filters=[["custom_tenant_id", "=", "${tenantId}"]]&fields=["count(name)"]`, {
-      headers: { 'Authorization': `token ${apiKey}:${apiSecret}` },
+    const { tenantId } = session
+
+    // Get today's revenue
+    const revenueResult = await queryOne<{ total: string }>(
+      `SELECT SUM(total::numeric) as total 
+       FROM invoices 
+       WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE`,
+      [tenantId]
+    )
+
+    // Get today's invoice count
+    const countResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count 
+       FROM invoices 
+       WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE`,
+      [tenantId]
+    )
+
+    // Get sync status counts
+    const syncStats = await query<{ status: string, count: string }>(
+      `SELECT erp_sync_status as status, COUNT(*) as count 
+       FROM invoices 
+       WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE 
+       GROUP BY erp_sync_status`,
+      [tenantId]
+    )
+
+    // Get recent invoices
+    const recentInvoices = await query<any>(
+      `SELECT id, invoice_number, customer_name, total, erp_sync_status, created_at 
+       FROM invoices 
+       WHERE tenant_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 5`,
+      [tenantId]
+    )
+
+    const stats = {
+      revenue: parseFloat(revenueResult?.total || '0'),
+      invoiceCount: parseInt(countResult?.count || '0'),
+      syncedCount: parseInt(syncStats.find(s => s.status === 'SYNCED')?.count || '0'),
+      failedCount: parseInt(syncStats.find(s => s.status === 'FAILED')?.count || '0'),
+      pendingCount: parseInt(syncStats.find(s => s.status === 'PENDING')?.count || '0'),
+    }
+
+    return NextResponse.json({
+      success: true,
+      stats,
+      recentInvoices: recentInvoices.map(inv => ({
+        id: inv.id,
+        number: inv.invoice_number,
+        party: inv.customer_name,
+        amount: parseFloat(inv.total),
+        status: inv.erp_sync_status.toLowerCase(),
+        date: inv.created_at
+      }))
     })
-    const data = await res.json()
-    return data.message?.count || 0
-  } catch {
-    return 0
+
+  } catch (error: any) {
+    console.error('[Dashboard Stats] Error:', error)
+    return NextResponse.json({ error: 'Failed to load dashboard stats' }, { status: 500 })
   }
 }
-
-async function getLowStockCount(tenantId: string, creds: any) {
-  const apiKey = creds?.apiKey || ERP_API_KEY
-  const apiSecret = creds?.apiSecret || ERP_API_SECRET
-  
-  try {
-    const res = await fetch(`${ERP_URL}/api/resource/Item?filters=[[" reorder_level", ">", 0], ["custom_tenant_id", "=", "${tenantId}"]]&fields=["name", "actual_qty", "reorder_level"]`, {
-      headers: { 'Authorization': `token ${apiKey}:${apiSecret}` },
-    })
-    const data = await res.json()
-    const items = Array.isArray(data.message) ? data.message : []
-    return items.filter((item: any) => (item.actual_qty || 0) <= (item.reorder_level || 0)).length
-  } catch {
-    return 0
-  }
-}
-
-async function handleStats(request: Request, session: SessionData) {
-  const { tenantId } = session
-  const creds = await getTenantApiCredentials(tenantId)
-
-  const [salesStats, customerCount, lowStockCount] = await Promise.all([
-    getSalesStats(tenantId, creds),
-    getCustomerCount(tenantId, creds),
-    getLowStockCount(tenantId, creds),
-  ])
-
-  return NextResponse.json({
-    todaySales: salesStats.todaySales,
-    todayInvoices: salesStats.todayInvoices,
-    pendingPayments: salesStats.pendingPayments,
-    pendingCount: salesStats.pendingCount,
-    customerCount,
-    lowStockCount,
-  })
-}
-
-export const GET = await withSessionAuth(handleStats)

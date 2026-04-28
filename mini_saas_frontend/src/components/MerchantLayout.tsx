@@ -72,7 +72,7 @@ export default function MerchantLayout() {
           {navItems.map((item) => (
             <Link
               key={item.id}
-              href={item.href}
+              href={item.href || '/'}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
                 activeTab === item.id
                   ? 'bg-indigo-500/10 text-indigo-400'
