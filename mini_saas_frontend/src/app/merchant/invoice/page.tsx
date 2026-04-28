@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { 
   Search, 
@@ -58,6 +58,36 @@ export default function InvoiceListPage() {
   const [search, setSearch] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [invoices, setInvoices] = useState(mockInvoices)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchInvoices() {
+      try {
+        const res = await fetch('/api/merchant/invoices')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.invoices?.length > 0) {
+            setInvoices(data.invoices.map((inv: any) => ({
+              id: inv.name || inv.invoice_number || inv.id,
+              date: inv.posting_date ? new Date(inv.posting_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+              customerName: inv.customer_name || 'Unknown',
+              customerPhone: inv.customer_phone || '',
+              amount: inv.grand_total || inv.total || 0,
+              paymentStatus: inv.outstanding_amount > 0 ? 'UNPAID' : 'PAID',
+              syncStatus: inv.sync_status || 'LOCAL',
+              items: inv.items || []
+            })))
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch invoices')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchInvoices()
+  }, [])
 
   const handleRowClick = (inv: any) => {
     setSelectedInvoice(inv)
@@ -176,7 +206,7 @@ export default function InvoiceListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {mockInvoices.map((inv) => (
+              {(loading ? invoices : invoices).map((inv) => (
                 <tr 
                   key={inv.id} 
                   onClick={() => handleRowClick(inv)}
@@ -216,7 +246,7 @@ export default function InvoiceListPage() {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
-          <span className="text-xs font-medium text-gray-400">Showing {mockInvoices.length} of 1,248 invoices</span>
+          <span className="text-xs font-medium text-gray-400">Showing {invoices.length} invoices</span>
           <div className="flex items-center gap-2">
             <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
               <ChevronLeft className="w-4 h-4" />
