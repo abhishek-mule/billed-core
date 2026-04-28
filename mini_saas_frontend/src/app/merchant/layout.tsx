@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, createContext, useContext } from 'react'
 import Link from 'next/link'
-import { Logo, LogoMark } from '@/components/logo/Logo'
+import { Logo } from '@/components/logo/Logo'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Home,
@@ -156,8 +156,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <aside className="hidden lg:flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="px-6 py-5 border-b border-sidebar-border">
           <Link href="/merchant" className="flex items-center gap-3">
-            <LogoMark />
-            <span className="text-2xl font-bold text-sidebar-foreground tracking-tight">BillZo</span>
+            <Logo variant="mark" />
+            <Logo variant="text" />
           </Link>
         </div>
         
@@ -201,7 +201,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         {/* Mobile Top Bar */}
         <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-card/95 backdrop-blur px-4 h-14">
           <Link href="/merchant" className="flex items-center gap-2">
-            <LogoMark />
+            <Logo variant="mark" />
             <span className="text-lg font-bold text-foreground tracking-tight">BillZo</span>
           </Link>
           <div className="flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-medium text-success">
