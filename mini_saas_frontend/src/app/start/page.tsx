@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { loadRazorpay, RAZORPAY_KEY } from '@/lib/razorpay'
 import { Icon, Icons } from '@/components/Icons'
 import { useRouter } from 'next/navigation'
+import { Logo } from '@/components/logo/Logo'
 
 const shopSchema = z.object({
   shopName: z.string().min(2, 'Shop name must be at least 2 characters'),
@@ -176,12 +177,7 @@ export default function StartPage() {
         className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-white/5"
       >
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">Z</span>
-            </div>
-            <span className="font-semibold text-lg">BillZo</span>
-          </div>
+          <Logo showText />
           <div className="text-sm text-gray-500">India's smartest billing</div>
         </div>
       </motion.div>
