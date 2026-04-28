@@ -273,9 +273,9 @@ export default function POSPage() {
               <div className="mt-2 text-sm text-success">Synced successfully</div>
             </div>
             <div className="mt-5 flex gap-2">
-              <button onClick={() => window.open(`/api/invoice/${success.id}`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary"><Printer className="h-4 w-4" /> Print</button>
+              <button onClick={() => window.open(`/api/print/${success.id}?size=58mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary"><Printer className="h-4 w-4" /> Print (58mm)</button>
+              <button onClick={() => window.open(`/api/print/${success.id}?size=80mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">Print (80mm)</button>
               <button onClick={() => window.open(`/api/export?type=invoices&format=csv`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">Excel</button>
-              <button onClick={() => window.location.href = `/api/invoice/${success.id}?format=json`} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-medium text-primary-foreground transition-base hover:opacity-90">Send via WhatsApp</button>
             </div>
             <div className="mt-4 flex gap-2">
               <button onClick={closeSuccess} className="flex-1 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">New sale</button>
