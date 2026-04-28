@@ -177,7 +177,7 @@ export default function StartPage() {
         className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-white/5"
       >
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Logo showText />
+          <Logo showText className="text-2xl" />
           <div className="text-sm text-gray-500">India's smartest billing</div>
         </div>
       </motion.div>
