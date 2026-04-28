@@ -1,11 +1,12 @@
 'use client'
 
 import { type ReactNode, useMemo, useState } from 'react'
-import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode, Zap } from 'lucide-react'
+import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode, Zap, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner'
 import { OCRScanner } from '@/components/scanner/OCRScanner'
 import { SmartSearch } from '@/components/search/SmartSearch'
+import { LogoIcon } from '@/components/logo/Logo'
 
 type Product = {
   id: string
@@ -73,7 +74,7 @@ export default function POSPage() {
   const [query, setQuery] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [customer, setCustomer] = useState('Walk-in Customer')
-  const [, setCustomerPhone] = useState<string | undefined>(undefined)
+  const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined)
   const [showCustomer, setShowCustomer] = useState(false)
   const [showPay, setShowPay] = useState(false)
   const [success, setSuccess] = useState<{ id: string; number: string; amount: number } | null>(null)
@@ -267,17 +268,38 @@ export default function POSPage() {
         <div className="fixed inset-0 z-50 flex items-end bg-background/80 backdrop-blur animate-fade-in lg:items-center lg:justify-center" onClick={closeSuccess}>
           <div className="w-full rounded-t-3xl border border-border bg-card p-6 shadow-elegant animate-slide-up lg:max-w-md lg:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="text-center">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-success text-success-foreground shadow-success"><CheckCircle2 className="h-7 w-7" /></div>
+              <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F4C81] via-[#1A5A9C] to-[#0D3E66] shadow-lg shadow-[#0F4C81]/25">
+                <LogoIcon size={28} className="text-white" />
+              </div>
               <h2 className="mt-3 text-xl font-bold">Invoice {success.number}</h2>
               <div className="number-display mt-1 text-3xl font-bold">{formatINR(success.amount)}</div>
-              <div className="mt-2 text-sm text-success">Synced successfully</div>
+              <div className="mt-2 text-sm text-success flex items-center justify-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Synced to ERP</div>
             </div>
             <div className="mt-5 flex gap-2">
-              <button onClick={() => window.open(`/api/print/${success.id}?size=58mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary"><Printer className="h-4 w-4" /> Print (58mm)</button>
-              <button onClick={() => window.open(`/api/print/${success.id}?size=80mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">Print (80mm)</button>
+              <button onClick={() => window.open(`/api/print/${success.id}?size=58mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary"><Printer className="h-4 w-4" /> 58mm</button>
+              <button onClick={() => window.open(`/api/print/${success.id}?size=80mm`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">80mm</button>
               <button onClick={() => window.open(`/api/export?type=invoices&format=csv`)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">Excel</button>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-3 flex gap-2">
+              {customerPhone && (
+                <button 
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ template: 'invoice', phone: customerPhone, invoiceId: success.id, params: { invoice_no: success.number, amount: success.amount } })
+                      })
+                      alert('Invoice sent to WhatsApp')
+                    } catch { alert('Failed to send') }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-sm font-medium text-white transition-base hover:bg-[#22c55e]"
+                >
+                  <MessageCircle className="h-4 w-4" /> Send to WhatsApp
+                </button>
+              )}
+            </div>
+            <div className="mt-3 flex gap-2">
               <button onClick={closeSuccess} className="flex-1 rounded-xl border border-input py-3 text-sm font-medium transition-base hover:bg-secondary">New sale</button>
             </div>
           </div>
