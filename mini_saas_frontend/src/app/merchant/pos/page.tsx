@@ -5,6 +5,7 @@ import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcod
 import { motion, AnimatePresence } from 'framer-motion'
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner'
 import { OCRScanner } from '@/components/scanner/OCRScanner'
+import { SmartSearch } from '@/components/search/SmartSearch'
 
 type Product = {
   id: string
@@ -136,10 +137,12 @@ export default function POSPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <div>
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products... (instant)" className="h-14 w-full rounded-xl border-2 border-input bg-card pl-11 pr-32 text-base font-medium transition-base focus:border-primary focus:outline-none" />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-              <button type="button" onClick={() => setShowOCR(true)} className="p-2 rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20" title="Smart Scan">
+            <SmartSearch
+              onSelect={(product) => addToCart(product)}
+              placeholder="Search products..."
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 z-10">
+              <button type="button" onClick={() => setShowOCR(true)} className="p-2 rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20" title="Smart OCR">
                 <Zap className="h-5 w-5" />
               </button>
               <button type="button" onClick={() => setShowScanner(true)} className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20" title="Scan Barcode">
