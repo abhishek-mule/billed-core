@@ -67,8 +67,22 @@ export default function DashboardPage() {
           </div>
         </div>
         {!allSynced && (
-          <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium">
-            Retry
+          <button 
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/merchant/invoice/retry-all', { method: 'POST' })
+                const data = await res.json()
+                if (data.succeeded !== undefined) {
+                  alert(`Retry complete: ${data.succeeded} succeeded, ${data.failed} failed`)
+                  window.location.reload()
+                }
+              } catch {
+                alert('Retry failed')
+              }
+            }}
+            className="px-4 py-2 rounded-lg bg-warning text-warning-foreground text-sm font-medium hover:bg-warning/90"
+          >
+            Retry All
           </button>
         )}
       </div>
