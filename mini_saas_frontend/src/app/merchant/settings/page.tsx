@@ -321,7 +321,7 @@ const PrintSettings = ({
           <p className="text-xs text-slate-400 font-medium">Select the page size for your physical printer.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {['Thermal 80mm', '58mm', 'A4'].map((format) => (
+          {['80mm', '58mm', 'A4'].map((format) => (
             <button 
               key={format}
               onClick={() => setPrintFormat(format)}
@@ -339,6 +339,21 @@ const PrintSettings = ({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="h-px bg-slate-50" />
+
+      <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+        <div>
+          <h4 className="font-semibold text-emerald-800">Test Print</h4>
+          <p className="text-xs text-emerald-600">Print a sample invoice to check alignment</p>
+        </div>
+        <button 
+          onClick={() => window.open(`/api/print/test?size=${printFormat}`)}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700"
+        >
+          Print Test
+        </button>
       </div>
 
       <div className="h-px bg-slate-50" />
