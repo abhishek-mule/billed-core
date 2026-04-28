@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg'
 import { calculateInvoiceTotal } from '@/lib/gst'
-import { formatPhone, generateCustomerId, MerchantInvoicePayload } from '@/lib/merchant'
+import { formatPhone, MerchantInvoicePayload } from '@/lib/merchant'
 import { queryOne, withTransaction } from '@/lib/db/client'
 import { reserveInvoiceNumber, confirmInvoiceNumber } from '@/lib/invoice/sequencing'
 import { createErpWriteAttempt } from '@/lib/invoice/erp-sync'
@@ -36,27 +36,46 @@ async function insertPendingInvoice(args: {
   total: ReturnType<typeof calculateInvoiceTotal>
 }): Promise<void> {
   const { client, tenantId, invoiceId, invoiceNumber, payload, total } = args
+  const normalizedPhone = formatPhone(payload.customerPhone)
+  const existingCustomer = await client.query(
+    `SELECT id, customer_name, gstin
+     FROM customers
+     WHERE tenant_id = $1 AND phone = $2 AND is_active = true
+     LIMIT 1`,
+    [tenantId, normalizedPhone]
+  )
+
+  const customer = existingCustomer.rows[0] as { id: string; customer_name: string; gstin: string | null } | undefined
+  const customerId = customer?.id || null
+  const customerName =
+    payload.customerName ||
+    customer?.customer_name ||
+    `Customer ${normalizedPhone}`
+  const customerGstin = customer?.gstin || null
 
   await client.query(
     `INSERT INTO invoices (
-      id, tenant_id, invoice_number, customer_id, customer_name, status,
-      subtotal, cgst, sgst, igst, total, line_items_json, tax_amount, notes,
+      id, tenant_id, invoice_number, customer_id, customer_name, customer_phone, customer_gstin, status,
+      subtotal, cgst, sgst, igst, total, grand_total, line_items_json, tax_amount, notes,
       erp_sync_status, invoice_date
     ) VALUES (
-      $1, $2, $3, $4, $5, 'FINALIZED',
-      $6, $7, $8, $9, $10, $11::jsonb, $12, $13,
+      $1, $2, $3, $4, $5, $6, $7, 'FINALIZED',
+      $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16,
       'PENDING', NOW()
     )`,
     [
       invoiceId,
       tenantId,
       invoiceNumber,
-      generateCustomerId(payload.customerPhone),
-      payload.customerName || `Customer ${formatPhone(payload.customerPhone)}`,
+      customerId,
+      customerName,
+      normalizedPhone,
+      customerGstin,
       total.subtotal,
       total.taxAmount / 2,
       total.taxAmount / 2,
       0,
+      total.total,
       total.total,
       JSON.stringify(total.items),
       total.taxAmount,

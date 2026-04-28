@@ -238,7 +238,7 @@ export function useOfflinePOS() {
           const result = await response.json()
           return {
             success: true,
-            invoiceId: result.id,
+            invoiceId: result.invoiceId,
             whatsappLink: result.whatsappLink,
             offline: false,
             idempotencyKey,
