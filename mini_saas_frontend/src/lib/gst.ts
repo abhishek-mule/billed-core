@@ -26,34 +26,55 @@ export interface InvoiceLineItem {
   quantity: number
   rate: number
   tax?: number
+  isInterState?: boolean
 }
 
 export interface InvoiceSummary {
   subtotal: number
+  cgst: number
+  sgst: number
+  igst: number
   taxAmount: number
   total: number
-  items: Array<InvoiceLineItem & { amount: number; taxAmount: number }>
+  items: Array<InvoiceLineItem & { amount: number; cgst: number; sgst: number; taxAmount: number }>
 }
 
-export function calculateInvoiceTotal(items: InvoiceLineItem[]): InvoiceSummary {
+export function calculateInvoiceTotal(items: InvoiceLineItem[], isInterState = false): InvoiceSummary {
   const processedItems = items.map((item) => {
     const amount = item.quantity * item.rate
     const gstRate = item.tax || getGSTRate()
-    const taxAmount = (amount * gstRate) / 100
+    
+    let cgst = 0, sgst = 0, igst = 0
+    if (item.isInterState || isInterState) {
+      igst = (amount * gstRate) / 100
+    } else {
+      cgst = (amount * gstRate) / 200
+      sgst = (amount * gstRate) / 200
+    }
+    const taxAmount = cgst + sgst + igst
 
     return {
       ...item,
       amount,
+      cgst,
+      sgst,
+      igst,
       taxAmount,
     }
   })
 
   const subtotal = processedItems.reduce((sum, item) => sum + item.amount, 0)
-  const taxAmount = processedItems.reduce((sum, item) => sum + item.taxAmount, 0)
+  const cgstTotal = processedItems.reduce((sum, item) => sum + item.cgst, 0)
+  const sgstTotal = processedItems.reduce((sum, item) => sum + item.sgst, 0)
+  const igstTotal = processedItems.reduce((sum, item) => sum + item.igst, 0)
+  const taxAmount = cgstTotal + sgstTotal + igstTotal
   const total = subtotal + taxAmount
 
   return {
     subtotal,
+    cgst: cgstTotal,
+    sgst: sgstTotal,
+    igst: igstTotal,
     taxAmount,
     total,
     items: processedItems,
@@ -65,10 +86,12 @@ export function formatInvoiceForWhatsApp(summary: InvoiceSummary, invoiceNo: str
     `📄 Invoice: ${invoiceNo}`,
     '',
     '📋 Items:',
-    ...summary.items.map((item) => `  • ${item.itemName} x${item.quantity} @ ₹${item.rate} = ₹${item.amount}`),
+    ...summary.items.map((item) => `  • ${item.itemName} x${item.quantity} @ ₹${item.rate} = ₹${item.amount.toFixed(2)}`),
     '',
     `Subtotal: ₹${summary.subtotal.toFixed(2)}`,
-    `Tax (GST): ₹${summary.taxAmount.toFixed(2)}`,
+    summary.igst > 0 
+      ? `IGST: ₹${summary.igst.toFixed(2)}` 
+      : `CGST: ₹${summary.cgst.toFixed(2)} | SGST: ₹${summary.sgst.toFixed(2)}`,
     `Total: ₹${summary.total.toFixed(2)}`,
   ]
 
