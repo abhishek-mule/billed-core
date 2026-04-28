@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS products (
   item_code VARCHAR(100),
   item_name VARCHAR(255) NOT NULL,
   hsn_code VARCHAR(50),
+  barcode VARCHAR(255),
+  aliases TEXT[],
   rate DECIMAL(12,2),
   standard_rate DECIMAL(12,2),
   mrp DECIMAL(12,2),
@@ -64,6 +66,10 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Add barcode index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_products_aliases ON products USING GIN(aliases);
 
 -- Suppliers
 CREATE TABLE IF NOT EXISTS suppliers (
