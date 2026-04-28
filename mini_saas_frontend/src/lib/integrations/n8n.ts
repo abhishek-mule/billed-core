@@ -13,9 +13,17 @@ export async function triggerInvoiceCreatedWorkflow(event: InvoiceCreatedEvent):
   if (!webhookBase) return
 
   const url = `${webhookBase.replace(/\/$/, '')}/invoice-created`
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(event),
-  })
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    })
+
+    if (!response.ok) {
+      console.warn('[n8n] Invoice workflow returned non-OK status', response.status)
+    }
+  } catch (error) {
+    console.warn('[n8n] Invoice workflow trigger failed', error)
+  }
 }
