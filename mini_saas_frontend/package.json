@@ -29,6 +29,7 @@
     "react-webcam": "^7.2.0",
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
