@@ -115,13 +115,39 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const [syncSummary, setSyncSummary] = useState({ synced: 0, pending: 0, failed: 0 })
+  const [lastSync, setLastSync] = useState<string>('just now')
+
+  useEffect(() => {
+    async function fetchSyncStatus() {
+      try {
+        const res = await fetch('/api/merchant/stats')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.stats) {
+            setSyncSummary({
+              synced: data.stats.syncedCount || 0,
+              pending: data.stats.pendingCount || 0,
+              failed: data.stats.failedCount || 0,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch sync status')
+      }
+    }
+    fetchSyncStatus()
+    const interval = setInterval(fetchSyncStatus, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/start'
   }
 
   const isMock = session?.erpMode === 'mock'
-  const allSynced = true
+  const allSynced = syncSummary.pending === 0 && syncSummary.failed === 0
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -159,10 +185,15 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-sidebar-border">
           <div className="rounded-lg bg-sidebar-accent/50 p-3">
             <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
-              <span className="h-2 w-2 rounded-full bg-success animate-pulse-dot" />
-              {allSynced ? 'All synced' : 'Pending sync'}
+              <span className={`h-2 w-2 rounded-full ${allSynced ? 'bg-success' : syncSummary.failed > 0 ? 'bg-danger' : 'bg-warning'} animate-pulse-dot`} />
+              {allSynced 
+                ? 'All synced' 
+                : syncSummary.failed > 0 
+                  ? `${syncSummary.failed} failed`
+                  : `${syncSummary.pending} pending`
+              }
             </div>
-            <p className="mt-1 text-xs text-sidebar-foreground/60">Last: just now</p>
+            <p className="mt-1 text-xs text-sidebar-foreground/60">Last: {lastSync}</p>
           </div>
         </div>
       </aside>
