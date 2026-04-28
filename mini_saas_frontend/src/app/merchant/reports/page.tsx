@@ -78,7 +78,10 @@ export default function ReportsPage() {
             <ShieldCheck className="w-4 h-4" />
             Generate CA Package
           </button>
-          <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+          <button 
+            onClick={() => window.open('/api/export?type=invoices&format=csv')}
+            className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+          >
             <Download className="w-4 h-4" />
             Download PDF
           </button>

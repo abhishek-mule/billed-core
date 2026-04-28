@@ -99,9 +99,19 @@ export default function InvoiceListPage() {
           <p className="text-gray-500 text-sm font-medium italic">Manage and track your customer billing history.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all">
+          <button 
+            onClick={() => window.open('/api/export?type=invoices&format=csv')}
+            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all"
+          >
             <Download className="w-4 h-4" />
             Export CSV
+          </button>
+          <button 
+            onClick={() => window.open('/api/export?type=products&format=csv')}
+            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all"
+          >
+            <Download className="w-4 h-4" />
+            Products
           </button>
           <Link 
             href="/merchant/invoice/new"
