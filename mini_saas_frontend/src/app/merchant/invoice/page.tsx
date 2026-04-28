@@ -100,6 +100,23 @@ export default function InvoiceListPage() {
         </div>
         <div className="flex items-center gap-3">
           <button 
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/merchant/invoice/retry-all', { method: 'POST' })
+                const data = await res.json()
+                if (data.succeeded !== undefined) {
+                  alert(`Retry complete: ${data.succeeded} succeeded, ${data.failed} failed`)
+                }
+              } catch {
+                alert('Retry failed')
+              }
+            }}
+            className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl font-bold text-sm text-amber-700 hover:bg-amber-100 transition-all"
+          >
+            <AlertCircle className="w-4 h-4" />
+            Retry Failed
+          </button>
+          <button 
             onClick={() => window.open('/api/export?type=invoices&format=csv')}
             className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all"
           >
