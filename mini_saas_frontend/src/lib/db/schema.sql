@@ -116,14 +116,23 @@ CREATE TABLE IF NOT EXISTS products (
   item_code TEXT NOT NULL,
   item_name TEXT NOT NULL,
   hsn_code TEXT,
+  barcode TEXT,
+  aliases TEXT[],
   standard_rate NUMERIC(15, 2) DEFAULT 0,
+  rate NUMERIC(15, 2) DEFAULT 0,
+  mrp NUMERIC(15, 2) DEFAULT 0,
   gst_rate NUMERIC(5, 2) DEFAULT 18,
   stock_qty NUMERIC(15, 3) DEFAULT 0,
+  unit TEXT,
+  category TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(tenant_id, item_code)
 );
+
+-- Index for barcode lookup
+CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL;
 
 -- Invoice line items
 CREATE TABLE IF NOT EXISTS invoice_items (
