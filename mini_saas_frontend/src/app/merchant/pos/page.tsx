@@ -1,9 +1,10 @@
 'use client'
 
 import { type ReactNode, useMemo, useState } from 'react'
-import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode } from 'lucide-react'
+import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner'
+import { OCRScanner } from '@/components/scanner/OCRScanner'
 
 type Product = {
   id: string
@@ -76,6 +77,7 @@ export default function POSPage() {
   const [showPay, setShowPay] = useState(false)
   const [success, setSuccess] = useState<{ id: string; number: string; amount: number } | null>(null)
   const [showScanner, setShowScanner] = useState(false)
+  const [showOCR, setShowOCR] = useState(false)
   const [scannerError, setScannerError] = useState<string | null>(null)
 
   const filtered = useMemo(() => mockProducts.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())), [query])
@@ -135,10 +137,15 @@ export default function POSPage() {
         <div>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products... (instant)" className="h-14 w-full rounded-xl border-2 border-input bg-card pl-11 pr-24 text-base font-medium transition-base focus:border-primary focus:outline-none" />
-            <button type="button" onClick={() => setShowScanner(true)} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20">
-              <ScanBarcode className="h-5 w-5" />
-            </button>
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products... (instant)" className="h-14 w-full rounded-xl border-2 border-input bg-card pl-11 pr-32 text-base font-medium transition-base focus:border-primary focus:outline-none" />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+              <button type="button" onClick={() => setShowOCR(true)} className="p-2 rounded-lg bg-amber-500/10 text-amber-600 hover:bg-amber-500/20" title="Smart Scan">
+                <Zap className="h-5 w-5" />
+              </button>
+              <button type="button" onClick={() => setShowScanner(true)} className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20" title="Scan Barcode">
+                <ScanBarcode className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {filtered.map((product) => {
@@ -275,6 +282,7 @@ export default function POSPage() {
       <AnimatePresence>
         {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} onError={(msg) => setScannerError(msg)} />}
       </AnimatePresence>
+      {showOCR && <OCRScanner onProductSelect={addToCart} onClose={() => setShowOCR(false)} />}
     </div>
   )
 }
