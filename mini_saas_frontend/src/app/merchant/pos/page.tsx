@@ -75,6 +75,7 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [customer, setCustomer] = useState('Walk-in Customer')
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined)
+  const [whatsappTemplate, setWhatsappTemplate] = useState<'invoice' | 'receipt' | 'summary'>('invoice')
   const [showCustomer, setShowCustomer] = useState(false)
   const [showPay, setShowPay] = useState(false)
   const [success, setSuccess] = useState<{ id: string; number: string; amount: number } | null>(null)
@@ -282,21 +283,43 @@ export default function POSPage() {
             </div>
             <div className="mt-3 flex gap-2">
               {customerPhone && (
-                <button 
-                  onClick={async () => {
-                    try {
-                      await fetch('/api/whatsapp/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ template: 'invoice', phone: customerPhone, invoiceId: success.id, params: { invoice_no: success.number, amount: success.amount } })
-                      })
-                      alert('Invoice sent to WhatsApp')
-                    } catch { alert('Failed to send') }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-sm font-medium text-white transition-base hover:bg-[#22c55e]"
-                >
-                  <MessageCircle className="h-4 w-4" /> Send to WhatsApp
-                </button>
+                <div className="w-full space-y-2">
+                  <div className="flex gap-1.5">
+                    {(['invoice', 'receipt', 'summary'] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setWhatsappTemplate(t)}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-base ${
+                          whatsappTemplate === t
+                            ? 'bg-[#25D366] text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      const phone = customerPhone?.replace(/\D/g, '')
+                      if (!phone || phone.length < 10) {
+                        alert('Invalid phone number')
+                        return
+                      }
+                      try {
+                        await fetch('/api/whatsapp/send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ template: whatsappTemplate, phone: phone, invoiceId: success.id, params: { invoice_no: success.number, amount: success.amount }, tenantId: 'demo' })
+                        })
+                        alert('Sent to WhatsApp!')
+                      } catch { alert('Failed to send') }
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-sm font-medium text-white transition-base hover:bg-[#22c55e]"
+                  >
+                    <MessageCircle className="h-4 w-4" /> Send {whatsappTemplate} to WhatsApp
+                  </button>
+                </div>
               )}
             </div>
             <div className="mt-3 flex gap-2">

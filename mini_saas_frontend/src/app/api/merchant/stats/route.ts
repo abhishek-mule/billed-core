@@ -29,12 +29,18 @@ export async function GET(request: NextRequest) {
       [tenantId]
     )
 
-    // Get sync status counts
+    // Get sync status counts (today)
     const syncStats = await query<{ status: string, count: string }>(
       `SELECT erp_sync_status as status, COUNT(*) as count 
        FROM invoices 
        WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE 
        GROUP BY erp_sync_status`,
+      [tenantId]
+    )
+
+    // Get total failed count (all time)
+    const totalFailedResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count FROM invoices WHERE tenant_id = $1 AND erp_sync_status = 'FAILED'`,
       [tenantId]
     )
 
@@ -54,6 +60,7 @@ export async function GET(request: NextRequest) {
       syncedCount: parseInt(syncStats.find(s => s.status === 'SYNCED')?.count || '0'),
       failedCount: parseInt(syncStats.find(s => s.status === 'FAILED')?.count || '0'),
       pendingCount: parseInt(syncStats.find(s => s.status === 'PENDING')?.count || '0'),
+      totalFailedCount: parseInt(totalFailedResult?.count || '0'),
     }
 
     return NextResponse.json({
