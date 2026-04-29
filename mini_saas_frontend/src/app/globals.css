@@ -104,6 +104,21 @@
   .shadow-elegant { box-shadow: var(--shadow-lg); }
   .transition-base { transition: var(--transition-base); }
   .transition-spring { transition: var(--transition-spring); }
+
+  /* Fallback animations for missing tailwindcss-animate plugin */
+  .animate-in {
+    animation-duration: 400ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: forwards;
+  }
+  .slide-in-from-right-2 {
+    animation-name: slide-in-right-2;
+  }
+}
+
+@keyframes slide-in-right-2 {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* OTP shake */
