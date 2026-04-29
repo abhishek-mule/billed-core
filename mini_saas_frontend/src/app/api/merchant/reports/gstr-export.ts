@@ -88,14 +88,7 @@ async function buildGSTRExport(tenantId: string, fromDate: string, toDate: strin
     const rate = inv.gst_rate
     if (!summary[rate]) {
       summary[rate] = { count: 0, taxable: 0, gst: 0 }
-    } catch (unknownError) {
-      console.error('[GSTR Export] Unknown error:', unknownError)
-      return NextResponse.json(
-        { error: 'Internal server error' },
-        { status: 500 }
-      )
     }
-  }
     summary[rate].count += 1
     summary[rate].taxable += inv.taxable_value
     summary[rate].gst += inv.cgst_amount + inv.sgst_amount + inv.igst_amount
