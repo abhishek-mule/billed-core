@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { 
   Search, 
@@ -13,7 +13,9 @@ import {
   MoreHorizontal,
   ArrowUpRight,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X,
+  ChevronDown
 } from 'lucide-react'
 import { InvoiceDetailsModal } from '@/components/invoice/InvoiceDetailsModal'
 
@@ -54,11 +56,16 @@ const mockInvoices = [
   },
 ]
 
+type Invoice = typeof mockInvoices[0]
+
 export default function InvoiceListPage() {
   const [search, setSearch] = useState('')
-  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null)
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [invoices, setInvoices] = useState(mockInvoices)
+const [showFilters, setShowFilters] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [syncFilter, setSyncFilter] = useState<string>('')
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -78,16 +85,39 @@ export default function InvoiceListPage() {
               syncStatus: inv.sync_status || 'LOCAL',
               items: inv.items || []
             })))
+          } else {
+            setInvoices(mockInvoices)
           }
+        } else {
+          setInvoices(mockInvoices)
         }
-      } catch (e) {
-        console.error('Failed to fetch invoices')
+      } catch {
+        setInvoices(mockInvoices)
       } finally {
         setLoading(false)
       }
     }
     fetchInvoices()
   }, [])
+
+  const filtered = useMemo(() => {
+    return invoices.filter((inv) => {
+      const matchSearch = !search || 
+        inv.id.toLowerCase().includes(search.toLowerCase()) ||
+        inv.customerName.toLowerCase().includes(search.toLowerCase())
+      const matchStatus = !statusFilter || inv.paymentStatus === statusFilter
+      const matchSync = !syncFilter || inv.syncStatus === syncFilter
+      return matchSearch && matchStatus && matchSync
+})
+  }, [invoices, search, statusFilter, syncFilter])
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('')
+    setSyncFilter('')
+  }
+
+  const hasFilters = statusFilter || syncFilter || search
 
   const handleRowClick = (inv: any) => {
     setSelectedInvoice(inv)
@@ -128,7 +158,22 @@ export default function InvoiceListPage() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">Sales Invoices</h1>
           <p className="text-gray-500 text-sm font-medium italic">Manage and track your customer billing history.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium ${
+              showFilters || hasFilters ? 'border-primary bg-primary/5 text-primary' : 'border-input bg-background text-muted-foreground'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            {hasFilters && <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px]">{(statusFilter ? 1 : 0) + (syncFilter ? 1 : 0)}</span>}
+          </button>
+          {hasFilters && (
+            <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-destructive">
+              Clear
+            </button>
+          )}
           <button 
             onClick={async () => {
               try {
@@ -169,6 +214,53 @@ export default function InvoiceListPage() {
           </Link>
         </div>
       </div>
+
+      {/* Filters Panel */}
+      {showFilters && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Payment Status</label>
+              <select 
+                value={statusFilter} 
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="mt-1 h-9 rounded-lg border border-input bg-background px-3 text-sm min-w-[140px]"
+              >
+                <option value="">All</option>
+                <option value="PAID">Paid</option>
+                <option value="UNPAID">Unpaid</option>
+                <option value="PENDING">Pending</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Sync Status</label>
+              <select 
+                value={syncFilter} 
+                onChange={(e) => setSyncFilter(e.target.value)}
+                className="mt-1 h-9 rounded-lg border border-input bg-background px-3 text-sm min-w-[140px]"
+              >
+                <option value="">All</option>
+                <option value="SYNCED">Synced</option>
+                <option value="FAILED">Failed</option>
+                <option value="LOCAL">Local Only</option>
+                <option value="PENDING">Pending</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="text-[10px] font-bold uppercase text-muted-foreground">Search</label>
+              <div className="mt-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Invoice #, customer name..."
+                  className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search & Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -246,7 +338,7 @@ export default function InvoiceListPage() {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
-          <span className="text-xs font-medium text-gray-400">Showing {invoices.length} invoices</span>
+          <span className="text-xs font-medium text-gray-400">Showing {filtered.length} of {invoices.length} invoices</span>
           <div className="flex items-center gap-2">
             <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
               <ChevronLeft className="w-4 h-4" />
