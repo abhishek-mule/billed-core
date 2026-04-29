@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withSessionAuth, SessionData } from '@/lib/session'
+import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
 
 interface EwayBillData {
@@ -103,17 +103,23 @@ async function generateEwayBill(tenantId: string, invoiceId: string) {
 }
 
 export async function POST(req: NextRequest) {
-  return withSessionAuth(async (session: SessionData) => {
-    try {
-      const body = await req.json()
-      const { invoice_id } = body
+  try {
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const { tenantId } = session
+    
+    const body = await req.json()
+    const { invoice_id } = body
 
-      if (!invoice_id) {
-        return NextResponse.json(
-          { error: 'Missing invoice_id' },
-          { status: 400 }
-        )
-      }
+    if (!invoice_id) {
+      return NextResponse.json(
+        { error: 'Missing invoice_id' },
+        { status: 400 }
+      )
+    }
 
       const ewayData = await generateEwayBill(session.tenantId, invoice_id)
 
@@ -147,6 +153,5 @@ export async function POST(req: NextRequest) {
         { error: error instanceof Error ? error.message : 'Generation failed' },
         { status: 500 }
       )
-    }
-  }, req)
+  }
 }

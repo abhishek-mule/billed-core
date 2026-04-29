@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withSessionAuth, SessionData } from '@/lib/session'
+import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
 
 interface GSTRInvoice {
@@ -88,7 +88,14 @@ async function buildGSTRExport(tenantId: string, fromDate: string, toDate: strin
     const rate = inv.gst_rate
     if (!summary[rate]) {
       summary[rate] = { count: 0, taxable: 0, gst: 0 }
+    } catch (unknownError) {
+      console.error('[GSTR Export] Unknown error:', unknownError)
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      )
     }
+  }
     summary[rate].count += 1
     summary[rate].taxable += inv.taxable_value
     summary[rate].gst += inv.cgst_amount + inv.sgst_amount + inv.igst_amount
@@ -108,19 +115,25 @@ async function buildGSTRExport(tenantId: string, fromDate: string, toDate: strin
 }
 
 export async function POST(req: NextRequest) {
-  return withSessionAuth(async (session: SessionData) => {
-    try {
-      const body = await req.json()
-      const { from_date, to_date } = body
+  try {
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const { tenantId } = session
+    
+    const body = await req.json()
+    const { from_date, to_date } = body
 
-      if (!from_date || !to_date) {
-        return NextResponse.json(
-          { error: 'Missing from_date or to_date' },
-          { status: 400 }
-        )
-      }
+    if (!from_date || !to_date) {
+      return NextResponse.json(
+        { error: 'Missing from_date or to_date' },
+        { status: 400 }
+      )
+    }
 
-      const gstrData = await buildGSTRExport(session.tenantId, from_date, to_date)
+    const gstrData = await buildGSTRExport(tenantId, from_date, to_date)
 
       // Option: Save export record to database for audit
       try {
@@ -129,7 +142,7 @@ export async function POST(req: NextRequest) {
            VALUES ($1, $2, $3, $4, 'GENERATED')
            ON CONFLICT (tenant_id, month, year) DO UPDATE SET export_data = $4, status = 'GENERATED', updated_at = NOW()`,
           [
-            session.tenantId,
+            tenantId,
             new Date(from_date).getMonth() + 1,
             new Date(from_date).getFullYear(),
             JSON.stringify(gstrData),
@@ -152,5 +165,4 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       )
     }
-  }, req)
-}
+  }
