@@ -53,6 +53,8 @@ export async function POST(request: Request) {
 
     const amount = plan === 'starter' ? 49900 : 99900
     const receipt = `order_${Date.now()}_${shopName?.replace(/\s+/g, '_') || 'unknown'}`
+    
+    const idempotencyKey = `${shopName}_${plan}_${Date.now()}`.slice(0, 40)
 
     const order = await razorpay.orders.create({
       amount,
@@ -64,6 +66,8 @@ export async function POST(request: Request) {
         email,
         phone
       }
+    }, {
+      idempotency: idempotencyKey
     })
 
     console.log('[BillZo] Order created:', order.id)

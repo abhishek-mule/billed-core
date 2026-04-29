@@ -1,55 +1,49 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 
-export async function POST(req: Request) {
+const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || ''
+
+function verifyWebhookSignature(body: string, signature: string): boolean {
+  if (!WEBHOOK_SECRET || !signature) return false
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(body)
+    .digest('hex')
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  )
+}
+
+export async function POST(req: NextRequest) {
   try {
     const body = await req.text()
-    const signature = req.headers.get('x-razorpay-signature')
+    const signature = req.headers.get('x-razorpay-signature') || ''
 
-    // 1. Verify Webhook Signature
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'YOUR_WEBHOOK_SECRET'
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(body)
-      .digest('hex')
-
-    if (signature !== expectedSignature) {
-      // For demo's sake, we might log it, but in reality, this is a security fail
-      console.warn('Razorpay Signature Verification Failed')
+    if (!verifyWebhookSignature(body, signature)) {
+      console.error('[Webhook] Signature verification failed')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
     const eventData = JSON.parse(body)
+    const event = eventData.event
 
-    // 2. Handle Payment Success
-    if (eventData.event === 'payment.captured' || eventData.event === 'order.paid') {
+    if (event === 'payment.captured') {
       const payment = eventData.payload.payment.entity
-      const metadata = payment.notes // We passed invoice details in notes
-
-      console.log(`[Billed] Payment Confirmed: ${payment.id} for Amount: ${payment.amount}`)
-
-      // 3. FINAL TRIGGER: Decrement Stock in ERPNext
-      // This calls a Frappe method to create a 'Sales Invoice' with 'Update Stock' enabled
-      const FRAPPE_URL = process.env.FRAPPE_SITE_URL || 'http://localhost:8000'
-      const FRAPPE_API_KEY = process.env.FRAPPE_API_KEY
-      const FRAPPE_API_SECRET = process.env.FRAPPE_API_SECRET
-
-      await fetch(`${FRAPPE_URL}/api/method/electrical_trader_pack.api.finalize_transaction`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `token ${FRAPPE_API_KEY}:${FRAPPE_API_SECRET}`
-        },
-        body: JSON.stringify({
-          payment_id: payment.id,
-          order_details: metadata
-        })
-      })
+      
+      console.log(`[Payment] Captured: ${payment.id} amount: ${payment.amount}`)
+      
+    } else if (event === 'payment.failed') {
+      const payment = eventData.payload.payment.entity
+      console.error(`[Payment] Failed: ${payment.id} error: ${payment.error_description}`)
     }
 
-    return NextResponse.json({ status: 'ok' })
+    return NextResponse.json({ received: true })
 
   } catch (error) {
-    console.error('Razorpay Webhook Error:', error)
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+    console.error('[Webhook] Error:', error)
+    return NextResponse.json({ error: 'Processing failed' }, { status: 500 })
   }
 }
