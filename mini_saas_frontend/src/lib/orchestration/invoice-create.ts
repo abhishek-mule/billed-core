@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg'
 import { calculateInvoiceTotal } from '@/lib/gst'
 import { formatPhone, MerchantInvoicePayload } from '@/lib/merchant'
-import { queryOne, withTransaction } from '@/lib/db/client'
+import { query, queryOne, withTransaction } from '@/lib/db/client'
 import { reserveInvoiceNumber, confirmInvoiceNumber } from '@/lib/invoice/sequencing'
 import { createErpWriteAttempt } from '@/lib/invoice/erp-sync'
 import { enqueueJobWithRetry, QUEUES } from '@/lib/queue'
@@ -151,11 +151,27 @@ export async function orchestrateInvoiceCreation(args: {
   // Confirm invoice number immediately
   await confirmInvoiceNumber(tenantId, invoiceNumber, idemKey)
 
+  // Log invoice creation
+  await logAudit(tenantId, invoiceNumber, 'INVOICE_CREATED', 'SUCCESS', { total: summary.total, itemCount: payload.items.length })
+
   // Return immediately - ERP sync happens in background
   return {
     invoiceId,
     invoiceNumber,
     total: summary.total,
     syncStatus: 'RETRY',
+  }
+}
+
+async function logAudit(tenantId: string, invoiceId: string, action: string, status: string, details: Record<string, unknown>) {
+  try {
+    const id = `AUDIT-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    await query(
+      `INSERT INTO audit_logs (id, tenant_id, entity_type, entity_id, action, metadata, created_at)
+       VALUES ($1, $2, 'invoice', $3, $4, $5, NOW())`,
+      [id, tenantId, invoiceId, action, JSON.stringify({ status, ...details })]
+    )
+  } catch (e) {
+    console.error('[Audit] Failed to log:', e)
   }
 }

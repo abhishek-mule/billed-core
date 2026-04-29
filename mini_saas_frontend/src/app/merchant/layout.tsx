@@ -129,7 +129,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             setSyncSummary({
               synced: data.stats.syncedCount || 0,
               pending: data.stats.pendingCount || 0,
-              failed: data.stats.failedCount || 0,
+              failed: data.stats.totalFailedCount || 0,
             })
           }
         }
