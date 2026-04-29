@@ -147,6 +147,13 @@ export async function POST(request: NextRequest) {
       path: '/',
     })
 
+    await query(
+      `INSERT INTO sessions (id, tenant_id, user_id, ip_address, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '7 days')
+       ON CONFLICT (id) DO UPDATE SET is_active = true, last_used_at = NOW()`,
+      [session.id, user.tenant_id, user.id, request.headers.get('x-forwarded-for') || '127.0.0.1', request.headers.get('user-agent') || 'unknown']
+    )
+
     return response
   } catch (error) {
     console.error('[Login] Error:', error)
