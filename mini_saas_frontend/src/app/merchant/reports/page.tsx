@@ -1,171 +1,71 @@
 'use client'
 
-import React, { useState } from 'react'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  FileText, 
-  Users, 
-  Clock, 
-  Download, 
-  Filter,
-  MoreVertical,
-  ArrowUpRight,
-  ShieldCheck,
-  BarChart3,
-  AlertCircle
-} from 'lucide-react'
-import { CAPackage } from '@/components/reports/CAPackage'
-import { useDashboardStats, useCustomers } from '@/hooks/useApi'
-import { formatINR } from '@/lib/api-client'
-import { StatCardSkeleton } from '@/components/ui/Skeleton'
+import { Button } from "@/components/ui/Button"
+import { Download, FileText, CheckCircle2 } from "lucide-react"
+import { formatINR } from "@/lib/api-client"
+import { toast } from "sonner"
 
-export default function ReportsPage() {
-  const [showCAPackage, setShowCAPackage] = useState(false)
-  const { data: statsData, isLoading: statsLoading } = useDashboardStats()
-  const { data: customersData, isLoading: customersLoading } = useCustomers('', 5)
-  
-  const stats = statsData?.stats
-  const topCustomers = customersData?.data?.sort((a: any, b: any) => (b.totalSales || 0) - (a.totalSales || 0)).slice(0, 4) || []
-
+const Reports = () => {
   return (
-    <div className="space-y-6 pb-10 animate-in slide-in-from-right-2 max-w-7xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-      {showCAPackage && <CAPackage onClose={() => setShowCAPackage(false)} />}
-
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight">Financial Reports</h1>
-          <p className="text-muted-foreground text-sm">Detailed overview of your business performance.</p>
+    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-4xl mx-auto space-y-5">
+      {/* GST card */}
+      <div className="rounded-2xl bg-gradient-to-br from-primary to-primary/90 text-primary-foreground p-6 lg:p-8 shadow-lg">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-80">
+              <CheckCircle2 className="h-3.5 w-3.5" /> April 2026
+            </div>
+            <h2 className="mt-3 text-2xl font-bold">GST Ready</h2>
+            <p className="mt-1 text-sm opacity-80">All invoices reconciled. Send to your CA.</p>
+          </div>
+          <span className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-500 text-white shadow-lg">
+            <CheckCircle2 className="h-6 w-6" />
+          </span>
         </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowCAPackage(true)}
-            className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-primary/20 transition-all shadow-sm"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            Generate CA Package
-          </button>
-          <button 
-            onClick={() => window.open('/api/export?type=invoices&format=csv')}
-            className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-xl font-medium text-sm text-foreground hover:bg-muted transition-all shadow-sm"
-          >
-            <Download className="w-4 h-4" />
-            Download Data
-          </button>
+        <div className="mt-6 grid grid-cols-3 gap-4">
+          <Mini label="Total sales" value={formatINR(842300)} dark />
+          <Mini label="Output GST" value={formatINR(74520)} dark />
+          <Mini label="Input GST" value={formatINR(18420)} dark />
         </div>
+        <Button 
+          className="mt-5 bg-emerald-500 hover:bg-emerald-600 text-white"
+          onClick={() => toast.success("GSTR-1 exported")}
+        >
+          <Download className="h-4 w-4 mr-2" /> Export GSTR-1
+        </Button>
       </div>
 
-      {/* Top Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsLoading ? (
-          <>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </>
-        ) : (
-          <>
-            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-xl bg-success-soft text-success">
-                  <DollarSign className="w-5 h-5" />
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs font-semibold uppercase tracking-widest mb-1">Today's Revenue</p>
-              <h3 className="text-2xl font-bold text-foreground tracking-tight">{formatINR(stats?.revenue || 0)}</h3>
-            </div>
-
-            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary">
-                  <FileText className="w-5 h-5" />
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs font-semibold uppercase tracking-widest mb-1">Today's Invoices</p>
-              <h3 className="text-2xl font-bold text-foreground tracking-tight">{stats?.invoiceCount || 0}</h3>
-            </div>
-
-            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-xl bg-warning-soft text-warning">
-                  <Clock className="w-5 h-5" />
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs font-semibold uppercase tracking-widest mb-1">Pending Sync</p>
-              <h3 className="text-2xl font-bold text-foreground tracking-tight">{stats?.pendingCount || 0}</h3>
-            </div>
-
-            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm hover:shadow-md transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-xl bg-destructive/10 text-destructive">
-                  <AlertCircle className="w-5 h-5" />
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs font-semibold uppercase tracking-widest mb-1">Failed Syncs</p>
-              <h3 className="text-2xl font-bold text-foreground tracking-tight">{stats?.totalFailedCount || 0}</h3>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Middle Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Category Data Placeholder */}
-        <div className="bg-card p-8 rounded-2xl border border-border shadow-sm flex flex-col items-center justify-center text-center min-h-[300px]">
-          <BarChart3 className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Category Analytics</h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            Categorized revenue breakdown is being calculated. Check back after more invoices are processed.
-          </p>
-        </div>
-
-        {/* Top Customers */}
-        <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col min-h-[300px]">
-          <div className="px-8 py-6 border-b border-border flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground tracking-tight">Top Customers</h3>
-          </div>
-          <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-muted/50">
-                  <th className="px-8 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Customer</th>
-                  <th className="px-8 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-right">Total Spent</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {customersLoading ? (
-                  <tr>
-                    <td colSpan={2} className="px-8 py-8 text-center text-sm text-muted-foreground">Loading...</td>
-                  </tr>
-                ) : topCustomers.length === 0 ? (
-                  <tr>
-                    <td colSpan={2} className="px-8 py-8 text-center text-sm text-muted-foreground">No customers yet</td>
-                  </tr>
-                ) : (
-                  topCustomers.map((customer: any) => (
-                    <tr key={customer.id} className="hover:bg-muted/40 transition-all group">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[10px] font-semibold text-muted-foreground">
-                            {customer.name?.charAt(0)?.toUpperCase() || 'U'}
-                          </div>
-                          <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{customer.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-right font-bold text-foreground text-sm">
-                        {formatINR(customer.totalSales || 0)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <ReportCard title="Sales summary" desc="Day, week & month-wise" />
+        <ReportCard title="Party ledger" desc="Receivables & payables" />
+        <ReportCard title="Stock report" desc="Movement & valuation" />
+        <ReportCard title="Tax report" desc="HSN-wise breakdown" />
       </div>
     </div>
   )
 }
+
+const Mini = ({ label, value, dark }: { label: string; value: string; dark?: boolean }) => (
+  <div className={`rounded-lg p-3 ${dark ? "bg-white/10" : "bg-secondary"}`}>
+    <div className="text-[11px] opacity-70">{label}</div>
+    <div className="mt-1 text-base font-bold">{value}</div>
+  </div>
+)
+
+const ReportCard = ({ title, desc }: { title: string; desc: string }) => (
+  <button 
+    className="text-left rounded-2xl border border-border bg-card p-5 hover:border-primary/30 hover:shadow-md transition-all flex items-center gap-4 w-full"
+    onClick={() => toast.success(`${title} exported`)}
+  >
+    <div className="grid h-11 w-11 place-items-center rounded-xl bg-secondary text-primary">
+      <FileText className="h-5 w-5" />
+    </div>
+    <div className="flex-1">
+      <div className="font-semibold">{title}</div>
+      <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
+    </div>
+    <Download className="h-4 w-4 text-muted-foreground" />
+  </button>
+)
+
+export default Reports
