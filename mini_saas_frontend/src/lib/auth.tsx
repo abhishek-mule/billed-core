@@ -2,55 +2,131 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
-export interface MerchantCredentials {
+export interface SessionUser {
+  id: string
   tenantId: string
-  siteName: string
-  apiKey: string
-  apiSecret: string
+  name: string
+  phone: string
+  role: string
+}
+
+export interface SessionTenant {
+  id: string
   companyName: string
   plan?: string
 }
 
 interface AuthContextType {
-  merchant: MerchantCredentials | null
+  user: SessionUser | null
+  tenant: SessionTenant | null
   isLoading: boolean
-  login: (credentials: MerchantCredentials) => void
-  logout: () => void
+  login: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>
+  logout: () => Promise<void>
   isAuthenticated: boolean
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const STORAGE_KEY = 'billzo_merchant'
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [merchant, setMerchant] = useState<MerchantCredentials | null>(null)
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [tenant, setTenant] = useState<SessionTenant | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        setMerchant(JSON.parse(stored))
-      } catch {
-        localStorage.removeItem(STORAGE_KEY)
-      }
-    }
-    setIsLoading(false)
+    checkSession()
+    const interval = setInterval(refreshSession, 5 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [])
 
-  const login = (credentials: MerchantCredentials) => {
-    setMerchant(credentials)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(credentials))
+  async function refreshSession() {
+    try {
+      await fetch('/api/auth/refresh', { method: 'POST' })
+    } catch (e) {
+      console.error('Session refresh failed:', e)
+    }
   }
 
-  const logout = () => {
-    setMerchant(null)
-    localStorage.removeItem(STORAGE_KEY)
+  async function checkSession() {
+    try {
+      const res = await fetch('/api/auth/session')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.session) {
+          setUser({
+            id: data.session.userId,
+            tenantId: data.session.tenantId,
+            name: data.session.companyName,
+            phone: '',
+            role: data.session.role,
+          })
+          setTenant({
+            id: data.session.tenantId,
+            companyName: data.session.companyName,
+            plan: data.session.plan,
+          })
+        }
+      }
+    } catch (e) {
+      console.error('Session check failed:', e)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const login = async (phone: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Login failed' }
+      }
+
+      setUser({
+        id: data.user.id,
+        tenantId: data.tenant.id,
+        name: data.user.name,
+        phone: data.user.phone,
+        role: data.user.role,
+      })
+      setTenant({
+        id: data.tenant.id,
+        companyName: data.tenant.companyName,
+      })
+
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: 'Network error' }
+    }
+  }
+
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch (e) {
+      console.error('Logout error:', e)
+    } finally {
+      setUser(null)
+      setTenant(null)
+    }
   }
 
   return (
-    <AuthContext.Provider value={{ merchant, isLoading, login, logout, isAuthenticated: !!merchant }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        tenant,
+        isLoading,
+        login,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
@@ -64,13 +140,7 @@ export function useAuth() {
   return context
 }
 
-export function generateAuthToken(credentials: MerchantCredentials): string {
-  const payload = {
-    tenantId: credentials.tenantId,
-    siteName: credentials.siteName,
-    apiKey: credentials.apiKey,
-    apiSecret: credentials.apiSecret,
-    companyName: credentials.companyName,
-  }
-  return `Bearer ${Buffer.from(JSON.stringify(payload)).toString('base64')}`
+export function useSession() {
+  const { user, tenant, isLoading, isAuthenticated } = useAuth()
+  return { user, tenant, isLoading, isAuthenticated }
 }
