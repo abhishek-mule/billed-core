@@ -269,7 +269,7 @@ export default function POSPage() {
         <div className="fixed inset-0 z-50 flex items-end bg-background/80 backdrop-blur animate-fade-in lg:items-center lg:justify-center" onClick={closeSuccess}>
           <div className="w-full rounded-t-3xl border border-border bg-card p-6 shadow-elegant animate-slide-up lg:max-w-md lg:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="text-center">
-              <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#0F4C81] via-[#1A5A9C] to-[#0D3E66] shadow-lg shadow-[#0F4C81]/25">
+              <div className="mx-auto mb-3 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#4F46E5] via-[#6366F1] to-[#3730A3] shadow-lg shadow-indigo-500/25">
                 <LogoIcon size={28} className="text-white" />
               </div>
               <h2 className="mt-3 text-xl font-bold">Invoice {success.number}</h2>
