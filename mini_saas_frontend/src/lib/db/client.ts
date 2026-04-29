@@ -14,9 +14,27 @@ export function getPool(): Pool {
   return pool
 }
 
+let currentTenantId: string | null = null
+
+export function setTenantContext(tenantId: string) {
+  currentTenantId = tenantId
+}
+
+export function getTenantContext(): string | null {
+  return currentTenantId
+}
+
 export async function query<T>(text: string, params?: any[]): Promise<T[]> {
-  const result = await getPool().query(text, params)
-  return result.rows as T[]
+  const client = await getPool().connect()
+  try {
+    if (currentTenantId) {
+      await client.query(`SET app.current_tenant_id = $1`, [currentTenantId])
+    }
+    const result = await client.query(text, params)
+    return result.rows as T[]
+  } finally {
+    client.release()
+  }
 }
 
 export async function queryOne<T>(text: string, params?: any[]): Promise<T | null> {
@@ -27,6 +45,9 @@ export async function queryOne<T>(text: string, params?: any[]): Promise<T | nul
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await getPool().connect()
   try {
+    if (currentTenantId) {
+      await client.query(`SET app.current_tenant_id = $1`, [currentTenantId])
+    }
     await client.query('BEGIN')
     const result = await fn(client)
     await client.query('COMMIT')
