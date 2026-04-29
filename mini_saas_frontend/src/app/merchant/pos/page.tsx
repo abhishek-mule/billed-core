@@ -79,6 +79,7 @@ export default function POSPage() {
   const [showCustomer, setShowCustomer] = useState(false)
   const [showPay, setShowPay] = useState(false)
   const [success, setSuccess] = useState<{ id: string; number: string; amount: number } | null>(null)
+  const [whatsappStatus, setWhatsappStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [showScanner, setShowScanner] = useState(false)
   const [showOCR, setShowOCR] = useState(false)
   const [scannerError, setScannerError] = useState<string | null>(null)
@@ -129,6 +130,7 @@ export default function POSPage() {
 
   const closeSuccess = () => {
     setSuccess(null)
+    setWhatsappStatus('idle')
     setCart([])
     setCustomer('Walk-in Customer')
     setCustomerPhone(undefined)
@@ -303,21 +305,43 @@ export default function POSPage() {
                     onClick={async () => {
                       const phone = customerPhone?.replace(/\D/g, '')
                       if (!phone || phone.length < 10) {
+                        setWhatsappStatus('error')
                         alert('Invalid phone number')
                         return
                       }
+                      setWhatsappStatus('sending')
                       try {
-                        await fetch('/api/whatsapp/send', {
+                        const res = await fetch('/api/whatsapp/send', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ template: whatsappTemplate, phone: phone, invoiceId: success.id, params: { invoice_no: success.number, amount: success.amount }, tenantId: 'demo' })
                         })
-                        alert('Sent to WhatsApp!')
-                      } catch { alert('Failed to send') }
+                        const data = await res.json()
+                        if (data.success) {
+                          setWhatsappStatus('sent')
+                          alert('Sent to WhatsApp!')
+                        } else {
+                          setWhatsappStatus('error')
+                          alert(data.error || 'Failed to send')
+                        }
+                      } catch { 
+                        setWhatsappStatus('error')
+                        alert('Failed to send') 
+                      }
                     }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] py-3 text-sm font-medium text-white transition-base hover:bg-[#22c55e]"
+                    disabled={whatsappStatus === 'sending' || whatsappStatus === 'sent'}
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium text-white transition-base ${
+                      whatsappStatus === 'sent' 
+                        ? 'bg-emerald-500 cursor-default'
+                        : whatsappStatus === 'error'
+                          ? 'bg-red-500 hover:bg-red-600'
+                          : 'bg-[#25D366] hover:bg-[#22c55e]'
+                    }`}
                   >
-                    <MessageCircle className="h-4 w-4" /> Send {whatsappTemplate} to WhatsApp
+                    {whatsappStatus === 'sending' && <><span className="animate-spin">⏳</span> Sending...</>}
+                    {whatsappStatus === 'sent' && <><CheckCircle2 className="h-4 w-4" /> Sent</>}
+                    {whatsappStatus === 'error' && <><X className="h-4 w-4" /> Retry</>}
+                    {whatsappStatus === 'idle' && <><MessageCircle className="h-4 w-4" /> Send {whatsappTemplate} to WhatsApp</>}
                   </button>
                 </div>
               )}
