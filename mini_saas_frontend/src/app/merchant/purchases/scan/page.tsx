@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   FileText, 
   Upload, 
@@ -15,13 +16,74 @@ import {
   ZoomIn,
   ZoomOut,
   Save,
-  Rocket
+  Rocket,
+  Loader2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+
+// Mock extracted data (would come from OCR in production)
+const mockExtractedData = {
+  supplierGstin: '27AABCU9603R1ZM',
+  supplierName: 'BALAJI TRADERS',
+  invoiceNumber: 'BT/23-24/0892',
+  invoiceDate: '2024-10-15',
+  lineItems: [
+    { name: 'Super Cement 50kg', qty: 10, rate: 1450, taxRate: 28, amount: 14500 },
+    { name: 'Steel TMT 12mm', qty: 20, rate: 1600, taxRate: 18, amount: 32000 }
+  ],
+  subtotal: 46500,
+  cgst: 6510,
+  sgst: 6510,
+  igst: 0,
+  total: 46500,
+  grandTotal: 59520
+}
 
 export default function PurchaseScanPage() {
-  const [isScanning, setIsScanning] = useState(false)
-  const [extracted, setExtracted] = useState(true)
+  const router = useRouter()
+  const [saving, setSaving] = useState(false)
+  const [data] = useState(mockExtractedData)
+
+  const handleSave = async (asDraft: boolean) => {
+    try {
+      setSaving(true)
+      
+      const res = await fetch('/api/merchant/purchases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purchaseInvoiceNumber: data.invoiceNumber,
+          supplierName: data.supplierName,
+          supplierGstin: data.supplierGstin,
+          invoiceDate: data.invoiceDate,
+          lineItems: data.lineItems,
+          subtotal: data.subtotal,
+          cgst: data.cgst,
+          sgst: data.sgst,
+          igst: data.igst,
+          total: data.total,
+          grandTotal: data.grandTotal,
+          status: asDraft ? 'DRAFT' : 'UNPAID',
+          eligibleForItc: true
+        })
+      })
+
+      const result = await res.json()
+
+      if (result.success) {
+        toast.success(asDraft ? 'Saved as draft' : 'Purchase saved to ledger')
+        router.push('/merchant/purchases')
+      } else {
+        toast.error(result.error || 'Failed to save')
+      }
+    } catch (error) {
+      console.error('Save error:', error)
+      toast.error('Failed to save purchase')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-6 pb-10 animate-in">
@@ -261,16 +323,24 @@ export default function PurchaseScanPage() {
                </div>
              </div>
              
-             <div className="flex items-center gap-3 w-full md:w-auto">
-               <button className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 px-6 py-4 rounded-3xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all active:scale-95">
-                 <Save className="w-4 h-4" />
-                 Save Draft
-               </button>
-               <button className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-primary text-white px-10 py-4 rounded-3xl font-black text-sm shadow-xl shadow-primary/30 hover:scale-105 hover:bg-indigo-700 transition-all active:scale-95">
-                 <Rocket className="w-4 h-4" />
-                 Approve & Update Ledger
-               </button>
-             </div>
+<div className="flex items-center gap-3 w-full md:w-auto">
+                <button 
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 px-6 py-4 rounded-3xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
+                  onClick={() => handleSave(true)}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Draft
+                </button>
+                <button 
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-primary text-white px-10 py-4 rounded-3xl font-black text-sm shadow-xl shadow-primary/30 hover:scale-105 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                  onClick={() => handleSave(false)}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  Approve & Update Ledger
+                </button>
+              </div>
           </div>
         </div>
       </div>
