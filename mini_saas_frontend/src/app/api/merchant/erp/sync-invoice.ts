@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withSessionAuth, SessionData } from '@/lib/session'
+import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
 
 interface ERPNextInvoice {
@@ -146,8 +146,13 @@ async function syncToERP(credentials: ERPCredentials, erpInvoice: ERPNextInvoice
 }
 
 export async function POST(req: NextRequest) {
-  return withSessionAuth(async (session: SessionData) => {
-    try {
+  try {
+    const session = await getSessionFromRequest(req)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    const { tenantId } = session
       const body = await req.json()
       const { invoice_id, action } = body
 
@@ -234,6 +239,5 @@ export async function POST(req: NextRequest) {
         { error: error instanceof Error ? error.message : 'Sync failed' },
         { status: 500 }
       )
-    }
-  }, req)
+  }
 }
