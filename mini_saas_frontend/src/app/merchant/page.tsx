@@ -1,26 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Receipt, Settings, HelpCircle, LogOut } from 'lucide-react'
-
-const todayStats = {
-  revenue: 28450,
-  invoiceCount: 34,
-  pendingAmount: 23310,
-  syncedCount: 32,
-  failedCount: 2,
-}
-
-const mockInvoices = [
-  { id: '1', number: 'INV-2026-0034', party: 'Anjali Sharma', amount: 4200, status: 'pending', date: 'Today, 4:12 PM' },
-  { id: '2', number: 'INV-2026-0033', party: 'Rahul Mehta', amount: 1850, status: 'synced', date: 'Today, 3:48 PM' },
-  { id: '3', number: 'INV-2026-0032', party: 'Walk-in Customer', amount: 320, status: 'synced', date: 'Today, 3:30 PM' },
-  { id: '4', number: 'INV-2026-0031', party: 'Priya Stores', amount: 12400, status: 'failed', date: 'Today, 2:15 PM' },
-  { id: '5', number: 'INV-2026-0030', party: 'Kumar General', amount: 870, status: 'synced', date: 'Today, 1:02 PM' },
-  { id: '6', number: 'INV-2026-0029', party: 'Sita Devi', amount: 2100, status: 'synced', date: 'Today, 12:40 PM' },
-]
-
-const formatINR = (n: number) => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp } from 'lucide-react'
+import { useDashboardStats } from '@/hooks/useApi'
+import { HeroSkeleton, StatCardSkeleton, ListItemSkeleton } from '@/components/ui/Skeleton'
+import { formatINRCompact, formatINR } from '@/lib/api-client'
 
 const statusBadge: Record<string, string> = {
   synced: 'bg-success-soft text-success',
@@ -29,7 +13,45 @@ const statusBadge: Record<string, string> = {
 }
 
 export default function DashboardPage() {
-  const allSynced = todayStats.failedCount === 0
+  const { data, isLoading, isError, refetch } = useDashboardStats()
+
+  if (isLoading) {
+    return (
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-5">
+        <HeroSkeleton />
+        <StatCardSkeleton />
+        <div className="grid grid-cols-4 gap-3">
+           <StatCardSkeleton />
+           <StatCardSkeleton />
+           <StatCardSkeleton />
+           <StatCardSkeleton />
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+           <ListItemSkeleton />
+           <ListItemSkeleton />
+           <ListItemSkeleton />
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !data || !data.success) {
+    return (
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[50vh]">
+        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+        <h2 className="text-xl font-semibold mb-2">Failed to load dashboard</h2>
+        <button 
+          onClick={() => refetch()}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+        >
+          Try Again
+        </button>
+      </div>
+    )
+  }
+
+  const { stats, recentInvoices } = data
+  const allSynced = stats.failedCount === 0
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-5">
@@ -41,13 +63,13 @@ export default function DashboardPage() {
         <div className="relative">
           <div className="text-sm opacity-80">Today&apos;s revenue</div>
           <div className="mt-2 text-5xl lg:text-6xl font-bold number-display tracking-tight">
-            {formatINR(todayStats.revenue)}
+            {formatINR(stats.revenue)}
           </div>
           <div className="mt-3 flex items-center gap-4 text-sm opacity-90">
-            <span>{todayStats.invoiceCount} invoices</span>
+            <span>{stats.invoiceCount} invoices</span>
             <span className="opacity-50">•</span>
             <span className="inline-flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5" /> +18% vs yesterday
+              <TrendingUp className="h-3.5 w-3.5" /> vs yesterday
             </span>
           </div>
         </div>
@@ -60,7 +82,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex-1 min-w-0">
           <div className={`font-semibold ${allSynced ? 'text-success' : 'text-warning'}`}>
-            {allSynced ? 'All invoices synced' : `${todayStats.failedCount} invoices failed to sync`}
+            {allSynced ? 'All invoices synced' : `${stats.failedCount} invoices failed to sync`}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {allSynced ? 'Last synced just now' : 'Tap retry to send them again'}
@@ -71,13 +93,13 @@ export default function DashboardPage() {
             onClick={async () => {
               try {
                 const res = await fetch('/api/merchant/invoice/retry-all', { method: 'POST' })
-                const data = await res.json()
-                if (data.succeeded !== undefined) {
-                  alert(`Retry complete: ${data.succeeded} succeeded, ${data.failed} failed`)
-                  window.location.reload()
+                const resData = await res.json()
+                if (resData.succeeded !== undefined) {
+                  // Use toast in a real app, here we just refetch
+                  refetch()
                 }
               } catch {
-                alert('Retry failed')
+                // Ignore error
               }
             }}
             className="px-4 py-2 rounded-lg bg-warning text-warning-foreground text-sm font-medium hover:bg-warning/90"
@@ -122,30 +144,36 @@ export default function DashboardPage() {
       {/* Recent invoices */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="font-semibold">Recent invoices</h2>
+          <h2 className="font-semibold text-foreground">Recent invoices</h2>
           <Link href="/merchant/invoice" className="text-xs text-primary font-medium inline-flex items-center gap-1 hover:underline">
             View all <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
-        <ul className="divide-y divide-border max-h-80 overflow-y-auto">
-          {mockInvoices.slice(0, 6).map((inv) => (
-            <li key={inv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-base">
-              <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-sm font-semibold">
-                {inv.party.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{inv.party}</div>
-                <div className="text-xs text-muted-foreground">{inv.number} • {inv.date}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-bold number-display">{formatINR(inv.amount)}</div>
-                <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${statusBadge[inv.status]}`}>
-                  {inv.status}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {recentInvoices.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            No invoices yet today — tap Bill to create your first
+          </div>
+        ) : (
+          <ul className="divide-y divide-border max-h-80 overflow-y-auto">
+            {recentInvoices.map((inv: any) => (
+              <li key={inv.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-base">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-sm font-semibold">
+                  {inv.party?.charAt(0) || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-foreground truncate">{inv.party}</div>
+                  <div className="text-xs text-muted-foreground">{inv.number} • {new Date(inv.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-foreground number-display">{formatINR(inv.amount)}</div>
+                  <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${statusBadge[inv.status] || 'bg-secondary text-secondary-foreground'}`}>
+                    {inv.status}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

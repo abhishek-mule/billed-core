@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { 
   Search, 
@@ -13,102 +13,40 @@ import {
   MoreHorizontal,
   ArrowUpRight,
   ChevronLeft,
-  ChevronRight,
-  X,
-  ChevronDown
+  ChevronRight
 } from 'lucide-react'
 import { InvoiceDetailsModal } from '@/components/invoice/InvoiceDetailsModal'
-
-const mockInvoices = [
-  { 
-    id: 'INV-0034', 
-    date: '4:12 PM', 
-    customerName: 'Anjali Sharma', 
-    customerPhone: '919876543210',
-    amount: 4671, 
-    paymentStatus: 'UNPAID' as const, 
-    syncStatus: 'LOCAL' as const,
-    items: [
-      { name: 'Surf Excel 1kg', qty: 4, rate: 245, gst: 18, hsn: '3402' },
-      { name: 'Aashirvaad Atta 5kg', qty: 8, rate: 285, gst: 5, hsn: '1101' },
-      { name: 'Colgate Toothpaste', qty: 10, rate: 95, gst: 18, hsn: '3306' },
-    ]
-  },
-  { 
-    id: 'INV-23-0145', 
-    date: '2 mins ago', 
-    customerName: 'Arjun Kumar', 
-    customerPhone: '918888888888',
-    amount: 18306, 
-    paymentStatus: 'PAID' as const, 
-    syncStatus: 'SYNCED' as const,
-    items: [{ name: 'Monitor X', qty: 1, rate: 18306, gst: 18, hsn: '8471' }]
-  },
-  { 
-    id: 'INV-23-0144', 
-    date: '15 mins ago', 
-    customerName: 'TechCorp Solutions', 
-    customerPhone: '917777777777',
-    amount: 45200, 
-    paymentStatus: 'PENDING' as const, 
-    syncStatus: 'SYNCED' as const,
-    items: [{ name: 'Laptop Pro', qty: 2, rate: 22600, gst: 18, hsn: '8471' }]
-  },
-]
-
-type Invoice = typeof mockInvoices[0]
+import { useInvoices } from '@/hooks/useApi'
+import { formatINR } from '@/lib/api-client'
+import { TableSkeleton } from '@/components/ui/Skeleton'
 
 export default function InvoiceListPage() {
   const [search, setSearch] = useState('')
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [syncFilter, setSyncFilter] = useState<string>('')
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
 
-  useEffect(() => {
-    async function fetchInvoices() {
-      try {
-        const res = await fetch('/api/merchant/invoices')
-        if (res.ok) {
-          const data = await res.json()
-          if (data.invoices?.length > 0) {
-            setInvoices(data.invoices.map((inv: any) => ({
-              id: inv.name || inv.invoice_number || inv.id,
-              date: inv.posting_date ? new Date(inv.posting_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Just now',
-              customerName: inv.customer_name || 'Unknown',
-              customerPhone: inv.customer_phone || '',
-              amount: inv.grand_total || inv.total || 0,
-              paymentStatus: inv.outstanding_amount > 0 ? 'UNPAID' : 'PAID',
-              syncStatus: inv.sync_status || 'LOCAL',
-              items: inv.items || []
-            })))
-          } else {
-            setInvoices(mockInvoices)
-          }
-        } else {
-          setInvoices(mockInvoices)
-        }
-      } catch {
-        setInvoices(mockInvoices)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchInvoices()
-  }, [])
+  const { data, isLoading, refetch } = useInvoices(undefined, 50)
+  const invoices = data?.invoices || []
 
   const filtered = useMemo(() => {
-    return invoices.filter((inv) => {
+    return invoices.filter((inv: any) => {
+      const idStr = String(inv.name || inv.id || '')
+      const customerStr = String(inv.customer_name || '')
+      
       const matchSearch = !search || 
-        inv.id.toLowerCase().includes(search.toLowerCase()) ||
-        inv.customerName.toLowerCase().includes(search.toLowerCase())
-      const matchStatus = !statusFilter || inv.paymentStatus === statusFilter
-      const matchSync = !syncFilter || inv.syncStatus === syncFilter
+        idStr.toLowerCase().includes(search.toLowerCase()) ||
+        customerStr.toLowerCase().includes(search.toLowerCase())
+        
+      const paymentStatus = inv.outstanding_amount > 0 ? 'UNPAID' : 'PAID'
+      const matchStatus = !statusFilter || paymentStatus === statusFilter
+      const matchSync = !syncFilter || (inv.sync_status || 'LOCAL') === syncFilter
+      
       return matchSearch && matchStatus && matchSync
-})
+    })
   }, [invoices, search, statusFilter, syncFilter])
 
   const clearFilters = () => {
@@ -124,28 +62,24 @@ const [showFilters, setShowFilters] = useState(false)
     setIsModalOpen(true)
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount)
-  }
-
   const getBadgeStyle = (status: string) => {
     switch (status) {
       case 'PAID':
-      case 'SYNCED': return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+      case 'SYNCED': return 'bg-success-soft text-success border-success/20'
       case 'PENDING':
-      case 'LOCAL': return 'bg-amber-50 text-amber-600 border-amber-100'
+      case 'LOCAL': return 'bg-warning-soft text-warning border-warning/20'
       case 'UNPAID':
-      case 'FAILED': return 'bg-rose-50 text-rose-600 border-rose-100'
-      default: return 'bg-gray-50 text-gray-600 border-gray-100'
+      case 'FAILED': return 'bg-destructive/10 text-destructive border-destructive/20'
+      default: return 'bg-secondary text-secondary-foreground border-border'
     }
   }
 
+  const totalSales = useMemo(() => {
+    return invoices.reduce((sum: number, inv: any) => sum + (Number(inv.grand_total) || 0), 0)
+  }, [invoices])
+
   return (
-    <div className="space-y-8 animate-in">
+    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-6 animate-in slide-in-from-right-2">
       <InvoiceDetailsModal 
         invoice={selectedInvoice} 
         isOpen={isModalOpen} 
@@ -155,8 +89,8 @@ const [showFilters, setShowFilters] = useState(false)
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Sales Invoices</h1>
-          <p className="text-gray-500 text-sm font-medium italic">Manage and track your customer billing history.</p>
+          <h1 className="text-xl font-semibold text-foreground tracking-tight">Sales Invoices</h1>
+          <p className="text-muted-foreground text-sm">Manage and track your customer billing history.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button 
@@ -180,34 +114,27 @@ const [showFilters, setShowFilters] = useState(false)
                 const res = await fetch('/api/merchant/invoice/retry-all', { method: 'POST' })
                 const data = await res.json()
                 if (data.succeeded !== undefined) {
-                  alert(`Retry complete: ${data.succeeded} succeeded, ${data.failed} failed`)
+                  refetch()
                 }
               } catch {
-                alert('Retry failed')
+                // Ignore
               }
             }}
-            className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl font-bold text-sm text-amber-700 hover:bg-amber-100 transition-all"
+            className="flex items-center gap-2 bg-warning-soft border border-warning/20 px-4 py-2 rounded-xl font-medium text-sm text-warning-foreground hover:bg-warning/20 transition-all"
           >
             <AlertCircle className="w-4 h-4" />
             Retry Failed
           </button>
           <button 
             onClick={() => window.open('/api/export?type=invoices&format=csv')}
-            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all"
+            className="flex items-center gap-2 bg-card border border-border px-4 py-2 rounded-xl font-medium text-sm text-foreground hover:bg-muted transition-all"
           >
             <Download className="w-4 h-4" />
             Export CSV
           </button>
-          <button 
-            onClick={() => window.open('/api/export?type=products&format=csv')}
-            className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-50 transition-all"
-          >
-            <Download className="w-4 h-4" />
-            Products
-          </button>
           <Link 
             href="/merchant/invoice/new"
-            className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm shadow-glow hover:opacity-90 transition-all"
           >
             <Plus className="w-4 h-4" />
             New Invoice
@@ -254,7 +181,7 @@ const [showFilters, setShowFilters] = useState(false)
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Invoice #, customer name..."
-                  className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                  className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
@@ -265,93 +192,109 @@ const [showFilters, setShowFilters] = useState(false)
       {/* Search & Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 relative group">
-          <Search className="absolute left-4 top-3.5 w-5 h-5 text-gray-300 group-focus-within:text-primary transition-colors" />
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <input 
             type="text" 
             placeholder="Search by invoice ID or customer name..." 
-            className="w-full bg-white border border-gray-100 rounded-2xl pl-12 pr-4 py-3.5 text-sm font-bold focus:outline-none ring-4 ring-primary/0 focus:ring-primary/5 transition-all"
+            className="w-full bg-card border border-border rounded-2xl pl-12 pr-4 py-3.5 text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="lg:col-span-4 bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-3 flex items-center justify-between">
+        <div className="lg:col-span-4 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-3 flex items-center justify-between">
            <div className="flex flex-col">
-             <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Total Sales (Today)</span>
-             <span className="text-xl font-black text-indigo-700">₹28,450</span>
+             <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Total Sales</span>
+             <span className="text-xl font-bold text-primary">{formatINR(totalSales)}</span>
            </div>
-           <ArrowUpRight className="w-6 h-6 text-indigo-300" />
+           <ArrowUpRight className="w-6 h-6 text-primary/50" />
         </div>
       </div>
 
       {/* Main Table */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50/50">
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Sync</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest w-16"></th>
+              <tr className="bg-muted/50">
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Invoice</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Customer</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Amount</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Payment</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Sync</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest w-16"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {(loading ? invoices : invoices).map((inv) => (
-                <tr 
-                  key={inv.id} 
-                  onClick={() => handleRowClick(inv)}
-                  className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
-                >
-                  <td className="px-6 py-5">
-                    <p className="text-sm font-black text-gray-900 group-hover:text-primary transition-colors">{inv.id}</p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{inv.date}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <p className="text-sm font-bold text-gray-700">{inv.customerName}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <p className="text-sm font-black text-gray-900">{formatCurrency(inv.amount)}</p>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.paymentStatus)}`}>
-                      {inv.paymentStatus === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                      {inv.paymentStatus}
-                    </div>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider ${getBadgeStyle(inv.syncStatus)}`}>
-                      {inv.syncStatus === 'SYNCED' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {inv.syncStatus}
-                    </div>
-                  </td>
-                  <td className="px-6 py-5 text-right">
-                    <button className="p-2 hover:bg-gray-100 rounded-lg text-gray-300 transition-colors">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <TableSkeleton rows={5} cols={6} />
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                    {search || statusFilter || syncFilter ? 'No invoices match your filters.' : 'No invoices found. Create your first one!'}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filtered.map((inv: any) => {
+                  const paymentStatus = inv.outstanding_amount > 0 ? 'UNPAID' : 'PAID'
+                  const syncStatus = inv.sync_status || 'LOCAL'
+                  
+                  return (
+                    <tr 
+                      key={inv.name || inv.id} 
+                      onClick={() => handleRowClick(inv)}
+                      className="hover:bg-muted/40 transition-colors group cursor-pointer"
+                    >
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{inv.name || inv.id}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{inv.posting_date ? new Date(inv.posting_date).toLocaleDateString() : 'Just now'}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-medium text-foreground">{inv.customer_name || 'Unknown'}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold text-foreground">{formatINR(Number(inv.grand_total) || 0)}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${getBadgeStyle(paymentStatus)}`}>
+                          {paymentStatus === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          {paymentStatus}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${getBadgeStyle(syncStatus)}`}>
+                          {syncStatus === 'SYNCED' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                          {syncStatus}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button className="p-2 hover:bg-muted rounded-lg text-muted-foreground transition-colors">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/30">
-          <span className="text-xs font-medium text-gray-400">Showing {filtered.length} of {invoices.length} invoices</span>
-          <div className="flex items-center gap-2">
-            <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-1">
-               <button className="w-8 h-8 rounded-lg bg-primary text-white text-xs font-bold">1</button>
-               <button className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 text-xs font-bold transition-all">2</button>
+        {!isLoading && filtered.length > 0 && (
+          <div className="px-6 py-4 border-t border-border flex items-center justify-between bg-muted/20">
+            <span className="text-xs font-medium text-muted-foreground">Showing {filtered.length} of {invoices.length} invoices</span>
+            <div className="flex items-center gap-2">
+              <button className="p-2 border border-border rounded-lg text-muted-foreground hover:bg-muted transition-all">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-1">
+                 <button className="w-8 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-medium">1</button>
+              </div>
+              <button className="p-2 border border-border rounded-lg text-muted-foreground hover:bg-muted transition-all">
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-            <button className="p-2 border border-gray-200 rounded-lg text-gray-400 hover:bg-gray-50 transition-all">
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

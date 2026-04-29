@@ -1,86 +1,53 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiGet, apiPost } from '@/lib/api-client'
 
-const API_BASE = '/api'
-
-export interface ApiError {
-  error?: string
-  details?: string
-}
-
-async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  })
-  
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(err.error || err.details || 'Request failed')
-  }
-  
-  return res.json()
-}
-
-export function useInvoices(tenantId: string) {
+export function useInvoices(tenantId?: string, limit = 10) {
   return useQuery({
-    queryKey: ['invoices', tenantId],
-    queryFn: () => fetchApi<any[]>(`${API_BASE}/v2/invoices?tenantId=${tenantId}`),
-    enabled: !!tenantId,
+    queryKey: ['invoices', tenantId, limit],
+    queryFn: () => apiGet<{ invoices: any[] }>(`/api/merchant/invoices?limit=${limit}`),
+    // If you're doing global tenant logic, maybe enabled: !!tenantId, but often not needed since cookie auth
   })
 }
 
 export function useCreateInvoice() {
   const queryClient = useQueryClient()
-  
   return useMutation({
-    mutationFn: (data: any) => fetchApi<any>(`${API_BASE}/v2/invoices`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: any) => apiPost<any>(`/api/merchant/invoices`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
     },
   })
 }
 
-export function useCustomers(tenantId: string) {
+export function useCustomers(search?: string, limit = 20) {
   return useQuery({
-    queryKey: ['customers', tenantId],
-    queryFn: () => fetchApi<any[]>(`${API_BASE}/merchant/customer/search?tenantId=${tenantId}&limit=100`),
-    enabled: !!tenantId,
+    queryKey: ['customers', search, limit],
+    queryFn: () => apiGet<{ success: boolean; data: any[] }>(`/api/merchant/customers?q=${encodeURIComponent(search || '')}&limit=${limit}`),
   })
 }
 
 export function useCreateCustomer() {
   const queryClient = useQueryClient()
-  
   return useMutation({
-    mutationFn: (data: any) => fetchApi<any>(`${API_BASE}/merchant/customer`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: any) => apiPost<any>(`/api/merchant/customers`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
     },
   })
 }
 
-export function useProducts(tenantId: string) {
+export function useProducts(search?: string, page = 1, limit = 50) {
   return useQuery({
-    queryKey: ['products', tenantId],
-    queryFn: () => fetchApi<any[]>(`${API_BASE}/merchant/products?tenantId=${tenantId}`),
-    enabled: !!tenantId,
+    queryKey: ['products', search, page, limit],
+    queryFn: () => apiGet<{ success: boolean; data: any[]; pagination: any }>(`/api/merchant/products?search=${encodeURIComponent(search || '')}&page=${page}&limit=${limit}`),
   })
 }
 
-export function useDashboardStats(tenantId: string) {
+export function useDashboardStats() {
   return useQuery({
-    queryKey: ['dashboard-stats', tenantId],
-    queryFn: () => fetchApi<any>(`${API_BASE}/dashboard/today-summary`),
-    enabled: !!tenantId,
+    queryKey: ['dashboard-stats'],
+    queryFn: () => apiGet<{ success: boolean; stats: any; recentInvoices: any[] }>(`/api/merchant/stats`),
     staleTime: 30000,
   })
 }
@@ -88,7 +55,7 @@ export function useDashboardStats(tenantId: string) {
 export function useInvoiceSyncStatus(invoiceId: string) {
   return useQuery({
     queryKey: ['invoice-sync', invoiceId],
-    queryFn: () => fetchApi<any>(`${API_BASE}/merchant/invoice/sync-status?id=${invoiceId}`),
+    queryFn: () => apiGet<any>(`/api/merchant/invoice/sync-status?id=${invoiceId}`),
     enabled: !!invoiceId,
     refetchInterval: 5000,
   })
