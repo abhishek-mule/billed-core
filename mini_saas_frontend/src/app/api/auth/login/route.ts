@@ -14,6 +14,38 @@ interface TenantUser {
   password_hash: string
   role: 'owner' | 'cashier' | 'accountant'
   is_active: boolean
+  failed_login_attempts?: number
+  locked_until?: string
+}
+
+const loginAttempts = new Map<string, { count: number; until: number }>()
+const MAX_ATTEMPTS = 5
+const LOCKOUT_MS = 15 * 60 * 1000
+
+function checkRateLimit(phone: string): { blocked: boolean; remaining: number } {
+  const attempts = loginAttempts.get(phone)
+  if (!attempts) return { blocked: false, remaining: MAX_ATTEMPTS }
+  
+  if (attempts.until > Date.now()) {
+    return { blocked: true, remaining: 0 }
+  }
+  
+  return { blocked: false, remaining: MAX_ATTEMPTS - attempts.count }
+}
+
+function recordFailedAttempt(phone: string) {
+  const current = loginAttempts.get(phone) || { count: 0, until: 0 }
+  const newCount = current.count + 1
+  
+  if (newCount >= MAX_ATTEMPTS) {
+    loginAttempts.set(phone, { count: newCount, until: Date.now() + LOCKOUT_MS })
+  } else {
+    loginAttempts.set(phone, { count: newCount, until: 0 })
+  }
+}
+
+function clearFailedAttempts(phone: string) {
+  loginAttempts.delete(phone)
 }
 
 export async function POST(request: NextRequest) {
@@ -27,12 +59,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const rateLimit = checkRateLimit(phone)
+    if (rateLimit.blocked) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Try again in 15 minutes.' },
+        { status: 429 }
+      )
+    }
+
     const user = await queryOne<TenantUser>(
       'SELECT * FROM tenant_users WHERE phone = $1 AND is_active = true',
       [phone]
     )
 
     if (!user) {
+      recordFailedAttempt(phone)
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
@@ -48,11 +89,14 @@ export async function POST(request: NextRequest) {
       }
     })()
     if (!valid) {
+      recordFailedAttempt(phone)
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
       )
     }
+
+    clearFailedAttempts(phone)
 
     const tenantRow = await queryOne<{ id: string; company_name: string }>(
       'SELECT id, company_name FROM tenants WHERE id = $1',
