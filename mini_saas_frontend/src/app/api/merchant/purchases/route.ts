@@ -48,12 +48,19 @@ export async function GET(request: NextRequest) {
         supplierName: p.supplier_name,
         supplierGstin: p.supplier_gstin,
         subtotal: Number(p.subtotal) || 0,
+        cgst: Number(p.cgst) || 0,
+        sgst: Number(p.sgst) || 0,
+        igst: Number(p.igst) || 0,
         total: Number(p.total) || 0,
         grandTotal: Number(p.grand_total) || 0,
         invoiceDate: p.invoice_date,
         dueDate: p.due_date,
         status: p.status,
-        notes: p.notes,
+        paymentStatus: p.payment_status || 'UNPAID',
+        paidAmount: Number(p.paid_amount) || 0,
+        dueAmount: Number(p.due_amount) || 0,
+        eligibleForItc: p.eligible_for_itc !== false,
+        lineItems: p.line_items_json || [],
         createdAt: p.created_at
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
@@ -89,12 +96,18 @@ export async function POST(request: NextRequest) {
       total,
       grandTotal,
       notes,
-      status
+      status,
+      eligibleForItc
     } = body
 
     if (!purchaseInvoiceNumber || !supplierName) {
       return NextResponse.json({ error: 'Invoice number and supplier required' }, { status: 400 })
     }
+
+    // Calculate due amount
+    const paidAmount = 0
+    const dueAmount = Number(grandTotal) || 0
+    const paymentStatus = dueAmount === 0 ? 'PAID' : 'UNPAID'
 
     // Check for duplicate
     const existing = await queryOne<{ id: string }>(
@@ -111,13 +124,14 @@ export async function POST(request: NextRequest) {
     await query(
       `INSERT INTO purchases (
         id, tenant_id, purchase_invoice_number, supplier_id, supplier_name, supplier_gstin,
-        line_items_json, subtotal, cgst, sgst, igst, total, grand_total, invoice_date, due_date, status, notes,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())`,
+        line_items_json, subtotal, cgst, sgst, igst, total, grand_total, invoice_date, due_date, status,
+        payment_status, paid_amount, due_amount, eligible_for_itc, notes, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())`,
       [
         purchaseId, session.tenantId, purchaseInvoiceNumber, supplierId || '', supplierName, supplierGstin || '',
         JSON.stringify(lineItems || []), String(subtotal || 0), String(cgst || 0), String(sgst || 0), String(igst || 0),
-        String(total || 0), String(grandTotal || 0), invoiceDate || null, dueDate || null, status || 'PENDING', notes || ''
+        String(total || 0), String(grandTotal || 0), invoiceDate || null, dueDate || null, status || 'UNPAID',
+        paymentStatus, String(paidAmount), String(dueAmount), eligibleForItc !== false ? true : false, notes || ''
       ]
     )
 
