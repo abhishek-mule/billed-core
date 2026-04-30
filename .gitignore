@@ -95,3 +95,6 @@ infra/data/
 infra/data/sites/
 frappe_docker/data/
 frappe_docker/sites/
+
+# Claude Code
+.claude/

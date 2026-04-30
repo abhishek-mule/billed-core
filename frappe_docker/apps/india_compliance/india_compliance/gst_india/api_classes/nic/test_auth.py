@@ -563,7 +563,7 @@ class TestEWaybillAuth(TestNICAuth):
         # Initialize e-Waybill API (this will trigger auth)
         self._mock_get_nic_public_key()
         self._mock_ewaybill_auth_response(auth_response)
-        return StandardEWaybillAPI(self.si)
+         return StandardEWaybillAPI(self.si)
 
     @responses.activate
     def test_ewaybill_generation(self):
