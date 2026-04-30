@@ -274,7 +274,7 @@ export default function POSPage() {
         <div className="fixed bottom-20 left-0 right-0 z-30 px-4 animate-slide-up lg:hidden">
           <button onClick={() => setShowPay(true)} className="flex w-full items-center justify-between rounded-2xl bg-gradient-primary p-4 text-primary-foreground shadow-glow">
             <span className="text-sm font-medium">{cart.reduce((s, i) => s + i.qty, 0)} items</span>
-            <span className="number-display text-lg font-bold">{formatINR(total)} -></span>
+            <span className="number-display text-lg font-bold">{formatINR(total)} {'->'}</span>
           </button>
         </div>
       )}
@@ -292,7 +292,7 @@ export default function POSPage() {
             {[{ label: 'UPI', desc: 'QR / link to customer', method: 'upi' as const }, { label: 'Cash', desc: 'Mark as paid', method: 'cash' as const }, { label: 'Udhar (Credit)', desc: 'Add to ledger', method: 'udhar' as const }].map((option) => (
               <button key={option.method} onClick={() => handlePay(option.method)} className="flex w-full items-center justify-between rounded-xl border-2 border-input p-4 text-left transition-base hover:border-primary hover:bg-secondary/40">
                 <div><div className="font-semibold">{option.label}</div><div className="text-xs text-muted-foreground">{option.desc}</div></div>
-                <span className="text-sm font-medium text-primary">-></span>
+                <span className="text-sm font-medium text-primary">{'->'}</span>
               </button>
             ))}
             <label className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-input p-3 hover:bg-secondary/40">
