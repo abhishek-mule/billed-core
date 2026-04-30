@@ -27,9 +27,10 @@ import {
   Globe,
   Upload
 } from 'lucide-react'
+import { PushNotificationManager } from '@/components/PushNotificationManager'
 
 // --- Types ---
-type SettingsTab = 'profile' | 'gst' | 'whatsapp' | 'team' | 'security' | 'billing' | 'print'
+type SettingsTab = 'profile' | 'gst' | 'whatsapp' | 'team' | 'security' | 'billing' | 'print' | 'notifications'
 
 // --- Components for Sections ---
 
@@ -379,6 +380,61 @@ const PrintSettings = ({
   </div>
 )
 
+const NotificationSettings = () => (
+  <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
+    <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm space-y-8">
+      <div>
+        <h4 className="font-black text-slate-900 tracking-tight mb-2">Push Notifications</h4>
+        <p className="text-xs text-slate-400 font-medium">Stay updated with real-time notifications for invoices, payments, and important business alerts.</p>
+      </div>
+      
+      <PushNotificationManager />
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <h4 className="font-semibold text-blue-900 mb-3">Notification Types</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0 mt-0.5">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-900">Invoice Created</p>
+              <p className="text-xs text-blue-700">When new invoices are generated</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0 mt-0.5">
+              <CreditCard className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-900">Payment Received</p>
+              <p className="text-xs text-blue-700">When payments are recorded</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0 mt-0.5">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-900">Payment Reminders</p>
+              <p className="text-xs text-blue-700">Automated payment due alerts</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0 mt-0.5">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-medium text-blue-900">Low Stock Alerts</p>
+              <p className="text-xs text-blue-700">When inventory runs low</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)
+
 // --- Navigation Groups Data ---
 const navGroups = [
   {
@@ -396,6 +452,7 @@ const navGroups = [
       { id: 'team', label: 'Users & Roles', icon: Users },
       { id: 'security', label: 'Security (2FA/PIN)', icon: ShieldCheck },
       { id: 'billing', label: 'Subscription', icon: CreditCard },
+      { id: 'notifications', label: 'Push Notifications', icon: Bell },
     ]
   }
 ]
@@ -419,6 +476,7 @@ export default function SettingsPage() {
         printFormat={printFormat} setPrintFormat={setPrintFormat}
         autoPrint={autoPrint} setAutoPrint={setAutoPrint}
       />
+      case 'notifications': return <NotificationSettings />
       default: return <ProfileSettings />
     }
   }
