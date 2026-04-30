@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { 
   Users, 
@@ -12,27 +12,61 @@ import {
   MessageCircle,
   Building2,
   ArrowUpRight,
-  TrendingDown
+  TrendingDown,
+  Loader2
 } from 'lucide-react'
+import { useCustomers } from '@/hooks/useApi'
+import { formatINR, formatINRCompact } from '@/lib/api-client'
 
-const mockParties = [
-  { id: '1', name: 'Ramesh Hardware & Tools', phone: '+91 98765 43210', balance: 45200, type: 'CUSTOMER', status: 'OVERDUE' },
-  { id: '2', name: 'Balaji Traders', phone: '+91 98765 43211', balance: -12000, type: 'SUPPLIER', status: 'HEALTHY' },
-  { id: '3', name: 'Meera Sharma', phone: '+91 98765 43212', balance: 2150, type: 'CUSTOMER', status: 'HEALTHY' },
-  { id: '4', name: 'TechCorp Solutions', phone: '+91 98765 43213', balance: 112400, type: 'CUSTOMER', status: 'OVERDUE' },
-  { id: '5', name: 'Priya Kreations', phone: '+91 98765 43214', balance: 0, type: 'CUSTOMER', status: 'HEALTHY' },
-]
+type Party = {
+  id: string
+  name: string
+  phone: string
+  balance: number
+  type: 'CUSTOMER' | 'SUPPLIER'
+  status: 'HEALTHY' | 'OVERDUE'
+  totalSales?: number
+}
 
 export default function PartiesPage() {
   const [search, setSearch] = useState('')
+  const [parties, setParties] = useState<Party[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const { data: customersData } = useCustomers(search, 50)
+
+  useEffect(() => {
+    if (customersData?.data) {
+      const transformedParties: Party[] = customersData.data.map((cust: any) => ({
+        id: cust.id,
+        name: cust.name,
+        phone: cust.phone || '',
+        balance: 0, // Add balance calculation if available
+        type: 'CUSTOMER',
+        status: 'HEALTHY',
+        totalSales: cust.totalSales || 0
+      }))
+      setParties(transformedParties)
+      setLoading(false)
+    }
+  }, [customersData])
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount)
+    return formatINR(Math.abs(amount))
   }
+
+  const totalToReceive = parties
+    .filter(p => p.type === 'CUSTOMER' && p.balance > 0)
+    .reduce((sum, p) => sum + p.balance, 0)
+
+  const totalToPay = parties
+    .filter(p => p.type === 'SUPPLIER' && p.balance < 0)
+    .reduce((sum, p) => sum + Math.abs(p.balance), 0)
+
+  const filteredParties = parties.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.phone.includes(search)
+  )
 
   return (
     <div className="space-y-8 animate-in">
@@ -57,7 +91,7 @@ export default function PartiesPage() {
               </div>
               <div>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">To Receive (Market)</span>
-                <span className="text-2xl font-black text-rose-600">₹1,12,400</span>
+                <span className="text-2xl font-black text-rose-600">{formatINRCompact(totalToReceive)}</span>
               </div>
             </div>
             <Link href="/merchant/reports" className="p-2 hover:bg-gray-50 rounded-xl transition-colors">
@@ -71,7 +105,7 @@ export default function PartiesPage() {
               </div>
               <div>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">To Pay (Suppliers)</span>
-                <span className="text-2xl font-black text-emerald-600">₹12,000</span>
+                <span className="text-2xl font-black text-emerald-600">{formatINRCompact(totalToPay)}</span>
               </div>
             </div>
             <Link href="/merchant/reports" className="p-2 hover:bg-gray-50 rounded-xl transition-colors">
@@ -93,57 +127,75 @@ export default function PartiesPage() {
       </div>
 
       {/* Parties List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockParties.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).map((party) => (
-          <Link 
-            key={party.id} 
-            href={party.id ? `/merchant/parties/${party.id}` : '/'}
-            className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
-          >
-            <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 opacity-[0.03] transition-transform group-hover:scale-110 ${
-              party.balance > 0 ? 'bg-rose-500' : party.balance < 0 ? 'bg-emerald-500' : 'bg-gray-500'
-            }`} />
-            
-            <div className="flex items-start justify-between mb-6">
-              <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all">
-                <Building2 className="w-6 h-6" />
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border ${
-                party.type === 'CUSTOMER' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-              }`}>
-                {party.type}
-              </span>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-lg font-black text-gray-900 leading-tight mb-1 group-hover:text-primary transition-colors truncate">{party.name}</h3>
-              <p className="text-xs text-gray-400 font-medium">{party.phone}</p>
-            </div>
-
-            <div className="flex items-end justify-between">
-              <div>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Current Balance</span>
-                <span className={`text-xl font-black ${
-                  party.balance > 0 ? 'text-rose-600' : party.balance < 0 ? 'text-emerald-600' : 'text-gray-900'
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : filteredParties.length === 0 ? (
+        <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-3xl">
+          <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Users className="w-8 h-8 text-gray-300" />
+          </div>
+          <h3 className="text-lg font-black text-gray-900 mb-2">No parties yet</h3>
+          <p className="text-gray-500 mb-6">Add customers and suppliers to get started</p>
+          <button className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 transition-transform active:scale-95 mx-auto">
+            <Plus className="w-4 h-4" />
+            Add New Party
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredParties.map((party) => (
+            <Link 
+              key={party.id} 
+              href={party.id ? `/merchant/parties/${party.id}` : '/'}
+              className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
+            >
+              <div className={`absolute top-0 right-0 w-24 h-24 rounded-full -mr-12 -mt-12 opacity-[0.03] transition-transform group-hover:scale-110 ${
+                party.balance > 0 ? 'bg-rose-500' : party.balance < 0 ? 'bg-emerald-500' : 'bg-gray-500'
+              }`} />
+              
+              <div className="flex items-start justify-between mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border ${
+                  party.type === 'CUSTOMER' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-amber-50 text-amber-600 border-amber-100'
                 }`}>
-                  {party.balance > 0 ? '+' : ''}{formatCurrency(Math.abs(party.balance))}
-                </span>
-                <span className="text-[10px] text-gray-400 font-bold ml-1 uppercase">
-                   {party.balance > 0 ? 'Receive' : party.balance < 0 ? 'Pay' : ''}
+                  {party.type}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                 <button className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all">
-                   <MessageCircle className="w-4 h-4" />
-                 </button>
-                 <button className="w-9 h-9 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-gray-100 transition-all">
-                   <Phone className="w-4 h-4" />
-                 </button>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-black text-gray-900 leading-tight mb-1 group-hover:text-primary transition-colors truncate">{party.name}</h3>
+                <p className="text-xs text-gray-400 font-medium">{party.phone || 'N/A'}</p>
               </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+
+              <div className="flex items-end justify-between">
+                <div>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Current Balance</span>
+                  <span className={`text-xl font-black ${
+                    party.balance > 0 ? 'text-rose-600' : party.balance < 0 ? 'text-emerald-600' : 'text-gray-900'
+                  }`}>
+                    {party.balance > 0 ? '+' : ''}{formatCurrency(Math.abs(party.balance))}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-bold ml-1 uppercase">
+                     {party.balance > 0 ? 'Receive' : party.balance < 0 ? 'Pay' : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                   <button className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all">
+                     <MessageCircle className="w-4 h-4" />
+                   </button>
+                   <button className="w-9 h-9 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-gray-100 transition-all">
+                     <Phone className="w-4 h-4" />
+                   </button>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

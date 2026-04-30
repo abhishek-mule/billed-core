@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/session'
 import { query } from '@/lib/db/client'
+import * as XLSX from 'xlsx'
 
 interface GSTRInvoice {
   invoice_no: string
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
     const { tenantId } = session
     
     const body = await req.json()
-    const { from_date, to_date } = body
+    const { from_date, to_date, format = 'json' } = body
 
     if (!from_date || !to_date) {
       return NextResponse.json(
@@ -144,6 +145,34 @@ export async function POST(req: NextRequest) {
       } catch (dbError) {
         // Table might not exist yet, that's OK
         console.warn('Could not save GSTR export record:', dbError)
+      }
+
+      if (format === 'excel') {
+        const wb = XLSX.utils.book_new()
+        
+        // Invoices Sheet
+        const wsInvoices = XLSX.utils.json_to_sheet(gstrData.invoices)
+        XLSX.utils.book_append_sheet(wb, wsInvoices, 'Invoices')
+        
+        // Summary Sheet
+        const summaryData = Object.entries(gstrData.summary).map(([rate, data]) => ({
+          'GST Rate (%)': rate,
+          'Invoice Count': data.count,
+          'Taxable Value': data.taxable,
+          'Total GST': data.gst
+        }))
+        const wsSummary = XLSX.utils.json_to_sheet(summaryData)
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
+
+        const excelBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+
+        return new NextResponse(excelBuffer, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename=GSTR_Export_${from_date}_to_${to_date}.xlsx`,
+          },
+        })
       }
 
       return NextResponse.json({
