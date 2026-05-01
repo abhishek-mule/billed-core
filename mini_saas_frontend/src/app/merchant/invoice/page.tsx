@@ -132,13 +132,6 @@ export default function InvoiceListPage() {
             <Download className="w-4 h-4" />
             Export CSV
           </button>
-          <Link 
-            href="/merchant/invoice/new"
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm shadow-glow hover:opacity-90 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New Invoice
-          </Link>
         </div>
       </div>
 

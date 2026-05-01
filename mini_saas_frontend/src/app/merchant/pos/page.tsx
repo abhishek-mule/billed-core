@@ -1,13 +1,14 @@
 'use client'
 
 import { type ReactNode, useMemo, useState, useEffect } from 'react'
-import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode, Zap, MessageCircle, Loader2 } from 'lucide-react'
+import { CheckCircle2, Minus, Plus, Printer, Search, Trash2, User, X, ScanBarcode, Zap, MessageCircle, Loader2, AlertTriangle, Shield, TrendingUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner'
 import { OCRScanner } from '@/components/scanner/OCRScanner'
 import { SmartSearch } from '@/components/search/SmartSearch'
 import { LogoIcon } from '@/components/logo/Logo'
 import { useProducts, useCustomers, useCreateInvoice } from '@/hooks/useApi'
+import { useCustomerContextInPOS } from '@/hooks/useCustomerContextInPOS'
 import { formatINR } from '@/lib/api-client'
 
 type Product = {
@@ -74,6 +75,19 @@ export default function POSPage() {
   const { data: customersData } = useCustomers('', 20)
   const createInvoice = useCreateInvoice()
 
+  // Credit context hook
+  const {
+    selectedCustomer,
+    setSelectedCustomer,
+    creditProfile,
+    canExtendCredit,
+    creditUtilization,
+    riskLevel,
+    paymentReliability,
+    isLoadingCredit,
+    formatCurrency: formatCreditCurrency
+  } = useCustomerContextInPOS()
+
   const products = useMemo(() => {
     return (productsData?.data || []).map((p: any) => ({
       id: p.id,
@@ -137,6 +151,12 @@ export default function POSPage() {
   }
 
   const handlePay = async (_method: 'upi' | 'cash' | 'udhar') => {
+    // Credit check for udhar payments
+    if (_method === 'udhar' && !canExtendCredit && selectedCustomer && selectedCustomer !== 'walk-in') {
+      alert(`Cannot extend credit to ${customer}. Credit limit exceeded or high risk.`)
+      return
+    }
+
     setShowPay(false)
     if (navigator.vibrate) navigator.vibrate(80)
 
@@ -149,7 +169,8 @@ export default function POSPage() {
           itemName: item.name,
           quantity: item.qty,
           rate: item.price
-        }))
+        })),
+        paymentMode: _method === 'udhar' ? 'CREDIT' : _method.toUpperCase()
       })
 
       if (result.success) {
@@ -173,6 +194,7 @@ export default function POSPage() {
     setCart([])
     setCustomer('Walk-in Customer')
     setCustomerPhone(undefined)
+    setSelectedCustomer(null)
   }
 
   return (
@@ -227,12 +249,33 @@ export default function POSPage() {
                 <h2 className="font-semibold">Cart</h2>
                 {cart.length > 0 && <button onClick={() => setCart([])} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"><Trash2 className="h-3 w-3" /> Clear</button>}
               </div>
-              <button onClick={() => setShowCustomer(true)} className="m-3 mb-0 flex items-center gap-2.5 rounded-lg bg-secondary p-3 text-left transition-base hover:bg-secondary/80">
+              <button onClick={() => setShowCustomer(true)} 
+                className={`m-3 mb-0 flex items-center gap-2.5 rounded-lg p-3 text-left transition-base 
+                  ${!canExtendCredit && selectedCustomer && selectedCustomer !== 'walk-in' ? 'bg-destructive/10 border border-destructive/30' : 'bg-secondary hover:bg-secondary/80'}`}>
                 <User className="h-4 w-4 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-muted-foreground">Customer</div>
                   <div className="truncate text-sm font-medium">{customer}</div>
+                  {creditProfile && selectedCustomer && selectedCustomer !== 'walk-in' && (
+                    <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                      {creditProfile.pending > 0 ? (
+                        <span className={creditProfile.pending > creditProfile.creditLimit * 0.8 ? 'text-warning font-medium' : ''}>
+                          {formatCreditCurrency(creditProfile.pending)} pending
+                        </span>
+                      ) : (
+                        <span className="text-success flex items-center gap-0.5">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> No pending
+                        </span>
+                      )}
+                      {isLoadingCredit && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                    </div>
+                  )}
                 </div>
+                {!canExtendCredit && selectedCustomer && selectedCustomer !== 'walk-in' && (
+                  <span className="text-[10px] font-bold text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> BLOCKED
+                  </span>
+                )}
                 <span className="text-xs font-medium text-primary">Change</span>
               </button>
               <div className="flex-1 space-y-2 overflow-y-auto p-3">
@@ -289,10 +332,26 @@ export default function POSPage() {
               </div>
               <button onClick={() => setShowCustomer(true)} className="inline-flex items-center gap-1 text-xs font-medium text-primary"><User className="h-3 w-3" /> {customer}</button>
             </div>
-            {[{ label: 'UPI', desc: 'QR / link to customer', method: 'upi' as const }, { label: 'Cash', desc: 'Mark as paid', method: 'cash' as const }, { label: 'Udhar (Credit)', desc: 'Add to ledger', method: 'udhar' as const }].map((option) => (
-              <button key={option.method} onClick={() => handlePay(option.method)} className="flex w-full items-center justify-between rounded-xl border-2 border-input p-4 text-left transition-base hover:border-primary hover:bg-secondary/40">
-                <div><div className="font-semibold">{option.label}</div><div className="text-xs text-muted-foreground">{option.desc}</div></div>
-                <span className="text-sm font-medium text-primary">{'->'}</span>
+            {[{ label: 'UPI', desc: 'QR / link to customer', method: 'upi' as const }, { label: 'Cash', desc: 'Mark as paid', method: 'cash' as const }, { 
+              label: 'Udhar (Credit)', 
+              desc: !canExtendCredit && selectedCustomer && selectedCustomer !== 'walk-in' ? 'Credit blocked' : 'Add to ledger', 
+              method: 'udhar' as const,
+              disabled: !canExtendCredit && selectedCustomer && selectedCustomer !== 'walk-in'
+            }].map((option) => (
+              <button 
+                key={option.method} 
+                onClick={() => handlePay(option.method)} 
+                disabled={option.disabled}
+                className={`flex w-full items-center justify-between rounded-xl border-2 p-4 text-left transition-base
+                  ${option.disabled 
+                    ? 'border-border bg-muted/30 opacity-50 cursor-not-allowed' 
+                    : 'border-input hover:border-primary hover:bg-secondary/40'}`}>
+                <div>
+                  <div className="font-semibold">{option.label}</div>
+                  <div className="text-xs text-muted-foreground">{option.desc}</div>
+                </div>
+                {!option.disabled && <span className="text-sm font-medium text-primary">{'->'}</span>}
+                {option.disabled && <AlertTriangle className="h-4 w-4 text-warning" />}
               </button>
             ))}
             <label className="mt-2 flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed border-input p-3 hover:bg-secondary/40">
@@ -307,9 +366,32 @@ export default function POSPage() {
         <Sheet onClose={() => setShowCustomer(false)} title="Select customer">
           <div className="space-y-1">
             {customers.map((cust) => (
-              <button key={cust.id} onClick={() => { setCustomer(cust.name); setCustomerPhone(cust.phone); setShowCustomer(false) }} className="flex w-full items-center justify-between rounded-lg p-3 text-left hover:bg-secondary">
-                <div><div className="text-sm font-medium">{cust.name}</div><div className="text-xs text-muted-foreground">{cust.phone}</div></div>
-                {cust.pending && cust.pending > 0 && <span className="text-xs font-semibold text-warning">{formatINR(cust.pending)} due</span>}
+              <button 
+                key={cust.id} 
+                onClick={() => { 
+                  setCustomer(cust.name); 
+                  setCustomerPhone(cust.phone); 
+                  setSelectedCustomer(cust.id === 'walk-in' ? null : cust.id);
+                  setShowCustomer(false) 
+                }} 
+                className={`flex w-full items-center justify-between rounded-lg p-3 text-left hover:bg-secondary transition-base
+                  ${selectedCustomer === cust.id ? 'bg-primary/10 border border-primary/30' : ''}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">{cust.name}</div>
+                  <div className="text-xs text-muted-foreground">{cust.phone}</div>
+                </div>
+                {cust.pending && cust.pending > 0 && (
+                  <span className="text-xs font-semibold text-warning">{formatINR(cust.pending)} due</span>
+                )}
+                {selectedCustomer === cust.id && cust.id !== 'walk-in' && creditProfile && (
+                  <div className="ml-2 flex items-center gap-1">
+                    {canExtendCredit ? (
+                      <Shield className="h-3 w-3 text-success" />
+                    ) : (
+                      <AlertTriangle className="h-3 w-3 text-destructive" />
+                    )}
+                  </div>
+                )}
               </button>
             ))}
           </div>

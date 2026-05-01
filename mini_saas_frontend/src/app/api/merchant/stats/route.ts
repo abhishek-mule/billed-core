@@ -54,6 +54,82 @@ export async function GET(request: NextRequest) {
       [tenantId]
     )
 
+    // Get today's cash flow breakdown
+    const cashCollectedResult = await queryOne<{ total: string }>(
+      `SELECT COALESCE(SUM(total::numeric), 0) as total 
+       FROM invoices 
+       WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE AND payment_mode IN ('CASH', 'UPI', 'CARD', 'BANK_TRANSFER')`,
+      [tenantId]
+    )
+
+    const creditGivenResult = await queryOne<{ total: string }>(
+      `SELECT COALESCE(SUM(total::numeric), 0) as total 
+       FROM invoices 
+       WHERE tenant_id = $1 AND invoice_date = CURRENT_DATE AND payment_mode = 'CREDIT'`,
+      [tenantId]
+    )
+
+    const pendingCollectionsResult = await queryOne<{ total: string }>(
+      `SELECT COALESCE(SUM(total::numeric), 0) as total 
+       FROM invoices 
+       WHERE tenant_id = $1 AND payment_mode = 'CREDIT' AND status NOT IN ('PAID', 'CANCELLED', 'VOIDED')`,
+      [tenantId]
+    )
+
+    // Get inventory health data
+    const lowStockItems = await query<any>(
+      `SELECT id, item_name, stock_qty, unit, standard_rate
+       FROM products 
+       WHERE tenant_id = $1 AND is_active = true AND stock_qty < 20
+       ORDER BY stock_qty ASC
+       LIMIT 10`,
+      [tenantId]
+    )
+
+    // Get slow-moving items (not sold in 30 days)
+    const slowMovingItems = await query<any>(
+      `SELECT p.id, p.item_name, p.stock_qty, p.unit, p.standard_rate,
+        MAX(i.created_at) as last_sold_date,
+        EXTRACT(DAY FROM (NOW() - MAX(i.created_at))) as days_since_sale
+       FROM products p
+       LEFT JOIN invoice_items ii ON p.item_code = ii.item_code
+       LEFT JOIN invoices i ON ii.invoice_id = i.id AND i.tenant_id = p.tenant_id
+       WHERE p.tenant_id = $1 AND p.is_active = true AND p.stock_qty > 0
+       GROUP BY p.id, p.item_name, p.stock_qty, p.unit, p.standard_rate
+       HAVING MAX(i.created_at) IS NULL OR MAX(i.created_at) < NOW() - INTERVAL '30 days'
+       ORDER BY days_since_sale DESC NULLS LAST
+       LIMIT 5`,
+      [tenantId]
+    )
+
+    // Get receivables aging (top debtors)
+    const topDebtors = await query<any>(
+      `SELECT 
+        c.id as customer_id,
+        c.customer_name,
+        c.phone,
+        COALESCE(SUM(i.total::numeric), 0) as amount,
+        MIN(i.created_at) as first_due_date,
+        MAX(i.created_at) as last_due_date,
+        EXTRACT(DAY FROM (NOW() - MAX(i.created_at))) as days_overdue,
+        COUNT(i.id) as invoice_count
+       FROM customers c
+       INNER JOIN invoices i ON c.id = i.customer_id
+       WHERE c.tenant_id = $1 
+         AND i.tenant_id = $1
+         AND i.payment_mode = 'CREDIT'
+         AND i.status NOT IN ('PAID', 'CANCELLED', 'VOIDED')
+       GROUP BY c.id, c.customer_name, c.phone
+       ORDER BY amount DESC, days_overdue DESC
+       LIMIT 10`,
+      [tenantId]
+    )
+
+    const cashCollected = parseFloat(cashCollectedResult?.total || '0')
+    const creditGiven = parseFloat(creditGivenResult?.total || '0')
+    const pendingCollections = parseFloat(pendingCollectionsResult?.total || '0')
+    const todaysCash = cashCollected - creditGiven
+
     const stats = {
       revenue: parseFloat(revenueResult?.total || '0'),
       invoiceCount: parseInt(countResult?.count || '0'),
@@ -61,6 +137,12 @@ export async function GET(request: NextRequest) {
       failedCount: parseInt(syncStats.find(s => s.status === 'FAILED')?.count || '0'),
       pendingCount: parseInt(syncStats.find(s => s.status === 'PENDING')?.count || '0'),
       totalFailedCount: parseInt(totalFailedResult?.count || '0'),
+      // New cash flow metrics
+      todaysCash,
+      cashCollected,
+      creditGiven,
+      pendingCollections,
+      creditInvoiceCount: parseInt(countResult?.count || '0') - parseInt(syncStats.find(s => s.status === 'SYNCED')?.count || '0')
     }
 
     return NextResponse.json({
@@ -73,7 +155,37 @@ export async function GET(request: NextRequest) {
         amount: parseFloat(inv.total),
         status: inv.erp_sync_status.toLowerCase(),
         date: inv.created_at
-      }))
+      })),
+      // New dashboard data
+      inventoryHealth: {
+        lowStockItems: lowStockItems.map(item => ({
+          id: item.id,
+          name: item.item_name,
+          stock: parseFloat(item.stock_qty),
+          unit: item.unit,
+          rate: parseFloat(item.standard_rate)
+        })),
+        slowMovingItems: slowMovingItems.map(item => ({
+          id: item.id,
+          name: item.item_name,
+          stock: parseFloat(item.stock_qty),
+          unit: item.unit,
+          daysSinceSale: item.days_since_sale ? parseInt(item.days_since_sale) : null,
+          lastSoldDate: item.last_sold_date
+        }))
+      },
+      receivables: {
+        topDebtors: topDebtors.map(debtor => ({
+          customerId: debtor.customer_id,
+          name: debtor.customer_name,
+          phone: debtor.phone,
+          amount: parseFloat(debtor.amount),
+          daysOverdue: parseInt(debtor.days_overdue) || 0,
+          invoiceCount: parseInt(debtor.invoice_count),
+          dueDate: debtor.last_due_date
+        })),
+        totalPending: pendingCollections
+      }
     })
 
   } catch (error: any) {

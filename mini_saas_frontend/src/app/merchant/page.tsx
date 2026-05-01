@@ -5,6 +5,9 @@ import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight
 import { useDashboardStats } from '@/hooks/useApi'
 import { HeroSkeleton, StatCardSkeleton, ListItemSkeleton } from '@/components/ui/Skeleton'
 import { formatINRCompact, formatINR } from '@/lib/api-client'
+import { CashFlowCard } from '@/components/dashboard/CashFlowCard'
+import { InventoryHealthCard } from '@/components/dashboard/InventoryHealthCard'
+import { ReceivablesCard } from '@/components/dashboard/ReceivablesCard'
 
 const statusBadge: Record<string, string> = {
   synced: 'bg-success-soft text-success',
@@ -50,30 +53,20 @@ export default function DashboardPage() {
     )
   }
 
-  const { stats, recentInvoices } = data
+  const { stats, recentInvoices, inventoryHealth, receivables } = data
   const allSynced = stats.failedCount === 0
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-5">
-      {/* Revenue hero card */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-card text-primary-foreground p-6 lg:p-8 shadow-elegant">
-        <div className="absolute inset-0 opacity-30 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,hsl(var(--success)),transparent_50%)]" />
-        </div>
-        <div className="relative">
-          <div className="text-sm opacity-80">Today&apos;s revenue</div>
-          <div className="mt-2 text-5xl lg:text-6xl font-bold number-display tracking-tight">
-            {formatINR(stats.revenue)}
-          </div>
-          <div className="mt-3 flex items-center gap-4 text-sm opacity-90">
-            <span>{stats.invoiceCount} invoices</span>
-            <span className="opacity-50">•</span>
-            <span className="inline-flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5" /> vs yesterday
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* Cash Flow Card */}
+      <CashFlowCard
+        todaysCash={stats.todaysCash}
+        cashCollected={stats.cashCollected}
+        creditGiven={stats.creditGiven}
+        pendingCollections={stats.pendingCollections}
+        invoiceCount={stats.invoiceCount}
+        creditInvoiceCount={stats.creditInvoiceCount}
+      />
 
       {/* Sync status */}
       <div className={`rounded-2xl border p-5 flex items-center gap-4 ${allSynced ? 'border-success/30 bg-success-soft' : 'border-warning/40 bg-warning-soft'}`}>
@@ -139,6 +132,21 @@ export default function DashboardPage() {
           <Users className="h-5 w-5" />
           <span className="text-xs font-semibold">Parties</span>
         </Link>
+      </div>
+
+      {/* Dashboard Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Inventory Health */}
+        <InventoryHealthCard
+          lowStockItems={inventoryHealth?.lowStockItems || []}
+          slowMovingItems={inventoryHealth?.slowMovingItems || []}
+        />
+
+        {/* Receivables */}
+        <ReceivablesCard
+          topDebtors={receivables?.topDebtors || []}
+          totalPending={receivables?.totalPending || 0}
+        />
       </div>
 
       {/* Recent invoices */}
