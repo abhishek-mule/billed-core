@@ -336,12 +336,12 @@ async function sendThankYouMessage(invoice: any, newPendingAmount: number) {
       templateName: 'payment_received',
     }
 
-    const params = {
-      name: invoice.customer_name.split(' ')[0],
-      amount: formatINR(parseFloat(invoice.total)),
-      newBalance: formatINR(newPendingAmount),
-      invoiceNumber: invoice.invoice_number
-    }
+    const params: string[] = [
+      invoice.customer_name.split(' ')[0] || 'Customer',
+      formatINR(parseFloat(invoice.total)),
+      formatINR(newPendingAmount),
+      String(invoice.invoice_number)
+    ]
 
     await sendWhatsAppMessage(config, {
       to: formatPhoneNumber(invoice.phone),
