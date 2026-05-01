@@ -2,278 +2,643 @@
 
 import { useState } from 'react'
 import { 
-  Scan, 
-  Upload, 
-  X, 
-  CheckCircle2, 
-  AlertCircle, 
-  ChevronDown, 
+  Plus, 
+  Package, 
   Search, 
-  FileText, 
-  Maximize2, 
-  Eye, 
-  ExternalLink,
-  Zap,
-  ArrowRight,
-  Printer,
-  ChevronRight,
-  Bell
+  Calendar, 
+  DollarSign, 
+  CheckCircle2, 
+  Clock, 
+  MoreVertical,
+  Filter,
+  Download,
+  Upload,
+  AlertCircle,
+  IndianRupee,
+  TrendingUp,
+  Box
 } from 'lucide-react'
+import { formatINR } from '@/lib/api-client'
 
-export default function MagicScanReviewPage() {
-  const [isReviewMode, setIsReviewMode] = useState(true)
+interface PurchaseOrder {
+  id: string
+  orderNumber: string
+  supplierName: string
+  supplierGstin: string
+  orderDate: string
+  expectedDate: string
+  items: Array<{
+    productName: string
+    quantity: number
+    rate: number
+    amount: number
+  }>
+  totalAmount: number
+  status: 'pending' | 'ordered' | 'received' | 'cancelled'
+  paymentStatus: 'unpaid' | 'partial' | 'paid'
+}
 
-  if (!isReviewMode) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] gap-6 animate-in">
-         <div className="w-20 h-20 rounded-[2rem] bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-xl shadow-indigo-100">
-            <Scan className="w-10 h-10" />
-         </div>
-         <div className="text-center space-y-2">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Magic Scan Purchase</h2>
-            <p className="text-slate-400 text-sm font-medium">Upload or scan a supplier invoice to auto-extract data.</p>
-         </div>
-         <button 
-          onClick={() => setIsReviewMode(true)}
-          className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"
-         >
-            <Upload className="w-5 h-5" />
-            Upload Supplier Invoice
-         </button>
-      </div>
+const mockPurchaseOrders: PurchaseOrder[] = [
+  {
+    id: '1',
+    orderNumber: 'PO-2024-001',
+    supplierName: 'Balaji Traders',
+    supplierGstin: '27AABCU9603R1ZM',
+    orderDate: '2024-01-15',
+    expectedDate: '2024-01-20',
+    items: [
+      { productName: 'Ultratech Cement 50kg', quantity: 50, rate: 290, amount: 14500 },
+      { productName: 'TMT Bar 12mm (Tata)', quantity: 20, rate: 1600, amount: 32000 }
+    ],
+    totalAmount: 46500,
+    status: 'ordered',
+    paymentStatus: 'partial'
+  },
+  {
+    id: '2',
+    orderNumber: 'PO-2024-002',
+    supplierName: 'Sharma Electronics',
+    supplierGstin: '29AAFPU4567M1ZT',
+    orderDate: '2024-01-18',
+    expectedDate: '2024-01-25',
+    items: [
+      { productName: 'LED Bulb 9W (Philips)', quantity: 100, rate: 85, amount: 8500 },
+      { productName: 'Ceiling Fan (Bajaj)', quantity: 10, rate: 2500, amount: 25000 }
+    ],
+    totalAmount: 33500,
+    status: 'pending',
+    paymentStatus: 'unpaid'
+  }
+]
+
+export default function PurchaseManagementPage() {
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(mockPurchaseOrders)
+  const [showNewOrderForm, setShowNewOrderForm] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+
+  const filteredOrders = purchaseOrders.filter(order => {
+    const matchesSearch = !searchQuery || 
+      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.supplierName.toLowerCase().includes(searchQuery.toLowerCase())
+    
+    const matchesStatus = statusFilter === 'all' || order.status === statusFilter
+    
+    return matchesSearch && matchesStatus
+  })
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-amber-100 text-amber-800 border-amber-200'
+      case 'ordered': return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'received': return 'bg-green-100 text-green-800 border-green-200'
+      case 'cancelled': return 'bg-red-100 text-red-800 border-red-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid': return 'bg-green-50 text-green-700 border-green-200'
+      case 'partial': return 'bg-amber-50 text-amber-700 border-amber-200'
+      case 'unpaid': return 'bg-red-50 text-red-700 border-red-200'
+      default: return 'bg-gray-50 text-gray-700 border-gray-200'
+    }
+  }
+
+  const handleCreateOrder = (newOrder: Omit<PurchaseOrder, 'id' | 'orderNumber'>) => {
+    const orderNumber = `PO-2024-${String(purchaseOrders.length + 1).padStart(3, '0')}`
+    const order: PurchaseOrder = {
+      ...newOrder,
+      id: String(purchaseOrders.length + 1),
+      orderNumber
+    }
+    setPurchaseOrders([order, ...purchaseOrders])
+    setShowNewOrderForm(false)
+  }
+
+  const handleUpdateStatus = (orderId: string, newStatus: PurchaseOrder['status']) => {
+    setPurchaseOrders(orders => 
+      orders.map(order => 
+        order.id === orderId ? { ...order, status: newStatus } : order
+      )
     )
   }
 
-  return (
-    <div className="space-y-6 pb-20 animate-in">
-      
-      {/* Top Banner (Demo Mode) */}
-      <div className="bg-amber-500 py-3 px-8 -mx-8 -mt-8 mb-8 flex items-center justify-center gap-3">
-         <AlertCircle className="w-4 h-4 text-white" />
-         <span className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Demo Mode — Data not saved to real accounting system</span>
-      </div>
+  const totalPendingAmount = purchaseOrders
+    .filter(order => order.paymentStatus !== 'paid')
+    .reduce((sum, order) => sum + order.totalAmount, 0)
 
+  const totalOrdersThisMonth = purchaseOrders.filter(order => {
+    const orderDate = new Date(order.orderDate)
+    const now = new Date()
+    return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear()
+  }).length
+
+  if (showNewOrderForm) {
+    return <NewPurchaseOrderForm onSubmit={handleCreateOrder} onCancel={() => setShowNewOrderForm(false)} />
+  }
+
+  return (
+    <div className="space-y-6 pb-10 animate-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Review Scanned Purchase</h1>
-          <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-             <Zap className="w-3.5 h-3.5" />
-             AI Extracted
-          </span>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Purchase Management</h1>
+          <p className="text-muted-foreground text-sm">Manage purchase orders and suppliers</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 bg-white border border-slate-200 px-6 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-xl font-medium text-sm text-foreground hover:bg-muted transition-all">
             <Upload className="w-4 h-4" />
-            Upload Another
+            Import
           </button>
-          <button onClick={() => setIsReviewMode(false)} className="p-2.5 text-slate-300 hover:text-slate-900 transition-colors">
-            <X className="w-6 h-6" />
+          <button 
+            onClick={() => setShowNewOrderForm(true)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-primary/90 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            New Purchase Order
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Left: Document Preview */}
-        <div className="lg:col-span-5 space-y-4">
-           <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <FileText className="w-4 h-4 text-slate-300" />
-                 <span className="text-xs font-bold text-slate-400 italic">invoice_october_supplier.pdf</span>
-              </div>
-              <div className="flex items-center gap-2">
-                 <button className="p-2 text-slate-300 hover:text-slate-600"><Search className="w-4 h-4" /></button>
-                 <button className="p-2 text-slate-300 hover:text-slate-600"><Maximize2 className="w-4 h-4" /></button>
-              </div>
-           </div>
-           
-           <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-10 min-h-[500px] relative">
-              {/* Simulated Invoice Content */}
-              <div className="max-w-md mx-auto space-y-12 animate-pulse">
-                 <div className="flex justify-between items-start">
-                    <div className="space-y-2">
-                       <h3 className="text-2xl font-black text-slate-900 tracking-tighter">BALAJI TRADERS</h3>
-                       <div className="bg-emerald-50 px-3 py-1 rounded-md text-[10px] font-black text-emerald-600">GSTIN: 27AABCU9603R1ZM</div>
-                       <div className="text-[10px] font-bold text-slate-400">Invoice No: BT/23-24/0892</div>
-                    </div>
-                    <div className="text-right text-[10px] font-bold text-slate-300 uppercase tracking-widest">Invoice #BT/23-24/0892</div>
-                 </div>
-
-                 <div className="space-y-6 pt-10">
-                    <div className="flex justify-between border-b border-slate-50 pb-2">
-                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Description</span>
-                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Total</span>
-                    </div>
-                    <div className="flex justify-between">
-                       <span className="font-bold text-slate-900">Super Cement 50kg</span>
-                       <span className="font-black text-slate-900">₹14,500.00</span>
-                    </div>
-                    <div className="flex justify-between">
-                       <span className="font-bold text-slate-900">Steel TMT 12mm</span>
-                       <span className="font-black text-slate-900">₹32,000.00</span>
-                    </div>
-                 </div>
-
-                 <div className="pt-10 flex flex-col items-end gap-2">
-                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Grand Total</span>
-                    <span className="text-3xl font-black text-slate-900 tracking-tighter">₹46,500.00</span>
-                 </div>
-              </div>
-              
-              {/* OCR Scan Line */}
-              <div className="absolute inset-x-0 top-0 h-1 bg-indigo-500/20 shadow-[0_0_15px_rgba(79,70,229,0.5)] animate-scan pointer-events-none" />
-           </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Package className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-full">+12%</span>
+          </div>
+          <p className="text-2xl font-bold text-foreground">{purchaseOrders.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">Total Orders</p>
         </div>
 
-        {/* Right: Extracted Data & Mapping */}
-        <div className="lg:col-span-7 space-y-8">
-           
-           {/* Supplier Details Card */}
-           <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm space-y-8">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Supplier Details</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                 <div className="space-y-2">
-                    <div className="flex justify-between items-center px-1">
-                       <label className="text-[10px] font-black text-slate-400 uppercase">Supplier GSTIN</label>
-                       <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">High Match</span>
-                    </div>
-                    <div className="relative">
-                       <input type="text" defaultValue="27AABCU9603R1ZM" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:outline-none ring-4 ring-indigo-500/0 focus:ring-indigo-500/5 transition-all" />
-                       <CheckCircle2 className="absolute right-5 top-4 w-5 h-5 text-emerald-500" />
-                    </div>
-                 </div>
-                 <div className="space-y-2">
-                    <div className="flex justify-between items-center px-1">
-                       <label className="text-[10px] font-black text-slate-400 uppercase">Supplier Name (Auto-fetched)</label>
-                       <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">High Match</span>
-                    </div>
-                    <div className="relative">
-                       <input type="text" defaultValue="Balaji Traders" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:outline-none ring-4 ring-indigo-500/0 focus:ring-indigo-500/5 transition-all" />
-                       <CheckCircle2 className="absolute right-5 top-4 w-5 h-5 text-emerald-500" />
-                    </div>
-                 </div>
-                 <div className="space-y-2">
-                    <div className="flex justify-between items-center px-1">
-                       <label className="text-[10px] font-black text-slate-400 uppercase">Invoice Number</label>
-                       <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">High Match</span>
-                    </div>
-                    <div className="relative">
-                       <input type="text" defaultValue="BT/23-24/0892" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:outline-none ring-4 ring-indigo-500/0 focus:ring-indigo-500/5 transition-all" />
-                       <CheckCircle2 className="absolute right-5 top-4 w-5 h-5 text-emerald-500" />
-                    </div>
-                 </div>
-                 <div className="space-y-2">
-                    <div className="flex justify-between items-center px-1">
-                       <label className="text-[10px] font-black text-slate-400 uppercase">Invoice Date</label>
-                       <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Review</span>
-                    </div>
-                    <div className="relative">
-                       <input type="text" defaultValue="18 Oct 2023" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:outline-none ring-4 ring-indigo-500/0 focus:ring-indigo-500/5 transition-all" />
-                       <FileText className="absolute right-5 top-4 w-5 h-5 text-amber-500" />
-                    </div>
-                 </div>
-              </div>
-           </div>
+        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Clock className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full">Active</span>
+          </div>
+          <p className="text-2xl font-bold text-foreground">
+            {purchaseOrders.filter(order => order.status === 'pending' || order.status === 'ordered').length}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Pending Orders</p>
+        </div>
 
-           {/* Line Items & Stock Mapping */}
-           <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm space-y-8">
-              <div className="flex justify-between items-center mb-4">
-                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Line Items & Stock Mapping</h3>
-                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">2 Items Extracted</span>
-              </div>
+        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+              <IndianRupee className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full">Due</span>
+          </div>
+          <p className="text-2xl font-bold text-foreground">{formatINR(totalPendingAmount)}</p>
+          <p className="text-xs text-muted-foreground mt-1">Pending Payments</p>
+        </div>
 
-              <div className="space-y-12">
-                 {/* Item 1 */}
-                 <div className="relative pl-6 border-l-4 border-emerald-400 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-                       <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Scanned Item Name</label>
-                          <input type="text" defaultValue="Super Cement 50kg" className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-500" readOnly />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                             <label className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Map to BillZo</label>
-                             <span className="text-[9px] font-black text-emerald-500 uppercase">Auto-matched</span>
-                          </div>
-                          <div className="relative">
-                             <select className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 text-sm font-black text-emerald-700 appearance-none focus:outline-none">
-                                <option>Ultratech Cement 50kg</option>
-                             </select>
-                             <ChevronDown className="absolute right-4 top-3 w-4 h-4 text-emerald-400" />
-                          </div>
-                       </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-8">
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Qty</label>
-                          <p className="text-lg font-black text-slate-900">50</p>
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Rate (₹)</label>
-                          <p className="text-lg font-black text-slate-900">290.00</p>
-                       </div>
-                       <div className="space-y-1 text-right">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Amount</label>
-                          <p className="text-lg font-black text-slate-900">14,500.00</p>
-                       </div>
-                    </div>
-                 </div>
+        <div className="bg-card rounded-xl p-5 border border-border shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">This Month</span>
+          </div>
+          <p className="text-2xl font-bold text-foreground">{totalOrdersThisMonth}</p>
+          <p className="text-xs text-muted-foreground mt-1">Orders This Month</p>
+        </div>
+      </div>
 
-                 {/* Item 2 */}
-                 <div className="relative pl-6 border-l-4 border-amber-400 space-y-6 opacity-80">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-                       <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Scanned Item Name</label>
-                          <input type="text" defaultValue="Steel TMT 12mm" className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-500" readOnly />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                             <label className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Map to BillZo</label>
-                             <span className="text-[9px] font-black text-amber-500 uppercase">Review Mapped</span>
-                          </div>
-                          <div className="relative">
-                             <select className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-900 appearance-none focus:outline-none">
-                                <option>TMT Bar 12mm (Tata)</option>
-                             </select>
-                             <ChevronDown className="absolute right-4 top-3 w-4 h-4 text-slate-400" />
-                          </div>
-                       </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-8">
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Qty</label>
-                          <p className="text-lg font-black text-slate-900">20</p>
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Rate (₹)</label>
-                          <p className="text-lg font-black text-slate-900">1600.00</p>
-                       </div>
-                       <div className="space-y-1 text-right">
-                          <label className="text-[9px] font-black text-slate-300 uppercase">Amount</label>
-                          <p className="text-lg font-black text-slate-900">32,000.00</p>
-                       </div>
-                    </div>
-                 </div>
+      {/* Filters and Search */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search orders..."
+            className="w-full bg-card border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-card border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="ordered">Ordered</option>
+            <option value="received">Received</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          
+          <button className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-xl text-sm hover:bg-muted transition-all">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        </div>
+      </div>
+
+      {/* Purchase Orders Table */}
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Order ID</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Supplier</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Date</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Items</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Amount</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Payment</th>
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider w-16"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                    No purchase orders found. Create your first order!
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((order) => (
+                  <tr 
+                    key={order.id} 
+                    className="hover:bg-muted/40 transition-colors cursor-pointer"
+                    onClick={() => setSelectedOrder(order)}
+                  >
+                    <td className="px-6 py-4">
+                      <p className="font-semibold text-sm text-foreground">{order.orderNumber}</p>
+                      <p className="text-xs text-muted-foreground">{order.supplierGstin}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-sm text-foreground">{order.supplierName}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-foreground">{new Date(order.orderDate).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">Exp: {new Date(order.expectedDate).toLocaleDateString()}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-foreground">{order.items.length} items</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.items.reduce((sum, item) => sum + item.quantity, 0)} units
+                      </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-sm text-foreground">{formatINR(order.totalAmount)}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getPaymentStatusColor(order.paymentStatus)}`}>
+                        {order.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button 
+                        className="p-2 hover:bg-muted rounded-lg text-muted-foreground transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // Handle menu click
+                        }}
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Order Detail Modal */}
+      {selectedOrder && (
+        <OrderDetailModal 
+          order={selectedOrder} 
+          onClose={() => setSelectedOrder(null)}
+          onUpdateStatus={handleUpdateStatus}
+        />
+      )}
+    </div>
+  )
+}
+
+function NewPurchaseOrderForm({ onSubmit, onCancel }: { onSubmit: (order: Omit<PurchaseOrder, 'id' | 'orderNumber'>) => void, onCancel: () => void }) {
+  const [supplierName, setSupplierName] = useState('')
+  const [supplierGstin, setSupplierGstin] = useState('')
+  const [expectedDate, setExpectedDate] = useState('')
+  const [items, setItems] = useState<Array<{ productName: string; quantity: number; rate: number; amount: number }>>([
+    { productName: '', quantity: 1, rate: 0, amount: 0 }
+  ])
+
+  const addItem = () => {
+    setItems([...items, { productName: '', quantity: 1, rate: 0, amount: 0 }])
+  }
+
+  const updateItem = (index: number, field: string, value: any) => {
+    const updatedItems = [...items]
+    updatedItems[index] = { ...updatedItems[index], [field]: value }
+    
+    // Recalculate amount
+    if (field === 'quantity' || field === 'rate') {
+      updatedItems[index].amount = updatedItems[index].quantity * updatedItems[index].rate
+    }
+    
+    setItems(updatedItems)
+  }
+
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index))
+  }
+
+  const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    const validItems = items.filter(item => item.productName && item.quantity > 0 && item.rate > 0)
+    
+    if (validItems.length === 0) {
+      alert('Please add at least one valid item')
+      return
+    }
+
+    onSubmit({
+      supplierName,
+      supplierGstin,
+      orderDate: new Date().toISOString().split('T')[0],
+      expectedDate: expectedDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      items: validItems,
+      totalAmount,
+      status: 'pending',
+      paymentStatus: 'unpaid'
+    })
+  }
+
+  return (
+    <div className="space-y-6 pb-10 animate-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">New Purchase Order</h1>
+          <p className="text-muted-foreground text-sm">Create a new purchase order</p>
+        </div>
+        <button 
+          onClick={onCancel}
+          className="px-4 py-2 bg-card border border-border rounded-xl text-sm hover:bg-muted transition-all"
+        >
+          Cancel
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Supplier Details */}
+        <div className="bg-card rounded-xl p-6 border border-border space-y-4">
+          <h2 className="font-semibold text-foreground">Supplier Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-2">Supplier Name</label>
+              <input
+                type="text"
+                required
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                placeholder="Enter supplier name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-2">Supplier GSTIN</label>
+              <input
+                type="text"
+                value={supplierGstin}
+                onChange={(e) => setSupplierGstin(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                placeholder="Enter GSTIN (optional)"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-2">Expected Delivery Date</label>
+              <input
+                type="date"
+                value={expectedDate}
+                onChange={(e) => setExpectedDate(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Line Items */}
+        <div className="bg-card rounded-xl p-6 border border-border space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-foreground">Line Items</h2>
+            <button
+              type="button"
+              onClick={addItem}
+              className="flex items-center gap-2 text-sm text-primary hover:text-primary/80"
+            >
+              <Plus className="w-4 h-4" />
+              Add Item
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                <div className="col-span-4">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Product Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={item.productName}
+                    onChange={(e) => updateItem(index, 'productName', e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    placeholder="Product name"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Rate (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={item.rate}
+                    onChange={(e) => updateItem(index, 'rate', parseFloat(e.target.value))}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Amount</label>
+                  <div className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm font-medium">
+                    {formatINR(item.amount)}
+                  </div>
+                </div>
+                <div className="col-span-1">
+                  <button
+                    type="button"
+                    onClick={() => removeItem(index)}
+                    className="w-full p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    disabled={items.length === 1}
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              
-              <div className="pt-10 border-t border-slate-50 flex items-center justify-between">
-                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
-                       <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                       <p className="text-sm font-black text-slate-900 tracking-tight">Everything looks correct?</p>
-                       <p className="text-xs text-slate-400 font-medium">This will inward 70 units into your inventory.</p>
-                    </div>
-                 </div>
-                 <button className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all flex items-center gap-4">
-                    Approve & Inward Stock
-                    <ArrowRight className="w-5 h-5" />
-                 </button>
-              </div>
-           </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Total */}
+        <div className="bg-card rounded-xl p-6 border border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Amount</p>
+              <p className="text-2xl font-bold text-foreground">{formatINR(totalAmount)}</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-6 py-3 bg-card border border-border rounded-xl text-sm font-medium hover:bg-muted transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all"
+              >
+                Create Purchase Order
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function OrderDetailModal({ order, onClose, onUpdateStatus }: { order: PurchaseOrder, onClose: () => void, onUpdateStatus: (id: string, status: PurchaseOrder['status']) => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-card rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-card border-b border-border p-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-foreground">{order.orderNumber}</h2>
+            <p className="text-sm text-muted-foreground">{order.supplierName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-muted rounded-lg transition-colors"
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Order Info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Order Date</p>
+              <p className="font-medium text-foreground">{new Date(order.orderDate).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Expected Date</p>
+              <p className="font-medium text-foreground">{new Date(order.expectedDate).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Status</p>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                order.status === 'pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                order.status === 'ordered' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                order.status === 'received' ? 'bg-green-100 text-green-800 border-green-200' :
+                'bg-red-100 text-red-800 border-red-200'
+              }`}>
+                {order.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Payment Status</p>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                order.paymentStatus === 'paid' ? 'bg-green-50 text-green-700 border-green-200' :
+                order.paymentStatus === 'partial' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                'bg-red-50 text-red-700 border-red-200'
+              }`}>
+                {order.paymentStatus}
+              </span>
+            </div>
+          </div>
+
+          {/* Items */}
+          <div>
+            <h3 className="font-semibold text-foreground mb-3">Items</h3>
+            <div className="space-y-2">
+              {order.items.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                  <div>
+                    <p className="font-medium text-foreground">{item.productName}</p>
+                    <p className="text-xs text-muted-foreground">Qty: {item.quantity} × ₹{item.rate}</p>
+                  </div>
+                  <p className="font-bold text-foreground">{formatINR(item.amount)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Total */}
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-lg font-semibold text-foreground">Total Amount</p>
+              <p className="text-2xl font-bold text-foreground">{formatINR(order.totalAmount)}</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            {order.status === 'pending' && (
+              <button
+                onClick={() => onUpdateStatus(order.id, 'ordered')}
+                className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-all"
+              >
+                Mark as Ordered
+              </button>
+            )}
+            {order.status === 'ordered' && (
+              <button
+                onClick={() => onUpdateStatus(order.id, 'received')}
+                className="flex-1 px-4 py-3 bg-green-500 text-white rounded-xl text-sm font-medium hover:bg-green-600 transition-all"
+              >
+                Mark as Received
+              </button>
+            )}
+            <button className="flex-1 px-4 py-3 bg-card border border-border rounded-xl text-sm font-medium hover:bg-muted transition-all">
+              Print Order
+            </button>
+          </div>
         </div>
       </div>
     </div>

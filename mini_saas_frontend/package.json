@@ -16,6 +16,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.100.5",
     "@upstash/redis": "^1.21.0",
+    "clsx": "^2.1.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.309.0",

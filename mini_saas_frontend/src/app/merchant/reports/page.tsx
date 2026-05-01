@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Download, 
   Calendar, 
@@ -39,17 +39,77 @@ interface ReportStats {
   activeCustomers: number
 }
 
+interface ReportsData {
+  success: boolean
+  period: string
+  dateRange: { start: string; end: string }
+  stats: ReportStats
+  topSellingProducts: Array<{ name: string; quantity: number; revenue: number }>
+  lowStockItems: Array<{ name: string; code: string; stock: number; reorderLevel: number }>
+  salesTrend: Array<{ date: string; invoices: number; revenue: number }>
+  paymentBreakdown: Array<{ status: string; count: number; amount: number }>
+  topCustomers: Array<{ name: string; phone: string; orders: number; spent: number }>
+}
+
 export default function ReportsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('month')
   const [selectedReport, setSelectedReport] = useState<ReportType>('sales')
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [reportsData, setReportsData] = useState<ReportsData | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock data - replace with actual API calls
-  const reportStats: ReportStats = {
-    totalSales: 842300,
-    totalInvoices: 156,
-    averageOrderValue: 5398,
+  // Fetch reports data
+  const fetchReportsData = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/merchant/reports/stats?period=${selectedPeriod}`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch reports data')
+      }
+      const data = await res.json()
+      if (data.success) {
+        setReportsData(data)
+      } else {
+        throw new Error(data.error || 'Failed to load reports')
+      }
+    } catch (err) {
+      console.error('Failed to fetch reports:', err)
+      setError('Failed to load reports data')
+      // Use fallback data if API fails
+      setReportsData(getFallbackData())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Load data on mount and period change
+  useEffect(() => {
+    fetchReportsData()
+  }, [selectedPeriod])
+
+  // Fallback data in case API fails
+  const getFallbackData = (): ReportsData => ({
+    success: true,
+    period: selectedPeriod,
+    dateRange: { start: new Date().toISOString(), end: new Date().toISOString() },
+    stats: {
+      totalSales: 842300,
+      totalInvoices: 156,
+      averageOrderValue: 5398,
+      topSellingProducts: [
+        { name: 'Parle-G Biscuit 100g', quantity: 245, revenue: 2450 },
+        { name: 'Amul Milk 500ml', quantity: 189, revenue: 6048 },
+        { name: 'Tata Salt 1kg', quantity: 156, revenue: 4368 },
+        { name: 'Maggi 70g', quantity: 134, revenue: 1876 },
+        { name: 'Coca Cola 750ml', quantity: 98, revenue: 3920 }
+      ],
+      gstCollected: { cgst: 74520, sgst: 74520, igst: 0 },
+      pendingPayments: 28500,
+      lowStockItems: 8,
+      activeCustomers: 89
+    },
     topSellingProducts: [
       { name: 'Parle-G Biscuit 100g', quantity: 245, revenue: 2450 },
       { name: 'Amul Milk 500ml', quantity: 189, revenue: 6048 },
@@ -57,11 +117,13 @@ export default function ReportsPage() {
       { name: 'Maggi 70g', quantity: 134, revenue: 1876 },
       { name: 'Coca Cola 750ml', quantity: 98, revenue: 3920 }
     ],
-    gstCollected: { cgst: 74520, sgst: 74520, igst: 0 },
-    pendingPayments: 28500,
-    lowStockItems: 8,
-    activeCustomers: 89
-  }
+    lowStockItems: [],
+    salesTrend: [],
+    paymentBreakdown: [],
+    topCustomers: []
+  })
+
+  const reportStats = reportsData?.stats || getFallbackData().stats
 
   const handleExportGstr = async () => {
     try {
@@ -228,8 +290,9 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setLoading(true)}
-            className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-xl font-medium text-sm text-foreground hover:bg-muted transition-all"
+            onClick={fetchReportsData}
+            disabled={loading}
+            className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-xl font-medium text-sm text-foreground hover:bg-muted transition-all disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -368,6 +431,35 @@ export default function ReportsPage() {
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-foreground">Sales Analysis</h3>
               
+              {/* Sales Trend Chart */}
+              <div className="bg-card rounded-xl p-6 border border-border">
+                <h4 className="text-sm font-semibold text-muted-foreground mb-4">Sales Trend</h4>
+                <div className="h-48 flex items-end gap-2">
+                  {reportsData?.salesTrend && reportsData.salesTrend.length > 0 ? (
+                    reportsData.salesTrend.slice(-7).map((trend, index) => {
+                      const maxRevenue = Math.max(...reportsData.salesTrend.map(t => t.revenue))
+                      const height = maxRevenue > 0 ? (trend.revenue / maxRevenue) * 100 : 0
+                      return (
+                        <div key={index} className="flex-1 flex flex-col items-center gap-2">
+                          <div 
+                            className="w-full bg-primary/80 rounded-t-lg transition-all hover:bg-primary"
+                            style={{ height: `${Math.max(height, 5)}%` }}
+                            title={`₹${formatINR(trend.revenue)}`}
+                          />
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(trend.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
+                      No trend data available
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Top Selling Products */}
               <div>
                 <h4 className="text-sm font-semibold text-muted-foreground mb-4">Top Selling Products</h4>
@@ -396,6 +488,57 @@ export default function ReportsPage() {
           {selectedReport === 'gst' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-foreground">GST Summary</h3>
+              
+              {/* GST Breakdown Chart */}
+              <div className="bg-card rounded-xl p-6 border border-border">
+                <h4 className="text-sm font-semibold text-muted-foreground mb-4">GST Breakdown</h4>
+                <div className="flex items-center gap-8">
+                  <div className="flex-1 space-y-3">
+                    {reportStats.gstCollected.cgst > 0 && (
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">CGST</span>
+                          <span className="font-semibold">{formatINR(reportStats.gstCollected.cgst)}</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full"
+                            style={{ width: `${(reportStats.gstCollected.cgst / (reportStats.gstCollected.cgst + reportStats.gstCollected.sgst + reportStats.gstCollected.igst)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {reportStats.gstCollected.sgst > 0 && (
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">SGST</span>
+                          <span className="font-semibold">{formatINR(reportStats.gstCollected.sgst)}</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 rounded-full"
+                            style={{ width: `${(reportStats.gstCollected.sgst / (reportStats.gstCollected.cgst + reportStats.gstCollected.sgst + reportStats.gstCollected.igst)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {reportStats.gstCollected.igst > 0 && (
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">IGST</span>
+                          <span className="font-semibold">{formatINR(reportStats.gstCollected.igst)}</span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-purple-500 rounded-full"
+                            style={{ width: `${(reportStats.gstCollected.igst / (reportStats.gstCollected.cgst + reportStats.gstCollected.sgst + reportStats.gstCollected.igst)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-success-soft rounded-xl border border-success/20">
