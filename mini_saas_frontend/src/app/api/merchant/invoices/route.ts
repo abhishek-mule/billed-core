@@ -158,8 +158,12 @@ async function handleCreateInvoice(request: Request, session: SessionData) {
   }
 }
 
-const authHandler = await withSessionAuth(handleListInvoices)
-const createHandler = await withSessionAuth(handleCreateInvoice)
+export async function GET(request: Request) {
+  const handler = await withSessionAuth(handleListInvoices)
+  return withCsrfProtection(handler)(request)
+}
 
-export const GET = withCsrfProtection(authHandler)
-export const POST = withCsrfProtection(createHandler)
+export async function POST(request: Request) {
+  const handler = await withSessionAuth(handleCreateInvoice)
+  return withCsrfProtection(handler)(request)
+}
