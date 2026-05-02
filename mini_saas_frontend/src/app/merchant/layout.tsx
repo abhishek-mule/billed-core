@@ -103,6 +103,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const session = useSession()
   const [isOnline, setIsOnline] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
@@ -151,16 +152,33 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const allSynced = syncSummary.pending === 0 && syncSummary.failed === 0
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <div className="px-6 py-5 border-b border-sidebar-border">
-          <Link href="/merchant" className="flex items-center gap-3">
-            <Logo variant="mark" />
-            <Logo variant="text" />
-          </Link>
+    <div className="flex min-h-screen w-full bg-slate-50">
+      {/* Desktop Sidebar - Collapsible */}
+      <aside className={`hidden lg:flex flex-col border-r border-slate-200 bg-white transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        {/* Logo & Collapse Button */}
+        <div className="px-4 py-5 border-b border-slate-200 flex items-center gap-3">
+          <button 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          {!sidebarCollapsed && (
+            <Link href="/merchant" className="flex items-center gap-2">
+              <Logo variant="mark" />
+              <Logo variant="text" />
+            </Link>
+          )}
+          {sidebarCollapsed && (
+            <Link href="/merchant" className="mx-auto">
+              <Logo variant="mark" />
+            </Link>
+          )}
         </div>
         
+        {/* Navigation Icons Only When Collapsed */}
         <nav className="flex-1 p-3 space-y-1">
           {sidebarItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== '/merchant' && pathname.startsWith(href))
@@ -168,65 +186,84 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={href}
                 href={href || '/'}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-base ${
+                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                   active
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                    ? 'bg-teal-50 text-teal-700'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
                 }`}
+                title={sidebarCollapsed ? label : undefined}
               >
-                <Icon className="h-4 w-4" />
-                {label}
+                <Icon className={`h-5 w-5 flex-shrink-0 ${active ? 'text-teal-600' : 'text-slate-400'}`} />
+                {!sidebarCollapsed && <span>{label}</span>}
               </Link>
             )
           })}
         </nav>
         
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="rounded-lg bg-sidebar-accent/50 p-3">
-            <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
-              <span className={`h-2 w-2 rounded-full ${allSynced ? 'bg-success' : syncSummary.failed > 0 ? 'bg-danger' : 'bg-warning'} animate-pulse-dot`} />
-              {allSynced 
-                ? 'All synced' 
-                : syncSummary.failed > 0 
-                  ? `${syncSummary.failed} failed`
-                  : `${syncSummary.pending} pending`
-              }
+        {/* Sync Status */}
+        <div className="p-4 border-t border-slate-200">
+          {!sidebarCollapsed ? (
+            <div className="rounded-xl bg-slate-50 p-3">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span className={`h-2 w-2 rounded-full ${allSynced ? 'bg-teal-500' : syncSummary.failed > 0 ? 'bg-red-500' : 'bg-amber-500'} animate-pulse-dot`} />
+                {allSynced 
+                  ? 'All synced' 
+                  : syncSummary.failed > 0 
+                    ? `${syncSummary.failed} failed`
+                    : `${syncSummary.pending} pending`
+                }
+              </div>
+              <p className="mt-1 text-xs text-slate-400">Last: {lastSync}</p>
             </div>
-            <p className="mt-1 text-xs text-sidebar-foreground/60">Last: {lastSync}</p>
-          </div>
+          ) : (
+            <div className={`h-2 w-2 rounded-full mx-auto ${allSynced ? 'bg-teal-500' : syncSummary.failed > 0 ? 'bg-red-500' : 'bg-amber-500'}`} />
+          )}
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Top Bar */}
-        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-card/95 backdrop-blur px-4 h-14">
+        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 backdrop-blur px-4 h-14">
           <Link href="/merchant" className="flex items-center gap-2">
             <Logo variant="mark" />
-            <span className="text-lg font-bold text-foreground tracking-tight">BillZo</span>
+            <span className="text-lg font-bold text-slate-800">BillZo</span>
           </Link>
-          <div className="flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-medium text-success">
-            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />
+          <div className="flex items-center gap-1.5 rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse-dot" />
             Online
           </div>
         </header>
 
         {/* Desktop Top Bar */}
-        <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between gap-4 border-b border-border bg-card/95 backdrop-blur px-8 h-16">
-          <h1 className="text-xl font-semibold tracking-tight">
-            {sidebarItems.find(item => pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href)))?.label || 'Dashboard'}
-          </h1>
+        <header className="hidden lg:flex sticky top-0 z-30 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 backdrop-blur px-6 h-16">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <Link href="/merchant" className="flex items-center gap-2">
+              <Logo variant="mark" />
+            </Link>
+            <h1 className="text-lg font-semibold text-slate-800 tracking-tight">
+              {sidebarItems.find(item => pathname === item.href || (item.href !== '/merchant' && pathname.startsWith(item.href)))?.label || 'Dashboard'}
+            </h1>
+          </div>
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 placeholder="Search invoices, products, parties..."
-                className="h-9 w-80 rounded-lg border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 w-72 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300"
               />
             </div>
-            <button className="grid h-9 w-9 place-items-center rounded-lg border border-input hover:bg-accent">
-              <Bell className="h-4 w-4" />
+            <button className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 hover:bg-slate-50">
+              <Bell className="h-4 w-4 text-slate-500" />
             </button>
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-primary text-primary-foreground text-sm font-semibold">
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-white text-sm font-semibold">
               {session?.companyName?.charAt(0) || 'R'}
             </div>
           </div>
@@ -238,7 +275,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             <motion.div 
               initial={{ height: 0, opacity: 0 }} 
               animate={{ height: 'auto', opacity: 1 }}
-              className="bg-warning text-white text-[10px] font-black uppercase tracking-[0.2em] py-2 text-center flex items-center justify-center gap-2"
+              className="bg-amber-400 text-amber-900 text-[10px] font-black uppercase tracking-[0.2em] py-2 text-center flex items-center justify-center gap-2"
             >
               <AlertTriangle className="w-3 h-3" />
               Demo Mode — Data not saved to real accounting system
