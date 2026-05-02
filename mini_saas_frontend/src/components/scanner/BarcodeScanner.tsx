@@ -1,231 +1,156 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { 
-  Camera, 
-  CameraOff, 
-  Flashlight, 
-  FlipHorizontal,
-  Loader2,
-  X,
-  CheckCircle2,
-  AlertTriangle
-} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
+import { Camera, X, RefreshCcw, Zap } from 'lucide-react'
+import { Button } from '../ui/Button'
+import { cn } from '@/lib/utils'
 
 interface BarcodeScannerProps {
-  onScan: (barcode: string) => void
+  onScan: (decodedText: string) => void
   onClose: () => void
-  onError?: (error: string) => void
+  isOpen: boolean
 }
 
-export function BarcodeScanner({ onScan, onClose, onError }: BarcodeScannerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  
-  const [scanning, setScanning] = useState(false)
-  const [flashOn, setFlashOn] = useState(false)
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps) {
+  const [scanner, setScanner] = useState<Html5Qrcode | null>(null)
+  const [isScanning, setIsScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastScanned, setLastScanned] = useState<string | null>(null)
+  const [hasCamera, setHasCamera] = useState(false)
+  const containerId = 'barcode-scanner-container'
 
-  const startCamera = useCallback(async () => {
+  useEffect(() => {
+    if (isOpen) {
+      const html5QrCode = new Html5Qrcode(containerId)
+      setScanner(html5QrCode)
+      startScanning(html5QrCode)
+    } else {
+      stopScanning()
+    }
+
+    return () => {
+      stopScanning()
+    }
+  }, [isOpen])
+
+  const startScanning = async (scannerInstance: Html5Qrcode) => {
     try {
       setError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+      setIsScanning(true)
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 150 },
+        aspectRatio: 1.0,
+      }
+
+      await scannerInstance.start(
+        { facingMode: 'environment' },
+        config,
+        (decodedText) => {
+          onScan(decodedText)
+          // Visual feedback
+          const audio = new Audio('/scan-success.mp3') // Optional
+          audio.play().catch(() => {})
         },
-        audio: false,
-      })
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        streamRef.current = stream
-        setScanning(true)
-      }
-    } catch (err: any) {
-      const msg = err.name === 'NotAllowedError' 
-        ? 'Camera permission denied' 
-        : 'Cannot access camera'
-      setError(msg)
-      onError?.(msg)
-    }
-  }, [facingMode, onError])
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-    setScanning(false)
-  }, [])
-
-  useEffect(() => {
-    return () => stopCamera()
-  }, [stopCamera])
-
-  // Barcode detection loop using BarcodeDetector API (Chrome/Edge)
-  useEffect(() => {
-    if (!scanning || !videoRef.current) return
-
-    const detectBarcode = async () => {
-      if (!('BarcodeDetector' in window)) {
-        // Fallback: try legacy @zxing approach
-        console.log('BarcodeDetector not supported, using mock')
-        return
-      }
-
-      try {
-        const barcodeDetector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
-        })
-
-        const detectLoop = async () => {
-          if (!videoRef.current || !streamRef.current) return
-
-          try {
-            const barcodes = await barcodeDetector.detect(videoRef.current)
-            if (barcodes.length > 0) {
-              const code = barcodes[0].rawValue
-              if (code !== lastScanned) {
-                setLastScanned(code)
-                onScan(code)
-                stopCamera()
-                return
-              }
-            }
-          } catch (e) {
-            // Ignore NotFoundException
-          }
-
-          if (streamRef.current) {
-            requestAnimationFrame(detectLoop)
-          }
+        (errorMessage) => {
+          // Silent for scan errors (normal during searching)
         }
+      )
+      setHasCamera(true)
+    } catch (err: any) {
+      console.error('Camera access failed:', err)
+      setError(err.message || 'Could not access camera')
+      setIsScanning(false)
+    }
+  }
 
-        detectLoop()
-      } catch (e) {
-        console.error('BarcodeDetector error:', e)
+  const stopScanning = async () => {
+    if (scanner) {
+      try {
+        await scanner.stop()
+        scanner.clear()
+      } catch (err) {
+        console.error('Failed to stop scanner:', err)
       }
     }
+    setIsScanning(false)
+  }
 
-    detectBarcode()
-  }, [scanning, onScan, lastScanned, stopCamera])
-
-  const toggleFlash = useCallback(() => {
-    if (streamRef.current) {
-      const track = streamRef.current.getVideoTracks()[0]
-      const capabilities = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean }
-      if (capabilities.torch) {
-        track.applyConstraints({ advanced: [{ torch: !flashOn }] as any })
-        setFlashOn(!flashOn)
-      }
-    }
-  }, [flashOn])
-
-  const toggleCamera = useCallback(() => {
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
-    stopCamera()
-  }, [stopCamera])
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-black/50">
-        <h3 className="text-white font-semibold">Scan Barcode</h3>
-        <button 
-          onClick={() => { stopCamera(); onClose() }}
-          className="p-2 rounded-full bg-white/10"
-        >
-          <X className="w-5 h-5 text-white" />
-        </button>
-      </div>
-
-      {/* Scanner View */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
-        {error ? (
-          <div className="text-center p-8">
-            <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-            <p className="text-white text-lg">{error}</p>
-            <p className="text-white/60 text-sm mt-2">
-              Please allow camera access or use manual entry
-            </p>
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl animate-fade-in p-6">
+      <div className="w-full max-w-md bg-card rounded-[2.5rem] border-2 border-border/50 overflow-hidden shadow-2xl relative">
+        {/* Header */}
+        <div className="p-6 flex items-center justify-between border-b border-border/50">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                <Zap className="w-5 h-5 fill-primary/20" />
+             </div>
+             <div>
+                <h3 className="text-sm font-black uppercase tracking-widest leading-none">Scanning Engine</h3>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase mt-1 tracking-tighter opacity-60">Point at a barcode</p>
+             </div>
           </div>
-        ) : (
-          <>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-            <canvas ref={canvasRef} className="hidden" />
-            
-            {/* Scanning overlay */}
-            {scanning && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-64 h-40 border-2 border-emerald-500 rounded-lg animate-pulse" />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Last scanned */}
-        {lastScanned && (
-          <div className="absolute bottom-4 left-4 right-4 bg-emerald-600 text-white p-4 rounded-xl flex items-center gap-3">
-            <CheckCircle2 className="w-6 h-6" />
-            <span className="font-mono text-lg">{lastScanned}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Controls */}
-      <div className="p-4 bg-black/50 flex items-center justify-center gap-4">
-        {!scanning ? (
-          <button
-            onClick={startCamera}
-            className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-full font-semibold"
-          >
-            <Camera className="w-5 h-5" />
-            Start Scanner
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-muted transition-colors">
+            <X className="w-5 h-5" />
           </button>
-        ) : (
-          <>
-            <button
-              onClick={toggleFlash}
-              className={`p-4 rounded-full ${flashOn ? 'bg-amber-500' : 'bg-white/10'}`}
-            >
-              <Flashlight className={`w-6 h-6 ${flashOn ? 'text-white' : 'text-white/60'}`} />
-            </button>
-            <button
-              onClick={toggleCamera}
-              className="p-4 rounded-full bg-white/10"
-            >
-              <FlipHorizontal className="w-6 h-6 text-white" />
-            </button>
-            <button
-              onClick={stopCamera}
-              className="p-4 rounded-full bg-white/10"
-            >
-              <CameraOff className="w-6 h-6 text-white" />
-            </button>
-          </>
-        )}
-      </div>
+        </div>
 
-      {/* Manual entry fallback */}
-      <div className="p-4 bg-black/50 text-center">
-        <button
-          onClick={onClose}
-          className="text-white/60 text-sm hover:text-white"
-        >
-          Enter barcode manually
-        </button>
+        {/* Scanner View */}
+        <div className="relative aspect-square w-full bg-black flex flex-col items-center justify-center overflow-hidden">
+           <div id={containerId} className="w-full h-full" />
+           
+           {/* Overlay Decorations */}
+           <div className="absolute inset-0 pointer-events-none border-[40px] border-black/40">
+              <div className="w-full h-full border-2 border-primary/50 rounded-2xl relative">
+                 <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary -translate-x-1 -translate-y-1" />
+                 <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary translate-x-1 -translate-y-1" />
+                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary -translate-x-1 translate-y-1" />
+                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary translate-x-1 translate-y-1" />
+                 
+                 {/* Scanning Line */}
+                 {isScanning && (
+                   <div className="absolute top-0 left-0 right-0 h-1 bg-primary/50 shadow-[0_0_15px_rgba(30,58,138,0.5)] animate-scan-line" />
+                 )}
+              </div>
+           </div>
+
+           {!isScanning && !error && (
+             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
+                <Loader />
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Warming up sensor...</p>
+             </div>
+           )}
+
+           {error && (
+             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-destructive/10 backdrop-blur-sm p-8 text-center">
+                <div className="w-16 h-16 bg-destructive text-white rounded-[1.5rem] flex items-center justify-center mb-2">
+                   <Camera className="w-8 h-8" />
+                </div>
+                <p className="text-xs font-black uppercase tracking-widest text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={() => scanner && startScanning(scanner)} icon={<RefreshCcw className="w-3 h-3" />}>
+                   Retry Sensor
+                </Button>
+             </div>
+           )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 bg-muted/30 flex items-center justify-center">
+           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-50">Authorized Scanning Module v1.0</p>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function Loader() {
+  return (
+    <div className="relative w-12 h-12">
+      <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
+      <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
   )
 }

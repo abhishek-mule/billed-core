@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOfflineQueue } from '@/hooks/useOfflineQueue'
+import { BarcodeScanner } from '@/components/scanner/BarcodeScanner'
+import { toast } from 'sonner'
 
 interface Item {
   id: string
@@ -44,6 +46,8 @@ export default function NewInvoicePage() {
   const [isCreating, setIsCreating] = useState(false)
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false)
 
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
+
   // Check if first-time setup needed
   useEffect(() => {
     const isFirstTime = localStorage.getItem('billzo_onboarded') === 'false'
@@ -52,9 +56,75 @@ export default function NewInvoicePage() {
     }
   }, [])
 
-  // Suggestions (Mock)
+  // Handle Barcode Scan
+  const handleBarcodeScan = async (code: string) => {
+    setIsScannerOpen(false)
+    toast.loading('Searching Product...', { id: 'barcode-scan' })
+    
+    try {
+      const res = await fetch(`/api/merchant/products?search=${code}`)
+      const json = await res.json()
+      
+      if (json.success && json.data.length > 0) {
+        quickAddItem(json.data[0])
+        toast.success(`Added ${json.data[0].itemName}`, { id: 'barcode-scan' })
+      } else {
+        toast.error('Product not found for this barcode', { id: 'barcode-scan' })
+      }
+    } catch (e) {
+      toast.error('Scan failed', { id: 'barcode-scan' })
+    }
+  }
+
+  // Suggestions (Real Data)
   const [customerSuggestions, setCustomerSuggestions] = useState<string[]>([])
-  const [productSuggestions, setProductSuggestions] = useState<{name: string, price: number}[]>([])
+  const [availableProducts, setAvailableProducts] = useState<any[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+
+  // Fetch Products for Quick Add
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setIsLoadingProducts(true)
+      try {
+        const res = await fetch('/api/merchant/products?limit=12')
+        const json = await res.json()
+        if (json.success) setAvailableProducts(json.data)
+      } catch (e) {
+        console.error('Failed to load products', e)
+      } finally {
+        setIsLoadingProducts(false)
+      }
+    }
+    fetchProducts()
+  }, [])
+
+  // Quick Add Item
+  const quickAddItem = (product: any) => {
+    // Check if item already exists
+    const existingIndex = items.findIndex(i => i.id === product.id || i.name === product.itemName)
+    
+    if (existingIndex > -1) {
+      updateItem(items[existingIndex].id, { qty: items[existingIndex].qty + 1 })
+    } else {
+      // Add as new item, but if the first empty row exists, replace it
+      if (items.length === 1 && !items[0].name) {
+        updateItem(items[0].id, { 
+          id: product.id, 
+          name: product.itemName, 
+          price: product.rate, 
+          taxRate: product.gstRate || 18 
+        })
+      } else {
+        setItems([...items, { 
+          id: product.id, 
+          name: product.itemName, 
+          qty: 1, 
+          price: product.rate, 
+          taxRate: product.gstRate || 18 
+        }])
+      }
+    }
+  }
 
   // Calculations
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + (item.qty * item.price), 0), [items])
@@ -76,32 +146,57 @@ export default function NewInvoicePage() {
   }
 
   const handleCreate = async (sendNow = false) => {
-    if (needsProfileSetup && !businessName) return alert('Please enter your Business Name to continue')
-    if (!customerName) return alert('Please enter customer name')
-    if (items.some(i => !i.name || i.price <= 0)) return alert('Please fill all item details')
+    if (needsProfileSetup && !businessName) return toast.error('Please enter your Business Name')
+    if (!customerName) return toast.error('Please enter customer name')
+    if (items.some(i => !i.name || i.price <= 0)) return toast.error('Please fill all item details')
 
     setIsCreating(true)
     
+    // Generate a unique idempotency key
+    const idempotencyKey = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
     const invoiceData = {
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      business_name: businessName, // Saved if provided
-      items,
-      subtotal,
-      tax_total: taxTotal,
-      grand_total: grandTotal,
-      payment_mode: paymentMode,
-      status: 'UNPAID',
-      created_at: new Date().toISOString()
+      customerName,
+      customerPhone,
+      businessName,
+      items: items.map(item => ({
+        itemCode: item.id.startsWith('ITEM') ? item.id : 'CUSTOM',
+        itemName: item.name,
+        quantity: item.qty,
+        rate: item.price,
+        taxRate: item.taxRate
+      })),
+      paymentMode,
+      notes: ''
     }
 
     try {
-      await enqueue('invoice:create', invoiceData)
-      localStorage.setItem('billzo_onboarded', 'true') // Mark setup complete
-      router.push('/invoices')
-    } catch (error) {
+      const res = await fetch('/api/merchant/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey
+        },
+        body: JSON.stringify(invoiceData)
+      })
+
+      const json = await res.json()
+
+      if (json.success) {
+        toast.success(`Invoice ${json.invoiceNumber} Created!`)
+        localStorage.setItem('billzo_onboarded', 'true')
+        
+        if (sendNow && json.whatsappLink) {
+           window.open(json.whatsappLink, '_blank')
+        }
+        
+        router.push(`/invoices/${json.invoiceId}`)
+      } else {
+        throw new Error(json.error || 'Failed to create invoice')
+      }
+    } catch (error: any) {
       console.error('Failed to create invoice:', error)
-      alert('Failed to save invoice')
+      toast.error(error.message || 'Failed to save invoice')
     } finally {
       setIsCreating(false)
     }
@@ -153,7 +248,50 @@ export default function NewInvoicePage() {
           </section>
         )}
 
-        {/* 1. Customer Details */}
+        {/* 1. Quick Add Products (Real Data) */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Quick Add</h2>
+            <div className="flex items-center gap-4">
+               <button 
+                 onClick={() => setIsScannerOpen(true)}
+                 className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-1.5"
+               >
+                 <Scan className="w-3 h-3" /> Barcode
+               </button>
+               <span className="text-[9px] font-bold text-success uppercase tracking-widest">In Stock</span>
+            </div>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x">
+            {isLoadingProducts ? (
+              [1, 2, 3].map(i => (
+                <div key={i} className="flex-shrink-0 w-32 h-24 bg-muted animate-pulse rounded-2xl" />
+              ))
+            ) : availableProducts.length > 0 ? (
+              availableProducts.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => quickAddItem(p)}
+                  className="flex-shrink-0 w-36 p-4 rounded-2xl bg-card border border-border/50 shadow-sm active:scale-95 transition-all snap-start hover:border-primary/30 text-left relative overflow-hidden group"
+                >
+                  <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Plus className="w-3 h-3 text-primary" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-tight text-foreground line-clamp-1">{p.itemName}</p>
+                  <p className="text-sm font-black tracking-tighter mt-1 text-primary">₹{p.rate}</p>
+                  <div className="flex items-center gap-1 mt-2">
+                    <div className={cn("w-1 h-1 rounded-full", p.stock > 5 ? "bg-success" : "bg-warning")} />
+                    <p className="text-[8px] font-bold text-muted-foreground uppercase">{p.stock} Left</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-[10px] font-bold text-muted-foreground italic px-1 uppercase tracking-widest py-4">No products found. Add them in Inventory.</p>
+            )}
+          </div>
+        </section>
+
+        {/* 2. Customer Details */}
         <section className="space-y-3">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Customer Info</h2>
           <div className="card-base p-4 space-y-4 bg-card/50 backdrop-blur-sm border-border/50">
@@ -303,6 +441,13 @@ export default function NewInvoicePage() {
           </div>
         </section>
       </div>
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner 
+        isOpen={isScannerOpen} 
+        onClose={() => setIsScannerOpen(false)} 
+        onScan={handleBarcodeScan} 
+      />
 
       {/* Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 md:left-20 lg:left-64 p-4 bg-background/80 backdrop-blur-xl border-t border-border z-50 pb-safe">

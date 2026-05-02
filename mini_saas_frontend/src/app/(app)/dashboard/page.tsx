@@ -29,19 +29,40 @@ export default function DashboardPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [summary, setSummary] = useState<any>(null)
+  const [lowStockItems, setLowStockItems] = useState<any[]>([])
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
+    const fetchDashboardData = async () => {
+      setIsLoading(true)
+      try {
+        const [summaryRes, lowStockRes] = await Promise.all([
+          fetch('/api/dashboard/today-summary'),
+          fetch('/api/merchant/inventory/low-stock')
+        ])
+        
+        const summaryData = await summaryRes.json()
+        const lowStockData = await lowStockRes.json()
+
+        if (summaryData.success) setSummary(summaryData.data)
+        if (lowStockData.success) setLowStockItems(lowStockData.data)
+      } catch (error: any) {
+        console.error('Failed to fetch dashboard data:', error)
+        setError(error.message)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardData()
   }, [])
 
   const stats = [
     { 
       label: 'Today Sales', 
-      value: '₹12,450', 
-      trend: '+12.5%', 
-      isPositive: true, 
+      value: summary ? `₹${summary.totalSales.toLocaleString()}` : '₹0', 
+      trend: summary ? `${summary.salesGrowth}%` : '0%', 
+      isPositive: (summary?.salesGrowth || 0) >= 0, 
       icon: TrendingUp,
       color: 'text-success',
       bgColor: 'bg-success-soft',
@@ -49,8 +70,8 @@ export default function DashboardPage() {
     },
     { 
       label: 'Pending', 
-      value: '₹4,500', 
-      trend: '2 unpaid', 
+      value: summary ? `₹${summary.pendingAmount.toLocaleString()}` : '₹0', 
+      trend: summary ? `${summary.pendingCount} unpaid` : '0 unpaid', 
       isPositive: false, 
       icon: Clock,
       color: 'text-warning',
@@ -59,7 +80,7 @@ export default function DashboardPage() {
     },
     { 
       label: 'Cash In Hand', 
-      value: '₹32,100', 
+      value: summary ? `₹${summary.cashInHand.toLocaleString()}` : '₹0', 
       trend: 'Ready', 
       isPositive: true, 
       icon: Wallet,
@@ -183,25 +204,34 @@ export default function DashboardPage() {
             <AlertCircle className="w-3 h-3 text-warning" /> Critical Feed
           </h2>
           <div className="space-y-3">
-             <div className="card-base p-5 bg-warning-soft/30 border-warning/20 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                   <Clock className="w-16 h-16 -rotate-12" />
-                </div>
-                <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-2">Payment Delay</p>
-                <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">2 Invoices Overdue</h3>
-                <p className="text-xs text-muted-foreground mt-2 font-medium">₹8,450 collection pending from 2 clients.</p>
-                <div className="flex gap-2 mt-5">
-                   <button onClick={() => router.push('/invoices?status=overdue')} className="flex-1 py-2.5 bg-warning text-warning-foreground rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">Send Reminders</button>
-                   <button className="px-4 py-2.5 bg-card border border-warning/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all text-warning">View</button>
-                </div>
-             </div>
+              {lowStockItems.length > 0 && (
+                 <div className="card-base p-5 bg-warning-soft/30 border-warning/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                       <Truck className="w-16 h-16 -rotate-12" />
+                    </div>
+                    <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-2">Inventory Alert</p>
+                    <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">{lowStockItems.length} Items Low Stock</h3>
+                    <div className="mt-3 space-y-2">
+                       {lowStockItems.slice(0, 2).map(item => (
+                         <div key={item.id} className="flex justify-between items-center text-[10px] font-bold uppercase">
+                            <span className="text-muted-foreground">{item.name}</span>
+                            <span className="text-destructive">{item.stock} {item.unit} left</span>
+                         </div>
+                       ))}
+                    </div>
+                    <div className="flex gap-2 mt-5">
+                       <button onClick={() => router.push('/inventory?filter=low')} className="flex-1 py-2.5 bg-warning text-warning-foreground rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">Order Stock</button>
+                       <button className="px-4 py-2.5 bg-card border border-warning/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all text-warning">View</button>
+                    </div>
+                 </div>
+              )}
 
-             <div className="card-base p-5 bg-destructive/5 border-destructive/10 relative overflow-hidden group">
-                <p className="text-[10px] font-black text-destructive uppercase tracking-widest mb-2">Data Failure</p>
-                <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">OCR Extraction Failed</h3>
-                <p className="text-xs text-muted-foreground mt-2 font-medium">Purchase bill #402 couldn't be auto-read.</p>
-                <button onClick={() => router.push('/purchases?review=true')} className="mt-5 w-full py-2.5 bg-destructive text-destructive-foreground rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all">Manual Review</button>
-             </div>
+              <div className="card-base p-5 bg-destructive/5 border-destructive/10 relative overflow-hidden group">
+                 <p className="text-[10px] font-black text-destructive uppercase tracking-widest mb-2">Data Failure</p>
+                 <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">OCR Extraction Failed</h3>
+                 <p className="text-xs text-muted-foreground mt-2 font-medium">Purchase bill #402 couldn't be auto-read.</p>
+                 <button onClick={() => router.push('/purchases?review=true')} className="mt-5 w-full py-2.5 bg-destructive text-destructive-foreground rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all">Manual Review</button>
+              </div>
           </div>
         </section>
 

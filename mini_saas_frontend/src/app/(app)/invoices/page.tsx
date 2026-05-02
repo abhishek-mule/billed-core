@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Plus, 
@@ -31,19 +31,38 @@ export default function InvoicesPage() {
   const router = useRouter()
   const [activeFilter, setActiveFilter] = useState<'ALL' | InvoiceStatus>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const invoices: Invoice[] = [
-    { id: 'INV-012', customer: 'Rahul Sharma', amount: '₹1,200', date: '10 mins ago', status: 'UNPAID', dueDate: '2026-05-10' },
-    { id: 'INV-011', customer: 'Priya Patel', amount: '₹4,500', date: '2 hours ago', status: 'OVERDUE', dueDate: '2026-04-28' },
-    { id: 'INV-010', customer: 'Amit Gupta', amount: '₹850', date: 'Yesterday', status: 'PAID' },
-    { id: 'INV-009', customer: 'Suresh Kumar', amount: '₹12,400', date: '2 days ago', status: 'UNPAID', dueDate: '2026-05-15' },
-  ]
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      setIsLoading(true)
+      try {
+        const res = await fetch('/api/merchant/invoices?limit=50')
+        const json = await res.json()
+        if (json.invoices) {
+          setInvoices(json.invoices.map((inv: any) => ({
+            id: inv.name,
+            customer: inv.customer_name,
+            amount: `₹${inv.grand_total.toLocaleString()}`,
+            date: new Date(inv.posting_date).toLocaleDateString(),
+            status: inv.outstanding_amount > 0 ? 'UNPAID' : 'PAID',
+            dbId: inv.id || inv.name
+          })))
+        }
+      } catch (e) {
+        console.error('Failed to fetch invoices', e)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchInvoices()
+  }, [])
 
   const filters = [
     { id: 'ALL', label: 'All' },
     { id: 'UNPAID', label: 'Unpaid' },
     { id: 'PAID', label: 'Paid' },
-    { id: 'OVERDUE', label: 'Overdue' },
   ]
 
   const filteredInvoices = useMemo(() => {
@@ -54,11 +73,7 @@ export default function InvoicesPage() {
                              inv.id.toLowerCase().includes(searchQuery.toLowerCase())
         return matchesFilter && matchesSearch
       })
-      .sort((a, b) => {
-        const priority: Record<InvoiceStatus, number> = { OVERDUE: 0, UNPAID: 1, PAID: 2 }
-        return priority[a.status] - priority[b.status]
-      })
-  }, [activeFilter, searchQuery])
+  }, [activeFilter, searchQuery, invoices])
 
   const handleReminder = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -118,7 +133,7 @@ export default function InvoicesPage() {
           filteredInvoices.map((inv) => (
             <div 
               key={inv.id} 
-              onClick={() => router.push(`/invoices/${inv.id}`)}
+              onClick={() => router.push(`/invoices/${inv.dbId}`)}
               className="card-base p-4 border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all group cursor-pointer"
             >
               <div className="flex items-start justify-between mb-4">

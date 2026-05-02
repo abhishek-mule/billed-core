@@ -1,127 +1,89 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Icon, Icons } from './Icons'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  CheckCircle2, 
+  Scan, 
+  Smartphone, 
+  FileText, 
+  ArrowRight,
+  Zap,
+  Check
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ChecklistItem {
   id: string
   label: string
-  labelHi: string
-  icon: keyof typeof Icons
+  sub: string
+  icon: any
   completed: boolean
 }
 
-interface OnboardingChecklistProps {
-  tenantId?: string
-}
-
-export default function OnboardingChecklist({ tenantId }: OnboardingChecklistProps) {
+export default function OnboardingChecklist() {
   const [items, setItems] = useState<ChecklistItem[]>([
-    { id: 'shopName', label: 'Set Shop Name', labelHi: 'Shop का नाम सेट करें', icon: 'home', completed: false },
-    { id: 'firstInvoice', label: 'Create First Invoice', labelHi: 'पहला बिल बनाएं', icon: 'receipt', completed: false },
-    { id: 'firstWhatsApp', label: 'Send via WhatsApp', labelHi: 'WhatsApp पर भेजें', icon: 'message', completed: false },
-    { id: 'addCustomer', label: 'Add Your Customer', labelHi: 'ग्राहक जोड़ें', icon: 'customers', completed: false },
+    { id: 'firstScan', label: 'Scan First Bill', sub: 'Try our high-speed OCR', icon: Scan, completed: false },
+    { id: 'firstInvoice', label: 'Create Invoice', sub: 'Generate your first GST bill', icon: FileText, completed: true },
+    { id: 'whatsappSync', label: 'Link WhatsApp', sub: 'Automate payment reminders', icon: Smartphone, completed: false },
   ])
-
-  const [lang, setLang] = useState<'en' | 'hi'>('en')
 
   const progress = Math.round((items.filter(i => i.completed).length / items.length) * 100)
 
-  const toggleItem = async (id: string) => {
-    setItems(items.map(item =>
-      item.id === id ? { ...item, completed: !item.completed } : item
-    ))
-    
-    if (!items.find(i => i.id === id)?.completed && tenantId) {
-      try {
-        await fetch('/api/onboarding/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenantId, checklistId: id }),
-        })
-      } catch (e) {
-        console.error('[Checklist] Update failed:', e)
-      }
-    }
-  }
-
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Icon name="checkCircle" className="text-indigo-400" size={20} />
-          <h3 className="font-semibold text-white">Onboarding Checklist</h3>
-        </div>
-        <button
-          onClick={() => setLang(lang === 'en' ? 'hi' : 'en')}
-          className="text-xs px-2 py-1 bg-white/10 rounded text-gray-400"
-        >
-          {lang === 'en' ? 'हिं' : 'EN'}
-        </button>
-      </div>
+    <div className="card-base p-6 bg-card/40 backdrop-blur-md border-border/50 relative overflow-hidden group">
+      {/* Background Glow */}
+      <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors" />
 
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>{progress}% Complete</span>
-          <span>{items.filter(i => i.completed).length}/{items.length}</span>
+      <header className="flex items-center justify-between mb-8">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-[0.2em] text-foreground flex items-center gap-2">
+            <Zap className="w-4 h-4 text-primary fill-primary/20" /> Launch Sequence
+          </h3>
+          <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase tracking-widest">{progress}% Mission Ready</p>
         </div>
-        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-          <motion.div
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ type: 'spring', stiffness: 100 }}
-          />
+        <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center font-black text-xs">
+          {items.filter(i => i.completed).length}/{items.length}
         </div>
-      </div>
+      </header>
 
-      <div className="space-y-2">
-        {items.map(item => (
-          <motion.button
+      <div className="space-y-3">
+        {items.map((item) => (
+          <button
             key={item.id}
-            onClick={() => toggleItem(item.id)}
-            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
-              item.completed
-                ? 'bg-emerald-500/10 border border-emerald-500/30'
-                : 'bg-white/5 border border-white/10 hover:border-white/20'
-            }`}
-          >
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-              item.completed
-                ? 'bg-emerald-500 text-white'
-                : 'bg-white/10 text-gray-500'
-            }`}>
-              {item.completed ? <Icon name="check" size={14} /> : <Icon name={item.icon} size={16} />}
-            </span>
-            <span className={`flex-1 text-left font-medium ${
-              item.completed ? 'text-emerald-400' : 'text-white'
-            }`}>
-              {lang === 'en' ? item.label : item.labelHi}
-            </span>
-            {item.completed && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="text-xs text-emerald-400"
-              >
-                Done!
-              </motion.span>
+            className={cn(
+              "w-full p-4 rounded-2xl border transition-all flex items-center gap-4 text-left group/item",
+              item.completed 
+                ? "bg-success-soft/20 border-success/20" 
+                : "bg-card border-border/50 hover:border-primary/30"
             )}
-          </motion.button>
+          >
+            <div className={cn(
+              "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+              item.completed ? "bg-success text-white" : "bg-muted text-muted-foreground group-hover/item:bg-primary/10 group-hover/item:text-primary"
+            )}>
+              {item.completed ? <Check className="w-5 h-5" /> : <item.icon className="w-5 h-5" />}
+            </div>
+            <div className="flex-1">
+              <p className={cn("text-xs font-black uppercase tracking-tight", item.completed ? "text-success/70" : "text-foreground")}>
+                {item.label}
+              </p>
+              <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase tracking-tighter opacity-60">
+                {item.sub}
+              </p>
+            </div>
+            {!item.completed && <ArrowRight className="w-4 h-4 text-muted-foreground group-hover/item:translate-x-1 transition-transform" />}
+          </button>
         ))}
       </div>
 
       {progress === 100 && (
-        <motion.div
+        <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 p-3 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl text-center"
+          className="mt-6 p-4 bg-primary text-primary-foreground rounded-2xl text-center shadow-glow"
         >
-          <p className="text-indigo-400 font-semibold flex items-center gap-2">
-            <Icon name="checkCircle" size={18} /> Onboarding Complete!
-          </p>
-          <p className="text-xs text-gray-400 mt-1">You're ready to grow your business</p>
+          <p className="text-[10px] font-black uppercase tracking-widest">Workspace Activated</p>
         </motion.div>
       )}
     </div>
