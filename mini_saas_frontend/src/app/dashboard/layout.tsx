@@ -13,8 +13,7 @@ import {
   Package, 
   BarChart3, 
   Settings,
-  Search,
-  X
+  Search
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -39,40 +38,43 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Top Navigation Bar */}
-      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200/60 z-40 flex items-center px-4 gap-4">
+      {/* Top Navigation Bar - Single cohesive white bar */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-40 flex items-center px-4 gap-3">
         {/* Hamburger Menu */}
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
         >
-          {sidebarOpen ? (
-            <X className="w-5 h-5 text-slate-600" />
-          ) : (
-            <Menu className="w-5 h-5 text-slate-600" />
-          )}
+          <Menu className="w-5 h-5 text-slate-800" />
         </button>
 
-        {/* Logo */}
-        <div className="flex items-center gap-2">
-          <img src="/new_logo_billzo.png" alt="Billzo" className="h-8 w-auto" />
-          <span className="text-xl font-bold text-slate-800">Billzo</span>
+        {/* Brand Lockup - Logo + BillZo text */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <img 
+            src="/logo-icon.svg" 
+            alt="BillZo" 
+            className="h-7 w-auto" 
+          />
+          <span className="text-xl font-bold text-slate-800 tracking-tight">BillZo</span>
         </div>
 
-        {/* Search Bar */}
+        {/* Vertical Divider */}
+        <div className="h-6 w-px bg-slate-200 flex-shrink-0" />
+
+        {/* Global Search Bar - Centered */}
         <div className="flex-1 max-w-xl mx-auto">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
               placeholder="Search products, invoices, parties..." 
-              className="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
+              className="w-full h-9 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
             />
           </div>
         </div>
 
         {/* User Avatar */}
-        <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center">
+        <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
           <span className="text-white text-sm font-medium">U</span>
         </div>
       </header>
@@ -80,11 +82,11 @@ export default function DashboardLayout({
       {/* Sidebar */}
       <aside 
         className={cn(
-          "fixed top-16 left-0 h-[calc(100vh-4rem)] bg-white border-r border-slate-200/60 transition-all duration-300 ease-in-out z-30",
+          "fixed top-16 left-0 h-[calc(100vh-4rem)] bg-white border-r border-slate-200 transition-all duration-300 ease-in-out z-30",
           sidebarOpen ? "w-64" : "w-20"
         )}
       >
-        <nav className="p-4 space-y-2">
+        <nav className="p-4 space-y-1">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.path || (item.path !== '/dashboard' && pathname.startsWith(item.path))
             const Icon = item.icon
@@ -94,18 +96,21 @@ export default function DashboardLayout({
                 key={item.id}
                 href={item.path}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
+                  "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
                   isActive 
                     ? "bg-teal-50 text-teal-700" 
                     : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
                 )}
               >
                 <Icon className={cn(
-                  "w-5 h-5 flex-shrink-0",
-                  isActive ? "text-teal-600" : "text-slate-400"
+                  "w-5 h-5 flex-shrink-0 transition-all duration-200",
+                  isActive 
+                    ? "text-teal-600" 
+                    : "text-slate-400 group-hover:text-teal-500 group-hover:scale-110",
+                  !isActive && "group-hover:translate-x-0.5"
                 )} />
                 <span className={cn(
-                  "font-medium text-sm transition-opacity duration-200",
+                  "font-medium text-sm transition-all duration-200",
                   sidebarOpen ? "opacity-100" : "opacity-0 hidden"
                 )}>
                   {item.label}
