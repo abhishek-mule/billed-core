@@ -100,6 +100,26 @@ export default function SettingsPage() {
       >
         <LogOut className="w-5 h-5" /> Logout
       </button>
+      </div>
+
+      <div className="space-y-4">
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-1">Plan & Billing</h2>
+      <div className="card-base p-6 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="font-bold text-foreground">Free Plan</p>
+            <p className="text-xs text-muted-foreground">Limited to 50 invoices/mo</p>
+          </div>
+          <div className="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold">CURRENT</div>
+        </div>
+        <button 
+          onClick={() => router.push('/settings/upgrade')}
+          className="w-full py-3 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-glow hover:bg-primary/90"
+        >
+          Upgrade to Pro
+        </button>
+      </div>
+      </div>
 
       <div className="text-center pb-8 pt-4">
         <p className="text-xs font-semibold text-muted-foreground">BillZo App v1.0.0</p>
