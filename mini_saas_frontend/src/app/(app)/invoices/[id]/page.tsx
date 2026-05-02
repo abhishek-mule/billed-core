@@ -1,209 +1,193 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, 
+  Download, 
+  Printer, 
   Send, 
-  Share2, 
   CheckCircle2, 
   Clock, 
   AlertCircle,
-  Download,
-  MoreVertical,
-  User,
-  Package,
-  History,
-  Check
+  FileText,
+  Share2
 } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
+import { motion } from 'framer-motion'
+import { WhiteLabelFooter } from '@/components/invoice/WhiteLabelFooter'
 
-export default function InvoiceDetailPage() {
+export default function InvoiceDetailsPage() {
   const { id } = useParams()
   const router = useRouter()
-  const [isMarkingPaid, setIsMarkingPaid] = useState(false)
+  const [invoice, setInvoice] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Mock Data
-  const invoice = {
-    id: id as string,
-    customer: {
-      name: 'Rahul Sharma',
-      phone: '+91 98765 43210',
-      address: '123, MG Road, Mumbai'
-    },
-    items: [
-      { name: 'USB-C Charging Cable', qty: 2, price: 400, tax: 72 },
-      { name: 'Wireless Mouse', qty: 1, price: 800, tax: 144 },
-    ],
-    subtotal: 1600,
-    taxTotal: 288,
-    grandTotal: 1888,
-    status: 'UNPAID' as 'PAID' | 'UNPAID' | 'OVERDUE',
-    createdAt: '2026-05-02T10:30:00Z',
-    timeline: [
-      { event: 'Invoice Created', time: 'May 02, 10:30 AM', status: 'completed' },
-      { event: 'Sent to Customer', time: 'May 02, 10:31 AM', status: 'completed' },
-      { event: 'Viewed by Customer', time: 'May 02, 11:15 AM', status: 'completed' },
-      { event: 'Payment Pending', time: 'Waiting...', status: 'pending' },
-    ]
+  useEffect(() => {
+    const fetchInvoice = async () => {
+      try {
+        const res = await fetch(`/api/merchant/invoices/${id}`)
+        const json = await res.json()
+        if (json.success) setInvoice(json.data)
+      } catch (e) {
+        console.error('Failed to fetch invoice', e)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchInvoice()
+  }, [id])
+
+  const handleDownload = () => {
+    window.location.href = `/api/merchant/invoices/${id}/download`
   }
 
-  const handleMarkAsPaid = () => {
-    setIsMarkingPaid(true)
-    setTimeout(() => {
-      invoice.status = 'PAID'
-      setIsMarkingPaid(false)
-      // Actual update logic here
-    }, 1000)
+  const handlePrint = () => {
+    window.print()
   }
+
+  if (isLoading) return <div className="p-8 animate-pulse bg-muted rounded-3xl h-96" />
+  if (!invoice) return (
+    <div className="flex flex-col items-center justify-center py-20">
+       <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+       <h2 className="text-xl font-black uppercase">Invoice Not Found</h2>
+       <Button onClick={() => router.back()} variant="outline" className="mt-4">Go Back</Button>
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-background pb-32 animate-fade-in md:pl-20 lg:pl-64">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border h-16 flex items-center px-4 justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-2 -ml-2 rounded-full hover:bg-muted active:scale-95 transition-all">
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-          <div>
-            <h1 className="text-base font-black tracking-tight text-foreground leading-none">{invoice.id}</h1>
-            <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase tracking-widest">Invoice Details</p>
-          </div>
-        </div>
-        <button className="p-2 rounded-full hover:bg-muted active:scale-95 transition-all">
-          <MoreVertical className="w-5 h-5 text-muted-foreground" />
+    <div className="max-w-4xl mx-auto pb-24 space-y-8 animate-fade-in">
+      {/* Navigation Header */}
+      <div className="flex items-center justify-between px-1">
+        <button onClick={() => router.back()} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
+          <ArrowLeft className="w-5 h-5" />
         </button>
-      </header>
-
-      <div className="p-4 max-w-2xl mx-auto space-y-6">
-        {/* 1. Status & Summary */}
-        <section className="card-base p-6 bg-card/50 backdrop-blur-sm border-border/50 flex flex-col items-center text-center">
-          <div className={cn(
-            "w-16 h-16 rounded-3xl flex items-center justify-center mb-4 shadow-elegant transition-transform hover:scale-110",
-            invoice.status === 'PAID' ? "bg-success-soft text-success" : 
-            invoice.status === 'OVERDUE' ? "bg-destructive/10 text-destructive" : "bg-warning-soft text-warning"
-          )}>
-            {invoice.status === 'PAID' ? <CheckCircle2 className="w-8 h-8" /> : 
-             invoice.status === 'OVERDUE' ? <AlertCircle className="w-8 h-8" /> : 
-             <Clock className="w-8 h-8" />}
-          </div>
-          <h2 className="text-3xl font-black tracking-tighter text-foreground">₹{invoice.grandTotal.toLocaleString()}</h2>
-          <div className={cn(
-            "mt-2 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full",
-            invoice.status === 'PAID' ? "bg-success-soft text-success" : 
-            invoice.status === 'OVERDUE' ? "bg-destructive/10 text-destructive" : "bg-warning-soft text-warning"
-          )}>
-            {invoice.status}
-          </div>
-        </section>
-
-        {/* 2. Customer Info */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1 flex items-center gap-2">
-            <User className="w-3 h-3" /> Customer
-          </h2>
-          <div className="card-base p-4 bg-card/50 border-border/50">
-            <p className="font-black text-base text-foreground">{invoice.customer.name}</p>
-            <p className="text-sm text-muted-foreground mt-1 font-medium">{invoice.customer.phone}</p>
-            <p className="text-xs text-muted-foreground/70 mt-2 leading-relaxed">{invoice.customer.address}</p>
-          </div>
-        </section>
-
-        {/* 3. Items Breakdown */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1 flex items-center gap-2">
-            <Package className="w-3 h-3" /> Items breakdown
-          </h2>
-          <div className="card-base divide-y divide-border/50 overflow-hidden bg-card/50 border-border/50">
-            {invoice.items.map((item, idx) => (
-              <div key={idx} className="p-4 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                <div>
-                  <p className="text-sm font-bold text-foreground leading-tight">{item.name}</p>
-                  <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase tracking-widest">
-                    {item.qty} units • ₹{item.price} each
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-foreground tracking-tight">₹{(item.qty * item.price).toLocaleString()}</p>
-                  <p className="text-[9px] font-bold text-success mt-1 uppercase tracking-widest">+₹{item.tax} GST</p>
-                </div>
-              </div>
-            ))}
-            <div className="p-4 bg-muted/20 space-y-2">
-              <div className="flex justify-between text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                <span>Subtotal</span>
-                <span className="text-foreground">₹{invoice.subtotal.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                <span>Total Tax</span>
-                <span className="text-success">₹{invoice.taxTotal.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. Timeline */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1 flex items-center gap-2">
-            <History className="w-3 h-3" /> Activity Timeline
-          </h2>
-          <div className="card-base p-6 bg-card/50 border-border/50 space-y-6">
-            {invoice.timeline.map((step, idx) => (
-              <div key={idx} className="flex gap-4 relative">
-                {idx !== invoice.timeline.length - 1 && (
-                  <div className="absolute left-[9px] top-6 w-[2px] h-10 bg-border/50" />
-                )}
-                <div className={cn(
-                  "w-5 h-5 rounded-full border-4 flex-shrink-0 z-10",
-                  step.status === 'completed' ? "bg-success border-success/20" : "bg-background border-border"
-                )}>
-                  {step.status === 'completed' && <Check className="w-3 h-3 text-white m-auto" />}
-                </div>
-                <div>
-                  <p className={cn(
-                    "text-xs font-bold uppercase tracking-widest leading-none",
-                    step.status === 'completed' ? "text-foreground" : "text-muted-foreground"
-                  )}>
-                    {step.event}
-                  </p>
-                  <p className="text-[10px] font-medium text-muted-foreground mt-1.5">{step.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <div className="flex items-center gap-2">
+           <Button variant="outline" size="sm" onClick={handleDownload} icon={<Download className="w-3.5 h-3.5" />}>Export</Button>
+           <Button variant="primary" size="sm" onClick={handlePrint} icon={<Printer className="w-3.5 h-3.5" />}>Print</Button>
+        </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 md:left-20 lg:left-64 p-4 bg-background/80 backdrop-blur-xl border-t border-border z-50 pb-safe">
-        <div className="max-w-2xl mx-auto flex gap-3">
-          {invoice.status !== 'PAID' ? (
-            <>
-              <button 
-                onClick={() => console.log('Sending reminder')}
-                className="flex-1 btn-base py-4 bg-primary text-primary-foreground font-black uppercase tracking-widest shadow-glow active:scale-[0.98]"
-              >
-                <Send className="w-5 h-5 mr-3" /> Send Reminder
-              </button>
-              <button 
-                onClick={handleMarkAsPaid}
-                disabled={isMarkingPaid}
-                className="flex-1 btn-base py-4 bg-secondary text-secondary-foreground font-black uppercase tracking-widest active:scale-[0.98] disabled:opacity-50"
-              >
-                {isMarkingPaid ? 'Updating...' : 'Mark as Paid'}
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="flex-1 btn-base py-4 bg-secondary text-secondary-foreground font-black uppercase tracking-widest active:scale-[0.98]">
-                <Share2 className="w-5 h-5 mr-3" /> Share Invoice
-              </button>
-              <button className="flex-1 btn-base py-4 bg-secondary text-secondary-foreground font-black uppercase tracking-widest active:scale-[0.98]">
-                <Download className="w-5 h-5 mr-3" /> Download PDF
-              </button>
-            </>
-          )}
+      {/* Invoice Document Card */}
+      <div className="card-base p-8 md:p-12 bg-white text-black shadow-2xl relative overflow-hidden print:p-0 print:shadow-none print:bg-transparent">
+        {/* Document Header */}
+        <div className="flex flex-col md:flex-row justify-between gap-8 mb-12">
+           <div>
+              <div className="flex items-center gap-3 mb-6">
+                 <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center font-black italic">BZ</div>
+                 <h1 className="text-2xl font-black uppercase tracking-tighter italic">BillZo Invoice</h1>
+              </div>
+              <div className="space-y-1">
+                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Billed To</p>
+                 <h2 className="text-xl font-black tracking-tight">{invoice.customer_name}</h2>
+                 <p className="text-xs font-bold text-muted-foreground">{invoice.customer_phone}</p>
+                 {invoice.customer_gstin && <p className="text-[10px] font-black text-primary uppercase mt-2">GSTIN: {invoice.customer_gstin}</p>}
+              </div>
+           </div>
+           
+           <div className="md:text-right space-y-4">
+              <div>
+                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Invoice Number</p>
+                 <p className="text-lg font-black tracking-tight">{invoice.invoice_number}</p>
+              </div>
+              <div>
+                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Date Issued</p>
+                 <p className="text-xs font-bold">{new Date(invoice.invoice_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+              </div>
+              <div className={cn(
+                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                invoice.status === 'PAID' ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
+              )}>
+                 {invoice.status === 'PAID' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                 {invoice.status}
+              </div>
+           </div>
         </div>
+
+        {/* Line Items Table */}
+        <div className="mb-12 overflow-x-auto">
+           <table className="w-full text-left">
+              <thead>
+                 <tr className="border-b-2 border-black/5">
+                    <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Item Description</th>
+                    <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">Qty</th>
+                    <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right">Rate</th>
+                    <th className="pb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right">Amount</th>
+                 </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5">
+                 {invoice.line_items_json.map((item: any, i: number) => (
+                   <tr key={i}>
+                      <td className="py-5">
+                         <p className="text-sm font-black uppercase tracking-tight">{item.itemName}</p>
+                         <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase">HSN: {item.hsnCode || 'N/A'}</p>
+                      </td>
+                      <td className="py-5 text-center text-sm font-bold">{item.quantity}</td>
+                      <td className="py-5 text-right text-sm font-bold">₹{item.rate}</td>
+                      <td className="py-5 text-right text-sm font-black italic">₹{(item.quantity * item.rate).toLocaleString()}</td>
+                   </tr>
+                 ))}
+              </tbody>
+           </table>
+        </div>
+
+        {/* Totals Section */}
+        <div className="flex flex-col md:flex-row justify-between gap-12">
+           <div className="flex-1">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Payment Info</p>
+              <div className="p-4 bg-muted/20 rounded-2xl border border-black/5">
+                 <p className="text-[10px] font-bold uppercase leading-relaxed text-muted-foreground">
+                    Bank Transfer: HDFC BANK • A/C 501004...<br/>
+                    UPI: sharma.elec@okicici<br/>
+                    Notes: {invoice.notes || 'No extra notes provided.'}
+                 </p>
+              </div>
+           </div>
+           
+           <div className="w-full md:w-64 space-y-3">
+              <div className="flex justify-between items-center text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                 <span>Subtotal</span>
+                 <span>₹{Number(invoice.subtotal).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                 <span>GST (Total)</span>
+                 <span>₹{Number(invoice.tax_amount).toLocaleString()}</span>
+              </div>
+              <div className="h-px bg-black/10 my-4" />
+              <div className="flex justify-between items-center">
+                 <span className="text-sm font-black uppercase tracking-widest">Total</span>
+                 <span className="text-2xl font-black tracking-tighter italic">₹{Number(invoice.total).toLocaleString()}</span>
+              </div>
+           </div>
+        </div>
+
+        {/* Growth Loop Footer */}
+        <WhiteLabelFooter 
+           merchantName="Sharma Electronics" 
+           referralId="USER_123" 
+           isPremium={false} 
+        />
+      </div>
+
+      {/* Sharing HUD */}
+      <div className="card-base p-6 bg-primary text-primary-foreground flex items-center justify-between shadow-glow print:hidden">
+         <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+               <Share2 className="w-6 h-6" />
+            </div>
+            <div>
+               <p className="text-sm font-black uppercase tracking-tight">Share Invoice</p>
+               <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Send via WhatsApp or SMS</p>
+            </div>
+         </div>
+         <Button 
+            variant="outline" 
+            className="bg-white text-primary border-none hover:bg-white/90"
+            onClick={() => window.open(invoice.whatsappLink, '_blank')}
+         >
+           Send Link
+         </Button>
       </div>
     </div>
   )

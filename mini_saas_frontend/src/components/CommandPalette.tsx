@@ -41,6 +41,9 @@ export function CommandPalette() {
     { id: 'scan-bill', label: 'Scan Purchase Bill', icon: Scan, shortcut: 'O', category: 'Inventory', path: '/scan' },
     { id: 'view-invoices', label: 'View Invoices', icon: FileText, shortcut: 'V', category: 'Billing', path: '/invoices' },
     { id: 'add-customer', label: 'Add Customer', icon: UserPlus, shortcut: 'C', category: 'Contacts', path: '/customers/new' },
+    { id: 'invoices', label: 'Invoices', path: '/invoices', icon: FileText, category: 'Pages' },
+    { id: 'purchases', label: 'Purchases', path: '/purchases', icon: ShoppingBag, category: 'Pages' },
+    { id: 'gst-reports', label: 'Tax Center / GST Reports', path: '/reports/gst', icon: ShieldCheck, category: 'Pages' },
     { id: 'view-reports', label: 'Business Reports', icon: BarChart3, shortcut: 'R', category: 'Analytics', path: '/reports' },
     { id: 'settings', label: 'App Settings', icon: Settings, shortcut: 'S', category: 'System', path: '/settings' },
   ]

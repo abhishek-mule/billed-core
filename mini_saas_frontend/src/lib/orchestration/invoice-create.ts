@@ -82,6 +82,28 @@ async function insertPendingInvoice(args: {
       payload.notes || '',
     ]
   )
+
+  // Insert individual items for granular reporting
+  for (const item of total.items) {
+    const itemId = `line_${invoiceId}_${Math.random().toString(36).slice(2, 5)}`
+    await client.query(
+      `INSERT INTO invoice_items (
+        id, invoice_id, item_code, item_name, quantity, rate, amount, tax_rate, cgst, sgst, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
+      [
+        itemId,
+        invoiceId,
+        item.itemCode,
+        item.itemName,
+        item.quantity,
+        item.rate,
+        item.quantity * item.rate,
+        item.taxRate || 18,
+        (item.quantity * item.rate * (item.taxRate || 18) / 200),
+        (item.quantity * item.rate * (item.taxRate || 18) / 200)
+      ]
+    )
+  }
 }
 
 export async function orchestrateInvoiceCreation(args: {
