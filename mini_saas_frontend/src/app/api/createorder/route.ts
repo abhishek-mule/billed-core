@@ -66,8 +66,6 @@ export async function POST(request: Request) {
         email,
         phone
       }
-    }, {
-      idempotency: idempotencyKey
     })
 
     console.log('[BillZo] Order created:', order.id)
