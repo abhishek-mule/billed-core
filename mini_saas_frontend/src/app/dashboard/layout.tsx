@@ -16,7 +16,6 @@ import {
   Search,
   X
 } from 'lucide-react'
-import { BillzoLogo } from '@/components/logo/BillzoLogo'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -56,7 +55,7 @@ export default function DashboardLayout({
 
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <BillzoLogo className="w-8 h-8" />
+          <img src="/new_logo_billzo.png" alt="Billzo" className="h-8 w-auto" />
           <span className="text-xl font-bold text-slate-800">Billzo</span>
         </div>
 
