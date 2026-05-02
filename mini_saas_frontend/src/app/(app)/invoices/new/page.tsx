@@ -17,7 +17,8 @@ import {
   Zap,
   CreditCard,
   Banknote,
-  Smartphone
+  Smartphone,
+  Store
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOfflineQueue } from '@/hooks/useOfflineQueue'
@@ -37,9 +38,19 @@ export default function NewInvoicePage() {
   // Form State
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [businessName, setBusinessName] = useState('')
   const [items, setItems] = useState<Item[]>([{ id: '1', name: '', qty: 1, price: 0, taxRate: 18 }])
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'UPI' | 'BANK'>('CASH')
   const [isCreating, setIsCreating] = useState(false)
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false)
+
+  // Check if first-time setup needed
+  useEffect(() => {
+    const isFirstTime = localStorage.getItem('billzo_onboarded') === 'false'
+    if (isFirstTime) {
+      setNeedsProfileSetup(true)
+    }
+  }, [])
 
   // Suggestions (Mock)
   const [customerSuggestions, setCustomerSuggestions] = useState<string[]>([])
@@ -65,6 +76,7 @@ export default function NewInvoicePage() {
   }
 
   const handleCreate = async (sendNow = false) => {
+    if (needsProfileSetup && !businessName) return alert('Please enter your Business Name to continue')
     if (!customerName) return alert('Please enter customer name')
     if (items.some(i => !i.name || i.price <= 0)) return alert('Please fill all item details')
 
@@ -73,6 +85,7 @@ export default function NewInvoicePage() {
     const invoiceData = {
       customer_name: customerName,
       customer_phone: customerPhone,
+      business_name: businessName, // Saved if provided
       items,
       subtotal,
       tax_total: taxTotal,
@@ -84,6 +97,7 @@ export default function NewInvoicePage() {
 
     try {
       await enqueue('invoice:create', invoiceData)
+      localStorage.setItem('billzo_onboarded', 'true') // Mark setup complete
       router.push('/invoices')
     } catch (error) {
       console.error('Failed to create invoice:', error)
@@ -115,6 +129,30 @@ export default function NewInvoicePage() {
       </header>
 
       <div className="p-4 max-w-2xl mx-auto space-y-6">
+        {/* 0. Progressive Setup: Business Name */}
+        {needsProfileSetup && (
+          <section className="space-y-3 animate-in fade-in slide-in-from-top duration-500">
+            <div className="flex items-center gap-2 px-1">
+              <Zap className="w-4 h-4 text-primary fill-primary" />
+              <h2 className="text-xs font-bold text-primary uppercase tracking-widest">Complete Your Profile</h2>
+            </div>
+            <div className="card-base p-4 bg-primary/5 border-primary/20 space-y-4">
+              <div className="relative group">
+                <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+                <input 
+                  type="text" 
+                  placeholder="Your Business Name (e.g. Sharma Electronics)" 
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  className="input-base pl-10 bg-white/50 border-primary/20 focus-visible:ring-primary/30 text-base font-black placeholder:font-medium text-primary"
+                  autoFocus
+                />
+              </div>
+              <p className="text-[10px] font-bold text-primary/60 px-1 uppercase tracking-tight">Required only once for your first invoice.</p>
+            </div>
+          </section>
+        )}
+
         {/* 1. Customer Details */}
         <section className="space-y-3">
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Customer Info</h2>
