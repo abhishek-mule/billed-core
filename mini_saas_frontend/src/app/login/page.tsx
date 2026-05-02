@@ -39,13 +39,13 @@ export default function LoginPage() {
     // Simulate verification
     setTimeout(() => {
       setStep('creating')
-      // Simulate account creation
+      // Simulate account/tenant auto-creation
       setTimeout(() => {
-        // Here we'd save the token (JWT) to localStorage/cookies
         localStorage.setItem('billzo_token', 'dummy-jwt-token')
+        localStorage.setItem('billzo_onboarded', 'false') // Track if first action performed
         router.push('/dashboard')
-      }, 1500)
-    }, 800)
+      }, 1000)
+    }, 600)
   }
 
   return (
