@@ -3,22 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  Home, 
-  FileText, 
-  ShoppingBag, 
-  Settings,
-  ScanLine
-} from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Home', icon: Home, path: '/dashboard' },
-  { id: 'invoices', label: 'Invoices', icon: FileText, path: '/invoices' },
-  { id: 'scan', label: 'Scan', icon: ScanLine, path: '/scan', isPrimary: true },
-  { id: 'purchases', label: 'Purchases', icon: ShoppingBag, path: '/purchases' },
-  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
-]
+import { ActionHeader } from '@/components/layout/ActionHeader'
+import { NAVIGATION_ITEMS } from '@/lib/navigation'
+import { Camera } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -29,8 +17,10 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-20 lg:pl-64 flex flex-col">
+      <ActionHeader businessName="Sharma Electronics" />
+
       {/* Desktop Sidebar (hidden on mobile) */}
-      <aside className="hidden md:flex flex-col fixed top-0 left-0 h-screen w-20 lg:w-64 bg-card border-r border-border z-30 transition-all duration-300">
+      <aside className="hidden md:flex flex-col fixed top-0 left-0 h-screen w-20 lg:w-64 bg-card border-r border-border z-50 transition-all duration-300">
         <div className="p-4 flex items-center justify-center lg:justify-start gap-3 h-16 border-b border-border">
           <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold text-lg shadow-glow">
             B
@@ -39,10 +29,10 @@ export default function DashboardLayout({
         </div>
 
         <nav className="flex-1 py-6 px-3 space-y-2">
-          {NAV_ITEMS.map((item) => {
+          {NAVIGATION_ITEMS.map((item) => {
             const isActive = pathname === item.path || (item.path !== '/dashboard' && pathname.startsWith(item.path))
             const Icon = item.icon
-            
+
             return (
               <Link
                 key={item.id}
@@ -75,23 +65,22 @@ export default function DashboardLayout({
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-5xl mx-auto p-4 md:p-8 animate-fade-in">
-        <header className="flex md:hidden items-center justify-between mb-6">
-           <div className="flex items-center gap-2">
-             <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold text-lg shadow-glow">
-               B
-             </div>
-             <span className="text-xl font-bold tracking-tight text-foreground">BillZo</span>
-           </div>
-           <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-sm font-semibold border border-border">
-             U
-           </div>
-        </header>
         {children}
       </main>
 
+      {/* Floating Scan Button (Mobile Only) */}
+      {pathname !== '/scan' && (
+        <Link 
+          href="/scan"
+          className="fixed bottom-24 right-6 w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-glow active:scale-90 transition-all z-40 md:hidden animate-in fade-in zoom-in duration-300"
+        >
+          <Camera className="w-6 h-6" />
+        </Link>
+      )}
+
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border px-6 py-3 pb-safe z-40 flex justify-between items-center">
-        {NAV_ITEMS.map((item) => {
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-lg border-t border-border px-6 py-3 pb-safe z-40 flex justify-between items-center shadow-elegant">
+        {NAVIGATION_ITEMS.map((item) => {
           const isActive = pathname === item.path || (item.path !== '/dashboard' && pathname.startsWith(item.path))
           const Icon = item.icon
 
@@ -100,10 +89,10 @@ export default function DashboardLayout({
               <Link 
                 key={item.id}
                 href={item.path}
-                className="relative -top-5 flex flex-col items-center justify-center"
+                className="relative -top-6 flex flex-col items-center justify-center group"
               >
-                <div className="w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-glow border-4 border-background">
-                  <Icon className="w-6 h-6" />
+                <div className="w-16 h-16 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-glow border-[6px] border-background active:scale-90 transition-all">
+                  <Icon className="w-7 h-7" />
                 </div>
               </Link>
             )
@@ -114,16 +103,17 @@ export default function DashboardLayout({
               key={item.id}
               href={item.path}
               className={cn(
-                "flex flex-col items-center gap-1",
+                "flex flex-col items-center gap-1.5 transition-all active:scale-90",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
               <Icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-[10px] font-bold tracking-tight">{item.label}</span>
             </Link>
           )
         })}
       </nav>
     </div>
+
   )
 }
