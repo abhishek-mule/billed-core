@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get basic sales statistics
-    const salesStats = await queryOne(`
+    const salesStats = await queryOne<any>(`
       SELECT 
         COUNT(*) as total_invoices,
         COALESCE(SUM(grand_total), 0) as total_sales,
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get GST collected
-    const gstStats = await queryOne(`
+    const gstStats = await queryOne<any>(`
       SELECT 
         COALESCE(SUM(cgst), 0) as cgst,
         COALESCE(SUM(sgst), 0) as sgst,
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get top selling products
-    const topProducts = await query(`
+    const topProducts = await query<any>(`
       SELECT 
         ii.item_name,
         SUM(ii.quantity) as total_quantity,
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get low stock items
-    const lowStockItems = await query(`
+    const lowStockItems = await query<any>(`
       SELECT 
         item_name,
         item_code,
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId])
 
     // Get active customers
-    const activeCustomers = await queryOne(`
+    const activeCustomers = await queryOne<any>(`
       SELECT COUNT(DISTINCT customer_id) as active_count
       FROM invoices 
       WHERE tenant_id = $1 
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get sales trend data (daily)
-    const salesTrend = await query(`
+    const salesTrend = await query<any>(`
       SELECT 
         DATE(created_at) as date,
         COUNT(*) as invoices,
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get payment status breakdown
-    const paymentBreakdown = await query(`
+    const paymentBreakdown = await query<any>(`
       SELECT 
         payment_status,
         COUNT(*) as count,
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
     `, [session.tenantId, startDate])
 
     // Get top customers by revenue
-    const topCustomers = await query(`
+    const topCustomers = await query<any>(`
       SELECT 
         customer_name,
         customer_phone,

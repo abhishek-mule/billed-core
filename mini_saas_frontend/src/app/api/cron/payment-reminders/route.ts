@@ -103,17 +103,17 @@ export async function POST(request: NextRequest) {
       const paymentLink = `${process.env.APP_URL}/pay?customer=${customerId}&amount=${Math.round(totalDue)}`
 
       // Prepare WhatsApp template parameters
-      const templateParams = {
-        name: customer.customer_name.split(' ')[0], // First name only
-        amount: formatINR(totalDue),
-        daysOverdue: daysOverdue.toString(),
-        invoiceCount: invoiceCount.toString(),
-        paymentLink: paymentLink,
-        dueDate: new Date(customer.created_at).toLocaleDateString('en-IN', {
+      const templateParams = [
+        customer.customer_name.split(' ')[0], // First name only
+        formatINR(totalDue),
+        daysOverdue.toString(),
+        invoiceCount.toString(),
+        paymentLink,
+        new Date(customer.created_at).toLocaleDateString('en-IN', {
           day: 'numeric',
           month: 'short'
         })
-      }
+      ]
 
       try {
         if (!dryRun) {

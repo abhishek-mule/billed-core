@@ -84,7 +84,7 @@ export function useDeleteProduct() {
 export function useDashboardStats() {
   return useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => apiGet<{ success: boolean; stats: any; recentInvoices: any[] }>(`/api/merchant/stats`),
+    queryFn: () => apiGet<{ success: boolean; stats: any; recentInvoices: any[]; inventoryHealth: any; receivables: any }>(`/api/merchant/stats`),
     retry: 2,
     staleTime: 30000, // 30 seconds
     refetchInterval: 60000, // Auto-refresh every minute
