@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const errors: Array<{ customer: string; error: string }> = []
 
     // Process each customer
-    for (const [customerId, invoices] of customerGroups.entries()) {
+    for (const [customerId, invoices] of Array.from(customerGroups.entries())) {
       const customer = invoices[0]
       const totalDue = invoices.reduce((sum: number, inv: any) => sum + parseFloat(inv.total), 0)
       const daysOverdue = Math.floor(customer.days_overdue)
