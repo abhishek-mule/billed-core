@@ -2,7 +2,7 @@
 
 import { useSession } from '@/hooks/useSession'
 import { usePermissions } from '@/components/auth/RoleGate'
-import { Link } from 'next/link'
+import Link from 'next/link'
 import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Settings, Users as UsersIcon, FileText, Shield, BarChart3 } from 'lucide-react'
 import { CashFlowCard } from '@/components/dashboard/CashFlowCard'
 import { InventoryHealthCard } from '@/components/dashboard/InventoryHealthCard'
@@ -20,7 +20,7 @@ const statusBadge: Record<string, string> = {
  * Shows different content based on user role
  */
 export default function RoleBasedDashboard({ data, isLoading, isError, refetch }: any) {
-  const { data: session } = useSession()
+  const session = useSession()
   const { role } = usePermissions()
   const userRole = role || 'cashier' // Default to cashier if no role
 

@@ -122,8 +122,6 @@ export default function BillZoLanding() {
   const [gstinInput, setGstinInput] = useState('')
   const [gstinResult, setGstinResult] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { scrollYProgress } = useScroll()
-  const opacity = useTransform(scrollYProgress, [0, 0.05], [1, 0.9])
   
   const showGstinResult = () => {
     if (gstinInput.trim().length >= 5) setGstinResult(true)
@@ -149,9 +147,9 @@ export default function BillZoLanding() {
       `}</style>
 
       {/* NAVIGATION */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? 'py-3 border-b border-black/5 bg-white/80 backdrop-blur-xl' : 'py-6 bg-transparent'}`}>
+      <nav className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ${scrolled ? 'py-3 border-b border-black/5 bg-white/90 backdrop-blur-xl' : 'py-6 bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 no-underline group">
+          <Link href="/" className="flex items-center gap-3 no-underline group relative z-10">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display text-xl text-white italic font-medium shadow-lg transition-transform group-hover:scale-105" 
               style={{ background: 'linear-gradient(135deg, #5548f0, #1e1657)' }}>
               Z
@@ -182,7 +180,7 @@ export default function BillZoLanding() {
       </nav>
 
       {/* HERO SECTION */}
-      <section className="relative pt-44 pb-24 px-6 md:px-12">
+      <section className="relative pt-44 pb-24 px-6 md:px-12 z-10 overflow-visible">
         {/* Background Decorative Elements */}
         <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-indigo-50/50 rounded-full blur-[120px] -z-10 translate-x-1/4 -translate-y-1/4" />
         <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-50/50 rounded-full blur-[100px] -z-10 -translate-x-1/4 translate-y-1/4" />
@@ -293,7 +291,7 @@ export default function BillZoLanding() {
       </div>
 
       {/* FEATURES REVEAL */}
-      <section className="py-32 px-6 md:px-12 bg-white" id="features">
+      <section className="py-32 px-6 md:px-12 bg-white relative z-20" id="features">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-12 gap-20">
             <div className="lg:col-span-5">

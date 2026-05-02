@@ -118,7 +118,8 @@ export async function logActionFromRequest(
       ipAddress,
       userAgent,
       success,
-      durationMs
+      durationMs,
+      timestamp: new Date()
     })
   } catch (error) {
     console.error('[Audit Log] Failed to log from request:', error)

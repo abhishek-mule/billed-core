@@ -36,7 +36,7 @@ export function RoleGate({
   fallback = null,
   requireAll = true
 }: RoleGateProps) {
-  const { data: session } = useSession()
+  const session = useSession()
 
   // If no session, show fallback
   if (!session) {
@@ -91,7 +91,7 @@ export function withRoleGate<P extends object>(
  * Hook to check if current user has specific permissions
  */
 export function usePermissions() {
-  const { data: session } = useSession()
+  const session = useSession()
   const userRole = session?.role as UserRole
 
   return {
