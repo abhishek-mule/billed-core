@@ -98,9 +98,9 @@ async function insertPendingInvoice(args: {
         item.quantity,
         item.rate,
         item.quantity * item.rate,
-        item.taxRate || 18,
-        (item.quantity * item.rate * (item.taxRate || 18) / 200),
-        (item.quantity * item.rate * (item.taxRate || 18) / 200)
+        Number(item.taxRate || 18),
+        (item.quantity * item.rate * Number(item.taxRate || 18) / 200),
+        (item.quantity * item.rate * Number(item.taxRate || 18) / 200)
       ]
     )
   }
