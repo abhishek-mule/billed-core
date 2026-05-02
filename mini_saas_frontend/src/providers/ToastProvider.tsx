@@ -14,10 +14,19 @@ export function ToastProvider({ children }: ToastProviderProps) {
         position="bottom-center"
         toastOptions={{
           style: {
-            background: '#1a1a1a',
-            color: '#fff',
-            border: '1px solid #333',
+            background: 'hsl(var(--card))',
+            color: 'hsl(var(--foreground))',
+            border: '2px solid hsl(var(--border))',
+            borderRadius: '1.5rem',
+            padding: '1rem',
+            fontFamily: 'inherit',
+            fontWeight: '900',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            fontSize: '10px',
+            boxShadow: 'var(--shadow-lg)',
           },
+          className: 'hyper-toast',
         }}
       />
     </>

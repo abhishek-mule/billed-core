@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react'
+import { Loader2, ArrowRight, ShieldCheck, CheckCircle2, Smartphone, Key } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,158 +18,163 @@ export default function LoginPage() {
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (phone.length < 10) {
-      setError('Enter a valid 10-digit number')
+      setError('Invalid Phone Number')
       return
     }
     setError('')
     setIsLoading(true)
-    // Simulate API call
     setTimeout(() => {
       setIsLoading(false)
       setStep('otp')
-    }, 600)
+    }, 800)
   }
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (otp.length < 4) {
-      setError('Enter complete OTP')
+      setError('Incomplete OTP')
       return
     }
     setError('')
     setIsLoading(true)
-    // Simulate verification
     setTimeout(() => {
       setStep('creating')
-      // Simulate account/tenant auto-creation
       setTimeout(() => {
         localStorage.setItem('billzo_token', 'dummy-jwt-token')
-        localStorage.setItem('billzo_onboarded', 'false') // Track if first action performed
+        localStorage.setItem('billzo_onboarded', 'false')
         router.push('/dashboard')
-      }, 1000)
-    }, 600)
+      }, 1500)
+    }, 800)
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="w-16 h-16 bg-primary text-primary-foreground rounded-2xl flex items-center justify-center text-2xl font-bold mx-auto mb-6 shadow-glow">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 selection:bg-primary selection:text-primary-foreground">
+      <div className="w-full max-w-md space-y-10">
+        {/* Logo Section */}
+        <div className="text-center space-y-6">
+          <motion.div 
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-20 h-20 bg-primary text-primary-foreground rounded-[2rem] flex items-center justify-center text-3xl font-black mx-auto shadow-glow italic"
+          >
             B
+          </motion.div>
+          <div className="space-y-2">
+             <h1 className="text-3xl font-black tracking-tighter text-foreground uppercase italic">
+               {step === 'phone' && 'Command Entry'}
+               {step === 'otp' && 'Auth Protocol'}
+               {step === 'creating' && 'Initializing'}
+             </h1>
+             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">
+               {step === 'phone' && 'Access your business engine'}
+               {step === 'otp' && `Verifying +91 ${phone}`}
+               {step === 'creating' && 'Provisioning merchant workspace'}
+             </p>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {step === 'phone' && 'Welcome to BillZo'}
-            {step === 'otp' && 'Verify your number'}
-            {step === 'creating' && 'Setting up your workspace'}
-          </h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            {step === 'phone' && 'Enter your phone number to get started'}
-            {step === 'otp' && `We sent a code to +91 ${phone}`}
-            {step === 'creating' && 'This will only take a second...'}
-          </p>
         </div>
 
-        <div className="card-base p-6 md:p-8">
-          <AnimatePresence mode="wait">
+        {/* Action Card */}
+        <div className="card-base p-8 border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-primary-glow" />
+           
+           <AnimatePresence mode="wait">
             {step === 'phone' && (
               <motion.form
                 key="phone"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 onSubmit={handlePhoneSubmit}
-                className="space-y-4"
+                className="space-y-6"
               >
-                <div className="space-y-2">
-                  <div className="flex rounded-xl overflow-hidden border border-input focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background transition-base">
-                    <span className="flex items-center justify-center px-4 bg-muted text-muted-foreground font-medium border-r border-input">
-                      +91
-                    </span>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                      placeholder="Mobile Number"
-                      className="flex-1 bg-transparent px-4 py-3 outline-none text-lg tracking-wide font-medium"
-                      autoFocus
-                    />
-                  </div>
-                  {error && <p className="text-sm text-destructive font-medium animate-shake">{error}</p>}
-                </div>
-                <button
-                  type="submit"
-                  disabled={isLoading || phone.length < 10}
-                  className="btn-base w-full py-3.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-elegant text-base font-semibold"
+                <Input 
+                  type="tel"
+                  placeholder="Mobile Number"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  icon={<Smartphone className="w-5 h-5" />}
+                  error={error}
+                  autoFocus
+                />
+                <Button 
+                  type="submit" 
+                  fullWidth 
+                  size="xl" 
+                  loading={isLoading}
+                  icon={<ArrowRight className="w-5 h-5" />}
                 >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continue'}
-                  {!isLoading && <ArrowRight className="w-5 h-5 ml-2 opacity-80" />}
-                </button>
+                  Send OTP
+                </Button>
               </motion.form>
             )}
 
             {step === 'otp' && (
               <motion.form
                 key="otp"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 onSubmit={handleOtpSubmit}
                 className="space-y-6"
               >
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Enter OTP"
-                    className="input-base text-center text-2xl tracking-[0.5em] font-bold h-14"
-                    autoFocus
-                  />
-                  {error && <p className="text-sm text-destructive font-medium animate-shake text-center">{error}</p>}
-                </div>
-                <button
-                  type="submit"
-                  disabled={isLoading || otp.length < 4}
-                  className="btn-base w-full py-3.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-elegant text-base font-semibold"
+                <Input 
+                  type="text"
+                  placeholder="Verification Code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  icon={<Key className="w-5 h-5" />}
+                  error={error}
+                  className="text-center tracking-[0.8em]"
+                  autoFocus
+                />
+                <Button 
+                  type="submit" 
+                  fullWidth 
+                  size="xl" 
+                  variant="success"
+                  loading={isLoading}
+                  icon={<ShieldCheck className="w-5 h-5" />}
                 >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify & Login'}
+                  Verify Access
+                </Button>
+                <button 
+                  type="button" 
+                  onClick={() => setStep('phone')} 
+                  className="w-full text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors text-center"
+                >
+                  Change Phone Number
                 </button>
-                <div className="text-center">
-                  <button type="button" onClick={() => setStep('phone')} className="text-sm text-muted-foreground hover:text-foreground font-medium">
-                    Change phone number
-                  </button>
-                </div>
               </motion.form>
             )}
 
             {step === 'creating' && (
               <motion.div
                 key="creating"
-                initial={{ opacity: 0, scale: 0.95 }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="py-8 flex flex-col items-center justify-center space-y-6"
+                className="py-10 flex flex-col items-center justify-center space-y-8"
               >
                 <div className="relative">
-                  <div className="absolute inset-0 bg-success/20 rounded-full animate-ping" />
-                  <div className="w-20 h-20 bg-success-soft text-success rounded-full flex items-center justify-center relative z-10 shadow-success">
-                    <ShieldCheck className="w-10 h-10" />
-                  </div>
+                   <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
+                   <div className="w-24 h-24 bg-primary text-primary-foreground rounded-[2.5rem] flex items-center justify-center relative z-10 shadow-glow">
+                      <Loader2 className="w-10 h-10 animate-spin" />
+                   </div>
                 </div>
-                <div className="space-y-2 text-center">
-                  <p className="font-semibold text-foreground flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-success" />
-                    Account Verified
-                  </p>
-                  <p className="text-sm text-muted-foreground">Preparing your dashboard...</p>
+                <div className="text-center space-y-2">
+                   <p className="text-sm font-black uppercase tracking-widest text-foreground">Syncing Database...</p>
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase animate-pulse">Allocating RLS Policies</p>
                 </div>
               </motion.div>
             )}
-          </AnimatePresence>
+           </AnimatePresence>
         </div>
         
-        <p className="text-center text-xs text-muted-foreground mt-8">
-          By continuing, you agree to BillZo's Terms & Conditions
-        </p>
+        <div className="text-center">
+           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-40 leading-relaxed">
+             Secure Multi-Tenant Authentication Protocol<br/>
+             Authorized Merchant Access Only
+           </p>
+        </div>
       </div>
     </div>
   )
