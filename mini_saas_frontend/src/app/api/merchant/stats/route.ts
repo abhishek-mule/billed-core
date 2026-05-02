@@ -78,24 +78,24 @@ export async function GET(request: NextRequest) {
 
     // Get inventory health data
     const lowStockItems = await query<any>(
-      `SELECT id, item_name, stock_qty, unit, standard_rate
+      `SELECT id, item_name, stock_quantity, unit, standard_rate
        FROM products 
-       WHERE tenant_id = $1 AND is_active = true AND stock_qty < 20
-       ORDER BY stock_qty ASC
+       WHERE tenant_id = $1 AND is_active = true AND stock_quantity < 20
+       ORDER BY stock_quantity ASC
        LIMIT 10`,
       [tenantId]
     )
 
     // Get slow-moving items (not sold in 30 days)
     const slowMovingItems = await query<any>(
-      `SELECT p.id, p.item_name, p.stock_qty, p.unit, p.standard_rate,
+      `SELECT p.id, p.item_name, p.stock_quantity, p.unit, p.standard_rate,
         MAX(i.created_at) as last_sold_date,
         EXTRACT(DAY FROM (NOW() - MAX(i.created_at))) as days_since_sale
        FROM products p
        LEFT JOIN invoice_items ii ON p.item_code = ii.item_code
        LEFT JOIN invoices i ON ii.invoice_id = i.id AND i.tenant_id = p.tenant_id
-       WHERE p.tenant_id = $1 AND p.is_active = true AND p.stock_qty > 0
-       GROUP BY p.id, p.item_name, p.stock_qty, p.unit, p.standard_rate
+       WHERE p.tenant_id = $1 AND p.is_active = true AND p.stock_quantity > 0
+       GROUP BY p.id, p.item_name, p.stock_quantity, p.unit, p.standard_rate
        HAVING MAX(i.created_at) IS NULL OR MAX(i.created_at) < NOW() - INTERVAL '30 days'
        ORDER BY days_since_sale DESC NULLS LAST
        LIMIT 5`,
@@ -215,14 +215,14 @@ export async function GET(request: NextRequest) {
         lowStockItems: lowStockItems.map(item => ({
           id: item.id,
           name: item.item_name,
-          stock: parseFloat(item.stock_qty),
+          stock: parseFloat(item.stock_quantity),
           unit: item.unit,
           rate: parseFloat(item.standard_rate)
         })),
         slowMovingItems: slowMovingItems.map(item => ({
           id: item.id,
           name: item.item_name,
-          stock: parseFloat(item.stock_qty),
+          stock: parseFloat(item.stock_quantity),
           unit: item.unit,
           daysSinceSale: item.days_since_sale ? parseInt(item.days_since_sale) : null,
           lastSoldDate: item.last_sold_date
