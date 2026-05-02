@@ -1,5 +1,6 @@
 import { query } from '../db/client'
-import { getSession } from '../session'
+import { getSessionFromRequest } from '../session'
+import { headers } from 'next/headers'
 
 interface ProductMatch {
   id: string
@@ -13,7 +14,8 @@ interface ProductMatch {
  * Uses PostgreSQL's similarity function (pg_trgm extension required).
  */
 export async function findSmartMatch(itemName: string): Promise<ProductMatch | null> {
-  const session = await getSession()
+  const request = { headers: headers() } as unknown as Request
+  const session = await getSessionFromRequest(request)
   if (!session?.tenantId) return null
 
   // We use word_similarity or similarity to find the closest product name
