@@ -61,6 +61,15 @@ export async function POST(request: NextRequest) {
     // Step 6: Calculate overall confidence
     const overallConfidence = calculateOverallConfidence(extractedData, matchedSupplier, matchedItems)
 
+    if (overallConfidence < 0.2) {
+       return NextResponse.json({
+         success: false,
+         error: 'UNREADABLE_BILL',
+         message: 'The image is too blurry or low quality. Please try again with better lighting.',
+         confidence: overallConfidence
+       }, { status: 422 })
+    }
+
     return NextResponse.json({
       success: true,
       extractedData: {
@@ -80,8 +89,17 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[OCR Processing] Error:', error)
+    
+    // Specific error handling for known failure modes
+    if (error.message?.includes('Tesseract')) {
+      return NextResponse.json(
+        { error: 'OCR_ENGINE_FAILURE', message: 'The extraction engine failed. Try a different image.' },
+        { status: 503 }
+      )
+    }
+
     return NextResponse.json(
-      { error: 'Failed to process invoice image', details: error.message },
+      { error: 'INTERNAL_ERROR', message: 'Failed to process invoice image', details: error.message },
       { status: 500 }
     )
   }

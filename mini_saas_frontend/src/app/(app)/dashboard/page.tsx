@@ -1,256 +1,259 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
-  PlusCircle, 
-  ScanLine, 
+  Plus, 
+  Scan, 
   Wallet,
-  UserPlus,
+  Users,
   ArrowUpRight,
   ArrowDownRight,
   AlertCircle,
   Clock,
   PackageX,
   FileWarning,
-  Camera,
   ChevronRight,
   Send,
   Eye,
   RefreshCcw,
-  Truck
+  Truck,
+  TrendingUp,
+  CreditCard,
+  History
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [hasData, setHasData] = useState(true) // For testing empty state
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const quickActions = [
-    { label: 'Create Invoice', icon: PlusCircle, path: '/invoices/new', color: 'bg-card text-foreground' },
-    { label: 'Scan Bill', icon: ScanLine, path: '/scan', color: 'bg-primary text-primary-foreground', isPrimary: true },
-    { label: 'Add Expense', icon: Wallet, path: '/purchases/new', color: 'bg-card text-foreground' },
-    { label: 'Add Customer', icon: UserPlus, path: '/customers/new', color: 'bg-card text-foreground' },
-  ]
+  useEffect(() => {
+    // Simulate loading
+    const timer = setTimeout(() => setIsLoading(false), 800)
+    return () => clearTimeout(timer)
+  }, [])
 
-  const alerts = [
+  const stats = [
     { 
-      id: 'unpaid', 
-      title: '2 Unpaid Invoices', 
-      subtitle: '₹4,500 pending collection', 
-      icon: AlertCircle, 
-      color: 'text-warning bg-warning/10',
-      actions: [
-        { label: 'Send Reminder', icon: Send, primary: true, onClick: () => console.log('Send reminder') },
-        { label: 'View All', icon: Eye, onClick: () => router.push('/invoices?status=pending') }
-      ]
+      label: 'Today Sales', 
+      value: '₹12,450', 
+      trend: '+12.5%', 
+      isPositive: true, 
+      icon: TrendingUp,
+      color: 'text-success',
+      bgColor: 'bg-success-soft',
+      path: '/reports'
     },
     { 
-      id: 'ocr-failed', 
-      title: 'OCR Failed', 
-      subtitle: '1 bill needs review', 
-      icon: FileWarning, 
-      color: 'text-destructive bg-destructive/10',
-      actions: [
-        { label: 'Review Now', icon: RefreshCcw, primary: true, onClick: () => router.push('/purchases?review=true') }
-      ]
+      label: 'Pending', 
+      value: '₹4,500', 
+      trend: '2 unpaid', 
+      isPositive: false, 
+      icon: Clock,
+      color: 'text-warning',
+      bgColor: 'bg-warning-soft',
+      path: '/invoices?status=pending'
     },
     { 
-      id: 'low-stock', 
-      title: 'Low Stock – USB Cable', 
-      subtitle: 'Only 3 units left', 
-      icon: PackageX, 
-      color: 'text-primary bg-primary/10',
-      actions: [
-        { label: 'Restock', icon: Truck, primary: true, onClick: () => console.log('Restock') },
-        { label: 'View Items', icon: Eye, onClick: () => router.push('/inventory') }
-      ]
+      label: 'Cash In Hand', 
+      value: '₹32,100', 
+      trend: 'Ready', 
+      isPositive: true, 
+      icon: Wallet,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+      path: '/reports/cash'
     },
   ]
 
-  const recentActivity = [
-    { id: 1, action: 'Invoice #012 created', target: 'Rahul Sharma', time: '10 mins ago', amount: '₹1,200', type: 'in', event: 'invoice_created' },
-    { id: 2, action: 'Payment received', target: 'Invoice #010', time: '1 hour ago', amount: '₹450', type: 'in', event: 'payment_received' },
-    { id: 3, action: 'OCR Failed', target: 'Supplier Bill #402', time: '3 hours ago', amount: null, type: 'alert', event: 'ocr_failed' },
-    { id: 4, action: 'Purchase added', target: 'Wholesale Mart', time: '5 hours ago', amount: '₹8,500', type: 'out', event: 'purchase_added' },
+  const actions = [
+    { label: 'Invoice', sub: 'Create New', icon: Plus, path: '/invoices/new', color: 'bg-primary text-primary-foreground shadow-glow' },
+    { label: 'Scan Bill', sub: 'OCR Entry', icon: Scan, path: '/scan', color: 'bg-black text-white shadow-xl' },
+    { label: 'Add Expense', sub: 'Manual', icon: CreditCard, path: '/purchases/new', color: 'bg-card border-2 border-border' },
+    { label: 'Customers', sub: 'Manage', icon: Users, path: '/customers', color: 'bg-card border-2 border-border' },
   ]
 
-  if (!hasData) {
+  if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 animate-fade-in">
-        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">
-          <PlusCircle className="w-10 h-10 text-muted-foreground" />
+      <div className="space-y-8 animate-pulse p-1">
+        <div className="h-24 bg-muted rounded-[2rem]" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-32 bg-muted rounded-[2rem]" />
+          <div className="h-32 bg-muted rounded-[2rem]" />
         </div>
-        <h2 className="text-xl font-bold text-foreground mb-2">Welcome to BillZo</h2>
-        <p className="text-muted-foreground mb-8 max-w-xs">
-          Start by creating your first invoice or scanning a bill to see your business pulse.
-        </p>
-        <div className="grid grid-cols-1 w-full gap-3 max-w-xs">
-          <button 
-            onClick={() => router.push('/invoices/new')}
-            className="btn-base py-4 bg-primary text-primary-foreground font-bold shadow-glow"
-          >
-            Create First Invoice
-          </button>
-          <button 
-            onClick={() => router.push('/scan')}
-            className="btn-base py-4 bg-secondary text-secondary-foreground font-bold"
-          >
-            Scan a Bill
-          </button>
+        <div className="space-y-3">
+          <div className="h-20 bg-muted rounded-2xl" />
+          <div className="h-20 bg-muted rounded-2xl" />
         </div>
       </div>
     )
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+        <div className="w-20 h-20 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6">
+          <AlertCircle className="w-10 h-10" />
+        </div>
+        <h2 className="text-xl font-black uppercase tracking-tight text-foreground">Sync Error</h2>
+        <p className="text-sm text-muted-foreground mt-2 max-w-xs leading-relaxed">
+          We couldn't refresh your business pulse. Check your connection or try manual refresh.
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-8 btn-base bg-primary text-primary-foreground px-8 py-3 font-black uppercase tracking-widest shadow-glow flex items-center gap-2"
+        >
+          <RefreshCcw className="w-4 h-4" /> Retry Sync
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-8 animate-fade-in pb-24 max-w-3xl mx-auto">
-      {/* 1. Quick Actions */}
+    <div className="space-y-10 animate-fade-in pb-24 max-w-4xl mx-auto px-1">
+      {/* 1. Primary Metrics Grid */}
       <section>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {quickActions.map((action) => {
-            const Icon = action.icon
-            return (
-              <button
-                key={action.label}
-                onClick={() => router.push(action.path)}
-                className={cn(
-                  "flex flex-col items-center justify-center p-4 rounded-2xl transition-all active:scale-95 border border-border shadow-sm",
-                  action.color,
-                  action.isPrimary && "shadow-glow"
-                )}
-              >
-                <div className={cn(
-                  "p-3 rounded-xl mb-2",
-                  action.isPrimary ? "bg-white/20" : "bg-muted"
-                )}>
-                  <Icon className="w-6 h-6" />
-                </div>
-                <span className="text-xs font-bold text-center tracking-tight">{action.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* 2. Needs Attention */}
-      {alerts.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Needs Attention</h2>
-          <div className="space-y-3">
-            {alerts.slice(0, 3).map((alert) => {
-              const Icon = alert.icon
-              return (
-                <div 
-                  key={alert.id} 
-                  className="card-base p-4 border-border/50 bg-card/50 backdrop-blur-sm"
-                >
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className={cn("p-2.5 rounded-xl flex-shrink-0", alert.color)}>
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <p className="font-bold text-base text-foreground leading-none">{alert.title}</p>
-                      <p className="text-sm text-muted-foreground mt-1.5">{alert.subtitle}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {alert.actions.map((action, idx) => {
-                      const ActionIcon = action.icon
-                      return (
-                        <button
-                          key={idx}
-                          onClick={action.onClick}
-                          className={cn(
-                            "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all active:scale-95",
-                            action.primary 
-                              ? "bg-primary text-primary-foreground shadow-sm" 
-                              : "bg-secondary text-secondary-foreground"
-                          )}
-                        >
-                          <ActionIcon className="w-3.5 h-3.5" />
-                          {action.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* 3. Today Snapshot */}
-      <section className="space-y-4">
-        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-1">Today Snapshot</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <button 
-            onClick={() => router.push('/reports')}
-            className="card-base p-5 text-left active:scale-[0.98] transition-all border-success/20 hover:border-success/40 group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-success uppercase tracking-widest">Today Sales</span>
-              <ArrowUpRight className="w-4 h-4 text-success group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black tracking-tighter">₹12,450</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1 font-bold">12 INVOICES</p>
-          </button>
-
-          <button 
-            onClick={() => router.push('/invoices?status=pending')}
-            className="card-base p-5 text-left active:scale-[0.98] transition-all border-warning/20 hover:border-warning/40 group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-warning uppercase tracking-widest">Pending Amount</span>
-              <ArrowDownRight className="w-4 h-4 text-warning group-hover:translate-x-0.5 group-hover:translate-y-0.5 transition-transform" />
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black tracking-tighter">₹4,500</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1 font-bold">2 UNPAID</p>
-          </button>
-        </div>
-      </section>
-
-      {/* 4. Recent Activity */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Recent Activity</h2>
-          <button className="text-xs font-bold text-primary hover:underline">View All</button>
-        </div>
-        <div className="card-base divide-y divide-border/50 overflow-hidden bg-card/30">
-          {recentActivity.slice(0, 10).map((item) => (
-            <div 
-              key={item.id} 
-              className="p-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer transition-colors group"
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {stats.map((stat, i) => (
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              key={stat.label}
+              onClick={() => router.push(stat.path)}
+              className="card-base p-6 text-left hover:border-primary/30 transition-all group flex flex-col justify-between h-36 bg-card/40 backdrop-blur-sm border-border/50"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:scale-110 transition-transform">
-                  <Clock className="w-5 h-5" />
+              <div className="flex items-center justify-between w-full">
+                <div className={cn("p-2 rounded-xl", stat.bgColor, stat.color)}>
+                  <stat.icon className="w-5 h-5" />
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-foreground leading-none">{item.action}</p>
-                  <p className="text-xs text-muted-foreground mt-1.5 font-medium">{item.target} • {item.time}</p>
+                <div className={cn(
+                  "text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter",
+                  stat.isPositive ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
+                )}>
+                  {stat.trend}
                 </div>
               </div>
-              {item.amount && (
-                <p className={cn(
-                  "text-sm font-black tracking-tight",
-                  item.type === 'in' ? "text-success" : "text-foreground"
-                )}>
-                  {item.type === 'in' ? '+' : '-'}{item.amount}
-                </p>
-              )}
-              {!item.amount && (
-                <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-primary transition-colors" />
-              )}
-            </div>
+              <div>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">{stat.label}</p>
+                <p className="text-3xl font-black tracking-tighter text-foreground mt-1">{stat.value}</p>
+              </div>
+            </motion.button>
           ))}
         </div>
       </section>
+
+      {/* 2. Fast Actions HUD */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Quick HUD</h2>
+          <Zap className="w-3 h-3 text-primary animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {actions.map((action, i) => (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 + (i * 0.05) }}
+              key={action.label}
+              onClick={() => router.push(action.path)}
+              className={cn(
+                "p-5 rounded-[2rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-90 group relative overflow-hidden",
+                action.color
+              )}
+            >
+              <action.icon className="w-6 h-6 mb-1 group-hover:scale-110 transition-transform" />
+              <div className="text-center">
+                <p className="text-xs font-black uppercase tracking-tight leading-none">{action.label}</p>
+                <p className="text-[9px] font-bold opacity-60 uppercase mt-1 tracking-widest">{action.sub}</p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. Smart Alerts & Activity Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        {/* Alerts Column */}
+        <section className="space-y-4">
+          <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-2">
+            <AlertCircle className="w-3 h-3 text-warning" /> Critical Feed
+          </h2>
+          <div className="space-y-3">
+             <div className="card-base p-5 bg-warning-soft/30 border-warning/20 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                   <Clock className="w-16 h-16 -rotate-12" />
+                </div>
+                <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-2">Payment Delay</p>
+                <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">2 Invoices Overdue</h3>
+                <p className="text-xs text-muted-foreground mt-2 font-medium">₹8,450 collection pending from 2 clients.</p>
+                <div className="flex gap-2 mt-5">
+                   <button onClick={() => router.push('/invoices?status=overdue')} className="flex-1 py-2.5 bg-warning text-warning-foreground rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">Send Reminders</button>
+                   <button className="px-4 py-2.5 bg-card border border-warning/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all text-warning">View</button>
+                </div>
+             </div>
+
+             <div className="card-base p-5 bg-destructive/5 border-destructive/10 relative overflow-hidden group">
+                <p className="text-[10px] font-black text-destructive uppercase tracking-widest mb-2">Data Failure</p>
+                <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">OCR Extraction Failed</h3>
+                <p className="text-xs text-muted-foreground mt-2 font-medium">Purchase bill #402 couldn't be auto-read.</p>
+                <button onClick={() => router.push('/purchases?review=true')} className="mt-5 w-full py-2.5 bg-destructive text-destructive-foreground rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all">Manual Review</button>
+             </div>
+          </div>
+        </section>
+
+        {/* Recent History Column */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-2">
+              <History className="w-3 h-3" /> Recent Log
+            </h2>
+            <button className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">Full Log</button>
+          </div>
+          <div className="card-base divide-y divide-border/30 overflow-hidden bg-card/20 backdrop-blur-sm">
+             {[
+               { icon: Plus, title: 'Invoice #012', sub: 'Rahul Sharma • 10m ago', val: '+₹1,200', color: 'text-success' },
+               { icon: RefreshCcw, title: 'Payment Recv', sub: 'Invoice #010 • 1h ago', val: '+₹450', color: 'text-success' },
+               { icon: Scan, title: 'Purchase Entry', sub: 'Wholesale Mart • 3h ago', val: '-₹8,500', color: 'text-foreground' },
+             ].map((log, i) => (
+               <button key={i} className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors group text-left">
+                  <div className="flex items-center gap-4">
+                     <div className="w-10 h-10 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:scale-110 transition-transform">
+                        <log.icon className="w-4 h-4" />
+                     </div>
+                     <div>
+                        <p className="text-xs font-black uppercase tracking-tight text-foreground">{log.title}</p>
+                        <p className="text-[10px] font-bold text-muted-foreground mt-1">{log.sub}</p>
+                     </div>
+                  </div>
+                  <p className={cn("text-xs font-black tracking-tight", log.color)}>{log.val}</p>
+               </button>
+             ))}
+          </div>
+        </section>
+      </div>
     </div>
+  )
+}
+
+function Zap(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 14.71 13.18 3h.51l-2.02 8.23H18l-8.68 11.23h-.5l1.58-8.75H4z" />
+    </svg>
   )
 }
