@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/session'
 import { query, queryOne } from '@/lib/db/client'
 
+export const dynamic = 'force-dynamic'
+
 interface Recommendation {
   product_id: string
   item_name: string
