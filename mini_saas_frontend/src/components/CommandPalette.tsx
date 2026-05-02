@@ -16,7 +16,9 @@ import {
   History,
   ShoppingCart,
   Scan,
-  UserPlus
+  UserPlus,
+  ShoppingBag,
+  ShieldCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
