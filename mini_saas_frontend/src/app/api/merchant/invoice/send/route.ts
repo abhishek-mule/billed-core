@@ -126,5 +126,7 @@ async function handleSendInvoice(request: Request, session: SessionData) {
   }
 }
 
-const sendHandler = await withSessionAuth(handleSendInvoice)
-export const POST = withCsrfProtection(sendHandler)
+export async function POST(request: Request) {
+  const handler = await withSessionAuth(handleSendInvoice)
+  return withCsrfProtection(handler)(request)
+}
