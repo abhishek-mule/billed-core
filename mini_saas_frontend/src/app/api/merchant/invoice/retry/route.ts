@@ -31,5 +31,7 @@ async function handleRetry(request: Request, session: SessionData) {
   }
 }
 
-const retryHandler = await withSessionAuth(handleRetry)
-export const POST = withCsrfProtection(retryHandler)
+export async function POST(request: Request) {
+  const handler = await withSessionAuth(handleRetry)
+  return withCsrfProtection(handler)(request)
+}
