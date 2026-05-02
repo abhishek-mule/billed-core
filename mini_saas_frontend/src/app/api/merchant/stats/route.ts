@@ -125,6 +125,56 @@ export async function GET(request: NextRequest) {
       [tenantId]
     )
 
+    // Get sales trend (last 7 days)
+    const salesTrend = await query<any>(
+      `SELECT 
+         DATE(created_at) as date,
+         SUM(total::numeric) as revenue
+       FROM invoices 
+       WHERE tenant_id = $1 
+         AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      [tenantId]
+    )
+
+    // Get purchases trend (last 7 days)
+    const purchasesTrend = await query<any>(
+      `SELECT 
+         DATE(created_at) as date,
+         SUM(total::numeric) as amount
+       FROM purchases 
+       WHERE tenant_id = $1 
+         AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      [tenantId]
+    )
+
+    // Get total purchases (this month)
+    const totalPurchasesResult = await queryOne<{ total: string }>(
+      `SELECT COALESCE(SUM(total::numeric), 0) as total 
+       FROM purchases 
+       WHERE tenant_id = $1 AND created_at >= date_trunc('month', CURRENT_DATE)`,
+      [tenantId]
+    )
+
+    // Get unpaid invoices count and amount
+    const unpaidInvoicesResult = await queryOne<{ count: string, total: string }>(
+      `SELECT COUNT(*) as count, COALESCE(SUM(total::numeric), 0) as total 
+       FROM invoices 
+       WHERE tenant_id = $1 AND payment_mode = 'CREDIT' AND status NOT IN ('PAID', 'CANCELLED', 'VOIDED')`,
+      [tenantId]
+    )
+
+    // Get pending purchases count
+    const pendingPurchasesResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count 
+       FROM purchases 
+       WHERE tenant_id = $1 AND status = 'DRAFT'`,
+      [tenantId]
+    )
+
     const cashCollected = parseFloat(cashCollectedResult?.total || '0')
     const creditGiven = parseFloat(creditGivenResult?.total || '0')
     const pendingCollections = parseFloat(pendingCollectionsResult?.total || '0')
@@ -142,6 +192,10 @@ export async function GET(request: NextRequest) {
       cashCollected,
       creditGiven,
       pendingCollections,
+      totalPurchases: parseFloat(totalPurchasesResult?.total || '0'),
+      unpaidCount: parseInt(unpaidInvoicesResult?.count || '0'),
+      unpaidAmount: parseFloat(unpaidInvoicesResult?.total || '0'),
+      pendingPurchasesCount: parseInt(pendingPurchasesResult?.count || '0'),
       creditInvoiceCount: parseInt(countResult?.count || '0') - parseInt(syncStats.find(s => s.status === 'SYNCED')?.count || '0')
     }
 
@@ -185,6 +239,10 @@ export async function GET(request: NextRequest) {
           dueDate: debtor.last_due_date
         })),
         totalPending: pendingCollections
+      },
+      trends: {
+        sales: salesTrend.map(t => ({ date: t.date, revenue: parseFloat(t.revenue) })),
+        purchases: purchasesTrend.map(t => ({ date: t.date, amount: parseFloat(t.amount) }))
       }
     })
 
