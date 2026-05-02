@@ -38,7 +38,7 @@ function extractKeywords(text: string): string[] {
     keywords.push(...cleaned.split(' ').filter(w => w.length > 2))
   }
   
-  return [...new Set(keywords)].slice(0, 10)
+  return Array.from(new Set(keywords)).slice(0, 10)
 }
 
 function fuzzyMatchScore(ocrText: string, productName: string, productCode: string, aliases: string[]): { score: number; matchedOn: string[] } {
