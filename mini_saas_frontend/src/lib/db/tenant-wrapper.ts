@@ -38,7 +38,8 @@ export async function withTenant<T>(
  * Helper to ensure a record belongs to the tenant before performing sensitive actions.
  */
 export async function validateOwnership(table: string, id: string): Promise<boolean> {
-  const session = await getSession()
+  const request = { headers: headers() } as unknown as Request
+  const session = await getSessionFromRequest(request)
   if (!session?.tenantId) return false
 
   const results = await query(
