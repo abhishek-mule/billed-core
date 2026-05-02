@@ -1,5 +1,6 @@
 import { query } from './client'
-import { getSession } from '../session'
+import { getSessionFromRequest } from '../session'
+import { headers } from 'next/headers'
 
 /**
  * Executes a database query within the context of a specific tenant.
@@ -9,7 +10,8 @@ export async function withTenant<T>(
   sql: string,
   params: any[] = []
 ): Promise<T[]> {
-  const session = await getSession()
+  const request = { headers: headers() } as unknown as Request
+  const session = await getSessionFromRequest(request)
   if (!session?.tenantId) {
     throw new Error('UNAUTHORIZED_TENANT_ACCESS: No active tenant session found.')
   }
