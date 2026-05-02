@@ -18,7 +18,8 @@ import {
   CreditCard,
   Banknote,
   Smartphone,
-  Store
+  Store,
+  Scan
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOfflineQueue } from '@/hooks/useOfflineQueue'

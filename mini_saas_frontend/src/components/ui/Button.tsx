@@ -54,7 +54,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ) : icon ? (
           <span className="shrink-0">{icon}</span>
         ) : null}
-        <span className="leading-none">{children}</span>
+        <span className="leading-none">{children as React.ReactNode}</span>
       </motion.button>
     )
   }
