@@ -67,7 +67,7 @@ function fuzzyMatchScore(ocrText: string, productName: string, productCode: stri
     }
   }
   
-  return { score, matchedOn: [...new Set(matchedOn)] }
+  return { score, matchedOn: Array.from(new Set(matchedOn)) }
 }
 
 export async function POST(req: NextRequest) {
