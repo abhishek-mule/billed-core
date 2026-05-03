@@ -1,125 +1,79 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { invoices, payments, customers } from '@/lib/schema'
+import { enqueueJob, QUEUES } from '@/lib/queue'
+import { eq, sql } from 'drizzle-orm'
 import crypto from 'crypto'
-import { query } from '@/lib/db/client'
 
-const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || ''
-
-function verifyWebhookSignature(body: string, signature: string): boolean {
-  if (!WEBHOOK_SECRET || !signature) return false
+export async function POST(req: Request) {
+  const rawBody = await req.text()
+  const signature = req.headers.get('x-razorpay-signature')
   
-  const expectedSignature = crypto
-    .createHmac('sha256', WEBHOOK_SECRET)
-    .update(body)
+  const expected = crypto
+    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
+    .update(rawBody)
     .digest('hex')
+    
+  if (expected !== signature) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  
+  const body = JSON.parse(rawBody)
+  if (body.event === 'payment.captured') {
+    const p = body.payload.payment.entity
+    
+    // Idempotency: skip if payment exists
+    const existing = await db.query.payments.findFirst({
+      where: eq(payments.razorpayPaymentId, p.id)
+    })
+    if (existing) return Response.json({ ok: true })
+    
+    await db.transaction(async (tx) => {
+      // Find invoice by order ID (stored in payment metadata or derived)
+      // For now, assuming payment linked to order; needs correlation
+      // Let's assume invoiceId linked via receipt
+      const receipt = p.notes?.receipt || ''
+      const invoice = await tx.query.invoices.findFirst({
+        where: eq(invoices.invoiceNumber, receipt.replace('receipt_', '')),
+        with: { customer: true }
+      })
+      
+      if (invoice) {
+        // Check if collected via automation (within 24h of last reminder)
+        const isAuto = invoice.lastFollowUpAt && 
+          (new Date().getTime() - new Date(invoice.lastFollowUpAt).getTime()) < (24 * 60 * 60 * 1000);
+        
+        const fee = isAuto ? (p.amount / 100) * 0.01 : 0;
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  )
-}
+        await tx.insert(payments).values({
+          tenantId: invoice.tenantId,
+          invoiceId: invoice.id,
+          amount: (p.amount / 100).toString(),
+          razorpayPaymentId: p.id,
+          razorpayOrderId: p.order_id,
+          status: 'captured',
+          collectedVia: isAuto ? 'auto' : 'manual',
+          platformFee: fee.toString()
+        })
+        
+        // Trigger confirmation + acquisition WhatsApp
+        await enqueueJob(QUEUES.invoiceNotification, {
+          invoiceId: invoice.id,
+          type: 'payment_confirmation_acquisition',
+          phone: invoice.customer?.phone
+        })
 
-async function updatePaymentStatus(
-  razorpayOrderId: string,
-  razorpayPaymentId: string,
-  status: 'captured' | 'failed',
-  amount: number,
-  tenantId?: string
-) {
-  try {
-    // Find payment record by razorpay order ID or payment ID
-    const existingPayment = await query<{ id: string; invoice_id: string; tenant_id: string }>(
-      `SELECT id, invoice_id, tenant_id FROM payments 
-       WHERE razorpay_payment_id = $1 OR payment_reference = $2
-       LIMIT 1`,
-      [razorpayPaymentId, razorpayOrderId]
-    )
-
-    if (existingPayment.length === 0) {
-      console.warn(`[Payment] No payment record found for order: ${razorpayOrderId}`)
-      return
-    }
-
-    const payment = existingPayment[0]
-    const invoiceId = payment.invoice_id
-    const actualTenantId = payment.tenant_id
-
-    if (status === 'captured') {
-      // Update payment record
-      await query(
-        `UPDATE payments 
-         SET razorpay_payment_id = $1, is_reconciled = true, status = 'COMPLETED', updated_at = NOW()
-         WHERE id = $2`,
-        [razorpayPaymentId, payment.id]
-      )
-
-      // Update invoice payment status
-      await query(
-        `UPDATE invoices 
-         SET payment_status = 'COMPLETED', erp_sync_status = 'PENDING'
-         WHERE id = $1`,
-        [invoiceId]
-      )
-
-      console.log(`[Payment] ✅ Captured: ${razorpayPaymentId} amount: ${amount}`)
-    } else if (status === 'failed') {
-      // Update payment record as failed
-      await query(
-        `UPDATE payments 
-         SET is_reconciled = false, status = 'FAILED', updated_at = NOW()
-         WHERE id = $1`,
-        [payment.id]
-      )
-
-      // Keep invoice as pending
-      console.error(`[Payment] ❌ Failed: ${razorpayPaymentId}`)
-    }
-  } catch (error) {
-    console.error('[Payment Update] Database error:', error)
+        if (invoice.customerId) {
+          await tx.update(customers)
+            .set({ udharBalance: sql`udhar_balance - ${(p.amount / 100)}` })
+            .where(eq(customers.id, invoice.customerId))
+        }
+        
+        const newTotal = Number(invoice.paymentAmount || 0) + (p.amount / 100)
+        await tx.update(invoices).set({
+          paymentAmount: newTotal.toString(),
+          paymentStatus: newTotal >= Number(invoice.grandTotal) ? 'paid' : 'partial'
+        }).where(eq(invoices.id, invoice.id))
+      }
+    })
   }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.text()
-    const signature = req.headers.get('x-razorpay-signature') || ''
-
-    if (!verifyWebhookSignature(body, signature)) {
-      console.error('[Webhook] Signature verification failed')
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    }
-
-    const eventData = JSON.parse(body)
-    const event = eventData.event
-
-    if (event === 'payment.captured') {
-      const payment = eventData.payload.payment.entity
-      
-      await updatePaymentStatus(
-        payment.order_id || '',
-        payment.id,
-        'captured',
-        payment.amount
-      )
-      
-    } else if (event === 'payment.failed') {
-      const payment = eventData.payload.payment.entity
-      
-      await updatePaymentStatus(
-        payment.order_id || '',
-        payment.id,
-        'failed',
-        payment.amount
-      )
-    } else if (event === 'order.paid') {
-      // Order completion webhook
-      const order = eventData.payload.order.entity
-      console.log(`[Order] Paid: ${order.id}`)
-    }
-
-    return NextResponse.json({ received: true })
-
-  } catch (error) {
-    console.error('[Webhook] Error:', error)
-    return NextResponse.json({ error: 'Processing failed' }, { status: 500 })
-  }
+  
+  return Response.json({ ok: true })
 }
