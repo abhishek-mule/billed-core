@@ -1,33 +1,26 @@
-import type { Metadata } from 'next'
-import './globals.css'
-import { QueryProvider } from '@/providers/QueryProvider'
-import { ToastProvider } from '@/providers/ToastProvider'
-import { SessionProvider } from '@/providers/SessionProvider'
-import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'BillZo - Free GST Billing Software',
-  description: 'Beat Zoho & Tally. Free GST billing for Indian retailers.',
-}
+  title: 'Billzo | Money Recovery Console',
+  description: 'Automate your daily cash recovery.',
+  manifest: '/manifest.json',
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export const viewport: Viewport = {
+  themeColor: '#1e3a8a',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-background text-foreground antialiased">
-        <ErrorBoundary>
-          <QueryProvider>
-            <SessionProvider>
-              <ToastProvider>
-                {children}
-              </ToastProvider>
-            </SessionProvider>
-          </QueryProvider>
-        </ErrorBoundary>
-      </body>
+      <head>
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body>{children}</body>
     </html>
-  )
+  );
 }

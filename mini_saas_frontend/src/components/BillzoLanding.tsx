@@ -137,14 +137,14 @@ export default function BillZoLanding() {
     <div className="min-h-screen bg-[#faf9f7] text-[#0e0e10] selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
       {/* Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .font-display { font-family: 'Instrument Serif', Georgia, serif; }
         .font-sans { font-family: 'DM Sans', system-ui, sans-serif; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         .glass { background: rgba(250, 249, 247, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(0,0,0,0.05); }
         @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .animate-marquee { animation: marquee 30s linear infinite; }
-      `}</style>
+      ` }} />
 
       {/* NAVIGATION */}
       <nav className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ${scrolled ? 'py-3 border-b border-black/5 bg-white/90 backdrop-blur-xl' : 'py-6 bg-transparent'}`}>

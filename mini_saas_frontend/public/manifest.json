@@ -1,1 +1,21 @@
-{"background_color":"#ffffff","categories":["business","finance","productivity"],"description":"Smart billing and POS system for small businesses","display":"standalone","icons":[{"purpose":"any maskable","sizes":"192x192","src":"/logo-icon.svg","type":"image/svg+xml"},{"purpose":"any maskable","sizes":"512x512","src":"/billZo_logo.png","type":"image/png"}],"name":"BillZo - Smart Billing & POS","orientation":"portrait-primary","screenshots":[{"form_factor":"wide","sizes":"1280x720","src":"/images/dashboard-preview.png","type":"image/png"}],"short_name":"BillZo","shortcuts":[{"description":"Create a new invoice","icons":[{"sizes":"96x96","src":"/logo-icon.svg"}],"name":"New Invoice","short_name":"Invoice","url":"/merchant/invoice/new"},{"description":"Point of Sale","icons":[{"sizes":"96x96","src":"/logo-icon.svg"}],"name":"POS","short_name":"POS","url":"/merchant/pos"},{"description":"View business reports","icons":[{"sizes":"96x96","src":"/logo-icon.svg"}],"name":"Reports","short_name":"Reports","url":"/merchant/reports"}],"start_url":"/","theme_color":"#1a1410"}
+{
+  "name": "Billzo",
+  "short_name": "Billzo",
+  "description": "Daily Revenue Recovery Console",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

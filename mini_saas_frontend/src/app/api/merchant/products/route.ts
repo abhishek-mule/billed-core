@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
         [productId, session.tenantId]
       )
       
-      const reservedQty = parseFloat(reserved?.reserved) || 0
+      const reservedQty = parseFloat(reserved?.reserved ?? '0') || 0
       const availableStock = Math.max(0, currentStock - reservedQty)
 
       if (quantity > availableStock) {

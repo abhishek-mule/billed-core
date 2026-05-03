@@ -190,7 +190,7 @@ async function handleOnboarding(values: OnboardingRequest, correlationId: string
       tenantId: existingTenantId,
       userId: generateId('user'),
       role: 'owner',
-      companyName: shopName,
+      companyName: shopName || 'New Business',
       plan,
     })
     
@@ -254,7 +254,7 @@ async function handleOnboarding(values: OnboardingRequest, correlationId: string
     tenantId: result.tenantId,
     userId: result.userId,
     role: 'owner',
-    companyName: shopName,
+    companyName: shopName || 'New Business',
     plan: plan as string,
   })
 
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
           tenantId: result.tenantId,
           userId: generateId('user'),
           role: 'owner',
-          companyName: shopName,
+          companyName: shopName || 'New Business',
           plan: plan || 'free',
         })
         

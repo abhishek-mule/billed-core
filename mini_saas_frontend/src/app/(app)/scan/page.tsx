@@ -236,7 +236,7 @@ export default function ScanPage() {
         )}
       </div>
 
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes scan-line {
           0% { top: 0% }
           100% { top: 100% }
@@ -244,7 +244,7 @@ export default function ScanPage() {
         .animate-scan-line {
           animation: scan-line 2s linear infinite;
         }
-      `}</style>
+      ` }} />
     </div>
   )
 }

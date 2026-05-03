@@ -43,6 +43,7 @@ export const QUEUES = {
   erpSync: 'erp_sync',
   emailNotification: 'email_notification',
   metricAggregation: 'metric_aggregation',
+  invoiceNotification: 'invoice_notification',
 } as const
 
 function getBackoffDelay(retryCount: number): number {

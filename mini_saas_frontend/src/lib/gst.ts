@@ -81,18 +81,40 @@ export function calculateInvoiceTotal(items: InvoiceLineItem[], isInterState = f
   }
 }
 
-export function formatInvoiceForWhatsApp(summary: InvoiceSummary, invoiceNo: string): string {
+export function calcGST(items: any[]): { subtotal: number; cgst: number; sgst: number; igst: number; total: number } {
+  const totals = items.reduce((acc, item) => {
+    const amount = (item.qty || item.quantity) * item.rate
+    const gstRate = item.gstRate || item.taxRate || 18
+    
+    const taxAmount = (amount * gstRate) / 100
+    const cgst = taxAmount / 2
+    const sgst = taxAmount / 2
+    
+    return {
+      subtotal: acc.subtotal + amount,
+      cgst: acc.cgst + cgst,
+      sgst: acc.sgst + sgst,
+      igst: acc.igst,
+      total: acc.total + amount + taxAmount
+    }
+  }, { subtotal: 0, cgst: 0, sgst: 0, igst: 0, total: 0 })
+  
+  return totals
+}
+
+export function formatInvoiceForWhatsApp(summary: any, invoiceNo: string): string {
+  const items = summary.items || []
   const lines = [
     `📄 Invoice: ${invoiceNo}`,
     '',
     '📋 Items:',
-    ...summary.items.map((item) => `  • ${item.itemName} x${item.quantity} @ ₹${item.rate} = ₹${item.amount.toFixed(2)}`),
+    ...items.map((item: any) => `  • ${item.itemName || item.name} x${item.quantity || item.qty} @ ₹${item.rate} = ₹${item.amount}`),
     '',
-    `Subtotal: ₹${summary.subtotal.toFixed(2)}`,
+    `Subtotal: ₹${summary.subtotal}`,
     summary.igst > 0 
-      ? `IGST: ₹${summary.igst.toFixed(2)}` 
-      : `CGST: ₹${summary.cgst.toFixed(2)} | SGST: ₹${summary.sgst.toFixed(2)}`,
-    `Total: ₹${summary.total.toFixed(2)}`,
+      ? `IGST: ₹${summary.igst}` 
+      : `CGST: ₹${summary.cgst} | SGST: ₹${summary.sgst}`,
+    `Total: ₹${summary.total || summary.grandTotal}`,
   ]
 
   return lines.join('\n')
