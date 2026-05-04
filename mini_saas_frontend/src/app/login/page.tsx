@@ -23,10 +23,28 @@ export default function LoginPage() {
     }
     setError('')
     setIsLoading(true)
-    setTimeout(() => {
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to send OTP')
+        setIsLoading(false)
+        return
+      }
+
       setIsLoading(false)
       setStep('otp')
-    }, 800)
+    } catch (err) {
+      setError('Network error. Please try again.')
+      setIsLoading(false)
+    }
   }
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
@@ -37,14 +55,30 @@ export default function LoginPage() {
     }
     setError('')
     setIsLoading(true)
-    setTimeout(() => {
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Verification failed')
+        setIsLoading(false)
+        return
+      }
+
       setStep('creating')
       setTimeout(() => {
-        localStorage.setItem('billzo_token', 'dummy-jwt-token')
-        localStorage.setItem('billzo_onboarded', 'false')
         router.push('/dashboard')
       }, 1500)
-    }, 800)
+    } catch (err) {
+      setError('Network error. Please try again.')
+      setIsLoading(false)
+    }
   }
 
   return (
