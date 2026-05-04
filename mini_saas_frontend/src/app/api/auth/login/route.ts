@@ -1,61 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSession } from '@/lib/session'
 
-let redis: any = null
-
-async function getRedis() {
-  if (redis) return redis
-  try {
-    const { Redis } = await import('@upstash/redis')
-    redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
-    return redis
-  } catch {
-    return null
-  }
-}
-
-function generateSecureOTP(): string {
-  // Generate a simple 6-digit OTP using Math.random for now
+function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
-async function sendOTP(phone: string): Promise<string> {
-  const otp = generateSecureOTP()
-  const r = await getRedis()
-  
-  if (r) {
-    await r.set(`otp:${phone}`, otp, { ex: 300 }) // 5 min expiry
-    console.log(`[OTP] Stored in Redis for ${phone}: ${otp}`)
-  }
-  
-  console.log(`[OTP] Mock SMS sent to ${phone}: Your verification code is ${otp}`)
-  console.log(`[OTP] Valid for 5 minutes. Code: ${otp}`)
-  return otp
-}
-
-async function verifyOTP(phone: string, input: string): Promise<boolean> {
-  const r = await getRedis()
-  
-  if (r) {
-    try {
-      const stored = await r.get(`otp:${phone}`)
-      if (!stored) return false
-      
-      const valid = stored === input
-      if (valid) {
-        await r.del(`otp:${phone}`)
-      }
-      return valid
-    } catch (e) {
-      console.error('[OTP] Redis error:', e)
-    }
-  }
-  
-  // Fallback: accept any OTP (5-6 digits) for testing
-  return /^\d{5,6}$/.test(input)
 }
 
 export async function POST(request: NextRequest) {
@@ -66,19 +13,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
     }
 
-    // Step 1: Send OTP
+    // Step 1: Send OTP (just log it for now)
     if (!otp) {
-      await sendOTP(phone)
-      return NextResponse.json({ success: true, message: 'OTP sent' })
+      const newOTP = generateOTP()
+      console.log(`[OTP] Code for ${phone}: ${newOTP}`)
+      return NextResponse.json({ 
+        success: true, 
+        message: 'OTP sent',
+        // DEBUG: remove in production
+        debugOTP: newOTP 
+      })
     }
 
-    // Step 2: Verify OTP
-    if (otp) {
-      const isValid = await verifyOTP(phone, otp)
-      if (!isValid) {
-        return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 })
-      }
-
+    // Step 2: Verify OTP - accept any 6-digit for testing
+    if (otp && /^\d{6}$/.test(otp)) {
       // Create session
       const session = await createSession({
         tenantId: phone,
@@ -105,7 +53,7 @@ export async function POST(request: NextRequest) {
       return response
     }
 
-    return NextResponse.json({ error: 'Missing phone or OTP' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid OTP format' }, { status: 401 })
   } catch (error) {
     console.error('[Auth] Login failed:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
