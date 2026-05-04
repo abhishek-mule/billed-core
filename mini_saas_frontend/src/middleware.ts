@@ -5,19 +5,15 @@ const SESSION_COOKIE = 'billzo_session'
 
 const publicPaths = [
   '/login',
-  '/api/auth/login',
-  '/api/auth/send-otp',
-  '/api/auth/verify-otp',
-  '/api/auth/refresh',
+  '/api/auth/',
   '/api/health',
-  '/api/health/',
   '/invoice/',
   '/api/print/',
 ]
 
 function isPublicPath(pathname: string): boolean {
   return publicPaths.some(path => 
-    pathname === path || pathname.startsWith(path)
+    pathname.startsWith(path)
   )
 }
 
