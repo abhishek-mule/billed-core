@@ -3,6 +3,8 @@ import { failedJobs } from "@/lib/schema";
 import { NextResponse } from "next/server";
 import { desc } from "drizzle-orm";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const failures = await db.query.failedJobs.findMany({
     orderBy: [desc(failedJobs.failedAt)],

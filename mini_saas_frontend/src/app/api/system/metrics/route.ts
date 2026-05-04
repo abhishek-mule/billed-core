@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   // Aggregate system health metrics
   const [metrics] = await db.execute(sql`

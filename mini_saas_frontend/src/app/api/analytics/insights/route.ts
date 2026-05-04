@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
+
 // Mock helper - replace with actual session/tenant resolution
 function getTenant() {
   return "tenant_id_here"; 
