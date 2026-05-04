@@ -6,72 +6,117 @@ import {
   Plus, 
   Scan, 
   Wallet,
-  Users,
-  ArrowUpRight,
-  ArrowDownRight,
   AlertCircle,
   Clock,
-  PackageX,
-  FileWarning,
-  ChevronRight,
-  Send,
-  Eye,
   RefreshCcw,
   Truck,
   TrendingUp,
   CreditCard,
-  History
+  History,
+  FileWarning,
+  Wifi,
+  WifiOff
 } from 'lucide-react'
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents'
 import { cn } from '@/lib/utils'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
+
+export type MerchantStatsDTO = {
+  success?: boolean;
+  error?: string;
+  window: { start: string; end: string };
+  money: {
+    collectedTodayPaise: number;
+    invoicedTodayPaise: number;
+    outstandingPaise: number;
+    overduePaise: number;
+    cashCollectedPaise: number;
+  };
+  counts: {
+    invoicesCreatedToday: number;
+    paymentsToday: number;
+    unpaidInvoices: number;
+    overdueInvoices: number;
+  };
+  failures: {
+    whatsapp: number;
+    payments: number;
+    system: number;
+    total: number;
+  };
+  inventory: {
+    lowStock: Array<any>;
+  };
+  recentActivity: Array<{
+    id: string;
+    type: string;
+    entityId: string;
+    amountPaise?: number;
+    customerName?: string;
+    createdAt: string;
+  }>;
+  lastEventAt: string | null;
+  systemState: "nominal" | "warning" | "degraded";
+};
 
 export default function DashboardPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<any>(null)
-  const [lowStockItems, setLowStockItems] = useState<any[]>([])
+  
+  const [data, setData] = useState<MerchantStatsDTO | null>(null)
+
+  const fetchDashboardData = async () => {
+    try {
+      const statsRes = await fetch('/api/merchant/stats')
+      const statsData = await statsRes.json()
+
+      if (statsData.success) {
+        setData(statsData)
+      } else {
+        setError(statsData.error || 'Failed to load stats')
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch dashboard data:', error)
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const { status: realtimeStatus, isConnected, reconnect: reconnectSSE } = useRealtimeEvents({
+    endpoint: '/api/events/stream',
+    onMessage: (updates) => {
+      if (updates.length > 0) {
+        console.log('[SSE] Received new events, refetching dashboard data...', updates)
+        fetchDashboardData()
+      }
+    },
+    onError: (error) => {
+      console.error('[SSE] Connection error:', error)
+    },
+    fallbackRefetch: fetchDashboardData,
+  })
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true)
-      try {
-        const [summaryRes, lowStockRes] = await Promise.all([
-          fetch('/api/dashboard/today-summary'),
-          fetch('/api/merchant/inventory/low-stock')
-        ])
-        
-        const summaryData = await summaryRes.json()
-        const lowStockData = await lowStockRes.json()
-
-        if (summaryData.success) setSummary(summaryData.data)
-        if (lowStockData.success) setLowStockItems(lowStockData.data)
-      } catch (error: any) {
-        console.error('Failed to fetch dashboard data:', error)
-        setError(error.message)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     fetchDashboardData()
   }, [])
 
   const stats = [
     { 
-      label: 'Today Sales', 
-      value: summary ? `₹${summary.totalSales.toLocaleString()}` : '₹0', 
-      trend: summary ? `${summary.salesGrowth}%` : '0%', 
-      isPositive: (summary?.salesGrowth || 0) >= 0, 
+      label: 'Invoiced Today', 
+      value: data ? `₹${(data.money.invoicedTodayPaise / 100).toLocaleString()}` : '₹0', 
+      trend: data ? `${data.counts.invoicesCreatedToday} bills` : '0 bills', 
+      isPositive: true, 
       icon: TrendingUp,
       color: 'text-success',
       bgColor: 'bg-success-soft',
       path: '/reports'
     },
     { 
-      label: 'Pending', 
-      value: summary ? `₹${summary.pendingAmount.toLocaleString()}` : '₹0', 
-      trend: summary ? `${summary.pendingCount} unpaid` : '0 unpaid', 
+      label: 'Outstanding', 
+      value: data ? `₹${(data.money.outstandingPaise / 100).toLocaleString()}` : '₹0', 
+      trend: data ? `${data.counts.unpaidInvoices} unpaid` : '0 unpaid', 
       isPositive: false, 
       icon: Clock,
       color: 'text-warning',
@@ -79,9 +124,9 @@ export default function DashboardPage() {
       path: '/invoices?status=pending'
     },
     { 
-      label: 'Cash In Hand', 
-      value: summary ? `₹${summary.cashInHand.toLocaleString()}` : '₹0', 
-      trend: 'Ready', 
+      label: 'Collected Today', 
+      value: data ? `₹${(data.money.cashCollectedPaise / 100).toLocaleString()}` : '₹0', 
+      trend: data ? `${data.counts.paymentsToday} payments` : 'Ready', 
       isPositive: true, 
       icon: Wallet,
       color: 'text-primary',
@@ -94,7 +139,6 @@ export default function DashboardPage() {
     { label: 'Invoice', sub: 'Create New', icon: Plus, path: '/invoices/new', color: 'bg-primary text-primary-foreground shadow-glow' },
     { label: 'Scan Bill', sub: 'OCR Entry', icon: Scan, path: '/scan', color: 'bg-black text-white shadow-xl' },
     { label: 'Add Expense', sub: 'Manual', icon: CreditCard, path: '/purchases/new', color: 'bg-card border-2 border-border' },
-    { label: 'Customers', sub: 'Manage', icon: Users, path: '/customers', color: 'bg-card border-2 border-border' },
   ]
 
   if (isLoading) {
@@ -113,7 +157,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (error) {
+  if (error || !data) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-6">
         <div className="w-20 h-20 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-6">
@@ -135,6 +179,49 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-10 animate-fade-in pb-24 max-w-4xl mx-auto px-1">
+      {/* Debug Panel (Internal Only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="p-3 bg-card border-2 border-dashed border-primary/50 rounded-xl mb-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Debug: DTO Contract</p>
+          <pre className="text-[10px] overflow-auto max-h-32 text-muted-foreground">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {/* Real-time Connection Status */}
+      <div className="flex items-center justify-between">
+        <div className={cn(
+          "flex items-center gap-2 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full",
+          isConnected ? "bg-success-soft text-success" : 
+          realtimeStatus === 'reconnecting' ? "bg-warning-soft text-warning" :
+          "bg-destructive/10 text-destructive"
+        )}>
+          {isConnected ? (
+            <>
+              <Wifi className="w-3 h-3" />
+              <span>Live</span>
+            </>
+          ) : realtimeStatus === 'reconnecting' ? (
+            <>
+              <RefreshCcw className="w-3 h-3 animate-spin" />
+              <span>Reconnecting...</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3" />
+              <span>Updates paused</span>
+              <button 
+                onClick={reconnectSSE}
+                className="underline hover:text-destructive ml-1"
+              >
+                Retry
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* 1. Primary Metrics Grid */}
       <section>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -204,34 +291,55 @@ export default function DashboardPage() {
             <AlertCircle className="w-3 h-3 text-warning" /> Critical Feed
           </h2>
           <div className="space-y-3">
-              {lowStockItems.length > 0 && (
+              {data.inventory.lowStock.length > 0 && (
                  <div className="card-base p-5 bg-warning-soft/30 border-warning/20 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                        <Truck className="w-16 h-16 -rotate-12" />
                     </div>
                     <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-2">Inventory Alert</p>
-                    <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">{lowStockItems.length} Items Low Stock</h3>
+                    <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">{data.inventory.lowStock.length} Items Low Stock</h3>
                     <div className="mt-3 space-y-2">
-                       {lowStockItems.slice(0, 2).map(item => (
-                         <div key={item.id} className="flex justify-between items-center text-[10px] font-bold uppercase">
+                       {data.inventory.lowStock.slice(0, 2).map((item, idx) => (
+                         <div key={idx} className="flex justify-between items-center text-[10px] font-bold uppercase">
                             <span className="text-muted-foreground">{item.name}</span>
-                            <span className="text-destructive">{item.stock} {item.unit} left</span>
+                            <span className="text-destructive">{item.stock} left</span>
                          </div>
                        ))}
                     </div>
                     <div className="flex gap-2 mt-5">
                        <button onClick={() => router.push('/inventory?filter=low')} className="flex-1 py-2.5 bg-warning text-warning-foreground rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">Order Stock</button>
-                       <button className="px-4 py-2.5 bg-card border border-warning/20 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all text-warning">View</button>
                     </div>
                  </div>
               )}
 
-              <div className="card-base p-5 bg-destructive/5 border-destructive/10 relative overflow-hidden group">
-                 <p className="text-[10px] font-black text-destructive uppercase tracking-widest mb-2">Data Failure</p>
-                 <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">OCR Extraction Failed</h3>
-                 <p className="text-xs text-muted-foreground mt-2 font-medium">Purchase bill #402 couldn't be auto-read.</p>
-                 <button onClick={() => router.push('/purchases?review=true')} className="mt-5 w-full py-2.5 bg-destructive text-destructive-foreground rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all">Manual Review</button>
-              </div>
+              {data.failures.total > 0 ? (
+                <div className="card-base p-5 bg-destructive/5 border-destructive/10 relative overflow-hidden group">
+                   <p className="text-[10px] font-black text-destructive uppercase tracking-widest mb-2">System Degradation</p>
+                   <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">Sync & Comm Failures</h3>
+                   <div className="mt-2 space-y-1">
+                     {data.failures.whatsapp > 0 && <p className="text-xs text-muted-foreground font-medium">• {data.failures.whatsapp} WhatsApp messages failed.</p>}
+                     {data.failures.payments > 0 && <p className="text-xs text-muted-foreground font-medium">• {data.failures.payments} Payment links failed.</p>}
+                     {data.failures.system > 0 && <p className="text-xs text-muted-foreground font-medium">• {data.failures.system} Core system failures.</p>}
+                   </div>
+                   <button onClick={() => router.push('/settings/integrations')} className="mt-5 w-full py-2.5 bg-destructive text-destructive-foreground rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 active:scale-95 transition-all">Review Errors</button>
+                </div>
+              ) : data.systemState === "warning" ? (
+                <div className="card-base p-5 bg-warning-soft/30 border-warning/20 relative overflow-hidden group">
+                   <p className="text-[10px] font-black text-warning uppercase tracking-widest mb-2">No Recent Activity</p>
+                   <h3 className="text-lg font-black tracking-tight text-foreground leading-tight">Heartbeat Stale</h3>
+                   <p className="text-xs text-muted-foreground mt-2 font-medium">No activity recorded for over 2 hours. Ensure system is tracking events correctly.</p>
+                </div>
+              ) : (
+                data.inventory.lowStock.length === 0 && (
+                  <div className="card-base p-8 text-center bg-card/20 border-border/20 flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 bg-success/10 text-success rounded-full flex items-center justify-center mb-3">
+                      <TrendingUp className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-bold text-foreground">All Systems Nominal</p>
+                    <p className="text-xs text-muted-foreground mt-1">No critical alerts requiring your attention.</p>
+                  </div>
+                )
+              )}
           </div>
         </section>
 
@@ -239,29 +347,38 @@ export default function DashboardPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-2">
-              <History className="w-3 h-3" /> Recent Log
+              <History className="w-3 h-3" /> Recent Activity
             </h2>
-            <button className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">Full Log</button>
+            <button onClick={() => router.push('/invoices')} className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">Full Log</button>
           </div>
           <div className="card-base divide-y divide-border/30 overflow-hidden bg-card/20 backdrop-blur-sm">
-             {[
-               { icon: Plus, title: 'Invoice #012', sub: 'Rahul Sharma • 10m ago', val: '+₹1,200', color: 'text-success' },
-               { icon: RefreshCcw, title: 'Payment Recv', sub: 'Invoice #010 • 1h ago', val: '+₹450', color: 'text-success' },
-               { icon: Scan, title: 'Purchase Entry', sub: 'Wholesale Mart • 3h ago', val: '-₹8,500', color: 'text-foreground' },
-             ].map((log, i) => (
-               <button key={i} className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors group text-left">
+             {data.recentActivity.length > 0 ? data.recentActivity.map((log) => (
+               <button key={log.id} className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors group text-left">
                   <div className="flex items-center gap-4">
                      <div className="w-10 h-10 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground group-hover:scale-110 transition-transform">
-                        <log.icon className="w-4 h-4" />
+                        {log.type === 'payment_success' ? <Wallet className="w-4 h-4 text-success" /> : log.type === 'invoice_created' ? <Plus className="w-4 h-4 text-primary" /> : <RefreshCcw className="w-4 h-4" />}
                      </div>
                      <div>
-                        <p className="text-xs font-black uppercase tracking-tight text-foreground">{log.title}</p>
-                        <p className="text-[10px] font-bold text-muted-foreground mt-1">{log.sub}</p>
+                        <p className="text-xs font-black uppercase tracking-tight text-foreground">
+                          {log.type.replace('_', ' ')}
+                        </p>
+                        <p className="text-[10px] font-bold text-muted-foreground mt-1 truncate max-w-[120px]">
+                          {log.customerName || 'System'} • {new Date(log.createdAt).toLocaleDateString()}
+                        </p>
                      </div>
                   </div>
-                  <p className={cn("text-xs font-black tracking-tight", log.color)}>{log.val}</p>
+                  {log.amountPaise !== undefined && log.amountPaise !== null && (
+                    <p className={cn("text-xs font-black tracking-tight", log.type === 'payment_success' ? 'text-success' : 'text-foreground')}>
+                      {log.type === 'payment_success' ? '+' : ''}₹{(log.amountPaise / 100).toLocaleString()}
+                    </p>
+                  )}
                </button>
-             ))}
+             )) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileWarning className="w-8 h-8 mx-auto mb-3 opacity-20" />
+                  <p className="text-xs font-bold uppercase tracking-widest">No Recent Activity</p>
+                </div>
+             )}
           </div>
         </section>
       </div>
@@ -287,3 +404,4 @@ function Zap(props: any) {
     </svg>
   )
 }
+
