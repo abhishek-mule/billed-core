@@ -122,10 +122,10 @@ export async function POST(req: Request) {
             .where(eq(customers.id, invoice.customerId))
         }
         
-        const newTotal = Number(invoice.paymentAmount || 0) + (p.amount / 100)
+        const updatedPaymentTotal = Number(invoice.paymentAmount || 0) + (p.amount / 100)
         await tx.update(invoices).set({
-          paymentAmount: newTotal.toString(),
-          paymentStatus: newTotal >= Number(invoice.grandTotal) ? 'paid' : 'partial'
+          paymentAmount: updatedPaymentTotal.toString(),
+          paymentStatus: updatedPaymentTotal >= Number(invoice.grandTotal) ? 'paid' : 'partial'
         }).where(eq(invoices.id, invoice.id))
 
         // 🔥 TRACK with attribution
