@@ -1,8 +1,9 @@
 import { db } from '@/lib/db'
-import { invoices, payments, customers } from '@/lib/schema'
+import { invoices, payments, customers, events } from '@/lib/schema'
 import { enqueueJob, QUEUES } from '@/lib/queue'
-import { eq, sql } from 'drizzle-orm'
+import { eq, sql, and, desc } from 'drizzle-orm'
 import crypto from 'crypto'
+import { trackEvent } from '@/lib/analytics'
 
 export async function POST(req: Request) {
   const rawBody = await req.text()
@@ -71,6 +72,80 @@ export async function POST(req: Request) {
           paymentAmount: newTotal.toString(),
           paymentStatus: newTotal >= Number(invoice.grandTotal) ? 'paid' : 'partial'
         }).where(eq(invoices.id, invoice.id))
+
+        // 1. Fetch last reminder before payment for attribution
+        const paymentTs = new Date(p.created_at * 1000); // Razorpay timestamps are seconds
+        const lastReminder = await tx.query.events.findFirst({
+          where: and(
+            eq(events.eventName, "reminder.sent"),
+            eq(events.entityId, invoice.id),
+            sql`${events.createdAt} < ${paymentTs}`
+          ),
+          orderBy: (events, { desc }) => [desc(events.createdAt)]
+        });
+
+        let collectedVia = "manual";
+        let attributionDelayHours = null;
+
+        if (lastReminder) {
+          const diffMs = paymentTs.getTime() - lastReminder.createdAt.getTime();
+          const diffHours = diffMs / (1000 * 60 * 60);
+          
+          if (diffHours <= 24) {
+            collectedVia = lastReminder.source ?? "auto"; // Default to auto if it came from worker
+            attributionDelayHours = Math.round(diffHours * 10) / 10;
+          }
+        }
+
+        // 2. Insert Payment with attribution
+        await tx.insert(payments).values({
+          tenantId: invoice.tenantId,
+          invoiceId: invoice.id,
+          amount: (p.amount / 100).toString(),
+          razorpayPaymentId: p.id,
+          razorpayOrderId: p.order_id,
+          status: 'captured',
+          collectedVia: collectedVia,
+          platformFee: fee.toString()
+        })
+        
+        // 3. Trigger confirmation + acquisition WhatsApp
+        await enqueueJob(QUEUES.invoiceNotification, {
+          invoiceId: invoice.id,
+          type: 'payment_confirmation_acquisition',
+          phone: invoice.customer?.phone
+        })
+
+        if (invoice.customerId) {
+          await tx.update(customers)
+            .set({ udharBalance: sql`udhar_balance - ${(p.amount / 100)}` })
+            .where(eq(customers.id, invoice.customerId))
+        }
+        
+        const newTotal = Number(invoice.paymentAmount || 0) + (p.amount / 100)
+        await tx.update(invoices).set({
+          paymentAmount: newTotal.toString(),
+          paymentStatus: newTotal >= Number(invoice.grandTotal) ? 'paid' : 'partial'
+        }).where(eq(invoices.id, invoice.id))
+
+        // 🔥 TRACK with attribution
+        await trackEvent(tx, {
+          tenantId: invoice.tenantId,
+          eventName: 'payment.success',
+          entityType: 'payment',
+          entityId: invoice.id,
+          source: 'system',
+          channel: 'whatsapp',
+          amountPaise: p.amount,
+          metadata: {
+            razorpay_payment_id: p.id,
+            razorpay_order_id: p.order_id,
+            method: p.method,
+            collectedVia,
+            attributionDelayHours
+          },
+        })
+
       }
     })
   }

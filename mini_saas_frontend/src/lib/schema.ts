@@ -200,13 +200,25 @@ export const ledgerEntries = pgTable('ledger_entries', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-export const eventLogs = pgTable('event_logs', {
-  id: text('id').primaryKey().$defaultFn(() => generateId('ev')),
-  tenantId: text('tenant_id').notNull().references(() => tenants.id),
-  eventType: text('event_type'),
-  eventName: text('event_name'), // Added for compatibility
-  metadata: jsonb('metadata'),
-  createdAt: timestamp('created_at').defaultNow(),
+export const EVENT_TYPES = [
+  "invoice.created",
+  "reminder.sent",
+  "payment.success",
+  "whatsapp.failed",
+  "payment.failed",
+  "system.failed",
+] as const;
+
+export const events = pgTable("events", {
+  id: text("id").primaryKey().$defaultFn(() => generateId("ev")),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  eventName: text("event_name").notNull(), 
+  entityId: text("entity_id"),
+  amountPaise: integer("amount_paise"),
+  source: text("source"),
+  channel: text("channel"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const failedJobs = pgTable('failed_jobs', {
@@ -217,4 +229,12 @@ export const failedJobs = pgTable('failed_jobs', {
   exception: text('exception'),
   errorMessage: text('error_message'), // Added for compatibility
   failedAt: timestamp('failed_at').defaultNow(),
+});
+
+export const automationState = pgTable('automation_state', {
+  tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id),
+  isEnabled: boolean('is_enabled').default(true),
+  lastFailureAt: timestamp('last_failure_at'),
+  failureCount: integer('failure_count').default(0),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });

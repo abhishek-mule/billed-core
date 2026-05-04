@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage, WHATSAPP_TEMPLATES, formatPhoneNumber } from '@/lib/whatsapp'
 import { query } from '@/lib/db/client'
 import { generateId } from '@/lib/db/encryption'
+import { trackEvent } from '@/lib/analytics'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { template, phone, params, invoiceId, tenantId } = body
+    const { template, phone, params, invoiceId, tenantId, tone, stage } = body
 
     if (!template || !phone) {
       return NextResponse.json(
@@ -55,6 +56,21 @@ export async function POST(request: NextRequest) {
           `UPDATE whatsapp_messages SET status = 'SENT', sent_at = NOW() WHERE id = $1`,
           [messageId]
         )
+
+        // 🔥 TRACK
+        if (invoiceId) {
+          await trackEvent(query, { // Passing 'query' as tx-like
+            tenantId,
+            eventName: 'reminder.sent',
+            entityType: 'invoice',
+            entityId: invoiceId,
+            source: 'system',
+            channel: 'whatsapp',
+            followUpStage: stage || 0,
+            tone: tone || 'general',
+          })
+        }
+
       }
       
       return NextResponse.json({

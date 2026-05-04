@@ -1,20 +1,20 @@
-import { db } from '@/lib/db';
-import { tenants, invoices } from '@/lib/schema';
-import { getSession } from '@/lib/auth/session';
-import { eq, count } from 'drizzle-orm';
+import { db } from "@/lib/db";
+import { invoices } from "@/lib/schema";
+import { eq, sql } from "drizzle-orm";
+import { requireAuth } from "@/server/auth/middleware";
 
 export async function GET(req: Request) {
-  const session = await getSession(req);
-  const tenantId = session.tenantId;
+  try {
+    const { tenantId } = requireAuth(req);
+    
+    // Check onboarding
+    const invoiceCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(invoices)
+      .where(eq(invoices.tenantId, tenantId));
 
-  // Check if tenant has sent any invoices
-  const invoiceCount = await db.select({ value: count() })
-    .from(invoices)
-    .where(eq(invoices.tenantId, tenantId));
-
-  const hasInvoices = invoiceCount[0].value > 0;
-
-  return Response.json({
-    shouldShowOnboarding: !hasInvoices
-  });
+    return Response.json({ hasInvoices: Number(invoiceCount[0].count) > 0 });
+  } catch (err) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 }

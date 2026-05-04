@@ -256,16 +256,41 @@ CREATE TABLE IF NOT EXISTS eway_bills (
   UNIQUE(tenant_id, invoice_id)
 );
 
--- Add payment status tracking
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'PENDING';
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255);
+-- System Automation State
+CREATE TABLE IF NOT EXISTS automation_state (
+  tenant_id UUID PRIMARY KEY REFERENCES tenants(id),
+  is_enabled BOOLEAN DEFAULT true,
+  last_failure_at TIMESTAMPTZ,
+  failure_count INT DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Additional performance indexes
-CREATE INDEX IF NOT EXISTS idx_gstr_exports_tenant_month ON gstr_exports(tenant_id, month, year);
-CREATE INDEX IF NOT EXISTS idx_gstr_exports_status ON gstr_exports(status);
-CREATE INDEX IF NOT EXISTS idx_eway_bills_tenant_id ON eway_bills(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_eway_bills_invoice_id ON eway_bills(invoice_id);
-CREATE INDEX IF NOT EXISTS idx_eway_bills_status ON eway_bills(status);
-CREATE INDEX IF NOT EXISTS idx_payments_razorpay_id ON payments(razorpay_payment_id);
-CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order ON payments(razorpay_order_id);
-CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+-- Optimized Analytics Events
+DROP TABLE IF EXISTS events;
+CREATE TABLE events (
+  id BIGSERIAL PRIMARY KEY,
+  tenant_id UUID NOT NULL,
+  user_id UUID,
+  event_name TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id UUID NOT NULL,
+  amount_paise BIGINT,
+  source TEXT,
+  channel TEXT,
+  follow_up_stage INT,
+  tone TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indexes
+CREATE INDEX idx_events_tenant_time ON events (tenant_id, created_at DESC);
+CREATE INDEX idx_events_entity ON events (entity_id, event_name);
+CREATE INDEX idx_events_revenue ON events (event_name, amount_paise);
+CREATE INDEX idx_events_attribution ON events (event_name, follow_up_stage);
+CREATE INDEX idx_events_metadata ON events USING GIN (metadata);
+
+-- Idempotency Constraints
+CREATE UNIQUE INDEX uniq_payment_event ON events ((metadata->>'razorpay_payment_id')) WHERE event_name = 'payment.success';
+CREATE UNIQUE INDEX uniq_reminder_event ON events (entity_id, follow_up_stage) WHERE event_name = 'reminder.sent';
+CREATE UNIQUE INDEX uniq_invoice_event ON events (entity_id) WHERE event_name = 'invoice.created';
