@@ -33,6 +33,11 @@ export default function LoginPage() {
 
       const data = await res.json()
 
+      if (data.debugOTP) {
+        console.log('DEBUG OTP:', data.debugOTP)
+        alert(`DEBUG: OTP is ${data.debugOTP}`)
+      }
+
       if (!res.ok) {
         setError(data.error || 'Failed to send OTP')
         setIsLoading(false)
