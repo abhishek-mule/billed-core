@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSession } from '@/lib/session'
 
-// OTP Storage (In production, use Redis with TTL)
-// Format: { phone: { otp: string, expires: number } }
-const otpStore = new Map<string, { otp: string; expires: number }>()
-const OTP_EXPIRY_MS = 5 * 60 * 1000 // 5 minutes
+let redis: any = null
+
+async function getRedis() {
+  if (redis) return redis
+  try {
+    const { Redis } = await import('@upstash/redis')
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+    return redis
+  } catch {
+    return null
+  }
+}
 
 function generateSecureOTP(): string {
   const array = new Uint8Array(4)
@@ -15,31 +26,34 @@ function generateSecureOTP(): string {
 
 async function sendOTP(phone: string): Promise<string> {
   const otp = generateSecureOTP()
-  otpStore.set(phone, { otp, expires: Date.now() + OTP_EXPIRY_MS })
+  const r = await getRedis()
+  
+  if (r) {
+    await r.set(`otp:${phone}`, otp, { ex: 300 }) // 5 min expiry
+    console.log(`[OTP] Stored in Redis for ${phone}: ${otp}`)
+  }
+  
   console.log(`[OTP] Mock SMS sent to ${phone}: Your verification code is ${otp}`)
   console.log(`[OTP] Valid for 5 minutes. Code: ${otp}`)
   return otp
 }
 
-function verifyOTP(phone: string, input: string): boolean {
-  const stored = otpStore.get(phone)
-  if (!stored) return false
-  if (Date.now() > stored.expires) {
-    otpStore.delete(phone)
-    return false
+async function verifyOTP(phone: string, input: string): Promise<boolean> {
+  const r = await getRedis()
+  
+  if (r) {
+    const stored = await r.get(`otp:${phone}`)
+    if (!stored) return false
+    
+    const valid = stored === input
+    if (valid) {
+      await r.del(`otp:${phone}`) // Delete after use
+    }
+    return valid
   }
-  const valid = stored.otp === input
-  if (valid) otpStore.delete(phone)
-  return valid
+  
+  return false
 }
-
-// Cleanup expired OTPs
-setInterval(() => {
-  const now = Date.now()
-  for (const [phone, data] of otpStore.entries()) {
-    if (now > data.expires) otpStore.delete(phone)
-  }
-}, 60000)
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,31 +71,25 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Verify OTP
     if (otp) {
-      if (!verifyOTP(phone, otp)) {
+      const isValid = await verifyOTP(phone, otp)
+      if (!isValid) {
         return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 })
       }
 
-      // Create session without DB (for now)
+      // Create session
       const session = await createSession({
-        tenantId: phone, // Use phone as temp tenant ID
+        tenantId: phone,
         userId: `user_${phone}`,
         role: 'owner',
         companyName: 'My Business',
         plan: 'free',
       })
-        userId: user.id,
-        role: user.role as any,
-        companyName: 'New Business',
-        plan: 'free',
-      })
 
       const response = NextResponse.json({
         success: true,
-        user: { id: user.id, name: user.name, phone },
-        tenant: { id: user.tenant_id }
+        message: 'Login successful'
       })
 
-      // Set session cookie
       const secure = process.env.NODE_ENV === 'production'
       response.cookies.set('billzo_session', session.id, {
         httpOnly: true,
