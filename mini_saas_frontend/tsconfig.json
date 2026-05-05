@@ -24,7 +24,6 @@
       ]
     },
     "types": [
-      "cypress",
       "node"
     ],
     "plugins": [
@@ -35,11 +34,15 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".next",
+    "tests",
+    "scripts",
+    "test-db.ts"
   ]
 }
