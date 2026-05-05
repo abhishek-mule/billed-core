@@ -18,6 +18,18 @@ import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { WhiteLabelFooter } from '@/components/invoice/WhiteLabelFooter'
 
+export default function InvoiceDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [invoice, setInvoice] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [businessName, setBusinessName] = useState('My Business')
+
+  useEffect(() => {
+    const stored = localStorage.getItem('billzo_business_name')
+    if (stored) setBusinessName(stored)
+  }, [])
+
 export default function InvoiceDetailsPage() {
   const { id } = useParams()
   const router = useRouter()
@@ -164,7 +176,7 @@ export default function InvoiceDetailsPage() {
 
         {/* Growth Loop Footer */}
         <WhiteLabelFooter 
-           merchantName="Sharma Electronics" 
+           merchantName={businessName} 
            referralId="USER_123" 
            isPremium={false} 
         />

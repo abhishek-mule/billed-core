@@ -78,6 +78,7 @@ export default function LoginPage() {
 
       setStep('creating')
       setTimeout(() => {
+        localStorage.setItem('billzo_business_name', phone)
         router.push('/dashboard')
       }, 1500)
     } catch (err) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MagicScan from '@/components/MagicScan'
 
@@ -18,6 +18,12 @@ export default function InvoiceBuilder() {
   const [customer, setCustomer] = useState({ name: '', gstin: '', phone: '' })
   const [isSending, setIsSending] = useState(false)
   const [isSent, setIsSent] = useState(false)
+  const [businessName, setBusinessName] = useState('My Business')
+
+  useEffect(() => {
+    const stored = localStorage.getItem('billzo_business_name')
+    if (stored) setBusinessName(stored)
+  }, [])
 
   const addItemFromScan = (scanResult: any) => {
     const newItem: LineItem = {
@@ -98,7 +104,7 @@ export default function InvoiceBuilder() {
         <div className="space-y-4">
           <label className="text-[10px] font-black uppercase tracking-widest text-indigo-500">From (Merchant)</label>
           <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-            <p className="font-bold">Sharma Electronics</p>
+            <p className="font-bold">{businessName}</p>
             <p className="text-sm text-gray-400">29ABCDE1234F1Z5</p>
             <p className="text-sm text-gray-400">+91 98765 43210</p>
           </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -15,10 +15,17 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const [businessName, setBusinessName] = useState('My Business')
+
+  useEffect(() => {
+    // Try to get business name from localStorage or session
+    const stored = localStorage.getItem('billzo_business_name')
+    if (stored) setBusinessName(stored)
+  }, [])
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-0 md:pl-24 lg:pl-72 flex flex-col selection:bg-primary selection:text-primary-foreground">
-      <ActionHeader businessName="Sharma Electronics" />
+      <ActionHeader businessName={businessName} />
       
       <CommandPalette />
 
