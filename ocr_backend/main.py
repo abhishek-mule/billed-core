@@ -1,6 +1,9 @@
 """
-Invoice OCR Backend using EasyOCR
+Invoice OCR Backend using Gemini 2.0 Flash + Tesseract Fallback
 Run: uvicorn main:app --reload --port 8000
+
+Set GEMINI_API_KEY in environment or .env file
+Get free key at: https://aistudio.google.com/app
 """
 
 import os
@@ -14,22 +17,37 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import numpy as np
-from PIL import Image
-import cv2
+from dotenv import load_dotenv
 
-# Initialize EasyOCR reader (English + Hindi for Indian invoices)
-# Using GPU=False since we're on CPU
-print("Loading EasyOCR model... (first request will be slow)")
+# Load environment variables
+load_dotenv()
+
+# Import Google Generative AI
 try:
-    import easyocr
-    reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-    print("EasyOCR loaded successfully!")
-except Exception as e:
-    print(f"Failed to load EasyOCR: {e}")
-    reader = None
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    print("Warning: google-generativeai not installed")
 
-app = FastAPI(title="BillZo OCR API", version="1.0.0")
+# Import Tesseract for offline fallback
+try:
+    import pytesseract
+    from PIL import Image
+    TESSERACT_AVAILABLE = True
+except ImportError:
+    TESSERACT_AVAILABLE = False
+    print("Warning: pytesseract not installed")
+
+# Configure Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+if GEMINI_API_KEY and GEMINI_AVAILABLE:
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("Gemini AI configured successfully!")
+else:
+    print("Warning: GEMINI_API_KEY not set")
+
+app = FastAPI(title="BillZo OCR API", version="2.0.0")
 
 # CORS middleware
 app.add_middleware(
@@ -50,13 +68,13 @@ class OCRResponse(BaseModel):
     subtotal: Optional[float] = None
     tax: Optional[float] = None
     total: Optional[float] = None
-    raw_text: str
     confidence: float
+    offline_fallback: bool = False
+    raw_text: Optional[str] = None
 
 
 def extract_amount(text: str) -> Optional[float]:
     """Extract numeric amount from text"""
-    # Match patterns like ₹1,234.56 or 1234.56 or 1,234.56
     patterns = [
         r'₹\s*([\d,]+\.?\d*)',
         r'Rs\.?\s*([\d,]+\.?\d*)',
@@ -78,7 +96,6 @@ def extract_date(text: str) -> Optional[str]:
     patterns = [
         r'(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})',
         r'(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{2,4})',
-        r'(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})',
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -90,196 +107,75 @@ def extract_date(text: str) -> Optional[str]:
 def extract_invoice_number(text: str) -> Optional[str]:
     """Extract invoice/bill number"""
     patterns = [
-        r'(?:invoice|bill|inv|tax|tax\s*invoice)[#:\s]*([A-Z0-9\-]+)',
-        r'(?:tax\s*invoice|tax\s*bill)[#:\s]*([A-Z0-9\-]+)',
+        r'(?:invoice|bill|inv)[#:\s]*([A-Z0-9\-]+)',
+        r'(INV|BILL|TAX)[\s#]*([A-Z0-9\-]+)',
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
-    # Fallback: look for common invoice patterns
-    match = re.search(r'(INV|BILL|TAX)[\s#]*([A-Z0-9\-]+)', text, re.IGNORECASE)
-    if match:
-        return f"{match.group(1)}-{match.group(2)}"
+            return f"{match.group(1)}-{match.group(2)}"
     return None
 
 
 def extract_supplier(text: str) -> Optional[str]:
-    """Extract supplier name (usually at the top of invoice)"""
+    """Extract supplier name"""
     lines = text.split('\n')
-    # First few non-empty lines usually contain supplier info
-    for i, line in enumerate(lines[:5]):
+    for line in lines[:5]:
         line = line.strip()
-        if len(line) > 3 and not line.startswith(('invoice', 'bill', 'date', 'tax', 'total', 'amount')):
-            # Skip lines that look like addresses or phone numbers
-            if not re.match(r'^[\d\-\+\s]+$', line) and len(line) < 50:
+        if len(line) > 3 and len(line) < 50:
+            if not re.match(r'^[\d\-\+\s]+$', line):
                 return line.title()
     return None
 
 
 def parse_invoice_items(text: str) -> List[dict]:
-    """Parse line items from OCR text"""
+    """Parse line items from text"""
     items = []
     lines = text.split('\n')
     
-    # Look for lines with amounts (likely line items)
     for line in lines:
-        # Match patterns like "Item name 100.00" or "Item name ₹100"
         match = re.search(r'(.+?)\s+(?:₹|Rs\.?)?\s*([\d,]+\.?\d*)\s*$', line.strip(), re.IGNORECASE)
         if match:
             name = match.group(1).strip()
             amount = extract_amount(match.group(2))
-            if name and amount and amount > 0 and amount < 100000:  # Reasonable amounts
-                # Try to extract quantity and rate
-                qty_match = re.search(r'(\d+)\s*[xX×]\s*', name)
-                if qty_match:
-                    qty = int(qty_match.group(1))
-                    rate = amount / qty
-                    items.append({
-                        "name": name.replace(qty_match.group(0), '').strip(),
-                        "quantity": qty,
-                        "rate": round(rate, 2),
-                        "amount": amount
-                    })
-                else:
-                    items.append({
-                        "name": name,
-                        "quantity": 1,
-                        "rate": amount,
-                        "amount": amount
-                    })
+            if name and amount and 0 < amount < 100000:
+                items.append({
+                    "name": name,
+                    "quantity": 1,
+                    "rate": amount,
+                    "amount": amount
+                })
     
-    return items[:20]  # Limit to 20 items
+    return items[:20]
 
 
 def extract_totals(text: str) -> dict:
-    """Extract subtotal, tax, and total"""
+    """Extract subtotal, tax, total"""
     result = {"subtotal": None, "tax": None, "total": None}
-    
     lines = text.split('\n')
+    
     for line in lines:
         line_lower = line.lower()
-        
-        # Total - usually the largest amount at the bottom
-        if any(x in line_lower for x in ['total', 'grand total', 'amount due', 'payable', 'balance']):
+        if any(x in line_lower for x in ['total', 'grand total', 'amount due', 'payable']):
             amount = extract_amount(line)
             if amount and not result["total"]:
                 result["total"] = amount
-        
-        # Subtotal
-        if 'subtotal' in line_lower or 'sub total' in line_lower:
-            amount = extract_amount(line)
-            if amount:
-                result["subtotal"] = amount
-        
-        # Tax
-        if any(x in line_lower for x in ['gst', 'tax', 'cgst', 'sgst', 'igst', 'vat']):
-            amount = extract_amount(line)
-            if amount:
-                result["tax"] = amount
-    
-    # If no subtotal found, calculate from items
-    if not result["subtotal"] and not result["total"]:
-        # Use total as fallback
-        pass
+        if 'subtotal' in line_lower:
+            result["subtotal"] = extract_amount(line)
+        if any(x in line_lower for x in ['gst', 'tax', 'cgst', 'sgst']):
+            result["tax"] = extract_amount(line)
     
     return result
 
 
-@app.get("/")
-def root():
-    return {"message": "BillZo OCR API", "status": "running"}
-
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "ocr_ready": reader is not None,
-        "model": "EasyOCR"
-    }
-
-
-@app.post("/scan", response_model=OCRResponse)
-async def scan_invoice(
-    image: UploadFile = File(...),
-    mode: str = Form("auto")
-):
-    """
-    Scan invoice image and extract structured data
-    """
-    if reader is None:
-        raise HTTPException(status_code=503, detail="OCR model not loaded")
+def extract_with_tesseract(image_bytes: bytes) -> dict:
+    """Fallback: Use Tesseract OCR"""
+    if not TESSERACT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Tesseract not available")
     
     try:
-        # Read image
-        contents = await image.read()
-        image_bytes = io.BytesIO(contents)
-        
-        # Convert to numpy array for EasyOCR
-        image_pil = Image.open(image_bytes).convert('RGB')
-        image_np = np.array(image_pil)
-        
-        # Run EasyOCR
-        print("Running OCR...")
-        results = reader.readtext(image_np)
-        
-        # Combine all text
-        raw_text = "\n".join([text for _, text, confidence in results if confidence > 0.3])
-        
-        # Calculate average confidence
-        confidences = [confidence for _, _, confidence in results]
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-        # Extract structured data
-        supplier = extract_supplier(raw_text)
-        invoice_number = extract_invoice_number(raw_text)
-        date = extract_date(raw_text)
-        items = parse_invoice_items(raw_text)
-        totals = extract_totals(raw_text)
-        
-        return OCRResponse(
-            success=True,
-            supplier=supplier,
-            invoice_number=invoice_number,
-            date=date,
-            items=items,
-            subtotal=totals.get("subtotal"),
-            tax=totals.get("tax"),
-            total=totals.get("total"),
-            raw_text=raw_text[:2000],  # Limit raw text length
-            confidence=round(avg_confidence * 100, 2)
-        )
-        
-    except Exception as e:
-        print(f"OCR Error: {e}")
-        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
-
-
-@app.post("/scan-base64")
-async def scan_invoice_base64(data: dict):
-    """
-    Scan invoice from base64 encoded image
-    """
-    if reader is None:
-        raise HTTPException(status_code=503, detail="OCR model not loaded")
-    
-    try:
-        # Decode base64
-        image_data = base64.b64decode(data.get("image", ""))
-        image_bytes = io.BytesIO(image_data)
-        
-        # Convert to numpy array
-        image_pil = Image.open(image_bytes).convert('RGB')
-        image_np = np.array(image_pil)
-        
-        # Run OCR
-        results = reader.readtext(image_np)
-        
-        raw_text = "\n".join([text for _, text, confidence in results if confidence > 0.3])
-        
-        confidences = [confidence for _, _, confidence in results]
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+        image = Image.open(io.BytesIO(image_bytes))
+        raw_text = pytesseract.image_to_string(image)
         
         supplier = extract_supplier(raw_text)
         invoice_number = extract_invoice_number(raw_text)
@@ -288,7 +184,6 @@ async def scan_invoice_base64(data: dict):
         totals = extract_totals(raw_text)
         
         return {
-            "success": True,
             "supplier": supplier,
             "invoice_number": invoice_number,
             "date": date,
@@ -297,11 +192,154 @@ async def scan_invoice_base64(data: dict):
             "tax": totals.get("tax"),
             "total": totals.get("total"),
             "raw_text": raw_text[:2000],
-            "confidence": round(avg_confidence * 100, 2)
+            "confidence": 0.5,  # Lower confidence for Tesseract
+            "offline_fallback": True
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tesseract failed: {str(e)}")
+
+
+def extract_with_gemini(image_bytes: bytes) -> dict:
+    """Extract using Gemini 2.0 Flash"""
+    if not GEMINI_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Google Generative AI not installed")
+    
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")
+    
+    try:
+        # Convert to base64
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Use Gemini model
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # Create prompt
+        prompt = """Extract invoice/bill details from this image. Return ONLY valid JSON (no markdown):
+{
+  "supplier": "Company name or null",
+  "invoice_number": "Invoice/Bill number or null", 
+  "date": "Date in DD/MM/YYYY or null",
+  "items": [{"name": "Item name", "quantity": number, "rate": price, "amount": total}],
+  "subtotal": number or null,
+  "tax": number or null,
+  "total": number or null,
+  "confidence": number between 0 and 1
+}
+Set unknown fields to null. Be precise with amounts."""
+        
+        # Generate content
+        response = model.generate_content([
+            prompt,
+            {"inline_data": {"data": image_base64, "mime_type": "image/jpeg"}}
+        ])
+        
+        # Parse JSON response
+        response_text = response.text
+        
+        # Clean up markdown JSON
+        response_text = re.sub(r'```json|```', '', response_text).strip()
+        
+        # Parse JSON
+        data = json.loads(response_text)
+        
+        # Ensure required fields exist
+        data.setdefault("supplier")
+        data.setdefault("invoice_number")
+        data.setdefault("date")
+        data.setdefault("items", [])
+        data.setdefault("subtotal")
+        data.setdefault("tax")
+        data.setdefault("total")
+        data.setdefault("confidence", 0.9)
+        data["offline_fallback"] = False
+        
+        return data
         
     except Exception as e:
-        print(f"OCR Error: {e}")
+        print(f"Gemini Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Gemini extraction failed: {str(e)}")
+
+
+@app.get("/")
+def root():
+    return {
+        "message": "BillZo OCR API v2.0",
+        "status": "running",
+        "ocr_engine": "gemini-2.0-flash",
+        "fallback": "tesseract" if TESSERACT_AVAILABLE else "none"
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "gemini_configured": bool(GEMINI_API_KEY),
+        "tesseract_available": TESSERACT_AVAILABLE,
+        "engine": "gemini-2.0-flash"
+    }
+
+
+@app.post("/scan", response_model=OCRResponse)
+async def scan_invoice(
+    image: UploadFile = File(...),
+):
+    """
+    Scan invoice image using Gemini 2.0 Flash with Tesseract fallback
+    """
+    try:
+        # Read image
+        contents = await image.read()
+        
+        # Try Gemini first
+        try:
+            result = extract_with_gemini(contents)
+            print(f"Gemini extraction successful, confidence: {result.get('confidence', 0)}")
+            return OCRResponse(success=True, **result)
+        except Exception as gemini_error:
+            print(f"Gemini failed: {gemini_error}")
+            
+            # Fallback to Tesseract if available
+            if TESSERACT_AVAILABLE:
+                print("Falling back to Tesseract...")
+                result = extract_with_tesseract(contents)
+                return OCRResponse(success=True, **result)
+            else:
+                raise HTTPException(
+                    status_code=503, 
+                    detail=f"Gemini failed and Tesseract not available: {str(gemini_error)}"
+                )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/scan-base64")
+async def scan_invoice_base64(data: dict):
+    """
+    Scan invoice from base64 encoded image
+    """
+    try:
+        image_data = base64.b64decode(data.get("image", ""))
+        
+        # Try Gemini first
+        try:
+            result = extract_with_gemini(image_data)
+            return {"success": True, **result}
+        except Exception:
+            if TESSERACT_AVAILABLE:
+                result = extract_with_tesseract(image_data)
+                return {"success": True, **result}
+            raise HTTPException(status_code=503, detail="OCR failed")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
