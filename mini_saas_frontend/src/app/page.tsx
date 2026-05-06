@@ -1,5 +1,9 @@
 import { redirect } from 'next/navigation'
 
 export default function RootEntry() {
-  redirect('/dashboard')
+  const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null
+  if (tenantId) {
+    redirect('/dashboard')
+  }
+  redirect('/login')
 }
