@@ -1,136 +1,100 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, CheckCircle2, TrendingUp, Users, Package, Receipt } from "lucide-react";
+import { Download, FileText, CheckCircle2, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 export default function ReportsPage() {
   const router = useRouter();
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ totalSales: 0, outputGst: 0, inputGst: 0, invoicesCount: 0 });
 
   useEffect(() => {
-    loadStats();
+    loadData();
   }, []);
 
-  const loadStats = async () => {
+  const loadData = async () => {
     try {
       const tenantId = localStorage.getItem("tenantId");
       if (!tenantId) {
         router.push("/login");
         return;
       }
-      const invoices = await db().invoices.where("tenantId").equals(tenantId).toArray();
-      
-      const totalSales = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
-
-      setStats({
-        totalSales,
-        outputGst: 0,
-        inputGst: 0,
-        invoicesCount: invoices.length,
-      });
+      const data = await db().invoices.where("tenantId").equals(tenantId).toArray();
+      setInvoices(data);
     } catch (error) {
-      console.error("Failed to load stats:", error);
+      console.error("Failed to load data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExportGSTR = () => {
-    console.log("GSTR-1 exported");
-  };
+  const totalSales = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
+  const outputGst = invoices.reduce((s, inv) => s + (inv.total || 0) * 0.12, 0);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  const currentMonth = new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-4xl mx-auto space-y-5">
-      <h1 className="text-2xl font-bold">Reports</h1>
-
-      <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white p-6 lg:p-8">
+      <div className="rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-6 lg:p-8 shadow-lg">
         <div className="flex items-start justify-between">
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider opacity-80">
-              <CheckCircle2 className="h-3.5 w-3.5" /> {currentMonth}
+              <CheckCircle2 className="h-3.5 w-3.5" /> {new Date().toLocaleString("default", { month: "long" })} {new Date().getFullYear()}
             </div>
-            <h2 className="mt-3 text-2xl font-bold">GST Summary</h2>
-            <p className="mt-1 text-sm opacity-80">{stats.invoicesCount} invoices reconciled</p>
+            <h2 className="mt-3 text-2xl font-bold">GST Ready</h2>
+            <p className="mt-1 text-sm opacity-80">All invoices reconciled. Send to your CA.</p>
           </div>
           <span className="grid h-12 w-12 place-items-center rounded-xl bg-white/20">
             <CheckCircle2 className="h-6 w-6" />
           </span>
         </div>
         <div className="mt-6 grid grid-cols-3 gap-4">
-          <div className="rounded-lg p-3 bg-white/10">
-            <div className="text-[11px] opacity-70">Total sales</div>
-            <div className="mt-1 text-base font-bold">{formatINR(stats.totalSales)}</div>
-          </div>
-          <div className="rounded-lg p-3 bg-white/10">
-            <div className="text-[11px] opacity-70">Output GST</div>
-            <div className="mt-1 text-base font-bold">{formatINR(stats.outputGst)}</div>
-          </div>
-          <div className="rounded-lg p-3 bg-white/10">
-            <div className="text-[11px] opacity-70">Input GST</div>
-            <div className="mt-1 text-base font-bold">{formatINR(stats.inputGst)}</div>
-          </div>
+          <Mini label="Total sales" value={formatINR(totalSales)} dark />
+          <Mini label="Output GST" value={formatINR(outputGst)} dark />
+          <Mini label="Input GST" value={formatINR(0)} dark />
         </div>
         <button
-          onClick={handleExportGSTR}
-          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-medium hover:bg-white/90"
+          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white text-green-700 rounded-xl font-medium hover:bg-white/90"
+          onClick={() => console.log("GSTR-1 exported")}
         >
           <Download className="h-4 w-4" /> Export GSTR-1
         </button>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
-        <ReportCard 
-          title="Sales summary" 
-          desc="Day, week & month-wise"
-          icon={<TrendingUp className="h-5 w-5" />}
-          onClick={() => console.log("Sales report coming soon")}
-        />
-        <ReportCard 
-          title="Party ledger" 
-          desc="Receivables & payables"
-          icon={<Users className="h-5 w-5" />}
-          onClick={() => router.push("/parties")}
-        />
-        <ReportCard 
-          title="Stock report" 
-          desc="Movement & valuation"
-          icon={<Package className="h-5 w-5" />}
-          onClick={() => router.push("/products")}
-        />
-        <ReportCard 
-          title="Tax report" 
-          desc="HSN-wise breakdown"
-          icon={<Receipt className="h-5 w-5" />}
-          onClick={() => console.log("Tax report coming soon")}
-        />
+        <ReportCard title="Sales summary" desc="Day, week & month-wise" />
+        <ReportCard title="Party ledger" desc="Receivables & payables" />
+        <ReportCard title="Stock report" desc="Movement & valuation" />
+        <ReportCard title="Tax report" desc="HSN-wise breakdown" />
       </div>
     </div>
   );
 }
 
-function ReportCard({ title, desc, icon, onClick }: { title: string; desc: string; icon: React.ReactNode; onClick?: () => void }) {
+function Mini({ label, value, dark }: { label: string; value: string; dark?: boolean }) {
   return (
-    <button 
-      onClick={onClick}
-      className="text-left rounded-2xl border border-border bg-card p-5 hover:border-primary/30 hover:shadow-md transition-all flex items-center gap-4"
-    >
+    <div className={`rounded-lg p-3 ${dark ? "bg-white/10" : "bg-secondary"}`}>
+      <div className="text-[11px] opacity-70">{label}</div>
+      <div className="mt-1 text-base font-bold">{value}</div>
+    </div>
+  );
+}
+
+function ReportCard({ title, desc }: { title: string; desc: string }) {
+  return (
+    <button className="text-left rounded-2xl border border-border bg-card p-5 hover:border-primary/30 hover:shadow-md transition-colors flex items-center gap-4">
       <div className="grid h-11 w-11 place-items-center rounded-xl bg-secondary text-primary">
-        {icon}
+        <FileText className="h-5 w-5" />
       </div>
       <div className="flex-1">
         <div className="font-semibold">{title}</div>

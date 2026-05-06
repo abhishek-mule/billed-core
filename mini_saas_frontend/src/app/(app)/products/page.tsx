@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, AlertTriangle, Package } from "lucide-react";
+import { Search, Plus, AlertTriangle, Package, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -34,29 +34,19 @@ export default function ProductsPage() {
   };
 
   const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
-  const lowStock = products.filter((p) => (p.stock || 0) < 20).length;
+  const lowStock = products.filter((p) => (p.stock || 0) < (p.lowStockAt || 20)).length;
   const stockValue = products.reduce((s, p) => s + (p.salePrice || 0) * (p.stock || 0), 0);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Products</h1>
-        <button
-          onClick={() => router.push("/products/add")}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add
-        </button>
-      </div>
-
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Total products" value={products.length.toString()} />
         <Stat label="Low stock" value={lowStock.toString()} warn={lowStock > 0} />
@@ -73,6 +63,12 @@ export default function ProductsPage() {
             className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <button
+          onClick={() => router.push("/products/add")}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium"
+        >
+          <Plus className="h-4 w-4" /> Add
+        </button>
       </div>
 
       {products.length === 0 ? (
@@ -111,8 +107,8 @@ export default function ProductsPage() {
                 </div>
                 <div className="sm:text-right mt-1 sm:mt-0 flex sm:block justify-between items-center">
                   <span className="sm:hidden text-muted-foreground text-sm">Stock</span>
-                  <span className={`text-sm font-semibold ${(p.stock || 0) < 20 ? "text-orange-600" : "text-green-600"}`}>
-                    {(p.stock || 0) < 20 && <AlertTriangle className="inline h-3 w-3 mr-1" />}
+                  <span className={`text-sm font-semibold ${(p.stock || 0) < (p.lowStockAt || 20) ? "text-yellow-600" : "text-green-600"}`}>
+                    {(p.stock || 0) < (p.lowStockAt || 20) && <AlertTriangle className="inline h-3 w-3 mr-1" />}
                     {p.stock || 0}
                   </span>
                 </div>
@@ -127,9 +123,9 @@ export default function ProductsPage() {
 
 function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className={`rounded-xl border p-4 ${warn ? "border-orange-400/40 bg-orange-50" : "border-border bg-card"}`}>
+    <div className={`rounded-xl border p-4 ${warn ? "border-yellow-400/40 bg-yellow-50" : "border-border bg-card"}`}>
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-xl font-bold ${warn ? "text-orange-600" : ""}`}>{value}</div>
+      <div className={`mt-1 text-xl font-bold ${warn ? "text-yellow-600" : ""}`}>{value}</div>
     </div>
   );
 }
