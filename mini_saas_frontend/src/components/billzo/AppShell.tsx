@@ -2,15 +2,20 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Receipt, ScanLine, ShoppingCart, Settings, Wifi, WifiOff } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useBillzo } from './useBillzo'
+import { Home, Receipt, ScanLine, Package, Users, ShoppingCart, Settings, Wifi, WifiOff, TrendingUp, MoreHorizontal } from 'lucide-react'
+import { useState } from 'react'
 
-const nav = [
+const mobileNav = [
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/invoices', label: 'Invoices', icon: Receipt },
-  { href: '/scan', label: 'Scan', icon: ScanLine, primary: true },
+  { href: '/pos', label: 'POS', icon: ScanLine, primary: true },
+  { href: '/products', label: 'Products', icon: Package },
+  { href: '/parties', label: 'Parties', icon: Users },
+]
+
+const moreItems = [
   { href: '/purchases', label: 'Purchases', icon: ShoppingCart },
+  { href: '/reports', label: 'Reports', icon: TrendingUp },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -28,7 +33,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="hidden text-lg font-black lg:block">Billzo</span>
           </div>
           <nav className="space-y-1 px-3">
-            {nav.map((item) => <NavItem key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+            {mobileNav.map((item) => <NavItem key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+            <div className="my-4 border-t" />
+            {moreItems.map((item) => <NavItem key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
           </nav>
         </div>
         <QueueBadge pending={pending} />
@@ -37,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-5xl px-4 pb-28 pt-4 md:px-8 md:py-8">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-white/95 px-2 pb-3 pt-2 shadow-2xl backdrop-blur md:hidden">
-        {nav.map((item) => {
+        {mobileNav.map((item) => {
           const Icon = item.icon
           const active = pathname.startsWith(item.href)
           return (
@@ -61,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   )
 }
 
-function NavItem({ item, active }: { item: (typeof nav)[number]; active: boolean }) {
+function NavItem({ item, active }: { item: (typeof mobileNav)[number]; active: boolean }) {
   const Icon = item.icon
   return (
     <Link
