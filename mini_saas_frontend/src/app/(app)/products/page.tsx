@@ -24,7 +24,7 @@ export default function ProductsPage() {
         router.push("/login");
         return;
       }
-      const data = await db.products.where("tenantId").equals(tenantId).toArray();
+      const data = await db().products.where("tenantId").equals(tenantId).toArray();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
@@ -35,7 +35,7 @@ export default function ProductsPage() {
 
   const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
   const lowStock = products.filter((p) => (p.stock || 0) < 20).length;
-  const stockValue = products.reduce((s, p) => s + (p.price || 0) * (p.stock || 0), 0);
+  const stockValue = products.reduce((s, p) => s + (p.salePrice || 0) * (p.stock || 0), 0);
 
   if (loading) {
     return (
@@ -101,13 +101,13 @@ export default function ProductsPage() {
               >
                 <div>
                   <div className="font-semibold text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground sm:hidden mt-0.5">HSN {p.hsn || "—"} • GST {p.gst || 0}%</div>
+                  <div className="text-xs text-muted-foreground sm:hidden mt-0.5">HSN {p.hsn || "—"} • GST {p.gstRate || 0}%</div>
                 </div>
                 <div className="hidden sm:block text-sm text-muted-foreground">{p.hsn || "—"}</div>
-                <div className="hidden sm:block text-sm text-muted-foreground">{p.gst || 0}%</div>
+                <div className="hidden sm:block text-sm text-muted-foreground">{p.gstRate || 0}%</div>
                 <div className="sm:text-right mt-2 sm:mt-0 flex sm:block justify-between text-sm">
                   <span className="sm:hidden text-muted-foreground">Price</span>
-                  <span className="font-bold">{formatINR(p.price || 0)}</span>
+                  <span className="font-bold">{formatINR(p.salePrice || 0)}</span>
                 </div>
                 <div className="sm:text-right mt-1 sm:mt-0 flex sm:block justify-between items-center">
                   <span className="sm:hidden text-muted-foreground text-sm">Stock</span>

@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, X, CheckCircle2, Printer, User } from "lucide-react";
 import { db } from "@/lib/billzo/db";
-import { toast } from "sonner";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -35,8 +34,8 @@ export default function POSPage() {
         return;
       }
       const [productsData, partiesData] = await Promise.all([
-        db.products.where("tenantId").equals(tenantId).toArray(),
-        db.customers.where("tenantId").equals(tenantId).toArray(),
+        db().products.where("tenantId").equals(tenantId).toArray(),
+        db().customers.where("tenantId").equals(tenantId).toArray(),
       ]);
       setProducts(productsData);
       setParties(partiesData);
@@ -77,32 +76,33 @@ export default function POSPage() {
     if (navigator.vibrate) navigator.vibrate(80);
     
     const invNumber = `INV-${Math.floor(1000 + Math.random() * 9000)}`;
-    const inv = {
-      id: `local-${Date.now()}`,
-      number: invNumber,
-      party: customer,
-      partyPhone: customerPhone,
-      amount: Math.round(total),
-      status: "pending",
-      date: new Date().toISOString(),
-      method,
-      items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.price, gst: c.gst })),
-    };
 
     try {
       const tenantId = localStorage.getItem("tenantId");
       if (tenantId) {
-        await db.invoices.add({
-          ...inv,
+        await db().invoices.add({
+          id: `local-${Date.now()}`,
           tenantId,
+          customerName: customer,
+          customerPhone: customerPhone || "",
+          total: Math.round(total),
+          paidAmount: method === "udhar" ? 0 : Math.round(total),
+          status: method === "udhar" ? "unpaid" : "paid",
+          dueAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
-        });
+          updatedAt: new Date().toISOString(),
+          syncStatus: "pending" as const,
+          recoveryStage: null,
+          lastWhatsAppStatus: null,
+          pdfUrl: "",
+          version: 1,
+        } as any);
       }
     } catch (error) {
       console.error("Failed to save invoice:", error);
     }
 
-    setSuccess(inv);
+    setSuccess({ number: invNumber, amount: Math.round(total), method });
   };
 
   const closeSuccess = () => {

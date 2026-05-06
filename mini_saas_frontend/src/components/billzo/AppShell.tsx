@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Receipt, ScanLine, Package, Users, ShoppingCart, Settings, Wifi, WifiOff, TrendingUp, MoreHorizontal } from 'lucide-react'
-import { useState } from 'react'
+import { Home, Receipt, ScanLine, Package, Users, ShoppingCart, Settings, Wifi, WifiOff, TrendingUp } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useBillzo } from './useBillzo'
 
 const mobileNav = [
   { href: '/dashboard', label: 'Home', icon: Home },

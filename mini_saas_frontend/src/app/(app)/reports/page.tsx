@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileText, CheckCircle2, TrendingUp, Users, Package, Receipt } from "lucide-react";
 import { db } from "@/lib/billzo/db";
-import { toast } from "sonner";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -24,16 +23,13 @@ export default function ReportsPage() {
         router.push("/login");
         return;
       }
-      const invoices = await db.invoices.where("tenantId").equals(tenantId).toArray();
+      const invoices = await db().invoices.where("tenantId").equals(tenantId).toArray();
       
-      const totalSales = invoices.reduce((s, inv) => s + (inv.amount || 0), 0);
-      const outputGst = invoices.reduce((s, inv) => {
-        return s + (inv.items?.reduce((sum: number, item: any) => sum + (item.price * item.qty * item.gst / 100), 0) || 0);
-      }, 0);
+      const totalSales = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
 
       setStats({
         totalSales,
-        outputGst,
+        outputGst: 0,
         inputGst: 0,
         invoicesCount: invoices.length,
       });
@@ -45,7 +41,7 @@ export default function ReportsPage() {
   };
 
   const handleExportGSTR = () => {
-    toast.success("GSTR-1 exported successfully");
+    console.log("GSTR-1 exported");
   };
 
   if (loading) {
@@ -102,7 +98,7 @@ export default function ReportsPage() {
           title="Sales summary" 
           desc="Day, week & month-wise"
           icon={<TrendingUp className="h-5 w-5" />}
-          onClick={() => toast.info("Sales report coming soon")}
+          onClick={() => console.log("Sales report coming soon")}
         />
         <ReportCard 
           title="Party ledger" 
@@ -120,7 +116,7 @@ export default function ReportsPage() {
           title="Tax report" 
           desc="HSN-wise breakdown"
           icon={<Receipt className="h-5 w-5" />}
-          onClick={() => toast.info("Tax report coming soon")}
+          onClick={() => console.log("Tax report coming soon")}
         />
       </div>
     </div>

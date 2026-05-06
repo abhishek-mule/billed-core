@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MessageCircle, Phone, Plus, Users } from "lucide-react";
 import { db } from "@/lib/billzo/db";
-import { toast } from "sonner";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -25,7 +24,7 @@ export default function PartiesPage() {
         router.push("/login");
         return;
       }
-      const data = await db.customers.where("tenantId").equals(tenantId).toArray();
+      const data = await db().customers.where("tenantId").equals(tenantId).toArray();
       setParties(data);
     } catch (error) {
       console.error("Failed to load parties:", error);
@@ -39,7 +38,7 @@ export default function PartiesPage() {
   const oweMoney = parties.filter((p) => (p.pending || 0) > 0).length;
 
   const handleRemind = (party: any) => {
-    toast.success(`Reminder sent to ${party.name} on WhatsApp`);
+    console.log(`Reminder sent to ${party.name} on WhatsApp`);
   };
 
   if (loading) {
