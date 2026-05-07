@@ -40,16 +40,20 @@ export function Scan() {
     setResult(null)
 
     try {
-      // Send to Python EasyOCR backend
+      console.log('Processing image:', file.name)
+      
+      // Send to Python OCR backend
       const formData = new FormData()
       formData.append('image', file)
 
       const response = await fetch(`${OCR_API_URL}/scan`, {
         method: 'POST',
-        body: formData,
       })
 
       if (!response.ok) {
+        if (response.status === 503) {
+          throw new Error('OCR service is temporarily unavailable. Please try again later.')
+        }
         throw new Error(`OCR failed: ${response.statusText}`)
       }
 
@@ -58,15 +62,35 @@ export function Scan() {
       console.log('OCR Result:', data)
     } catch (err: any) {
       console.error('OCR Error:', err)
-      setError(err.message || 'Failed to process image')
+      // Provide more helpful error messages
+      if (err.message.includes('network') || err.message.includes('fetch')) {
+        setError('Cannot connect to OCR service. Please check your internet connection.')
+      } else {
+        setError(err.message || 'Failed to process image')
+      }
     } finally {
       setProcessing(false)
     }
   }
 
-  const handleCapture = async () => {
+  const handleCapture = () => {
     // Use camera capture via input
-    fileInputRef.current?.click()
+    // Trigger click on the hidden file input
+    if (fileInputRef.current) {
+      console.log('Triggering camera capture...')
+      fileInputRef.current.click()
+    } else {
+      console.error('File input ref not found')
+      setError('Camera not available. Please use Upload instead.')
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      console.log('File selected:', file.name, file.size)
+      processUpload(file)
+    }
   }
 
   const saveAsPurchase = async () => {
@@ -186,7 +210,7 @@ export function Scan() {
                 accept="image/*" 
                 capture="environment"
                 className="hidden" 
-                onChange={(event) => processUpload(event.target.files?.[0])} 
+                onChange={handleFileSelect}
               />
             </label>
             
