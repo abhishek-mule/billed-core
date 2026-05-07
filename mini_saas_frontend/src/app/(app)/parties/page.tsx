@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MessageCircle, Phone, Plus, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { getUsageLimits, incrementReminderCount } from "@/lib/billzo/usage";
+import { PaywallModal } from "@/components/billzo/PaywallModal";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -12,6 +14,8 @@ export default function PartiesPage() {
   const [q, setQ] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usageLimits, setUsageLimits] = useState<any>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -24,8 +28,12 @@ export default function PartiesPage() {
         router.push("/login");
         return;
       }
-      const data = await db().customers.where("tenantId").equals(tenantId).toArray();
+      const [data, usage] = await Promise.all([
+        db().customers.where("tenantId").equals(tenantId).toArray(),
+        getUsageLimits(tenantId),
+      ]);
       setCustomers(data);
+      setUsageLimits(usage);
     } catch (error) {
       console.error("Failed to load customers:", error);
     } finally {
@@ -103,7 +111,21 @@ export default function PartiesPage() {
               {p.pending > 0 && (
                 <button
                   className="px-3 py-1.5 border border-input rounded-lg font-medium text-sm"
-                  onClick={() => console.log(`Reminder sent to ${p.name} on WhatsApp`)}
+                  onClick={async () => {
+                    const tenantId = localStorage.getItem("tenantId");
+                    if (!tenantId) return;
+
+                    const limits = await getUsageLimits(tenantId);
+                    if (!limits.canSendReminder) {
+                      setShowPaywall(true);
+                      return;
+                    }
+
+                    console.log(`Reminder sent to ${p.name} on WhatsApp`);
+                    await incrementReminderCount(tenantId);
+                    const newLimits = await getUsageLimits(tenantId);
+                    setUsageLimits(newLimits);
+                  }}
                 >
                   <MessageCircle className="h-3.5 w-3.5" /> Remind
                 </button>
@@ -112,6 +134,14 @@ export default function PartiesPage() {
           ))}
         </div>
       )}
+
+      <PaywallModal
+        type="reminder"
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        currentCount={usageLimits?.currentReminderCount || 0}
+        limit={usageLimits?.reminderLimit || 10}
+      />
     </div>
   );
 }
