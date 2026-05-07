@@ -21,7 +21,7 @@ interface ExtractedData {
   confidence?: number
 }
 
-const OCR_API_URL = process.env.NEXT_PUBLIC_OCR_API_URL || 'http://localhost:8000'
+const OCR_API_URL = process.env.NEXT_PUBLIC_OCR_API_URL || 'https://billedcore2.onrender.com'
 
 export function Scan() {
   const router = useRouter()
