@@ -1,7 +1,7 @@
 import { db } from '@/lib/billzo/db'
 
 const FREE_INVOICE_LIMIT = 3
-const FREE_REMINDER_LIMIT = 1
+const FREE_REMINDER_LIMIT = 10
 
 export interface UsageLimits {
   invoiceLimit: number

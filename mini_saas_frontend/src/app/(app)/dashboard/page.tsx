@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2 } from "lucide-react";
+import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2, Store } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { UsagePill } from "@/components/billzo/UsagePill";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -67,6 +68,19 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <Store className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">{localStorage.getItem("tenantName") || "My Shop"}</h1>
+            <p className="text-xs text-muted-foreground">Dashboard</p>
+          </div>
+        </div>
+        <UsagePill />
+      </div>
+
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-6 lg:p-8 shadow-lg">
         <div className="absolute inset-0 opacity-30 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,hsl(142,76%,36%),transparent_50%)]" />
