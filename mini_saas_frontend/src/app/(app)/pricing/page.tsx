@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Sparkles, Loader2 } from "lucide-react";
 import { db, uuid } from "@/lib/billzo/db";
@@ -13,7 +13,7 @@ const PLANS = [
     description: "Perfect to get started",
     features: [
       "3 free invoices",
-      "1 free reminder",
+      "10 reminders/month",
       "Basic POS",
       "Offline support",
     ],
@@ -38,9 +38,26 @@ const PLANS = [
   },
 ];
 
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
 export default function PricingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load Razorpay checkout script
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   const handleUpgrade = async () => {
     setLoading("pro");
@@ -52,28 +69,80 @@ export default function PricingPage() {
         return;
       }
 
-      // In production, integrate with payment gateway (Razorpay/Stripe)
-      // For demo, simulate successful payment
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const tenantName = localStorage.getItem("tenantName") || "Business";
 
-      // Update tenant to pro
-      await db().tenants.update(tenantId, {
-        plan: "pro",
-        paywallUnlocked: true,
-        updatedAt: new Date().toISOString(),
+      // Create subscription order
+      const res = await fetch("/api/payment/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId, tenantName }),
       });
 
-      localStorage.setItem("isPaid", "true");
-      
-      // Show success and redirect
-      alert("Upgraded to Pro successfully!");
-      router.push("/dashboard");
+      const data = await res.json();
+
+      if (data.mock) {
+        // Demo mode - no Razorpay keys configured
+        await handleDemoUpgrade(tenantId);
+        return;
+      }
+
+      // Open Razorpay checkout
+      const razorpay = new window.Razorpay({
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || data.key_id,
+        subscription_id: data.subscriptionId,
+        name: "BillZo Pro",
+        description: "₹399/month - Auto Recovery + Unlimited Invoices",
+        handler: async (response: any) => {
+          // Payment successful - verify with backend
+          await handlePaymentSuccess(tenantId, response.razorpay_subscription_id);
+        },
+        prefill: {
+          name: tenantName,
+        },
+        theme: {
+          color: "#f59e0b",
+        },
+      });
+
+      razorpay.open();
+
     } catch (error) {
       console.error("Upgrade failed:", error);
       alert("Upgrade failed. Please try again.");
     } finally {
       setLoading(null);
     }
+  };
+
+  const handleDemoUpgrade = async (tenantId: string) => {
+    // Demo mode - simulate successful payment
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    await db().tenants.update(tenantId, {
+      plan: "pro",
+      paywallUnlocked: true,
+      updatedAt: new Date().toISOString(),
+    });
+
+    localStorage.setItem("isPaid", "true");
+    alert("Upgraded to Pro successfully! (Demo Mode)");
+    router.push("/dashboard");
+  };
+
+  const handlePaymentSuccess = async (tenantId: string, subscriptionId: string) => {
+    // Verify payment and activate subscription
+    // In production, call backend to verify and activate
+    await db().tenants.update(tenantId, {
+      plan: "pro",
+      paywallUnlocked: true,
+      subscriptionId,
+      subscriptionStatus: "active",
+      updatedAt: new Date().toISOString(),
+    });
+
+    localStorage.setItem("isPaid", "true");
+    alert("Payment successful! You're now on Pro.");
+    router.push("/dashboard");
   };
 
   return (

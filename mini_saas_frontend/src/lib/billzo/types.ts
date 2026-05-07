@@ -12,6 +12,8 @@ export type Tenant = {
   paywallUnlocked: boolean
   invoiceCount: number
   reminderCount: number
+  subscriptionId?: string
+  subscriptionStatus?: string
   createdAt: string
   updatedAt: string
 }
