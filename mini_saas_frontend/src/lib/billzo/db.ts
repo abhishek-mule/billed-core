@@ -3,6 +3,7 @@ import { getMockSession } from './tenant'
 import type {
   Activity,
   Customer,
+  DeviceToken,
   InventoryMovement,
   Invoice,
   InvoiceItem,
@@ -28,10 +29,11 @@ class BillzoDB extends Dexie {
   recoveryAttempts!: Table<RecoveryAttempt, string>
   queue!: Table<QueueItem, string>
   activity!: Table<Activity, string>
+  deviceTokens!: Table<DeviceToken, string>
 
   constructor() {
     super('billzo_offline_first_v2')
-    this.version(2).stores({
+    this.version(3).stores({
       tenants: 'id, ownerUserId, updatedAt',
       customers: 'id, tenantId, name, phone, lastUsedAt, updatedAt',
       products: 'id, tenantId, barcode, name, stock, updatedAt',
@@ -44,6 +46,7 @@ class BillzoDB extends Dexie {
       recoveryAttempts: 'id, tenantId, invoiceId, stage, status, scheduledAt, updatedAt',
       queue: 'id, tenantId, status, entity, entityId, nextAttemptAt, idempotencyKey',
       activity: 'id, tenantId, createdAt',
+      deviceTokens: 'id, tenantId, fcmToken, deviceType, createdAt',
     })
   }
 }
@@ -78,6 +81,8 @@ export async function seedDemoData() {
     ownerUserId: session.userId,
     plan: 'test',
     paywallUnlocked: true,
+    invoiceCount: 0,
+    reminderCount: 0,
     createdAt: iso(current),
     updatedAt: iso(current),
   }

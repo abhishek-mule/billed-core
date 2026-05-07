@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { getUsageLimits, incrementInvoiceCount } from "@/lib/billzo/usage";
+import { PaywallModal } from "@/components/billzo/PaywallModal";
 
 type CartItem = {
   id: string;
@@ -30,6 +32,8 @@ export default function POSPage() {
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [success, setSuccess] = useState<any>(null);
+  const [usageLimits, setUsageLimits] = useState<any>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -43,13 +47,15 @@ export default function POSPage() {
         return;
       }
 
-      const [productData, customerData] = await Promise.all([
+      const [productData, customerData, usage] = await Promise.all([
         db().products.where("tenantId").equals(tenantId).toArray(),
         db().customers.where("tenantId").equals(tenantId).toArray(),
+        getUsageLimits(tenantId),
       ]);
 
       setProducts(productData);
       setCustomers(customerData);
+      setUsageLimits(usage);
     } catch (error) {
       console.error("Failed to load data:", error);
     } finally {
@@ -89,6 +95,13 @@ export default function POSPage() {
     try {
       const tenantId = localStorage.getItem("tenantId");
       if (!tenantId) return;
+
+      // Check usage limits
+      const limits = await getUsageLimits(tenantId);
+      if (!limits.canCreateInvoice) {
+        setShowPaywall(true);
+        return;
+      }
 
       const invoiceId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -139,6 +152,11 @@ export default function POSPage() {
         method,
         items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
       };
+
+      // Increment invoice count
+      await incrementInvoiceCount(tenantId);
+      const newLimits = await getUsageLimits(tenantId);
+      setUsageLimits(newLimits);
 
       setSuccess(inv);
     } catch (error) {
@@ -340,6 +358,14 @@ export default function POSPage() {
           </div>
         </div>
       )}
+
+      <PaywallModal
+        type="invoice"
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        currentCount={usageLimits?.currentInvoiceCount || 0}
+        limit={usageLimits?.invoiceLimit || 3}
+      />
     </div>
   );
 }

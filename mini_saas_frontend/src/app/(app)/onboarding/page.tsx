@@ -8,7 +8,6 @@ import { db } from "@/lib/billzo/db";
 export default function OnboardingPage() {
   const router = useRouter();
   const [shop, setShop] = useState("");
-  const [gstin, setGstin] = useState("");
   const [loading, setLoading] = useState<"idle" | "creating" | "done">("idle");
 
   useEffect(() => {
@@ -31,6 +30,8 @@ export default function OnboardingPage() {
         ownerUserId: `user-${Date.now()}`,
         plan: "starter",
         paywallUnlocked: true,
+        invoiceCount: 0,
+        reminderCount: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -77,15 +78,7 @@ export default function OnboardingPage() {
                 className="mt-2 w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-base font-medium focus:border-primary focus:outline-none transition-colors"
               />
 
-              <label className="mt-5 block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                GSTIN <span className="font-normal normal-case text-muted-foreground/70">(optional)</span>
-              </label>
-              <input
-                value={gstin}
-                onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                placeholder="27ABCDE1234F1Z5"
-                className="mt-2 w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-base font-medium tracking-wider focus:border-primary focus:outline-none transition-colors"
-              />
+              
 
               <button
                 className="mt-7 w-full px-4 py-3 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-lg font-medium"

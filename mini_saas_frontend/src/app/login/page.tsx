@@ -14,7 +14,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [resend, setResend] = useState(24);
+  const [error, setError] = useState("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    // Check if already logged in (persistent session)
+    const accessToken = sessionStorage.getItem("accessToken");
+    const tenantId = localStorage.getItem("tenantId");
+    const isPaid = localStorage.getItem("isPaid");
+    
+    if (accessToken && tenantId) {
+      router.push("/dashboard");
+    }
+  }, [router]);
 
   useEffect(() => {
     if (step !== "otp") return;
@@ -28,19 +40,28 @@ export default function LoginPage() {
     return `${digits.slice(0, 5)} ${digits.slice(5)}`;
   };
 
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     const digits = phone.replace(/\D/g, "");
     if (digits.length !== 10) {
-      alert("Enter a valid 10-digit number");
+      setError("Enter a valid 10-digit number");
       return;
     }
+    
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError("");
+    
+    try {
+      // Send OTP request (in production, use real SMS API)
+      // For demo, simulate OTP sending
+      await new Promise(resolve => setTimeout(resolve, 700));
       setStep("otp");
       setResend(24);
       setTimeout(() => otpRefs.current[0]?.focus(), 50);
-    }, 700);
+    } catch (err) {
+      setError("Failed to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOtpChange = (i: number, v: string) => {
@@ -56,22 +77,49 @@ export default function LoginPage() {
     if (e.key === "Backspace" && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
   };
 
-  const verifyOtp = (code: string) => {
+  const verifyOtp = async (code: string) => {
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (code === "000000") {
-        setShake(true);
-        setTimeout(() => setShake(false), 350);
-        setOtp(["", "", "", "", "", ""]);
-        otpRefs.current[0]?.focus();
-        alert("Wrong code. Try again.");
-        return;
+    setError("");
+    
+    try {
+      // Call login API
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          phone: phone.replace(/\D/g, ""), 
+          otp: code 
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Login failed");
       }
-      localStorage.setItem("tenantId", "demo-tenant-001");
-      localStorage.setItem("businessName", phone || "My Business");
-      router.push("/dashboard");
-    }, 600);
+
+      // Store session tokens (in production, use httpOnly cookies for refreshToken)
+      sessionStorage.setItem("accessToken", data.accessToken);
+      sessionStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("userId", data.userId);
+      localStorage.setItem("tenantId", data.tenantId || "");
+      localStorage.setItem("isPaid", data.isPaid ? "true" : "false");
+      
+      // Route based on state
+      if (!data.tenantId) {
+        router.push("/onboarding");
+      } else {
+        router.push("/dashboard");
+      }
+
+    } catch (err: any) {
+      setLoading(false);
+      setShake(true);
+      setTimeout(() => setShake(false), 350);
+      setOtp(["", "", "", "", "", ""]);
+      otpRefs.current[0]?.focus();
+      setError(err.message || "Invalid OTP. Try again.");
+    }
   };
 
   return (
@@ -97,6 +145,12 @@ export default function LoginPage() {
               <h1 className="text-2xl font-bold tracking-tight">Welcome to BillZo</h1>
               <p className="mt-1.5 text-sm text-muted-foreground">Enter your phone to continue.</p>
 
+              {error && (
+                <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
+
               <label className="mt-7 block text-xs font-semibold text-muted-foreground uppercase tracking-wider">Phone</label>
               <div className="mt-2 flex items-center gap-2 rounded-xl border-2 border-input bg-background px-4 py-3 focus-within:border-primary">
                 <span className="text-base font-semibold text-muted-foreground">+91</span>
@@ -105,7 +159,7 @@ export default function LoginPage() {
                   inputMode="numeric"
                   autoFocus
                   value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
+                  onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(""); }}
                   placeholder="98765 43210"
                   className="flex-1 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
                   onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
@@ -117,7 +171,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="mt-6 w-full py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Continue
               </button>
 
@@ -130,6 +184,12 @@ export default function LoginPage() {
               <h1 className="text-2xl font-bold tracking-tight">Enter the 6-digit code</h1>
               <p className="mt-1.5 text-sm text-muted-foreground">Sent to +91 {phone}</p>
 
+              {error && (
+                <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
+
               <div className="mt-7 flex gap-2 justify-between">
                 {otp.map((d, i) => (
                   <input
@@ -138,7 +198,7 @@ export default function LoginPage() {
                     inputMode="numeric"
                     maxLength={1}
                     value={d}
-                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onChange={(e) => { handleOtpChange(i, e.target.value); setError(""); }}
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
                     className="h-14 w-12 text-center text-2xl font-bold rounded-xl border-2 border-input focus:border-indigo-600 focus:outline-none"
                   />
@@ -162,7 +222,7 @@ export default function LoginPage() {
               )}
 
               <p className="mt-5 text-xs text-center text-muted-foreground">
-                Tip: enter <span className="font-mono font-semibold">000000</span> to see error state
+                Demo: OTP = <span className="font-mono font-semibold">123456</span>
               </p>
             </div>
           )}

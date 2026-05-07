@@ -8,10 +8,20 @@ export type Tenant = {
   id: string
   name: string
   ownerUserId: string
-  plan: 'test' | 'starter' | 'growth'
+  plan: 'test' | 'starter' | 'growth' | 'pro'
   paywallUnlocked: boolean
+  invoiceCount: number
+  reminderCount: number
   createdAt: string
   updatedAt: string
+}
+
+export type DeviceToken = {
+  id: string
+  tenantId: string
+  fcmToken: string
+  deviceType: 'android' | 'ios' | 'web'
+  createdAt: string
 }
 
 export type Customer = {
