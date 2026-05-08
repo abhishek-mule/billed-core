@@ -1,4 +1,4 @@
-# Billed - Mini SaaS Platform
+# Billed - Mini SaaS Platform for merchants
 
 A multi-tenant GST billing SaaS for Indian retailers, powered by **Next.js + n8n + Frappe/ERPNext**.
 
