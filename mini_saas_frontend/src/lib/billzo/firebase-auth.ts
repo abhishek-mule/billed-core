@@ -4,8 +4,13 @@ import { useState, useEffect } from 'react'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth'
 
-let recaptchaVerifier: RecaptchaVerifier | null = null
 let confirmationResult: ConfirmationResult | null = null
+
+declare global {
+  interface Window {
+    recaptchaVerifier: any;
+  }
+}
 
 const firebaseConfig = {
   apiKey: typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_FIREBASE_API_KEY : '',
@@ -48,21 +53,25 @@ export function useFirebaseAuth() {
     try {
       const auth = getAuth()
       
-      // Clean up old verifier if exists
-      if (recaptchaVerifier) {
-        recaptchaVerifier.clear()
+      // Initialize recaptcha verifier if not already done
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible',
+          callback: () => {
+            // reCAPTCHA solved
+          },
+          'expired-callback': () => {
+            // Response expired. Ask user to solve reCAPTCHA again.
+            window.recaptchaVerifier?.clear();
+            window.recaptchaVerifier = null;
+          }
+        })
       }
-
-      // Create new recaptcha verifier
-      recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {},
-      })
 
       // Format phone number
       const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`
 
-      confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier)
+      confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier)
       
       setLoading(false)
       return { success: true }
@@ -100,8 +109,9 @@ export function useFirebaseAuth() {
       const userId = result.user.uid
       
       // Clean up
-      if (recaptchaVerifier) {
-        recaptchaVerifier.clear()
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear()
+        window.recaptchaVerifier = null
       }
       confirmationResult = null
       

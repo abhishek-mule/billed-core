@@ -35,9 +35,9 @@ export async function initNotifications(): Promise<string | null> {
 
       // Only init if config exists
       if (firebaseConfig.apiKey) {
-        const { initializeApp } = await import("firebase/app");
-        initializeApp(firebaseConfig);
-        messaging = getMessaging();
+        const { initializeApp, getApps, getApp } = await import("firebase/app");
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        messaging = getMessaging(app);
       } else {
         console.log("Firebase config not set, skipping push notifications");
         return null;

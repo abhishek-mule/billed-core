@@ -113,31 +113,48 @@ export default function LoginPage() {
         userId = `demo_${Date.now()}`;
       }
 
-      // Check if tenant exists for this phone
       const digits = phone.replace(/\D/g, "");
+
+      // Call backend API to handle session and tokens
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: digits, otp: code }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Login failed via API");
+      }
+
+      // Check if tenant exists for this phone locally (offline-first strategy)
       const existingTenant = await db().tenants
         .where('phone')
         .equals(digits)
         .first();
 
-      const uid = userId || `user_${Date.now()}`;
+      const uid = userId || data.userId || `user_${Date.now()}`;
+      
+      // We still store tokens locally as requested by the offline-first app architecture
+      sessionStorage.setItem("accessToken", data.accessToken);
+      sessionStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("userId", uid);
+      localStorage.setItem("isPaid", existingTenant ? (existingTenant.plan === 'pro' ? "true" : "false") : data.isPaid?.toString() || "false");
 
       if (existingTenant) {
         // Existing user - login
-        sessionStorage.setItem("accessToken", `token_${Date.now()}`);
-        sessionStorage.setItem("refreshToken", `refresh_${Date.now()}`);
-        localStorage.setItem("userId", uid);
         localStorage.setItem("tenantId", existingTenant.id);
         localStorage.setItem("tenantName", existingTenant.name);
-        localStorage.setItem("isPaid", existingTenant.plan === 'pro' ? "true" : "false");
+        
+        // Ensure device is registered for push notifications
+        import("@/lib/billzo/notifications").then(m => m.registerDevice(existingTenant.id));
         
         router.push("/dashboard");
       } else {
         // New user - create tenant automatically
-        const tenantId = `tenant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const newTenantId = data.tenantId || `tenant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         
         await db().tenants.add({
-          id: tenantId,
+          id: newTenantId,
           name: `Shop ${digits.slice(-4)}`,
           ownerUserId: uid,
           phone: digits,
@@ -149,12 +166,11 @@ export default function LoginPage() {
           updatedAt: new Date().toISOString(),
         });
 
-        sessionStorage.setItem("accessToken", `token_${Date.now()}`);
-        sessionStorage.setItem("refreshToken", `refresh_${Date.now()}`);
-        localStorage.setItem("userId", uid);
-        localStorage.setItem("tenantId", tenantId);
+        localStorage.setItem("tenantId", newTenantId);
         localStorage.setItem("tenantName", `Shop ${digits.slice(-4)}`);
-        localStorage.setItem("isPaid", "false");
+
+        // Register device for push notifications
+        import("@/lib/billzo/notifications").then(m => m.registerDevice(newTenantId));
 
         router.push("/dashboard");
       }
@@ -177,8 +193,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col lg:flex-row">
-      {/* Hidden recaptcha container */}
-      <div id="recaptcha-container" className="hidden"></div>
+      {/* Invisible recaptcha container (badge will show automatically) */}
+      <div id="recaptcha-container"></div>
 
       {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex-col justify-between p-12 relative overflow-hidden">
