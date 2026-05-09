@@ -51,9 +51,14 @@ export async function initNotifications(): Promise<string | null> {
       return null;
     }
 
+    // Register service worker with config as query params
+    const swUrl = `/firebase-messaging-sw.js?apiKey=${firebaseConfig.apiKey}&projectId=${firebaseConfig.projectId}&messagingSenderId=${firebaseConfig.messagingSenderId}&appId=${firebaseConfig.appId}&authDomain=${firebaseConfig.authDomain}&storageBucket=${firebaseConfig.storageBucket}`;
+    const registration = await navigator.serviceWorker.register(swUrl);
+
     // Get token
     fcmToken = await getToken(messaging, {
       vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration: registration
     });
 
     // Listen for foreground messages

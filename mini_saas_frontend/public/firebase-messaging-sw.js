@@ -3,19 +3,15 @@ importScripts("https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-comp
 
 // Initialize the Firebase app in the service worker by passing in
 // your app's Firebase config object.
-// https://firebase.google.com/docs/web/setup#config-object
+// To avoid hardcoding API keys in GitHub (which triggers false positive secret warnings),
+// we pull these from query parameters during registration.
 firebase.initializeApp({
-  apiKey: new URLSearchParams(location.search).get("apiKey") || "your-api-key", // In production you should inject this or hardcode it if it's public
-  // We can just rely on the default behavior since the app config is passed during initialization,
-  // but standard practice is to hardcode the config here, or use the query params workaround.
-  // Actually, Vercel/NextJS doesn't easily process env vars in public folder JS files.
-  // We will add placeholders. You should replace these with your actual keys in production.
-  apiKey: "AIzaSyCvpvVcGitD3G6x6XxRrZbDXDvsMt5OW3o",
-  authDomain: "billzo-87eb2.firebaseapp.com",
-  projectId: "billzo-87eb2",
-  storageBucket: "billzo-87eb2.firebasestorage.app",
-  messagingSenderId: "493505097813",
-  appId: "1:493505097813:web:a409b7acd32c58f701e4dc"
+  apiKey: new URLSearchParams(location.search).get("apiKey"),
+  authDomain: new URLSearchParams(location.search).get("authDomain"),
+  projectId: new URLSearchParams(location.search).get("projectId"),
+  storageBucket: new URLSearchParams(location.search).get("storageBucket"),
+  messagingSenderId: new URLSearchParams(location.search).get("messagingSenderId"),
+  appId: new URLSearchParams(location.search).get("appId")
 });
 
 // Retrieve an instance of Firebase Messaging so that it can handle background
