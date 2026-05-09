@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, MessageCircle, Shield, Zap } from "lucide-react";
 
 type Step = "phone" | "otp";
 
@@ -13,15 +13,13 @@ export default function LoginPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
-  const [resend, setResend] = useState(24);
+  const [resend, setResend] = useState(30);
   const [error, setError] = useState("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    // Check if already logged in (persistent session)
     const accessToken = sessionStorage.getItem("accessToken");
     const tenantId = localStorage.getItem("tenantId");
-    const isPaid = localStorage.getItem("isPaid");
     
     if (accessToken && tenantId) {
       router.push("/dashboard");
@@ -43,7 +41,7 @@ export default function LoginPage() {
   const handleSendOtp = async () => {
     const digits = phone.replace(/\D/g, "");
     if (digits.length !== 10) {
-      setError("Enter a valid 10-digit number");
+      setError("Please enter a valid 10-digit phone number");
       return;
     }
     
@@ -51,14 +49,12 @@ export default function LoginPage() {
     setError("");
     
     try {
-      // Send OTP request (in production, use real SMS API)
-      // For demo, simulate OTP sending
-      await new Promise(resolve => setTimeout(resolve, 700));
+      await new Promise(resolve => setTimeout(resolve, 800));
       setStep("otp");
-      setResend(24);
-      setTimeout(() => otpRefs.current[0]?.focus(), 50);
+      setResend(30);
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
-      setError("Failed to send OTP. Please try again.");
+      setError("Unable to send OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -82,7 +78,6 @@ export default function LoginPage() {
     setError("");
     
     try {
-      // Call login API
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,17 +90,18 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || "Verification failed");
       }
 
-      // Store session tokens (in production, use httpOnly cookies for refreshToken)
       sessionStorage.setItem("accessToken", data.accessToken);
       sessionStorage.setItem("refreshToken", data.refreshToken);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("tenantId", data.tenantId || "");
       localStorage.setItem("isPaid", data.isPaid ? "true" : "false");
       
-      // Route based on state
+      setLoading(false);
+      setOtp(["", "", "", "", "", ""]);
+      
       if (!data.tenantId) {
         router.push("/onboarding");
       } else {
@@ -115,117 +111,198 @@ export default function LoginPage() {
     } catch (err: any) {
       setLoading(false);
       setShake(true);
-      setTimeout(() => setShake(false), 350);
+      setTimeout(() => setShake(false), 500);
       setOtp(["", "", "", "", "", ""]);
       otpRefs.current[0]?.focus();
-      setError(err.message || "Invalid OTP. Try again.");
+      setError(err.message || "Invalid code. Please try again.");
     }
   };
 
+  const features = [
+    { icon: Zap, text: "Instant invoice creation" },
+    { icon: MessageCircle, text: "Automated WhatsApp reminders" },
+    { icon: Shield, text: "Secure & encrypted data" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex flex-col">
-      <header className="container py-5 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2 font-bold text-xl text-white">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-white text-indigo-600">
-            <Sparkles className="h-5 w-5" />
-          </span>
-          <span>BillZo</span>
+    <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+      {/* Left Side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex-col justify-between p-12 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-indigo-500 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
         </div>
-        {step === "otp" && (
-          <button onClick={() => setStep("phone")} className="text-sm text-white/80 inline-flex items-center gap-1 hover:text-white">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-        )}
-      </header>
-
-      <div className="flex-1 grid place-items-center px-4 pb-16">
-        <div className="w-full max-w-md">
-          {step === "phone" ? (
-            <div className="rounded-2xl border border-white/20 bg-white/95 backdrop-blur p-7 shadow-xl">
-              <h1 className="text-2xl font-bold tracking-tight">Welcome to BillZo</h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">Enter your phone to continue.</p>
-
-              {error && (
-                <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <label className="mt-7 block text-xs font-semibold text-muted-foreground uppercase tracking-wider">Phone</label>
-              <div className="mt-2 flex items-center gap-2 rounded-xl border-2 border-input bg-background px-4 py-3 focus-within:border-primary">
-                <span className="text-base font-semibold text-muted-foreground">+91</span>
-                <span className="h-5 w-px bg-border" />
-                <input
-                  inputMode="numeric"
-                  autoFocus
-                  value={phone}
-                  onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(""); }}
-                  placeholder="98765 43210"
-                  className="flex-1 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
-                  onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
-                />
-              </div>
-
-              <button
-                onClick={handleSendOtp}
-                disabled={loading}
-                className="mt-6 w-full py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Continue
-              </button>
-
-              <p className="mt-5 text-xs text-center text-muted-foreground">
-                Demo: enter any phone, OTP = 123456
-              </p>
+        
+        <div className="relative">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
-          ) : (
-            <div className={`rounded-2xl border border-white/20 bg-white/95 backdrop-blur p-7 shadow-xl ${shake ? "animate-pulse" : ""}`}>
-              <h1 className="text-2xl font-bold tracking-tight">Enter the 6-digit code</h1>
-              <p className="mt-1.5 text-sm text-muted-foreground">Sent to +91 {phone}</p>
+            <span className="text-2xl font-bold text-white">BillZo</span>
+          </div>
+        </div>
 
-              {error && (
-                <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
-                  {error}
+        <div className="relative space-y-8">
+          <div>
+            <h1 className="text-4xl font-bold text-white leading-tight">
+              Get paid faster with<br />
+              <span className="text-indigo-400">automated reminders</span>
+            </h1>
+            <p className="mt-4 text-slate-400 text-lg max-w-md">
+              Send professional invoices and follow up automatically. 
+              Never lose track of pending payments again.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {features.map((f, i) => (
+              <div key={i} className="flex items-center gap-4 text-slate-300">
+                <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center">
+                  <f.icon className="w-5 h-5 text-indigo-400" />
                 </div>
-              )}
-
-              <div className="mt-7 flex gap-2 justify-between">
-                {otp.map((d, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { otpRefs.current[i] = el; }}
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={d}
-                    onChange={(e) => { handleOtpChange(i, e.target.value); setError(""); }}
-                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                    className="h-14 w-12 text-center text-2xl font-bold rounded-xl border-2 border-input focus:border-indigo-600 focus:outline-none"
-                  />
-                ))}
+                <span className="text-sm">{f.text}</span>
               </div>
+            ))}
+          </div>
+        </div>
 
-              <div className="mt-6 text-sm text-center">
-                {resend > 0 ? (
-                  <span className="text-muted-foreground">Resend in {resend}s</span>
-                ) : (
-                  <button onClick={() => { setResend(24); setOtp(["", "", "", "", "", ""]); }} className="text-indigo-600 font-medium hover:underline">
-                    Resend code
-                  </button>
+        <div className="relative text-slate-500 text-sm">
+          © 2025 BillZo. All rights reserved.
+        </div>
+      </div>
+
+      {/* Right Side - Login Form */}
+      <div className="flex-1 flex flex-col">
+        {/* Mobile Header */}
+        <div className="lg:hidden flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="font-bold text-slate-900">BillZo</span>
+          </div>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-sm">
+            {step === "phone" ? (
+              <div className="space-y-8">
+                <div className="text-center lg:text-left">
+                  <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+                  <p className="mt-2 text-slate-500">Enter your phone number to continue</p>
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                    {error}
+                  </div>
                 )}
+
+                <form onSubmit={(e) => { e.preventDefault(); handleSendOtp(); }} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Phone Number
+                    </label>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                      <span className="text-slate-500 font-medium">+91</span>
+                      <span className="h-5 w-px bg-slate-200"></span>
+                      <input
+                        type="tel"
+                        autoComplete="tel"
+                        value={phone}
+                        onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(""); }}
+                        placeholder="98765 43210"
+                        className="flex-1 bg-transparent text-slate-900 font-medium outline-none placeholder:text-slate-400"
+                        onKeyDown={(e) => e.key === "Enter" && handleSendOtp()}
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || phone.replace(/\D/g, "").length !== 10}
+                    className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      "Continue"
+                    )}
+                  </button>
+                </form>
+
+                <p className="text-center text-xs text-slate-400">
+                  Demo: Enter any phone number • OTP: 123456
+                </p>
               </div>
-
-              {loading && (
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
+            ) : (
+              <div className={`space-y-8 ${shake ? "animate-pulse" : ""}`}>
+                <div className="text-center">
+                  <button 
+                    onClick={() => setStep("phone")} 
+                    className="lg:hidden mb-4 text-slate-500 flex items-center gap-1 text-sm"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Back
+                  </button>
+                  <h2 className="text-2xl font-bold text-slate-900">Enter verification code</h2>
+                  <p className="mt-2 text-slate-500">We sent a code to +91 {phone}</p>
                 </div>
-              )}
 
-              <p className="mt-5 text-xs text-center text-muted-foreground">
-                Demo: OTP = <span className="font-mono font-semibold">123456</span>
-              </p>
-            </div>
-          )}
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-center">
+                  {otp.map((d, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => { otpRefs.current[i] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      autoComplete="one-time-code"
+                      value={d}
+                      disabled={loading}
+                      onChange={(e) => { handleOtpChange(i, e.target.value); setError(""); }}
+                      onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                      className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 border-slate-200 focus:border-indigo-500 focus:outline-none transition-colors"
+                    />
+                  ))}
+                </div>
+
+                <div className="text-center text-sm text-slate-500">
+                  {resend > 0 ? (
+                    <span>Resend code in <span className="font-medium text-slate-700">{resend}s</span></span>
+                  ) : (
+                    <button 
+                      onClick={() => { setResend(30); setOtp(["", "", "", "", "", ""]); }} 
+                      className="text-indigo-600 font-medium hover:underline"
+                    >
+                      Resend code
+                    </button>
+                  )}
+                </div>
+
+                {loading && (
+                  <div className="flex items-center justify-center gap-2 text-slate-500 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Verifying...
+                  </div>
+                )}
+
+                <p className="text-center text-xs text-slate-400">
+                  Demo OTP: <span className="font-mono font-semibold text-slate-600">123456</span>
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
