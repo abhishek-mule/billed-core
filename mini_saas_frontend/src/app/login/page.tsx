@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ArrowLeft, MessageCircle, Shield, Zap } from "lucide-react";
+import { useFirebaseAuth } from "@/lib/billzo/firebase-auth";
+import { db, uuid } from "@/lib/billzo/db";
 
 type Step = "phone" | "otp";
 
@@ -16,6 +18,8 @@ export default function LoginPage() {
   const [resend, setResend] = useState(30);
   const [error, setError] = useState("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const { sendOTP, verifyOTP, isConfigured, loading: firebaseLoading } = useFirebaseAuth();
 
   useEffect(() => {
     const accessToken = sessionStorage.getItem("accessToken");
@@ -49,11 +53,24 @@ export default function LoginPage() {
     setError("");
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setStep("otp");
-      setResend(30);
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
-    } catch (err) {
+      // Try Firebase auth if configured
+      if (isConfigured) {
+        const result = await sendOTP(digits);
+        if (result.success) {
+          setStep("otp");
+          setResend(30);
+          setTimeout(() => otpRefs.current[0]?.focus(), 100);
+        } else {
+          setError(result.error || "Failed to send OTP");
+        }
+      } else {
+        // Demo mode - simulate OTP sending
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setStep("otp");
+        setResend(30);
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      }
+    } catch (err: any) {
       setError("Unable to send OTP. Please try again.");
     } finally {
       setLoading(false);
@@ -66,45 +83,79 @@ export default function LoginPage() {
     next[i] = digit;
     setOtp(next);
     if (digit && i < 5) otpRefs.current[i + 1]?.focus();
-    if (next.every((d) => d) && next.join("").length === 6) verifyOtp(next.join(""));
+    if (next.every((d) => d) && next.join("").length === 6) verifyAndLogin(next.join(""));
   };
 
   const handleOtpKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
   };
 
-  const verifyOtp = async (code: string) => {
+  const verifyAndLogin = async (code: string) => {
     setLoading(true);
     setError("");
     
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          phone: phone.replace(/\D/g, ""), 
-          otp: code 
-        })
-      });
+      let userId: string | undefined;
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Verification failed");
+      // Try Firebase verification if configured
+      if (isConfigured) {
+        const result = await verifyOTP(code);
+        if (result.success) {
+          userId = result.userId;
+        } else {
+          throw new Error(result.error || "Verification failed");
+        }
+      } else {
+        // Demo mode - accept 123456
+        if (code !== "123456") {
+          throw new Error("Invalid OTP. Use 123456 for demo.");
+        }
+        userId = `demo_${Date.now()}`;
       }
 
-      sessionStorage.setItem("accessToken", data.accessToken);
-      sessionStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("userId", data.userId);
-      localStorage.setItem("tenantId", data.tenantId || "");
-      localStorage.setItem("isPaid", data.isPaid ? "true" : "false");
-      
-      setLoading(false);
-      setOtp(["", "", "", "", "", ""]);
-      
-      if (!data.tenantId) {
-        router.push("/onboarding");
+      // Check if tenant exists for this phone
+      const digits = phone.replace(/\D/g, "");
+      const existingTenant = await db().tenants
+        .where('phone')
+        .equals(digits)
+        .first();
+
+      const uid = userId || `user_${Date.now()}`;
+
+      if (existingTenant) {
+        // Existing user - login
+        sessionStorage.setItem("accessToken", `token_${Date.now()}`);
+        sessionStorage.setItem("refreshToken", `refresh_${Date.now()}`);
+        localStorage.setItem("userId", uid);
+        localStorage.setItem("tenantId", existingTenant.id);
+        localStorage.setItem("tenantName", existingTenant.name);
+        localStorage.setItem("isPaid", existingTenant.plan === 'pro' ? "true" : "false");
+        
+        router.push("/dashboard");
       } else {
+        // New user - create tenant automatically
+        const tenantId = `tenant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        
+        await db().tenants.add({
+          id: tenantId,
+          name: `Shop ${digits.slice(-4)}`,
+          ownerUserId: uid,
+          phone: digits,
+          plan: "starter",
+          paywallUnlocked: true,
+          invoiceCount: 0,
+          reminderCount: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
+        sessionStorage.setItem("accessToken", `token_${Date.now()}`);
+        sessionStorage.setItem("refreshToken", `refresh_${Date.now()}`);
+        localStorage.setItem("userId", uid);
+        localStorage.setItem("tenantId", tenantId);
+        localStorage.setItem("tenantName", `Shop ${digits.slice(-4)}`);
+        localStorage.setItem("isPaid", "false");
+
         router.push("/dashboard");
       }
 
@@ -126,9 +177,11 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col lg:flex-row">
+      {/* Hidden recaptcha container */}
+      <div id="recaptcha-container" className="hidden"></div>
+
       {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex-col justify-between p-12 relative overflow-hidden">
-        {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-72 h-72 bg-indigo-500 rounded-full blur-3xl"></div>
           <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
@@ -170,13 +223,16 @@ export default function LoginPage() {
         </div>
 
         <div className="relative text-slate-500 text-sm">
-          © 2025 BillZo. All rights reserved.
+          {!isConfigured && (
+            <span className="bg-yellow-600/20 text-yellow-400 px-3 py-1 rounded text-xs">
+              Demo Mode - Firebase not configured
+            </span>
+          )}
         </div>
       </div>
 
       {/* Right Side - Login Form */}
       <div className="flex-1 flex flex-col">
-        {/* Mobile Header */}
         <div className="lg:hidden flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
@@ -186,6 +242,9 @@ export default function LoginPage() {
             </div>
             <span className="font-bold text-slate-900">BillZo</span>
           </div>
+          {!isConfigured && (
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Demo</span>
+          )}
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6">
@@ -238,7 +297,11 @@ export default function LoginPage() {
                 </form>
 
                 <p className="text-center text-xs text-slate-400">
-                  Demo: Enter any phone number • OTP: 123456
+                  {!isConfigured ? (
+                    <>Demo: Enter any phone • OTP: 123456</>
+                  ) : (
+                    <>We&apos;ll send a verification code</>
+                  )}
                 </p>
               </div>
             ) : (
@@ -283,7 +346,7 @@ export default function LoginPage() {
                     <span>Resend code in <span className="font-medium text-slate-700">{resend}s</span></span>
                   ) : (
                     <button 
-                      onClick={() => { setResend(30); setOtp(["", "", "", "", "", ""]); }} 
+                      onClick={() => { setResend(30); setOtp(["", "", "", "", "", ""]); handleSendOtp(); }} 
                       className="text-indigo-600 font-medium hover:underline"
                     >
                       Resend code
@@ -298,7 +361,7 @@ export default function LoginPage() {
                 )}
 
                 <p className="text-center text-xs text-slate-400">
-                  Demo OTP: <span className="font-mono font-semibold text-slate-600">123456</span>
+                  {!isConfigured && "Demo OTP: "}<span className="font-mono font-semibold text-slate-600">123456</span>
                 </p>
               </div>
             )}

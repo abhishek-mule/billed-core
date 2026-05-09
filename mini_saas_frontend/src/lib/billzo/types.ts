@@ -8,6 +8,7 @@ export type Tenant = {
   id: string
   name: string
   ownerUserId: string
+  phone?: string
   plan: 'test' | 'starter' | 'growth' | 'pro'
   paywallUnlocked: boolean
   invoiceCount: number
