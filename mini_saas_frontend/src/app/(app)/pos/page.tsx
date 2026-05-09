@@ -7,6 +7,7 @@ import { db } from "@/lib/billzo/db";
 import { getUsageLimits, incrementInvoiceCount } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
+import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
 
 type CartItem = {
   id: string;
@@ -35,6 +36,7 @@ export default function POSPage() {
   const [success, setSuccess] = useState<any>(null);
   const [usageLimits, setUsageLimits] = useState<any>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -185,15 +187,26 @@ export default function POSPage() {
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
       <div className="grid lg:grid-cols-[1fr_400px] gap-6">
         <div>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products… (instant)"
-              className="w-full h-14 rounded-xl border-2 border-input bg-card pl-11 pr-4 text-base font-medium focus:border-primary focus:outline-none transition-colors"
-            />
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search products… (instant)"
+                className="w-full h-14 rounded-xl border-2 border-input bg-card pl-11 pr-4 text-base font-medium focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
+            <button 
+              onClick={() => setShowScanner(true)}
+              className="h-14 px-5 rounded-xl bg-secondary text-secondary-foreground border-2 border-input hover:border-primary transition-colors flex items-center gap-2 font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              Scan
+            </button>
           </div>
 
           {products.length === 0 ? (
@@ -412,6 +425,22 @@ export default function POSPage() {
         currentCount={usageLimits?.currentInvoiceCount || 0}
         limit={usageLimits?.invoiceLimit || 3}
       />
+
+      {showScanner && (
+        <BarcodeScanner 
+          onClose={() => setShowScanner(false)} 
+          onScan={(code) => {
+            setShowScanner(false);
+            const product = products.find(p => p.barcode === code);
+            if (product) {
+              addToCart(product);
+              setQuery("");
+            } else {
+              alert(`Product with barcode ${code} not found!`);
+            }
+          }} 
+        />
+      )}
     </div>
   );
 }

@@ -42,30 +42,17 @@ const sessions = new Map<string, { userId: string; tenantId: string | null; isPa
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { phone, otp } = body
+    const { email, uid, name } = body
 
-    // Validate phone
-    if (!phone || phone.length !== 10) {
-      return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
+    if (!email || !uid) {
+      return NextResponse.json({ error: 'Missing credentials' }, { status: 400 })
     }
 
-    // Validate OTP (demo: accept 123456 or any 6-digit)
-    if (!otp || otp.length !== 6) {
-      return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
-    }
-
-    // Demo: accept any 6-digit OTP (or 123456)
-    // In production, verify against stored OTP with expiry
-    if (otp !== '123456' && !/^\d{6}$/.test(otp)) {
-      return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
-    }
-
-    // Create user session
-    const userId = `user_${phone}`
+    // Create user session based on their UID from Google
+    const userId = uid
     const refreshToken = crypto.randomBytes(32).toString('hex')
     
     // Check if user has tenant (onboarding done)
-    // In production, check DB
     const existingSession = Array.from(sessions.values()).find(s => s.userId === userId)
     const tenantId = existingSession?.tenantId || null
     const isPaid = existingSession?.isPaid || false

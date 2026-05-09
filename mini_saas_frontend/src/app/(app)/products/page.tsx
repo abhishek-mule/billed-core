@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, AlertTriangle, Package, Loader2 } from "lucide-react";
+import { Search, Plus, AlertTriangle, Package, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -37,6 +40,40 @@ export default function ProductsPage() {
   const lowStock = products.filter((p) => (p.stock || 0) < (p.lowStockAt || 20)).length;
   const stockValue = products.reduce((s, p) => s + (p.salePrice || 0) * (p.stock || 0), 0);
 
+  const exportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filtered.map(p => ({
+      Name: p.name,
+      Barcode: p.barcode || "",
+      HSN: p.hsn || "",
+      GST_Rate: `${p.gstRate || 0}%`,
+      Sale_Price: p.salePrice || 0,
+      Purchase_Price: p.purchasePrice || 0,
+      Stock: p.stock || 0
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+    XLSX.writeFile(wb, "Products_Export.xlsx");
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Products Report", 14, 15);
+    
+    autoTable(doc, {
+      startY: 20,
+      head: [["Name", "HSN", "GST", "Price", "Stock"]],
+      body: filtered.map(p => [
+        p.name,
+        p.hsn || "—",
+        `${p.gstRate || 0}%`,
+        formatINR(p.salePrice || 0),
+        (p.stock || 0).toString()
+      ]),
+    });
+    
+    doc.save("Products_Export.pdf");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -63,6 +100,12 @@ export default function ProductsPage() {
             className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-input flex items-center gap-2" onClick={exportExcel}>
+          <FileSpreadsheet className="h-4 w-4 text-green-600" /> <span className="hidden sm:inline">Excel</span>
+        </button>
+        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-input flex items-center gap-2" onClick={exportPDF}>
+          <FileText className="h-4 w-4 text-red-600" /> <span className="hidden sm:inline">PDF</span>
+        </button>
         <button
           onClick={() => router.push("/products/add")}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium"

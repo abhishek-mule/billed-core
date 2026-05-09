@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Upload, FileText, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { Camera, Upload, FileText, CheckCircle2, Loader2, Sparkles, Image as ImageIcon } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import Tesseract from "tesseract.js";
 
 type Step = "scan" | "extracting" | "verify" | "saved";
 
@@ -40,9 +41,53 @@ export default function PurchasesPage() {
     }
   };
 
-  const startScan = () => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     setStep("extracting");
-    setTimeout(() => setStep("verify"), 1400);
+    
+    try {
+      // Create local URL for Tesseract
+      const imageUrl = URL.createObjectURL(file);
+      
+      const result = await Tesseract.recognize(imageUrl, 'eng', {
+        logger: m => console.log(m)
+      });
+      
+      const text = result.data.text;
+      console.log("OCR Result:", text);
+      
+      // Simple Regex heuristics to extract data from raw OCR text
+      // In production, an LLM API like GPT-4o-mini would be much more reliable
+      let extractedAmount = "0";
+      let extractedSupplier = "Unknown Supplier";
+      
+      const amountMatch = text.match(/(?:total|amount|amt|grand total)[\s:]*([0-9,.]+)/i);
+      if (amountMatch) {
+        extractedAmount = amountMatch[1].replace(/,/g, '');
+      }
+
+      // Try to find supplier (usually first line or after certain keywords)
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length > 0) {
+        extractedSupplier = lines[0]; // first line is often the company name
+      }
+
+      setData(prev => ({
+        ...prev,
+        amount: extractedAmount,
+        supplier: extractedSupplier,
+        invoiceNo: `INV-${Math.floor(Math.random() * 10000)}`
+      }));
+
+      setStep("verify");
+      URL.revokeObjectURL(imageUrl);
+    } catch (error) {
+      console.error("OCR failed:", error);
+      alert("Failed to read invoice. Please enter details manually.");
+      setStep("verify");
+    }
   };
 
   const save = async () => {
@@ -90,26 +135,21 @@ export default function PurchasesPage() {
       <div className="text-sm text-muted-foreground">Scan a supplier invoice — we&apos;ll extract everything for you.</div>
 
       {step === "scan" && (
-        <div className="mt-5 space-y-4">
-          <button
-            onClick={startScan}
-            className="w-full rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-8 shadow-lg flex flex-col items-center gap-3 active:scale-[0.98] transition-transform"
-          >
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-white/10 backdrop-blur">
+        <div className="mt-5 space-y-4 relative">
+          <label className="w-full rounded-2xl border-2 border-dashed border-input bg-card p-8 flex flex-col items-center gap-3 hover:border-primary transition-colors cursor-pointer group">
+            <div className="grid h-16 w-16 place-items-center rounded-full bg-primary/10 text-primary group-hover:scale-110 transition-transform">
               <Camera className="h-8 w-8" />
             </div>
-            <div className="text-lg font-bold">Scan with camera</div>
-            <div className="text-xs opacity-80">Auto-extract supplier, items & tax</div>
-          </button>
-
-          <button
-            onClick={startScan}
-            className="w-full rounded-2xl border-2 border-dashed border-input bg-card p-8 flex flex-col items-center gap-3 hover:border-primary transition-colors"
-          >
-            <Upload className="h-7 w-7 text-muted-foreground" />
-            <div className="text-sm font-semibold">Upload PDF or image</div>
-            <div className="text-xs text-muted-foreground">Drag & drop or tap to select</div>
-          </button>
+            <div className="text-lg font-bold">Scan Invoice</div>
+            <div className="text-xs text-muted-foreground text-center">Take a photo or upload an image<br/>(Powered by Tesseract OCR)</div>
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment" 
+              className="hidden" 
+              onChange={handleImageUpload} 
+            />
+          </label>
         </div>
       )}
 

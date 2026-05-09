@@ -3,8 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, AlertTriangle, RefreshCw, Plus, Filter, Loader2 } from "lucide-react";
+import { Search, AlertTriangle, RefreshCw, Plus, Filter, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const tabs = ["All", "Synced", "Pending", "Failed"] as const;
 type Tab = typeof tabs[number];
@@ -52,6 +55,40 @@ export default function InvoicesPage() {
 
   const failedCount = invoices.filter((i) => i.syncStatus === "failed").length;
 
+  const exportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
+      ID: i.id,
+      Date: new Date(i.createdAt).toLocaleString(),
+      Customer: i.customerName,
+      Phone: i.customerPhone,
+      Amount: i.total,
+      Status: i.status,
+      SyncStatus: i.syncStatus
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Invoices");
+    XLSX.writeFile(wb, "Invoices_Export.xlsx");
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Invoices Report", 14, 15);
+    
+    autoTable(doc, {
+      startY: 20,
+      head: [["ID", "Date", "Customer", "Amount", "Status"]],
+      body: filtered.map(i => [
+        i.id.slice(0, 8),
+        new Date(i.createdAt).toLocaleDateString(),
+        i.customerName,
+        formatINR(i.total),
+        i.status
+      ]),
+    });
+    
+    doc.save("Invoices_Export.pdf");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -85,9 +122,12 @@ export default function InvoicesPage() {
             className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium">
-          <Filter className="h-4 w-4" /> Filters
-          </button>
+        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium border border-input flex items-center gap-2" onClick={exportExcel}>
+          <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel
+        </button>
+        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium border border-input flex items-center gap-2" onClick={exportPDF}>
+          <FileText className="h-4 w-4 text-red-600" /> PDF
+        </button>
       </div>
 
       <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit">

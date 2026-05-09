@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { initializeApp, getApps } from 'firebase/app'
-import { getAuth, signInWithPhoneNumber, ConfirmationResult, RecaptchaVerifier } from 'firebase/auth'
-
-let confirmationResult: ConfirmationResult | null = null
-
-declare global {
-  interface Window {
-    recaptchaVerifier: any;
-  }
-}
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  updateProfile
+} from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_FIREBASE_API_KEY : '',
@@ -22,6 +22,8 @@ const firebaseConfig = {
 }
 
 const isFirebaseConfigured = !!(firebaseConfig.apiKey && firebaseConfig.apiKey.length > 10)
+
+const DISPOSABLE_DOMAINS = ['mailinator.com', '10minutemail.com', 'temp-mail.org', 'guerrillamail.com', 'yopmail.com', 'throwawaymail.com'];
 
 export function useFirebaseAuth() {
   const [loading, setLoading] = useState(false)
@@ -42,9 +44,14 @@ export function useFirebaseAuth() {
     }
   }, [])
 
-  const sendOTP = async (phone: string): Promise<{ success: boolean; error?: string }> => {
+  const isDisposableEmail = (email: string) => {
+    const domain = email.split('@')[1]?.toLowerCase();
+    return DISPOSABLE_DOMAINS.includes(domain);
+  }
+
+  const signInWithGoogle = async (): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string }> => {
     if (!isFirebaseConfigured || !isReady) {
-      return { success: false, error: 'Firebase not configured - using demo mode' }
+      return { success: true, userId: `demo_${Date.now()}`, email: 'demo@example.com', name: 'Demo User' }
     }
 
     setLoading(true)
@@ -52,88 +59,115 @@ export function useFirebaseAuth() {
 
     try {
       const auth = getAuth()
-      
-      // Initialize recaptcha verifier if not already done
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-          callback: () => {
-            // reCAPTCHA solved
-          },
-          'expired-callback': () => {
-            // Response expired. Ask user to solve reCAPTCHA again.
-            window.recaptchaVerifier?.clear();
-            window.recaptchaVerifier = null;
-          }
-        })
-      }
-
-      // Format phone number
-      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`
-
-      confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier)
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
       
       setLoading(false)
-      return { success: true }
-
+      return { 
+        success: true, 
+        userId: result.user.uid,
+        email: result.user.email,
+        name: result.user.displayName
+      }
     } catch (err: any) {
       setLoading(false)
-      
-      // Handle specific errors
-      if (err.code === 'auth/invalid-phone-number') {
-        setError('Invalid phone number')
-      } else if (err.code === 'auth/quota-exceeded') {
-        setError('SMS quota exceeded')
-      } else {
-        setError(err.message || 'Failed to send OTP')
-      }
-      
+      setError(err.message || 'Failed to sign in with Google')
       return { success: false, error: err.message }
     }
   }
 
-  const verifyOTP = async (otp: string): Promise<{ success: boolean; userId?: string; error?: string }> => {
-    if (!isFirebaseConfigured || !confirmationResult) {
-      // Demo mode - accept any 6-digit OTP
-      if (otp === '123456' || otp.length === 6) {
-        return { success: true, userId: `demo_${Date.now()}` }
-      }
-      return { success: false, error: 'Invalid OTP' }
+  const signUpWithEmail = async (email: string, password: string, name: string): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string }> => {
+    if (!isFirebaseConfigured || !isReady) {
+      return { success: true, userId: `demo_${Date.now()}`, email, name }
+    }
+
+    if (isDisposableEmail(email)) {
+      return { success: false, error: 'Please use a permanent email address. Disposable emails are not allowed.' }
     }
 
     setLoading(true)
     setError(null)
 
     try {
-      const result = await confirmationResult.confirm(otp)
-      const userId = result.user.uid
+      const auth = getAuth()
+      const result = await createUserWithEmailAndPassword(auth, email, password)
       
-      // Clean up
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear()
-        window.recaptchaVerifier = null
-      }
-      confirmationResult = null
+      // Update their display name
+      await updateProfile(result.user, { displayName: name });
+      
+      // Send verification email
+      await sendEmailVerification(result.user);
       
       setLoading(false)
-      return { success: true, userId }
-
+      return { 
+        success: true, 
+        userId: result.user.uid,
+        email: result.user.email,
+        name
+      }
     } catch (err: any) {
       setLoading(false)
-      
-      if (err.code === 'auth/invalid-verification-code') {
-        setError('Invalid OTP')
+      if (err.code === 'auth/email-already-in-use') {
+        setError('This email is already in use. Try logging in instead.')
       } else {
-        setError(err.message || 'Verification failed')
+        setError(err.message || 'Failed to sign up')
       }
+      return { success: false, error: error || err.message }
+    }
+  }
+
+  const signInWithEmail = async (email: string, password: string): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string; needsVerification?: boolean }> => {
+    if (!isFirebaseConfigured || !isReady) {
+      return { success: true, userId: `demo_${Date.now()}`, email, name: 'Demo User' }
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const auth = getAuth()
+      const result = await signInWithEmailAndPassword(auth, email, password)
       
+      // Check if email is verified
+      if (!result.user.emailVerified) {
+        setLoading(false)
+        return { success: false, needsVerification: true, error: 'Please verify your email address before logging in.' }
+      }
+
+      setLoading(false)
+      return { 
+        success: true, 
+        userId: result.user.uid,
+        email: result.user.email,
+        name: result.user.displayName
+      }
+    } catch (err: any) {
+      setLoading(false)
+      if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password.')
+      } else {
+        setError(err.message || 'Failed to sign in')
+      }
+      return { success: false, error: error || err.message }
+    }
+  }
+
+  const resendVerification = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const auth = getAuth()
+      const result = await signInWithEmailAndPassword(auth, email, password)
+      await sendEmailVerification(result.user)
+      return { success: true }
+    } catch (err: any) {
       return { success: false, error: err.message }
     }
   }
 
   return {
-    sendOTP,
-    verifyOTP,
+    signInWithGoogle,
+    signUpWithEmail,
+    signInWithEmail,
+    resendVerification,
     loading,
     error,
     isConfigured: isFirebaseConfigured && isReady,
