@@ -42,14 +42,15 @@ const sessions = new Map<string, { userId: string; tenantId: string | null; isPa
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, uid, name } = body
+    const { email, uid, name, phone } = body
 
-    if (!email || !uid) {
+    // Accept either email OR uid (phone auth uses uid only)
+    if (!email && !uid) {
       return NextResponse.json({ error: 'Missing credentials' }, { status: 400 })
     }
 
-    // Create user session based on their UID from Google
-    const userId = uid
+    // Create user session
+    const userId = uid || `phone_${phone}`
     const refreshToken = crypto.randomBytes(32).toString('hex')
     
     // Check if user has tenant (onboarding done)
