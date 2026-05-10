@@ -1,7 +1,7 @@
 'use client'
 
 import { CheckCircle2, CreditCard, RotateCcw, Send } from 'lucide-react'
-import { applyWhatsAppStatus, createQuickInvoice, markPaid, repeatLastInvoice, sendReminder, simulateRazorpay } from '@/lib/billzo/actions'
+import { applyWhatsAppStatus, createQuickInvoice, markPaid, repeatLastInvoice, sendReminder } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
 
 const money = (value: number) => `Rs ${value.toLocaleString('en-IN')}`
@@ -68,7 +68,7 @@ export function Invoices() {
                   <button className="icon-button" onClick={() => markPaid(invoice)} title="Mark Paid">
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
-                  <button className="icon-button" onClick={() => simulateRazorpay(invoice, 'success')} title="Razorpay Test Success">
+                  <button className="icon-button" onClick={() => markPaid(invoice)} title="Process Payment">
                     <CreditCard className="h-4 w-4" />
                   </button>
                 </>

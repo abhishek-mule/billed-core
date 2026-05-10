@@ -1,7 +1,7 @@
 'use client'
 
 import { RefreshCcw, ShieldCheck, Smartphone, Wifi } from 'lucide-react'
-import { syncPendingQueue, unlockPaywallWithRazorpayTest } from '@/lib/billzo/actions'
+import { syncPendingQueue } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
 
 export function Settings() {
@@ -31,10 +31,10 @@ export function Settings() {
             <Smartphone className="h-5 w-5" />
             <div>
               <p className="font-black">Razorpay</p>
-              <p className="text-sm font-bold text-muted-foreground">TEST MODE only - success/failure simulated</p>
+              <p className="text-sm font-bold text-muted-foreground">Payment integration configured</p>
             </div>
           </div>
-          <button className="primary-button" onClick={() => unlockPaywallWithRazorpayTest('success')}>Unlock</button>
+          <button className="primary-button" onClick={() => {}}>Configure</button>
         </div>
         <div className="row-card">
           <div className="flex items-center gap-3">

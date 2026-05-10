@@ -1,5 +1,4 @@
 import Dexie, { type Table } from 'dexie'
-import { getMockSession } from './tenant'
 import type {
   Activity,
   Customer,
@@ -16,8 +15,18 @@ import type {
   WhatsAppEvent,
 } from './types'
 
+export interface User {
+  id: string
+  phone: string
+  email?: string
+  name?: string
+  createdAt: string
+  updatedAt: string
+}
+
 class BillzoDB extends Dexie {
   tenants!: Table<Tenant, string>
+  users!: Table<User, string>
   customers!: Table<Customer, string>
   products!: Table<Product, string>
   invoices!: Table<Invoice, string>
@@ -32,9 +41,10 @@ class BillzoDB extends Dexie {
   deviceTokens!: Table<DeviceToken, string>
 
   constructor() {
-    super('billzo_offline_first_v2')
-    this.version(3).stores({
+    super('billzo_production_v1')
+    this.version(1).stores({
       tenants: 'id, ownerUserId, updatedAt',
+      users: 'id, phone, email, createdAt',
       customers: 'id, tenantId, name, phone, lastUsedAt, updatedAt',
       products: 'id, tenantId, barcode, name, stock, updatedAt',
       invoices: 'id, tenantId, status, customerName, dueAt, nextRecoveryAt, lastWhatsAppStatus, updatedAt, syncStatus',
@@ -63,199 +73,87 @@ export function uuid() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-const iso = (date = new Date()) => date.toISOString()
-
 export async function seedDemoData() {
   const database = db()
-  const session = getMockSession()
   const count = await database.tenants.count()
   if (count > 0) return
+
+  const tenantId = localStorage.getItem('tenantId')
+  const businessName = localStorage.getItem('tenantName')
+
+  if (!tenantId) return
 
   const current = new Date()
   const overdueDate = new Date(current)
   overdueDate.setDate(current.getDate() - 2)
 
   const tenant: Tenant = {
-    id: session.tenantId,
-    name: session.businessName,
-    ownerUserId: session.userId,
-    plan: 'test',
-    paywallUnlocked: true,
+    id: tenantId,
+    name: businessName || 'My Shop',
+    ownerUserId: localStorage.getItem('userId') || '',
+    plan: 'starter',
+    paywallUnlocked: false,
     invoiceCount: 0,
     reminderCount: 0,
-    createdAt: iso(current),
-    updatedAt: iso(current),
+    createdAt: current.toISOString(),
+    updatedAt: current.toISOString(),
   }
 
   const customers: Customer[] = [
     {
       id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Ramesh',
+      tenantId,
+      name: 'Customer A',
       phone: '9876543210',
       defaultTone: 'hinglish',
-      lastUsedAt: iso(current),
-      invoiceCount: 8,
-      createdAt: iso(current),
-      updatedAt: iso(current),
+      lastUsedAt: current.toISOString(),
+      invoiceCount: 0,
+      createdAt: current.toISOString(),
+      updatedAt: current.toISOString(),
     },
     {
       id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Kirana A1',
+      tenantId,
+      name: 'Customer B',
       phone: '9810012300',
       defaultTone: 'hindi',
-      lastUsedAt: iso(current),
-      invoiceCount: 5,
-      createdAt: iso(current),
-      updatedAt: iso(current),
-    },
-    {
-      id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Sita Traders',
-      phone: '9900011122',
-      gstin: '27ABCDE1234F1Z5',
-      defaultTone: 'english',
-      lastUsedAt: iso(overdueDate),
-      invoiceCount: 3,
-      createdAt: iso(overdueDate),
-      updatedAt: iso(overdueDate),
+      lastUsedAt: current.toISOString(),
+      invoiceCount: 0,
+      createdAt: current.toISOString(),
+      updatedAt: current.toISOString(),
     },
   ]
 
   const products: Product[] = [
     {
       id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Aashirvaad Atta 5kg',
-      barcode: '8901725181222',
-      hsn: '1101',
-      gstRate: 5,
-      stock: 4,
-      lowStockAt: 6,
-      salePrice: 265,
-      purchasePrice: 235,
-      createdAt: iso(current),
-      updatedAt: iso(current),
-    },
-    {
-      id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Amul Taaza 1L',
-      barcode: '8901262010129',
-      hsn: '0401',
-      gstRate: 0,
-      stock: 18,
-      lowStockAt: 10,
-      salePrice: 68,
-      purchasePrice: 62,
-      createdAt: iso(current),
-      updatedAt: iso(current),
-    },
-    {
-      id: uuid(),
-      tenantId: session.tenantId,
-      name: 'Surf Excel 1kg',
-      barcode: '8901030875126',
-      hsn: '3402',
+      tenantId,
+      name: 'Sample Product 1',
+      barcode: '1234567890123',
+      hsn: '1234',
       gstRate: 18,
-      stock: 2,
+      stock: 10,
       lowStockAt: 5,
-      salePrice: 239,
-      purchasePrice: 210,
-      createdAt: iso(current),
-      updatedAt: iso(current),
-    },
-  ]
-
-  const firstInvoiceId = uuid()
-  const secondInvoiceId = uuid()
-  const invoices: Invoice[] = [
-    {
-      id: firstInvoiceId,
-      tenantId: session.tenantId,
-      customerId: customers[0].id,
-      customerName: customers[0].name,
-      customerPhone: customers[0].phone,
-      total: 530,
-      paidAmount: 0,
-      status: 'overdue',
-      dueAt: iso(overdueDate),
-      createdAt: iso(overdueDate),
-      updatedAt: iso(current),
-      syncStatus: 'pending',
-      recoveryStage: 't24_nudge',
-      nextRecoveryAt: iso(current),
-      lastWhatsAppStatus: 'read',
-      pdfUrl: `/invoice/${firstInvoiceId}`,
-      version: 1,
-    },
-    {
-      id: secondInvoiceId,
-      tenantId: session.tenantId,
-      customerId: customers[1].id,
-      customerName: customers[1].name,
-      customerPhone: customers[1].phone,
-      total: 717,
-      paidAmount: 0,
-      status: 'unpaid',
-      dueAt: iso(current),
-      createdAt: iso(current),
-      updatedAt: iso(current),
-      syncStatus: 'pending',
-      recoveryStage: 't0_soft',
-      nextRecoveryAt: iso(current),
-      lastWhatsAppStatus: 'queued',
-      pdfUrl: `/invoice/${secondInvoiceId}`,
-      version: 1,
-    },
-  ]
-
-  const invoiceItems: InvoiceItem[] = [
-    {
-      id: uuid(),
-      tenantId: session.tenantId,
-      invoiceId: firstInvoiceId,
-      productId: products[0].id,
-      name: products[0].name,
-      qty: 2,
-      price: 265,
-      gstRate: 5,
-      lineTotal: 530,
-      createdAt: iso(overdueDate),
-      updatedAt: iso(current),
+      salePrice: 100,
+      purchasePrice: 80,
+      createdAt: current.toISOString(),
+      updatedAt: current.toISOString(),
     },
     {
       id: uuid(),
-      tenantId: session.tenantId,
-      invoiceId: secondInvoiceId,
-      productId: products[2].id,
-      name: products[2].name,
-      qty: 3,
-      price: 239,
-      gstRate: 18,
-      lineTotal: 717,
-      createdAt: iso(current),
-      updatedAt: iso(current),
+      tenantId,
+      name: 'Sample Product 2',
+      barcode: '1234567890124',
+      hsn: '1234',
+      gstRate: 12,
+      stock: 5,
+      lowStockAt: 8,
+      salePrice: 200,
+      purchasePrice: 160,
+      createdAt: current.toISOString(),
+      updatedAt: current.toISOString(),
     },
   ]
-
-  const readAttempt: RecoveryAttempt = {
-    id: uuid(),
-    tenantId: session.tenantId,
-    invoiceId: firstInvoiceId,
-    stage: 't0_soft',
-    tone: 'soft',
-    message: 'Namaste Ramesh, Rs 530 pending. Invoice link: /invoice/demo',
-    pdfUrl: `/invoice/${firstInvoiceId}`,
-    scheduledAt: iso(overdueDate),
-    sentAt: iso(overdueDate),
-    readAt: iso(current),
-    status: 'read',
-    createdAt: iso(overdueDate),
-    updatedAt: iso(current),
-  }
 
   await database.transaction(
     'rw',
@@ -263,37 +161,24 @@ export async function seedDemoData() {
       database.tenants,
       database.customers,
       database.products,
-      database.invoices,
-      database.invoiceItems,
-      database.recoveryAttempts,
-      database.whatsappEvents,
       database.activity,
     ],
     async () => {
       await database.tenants.add(tenant)
       await database.customers.bulkAdd(customers)
       await database.products.bulkAdd(products)
-      await database.invoices.bulkAdd(invoices)
-      await database.invoiceItems.bulkAdd(invoiceItems)
-      await database.recoveryAttempts.add(readAttempt)
-      await database.whatsappEvents.add({
+      await database.activity.add({
         id: uuid(),
-        tenantId: session.tenantId,
-        invoiceId: firstInvoiceId,
-        recoveryAttemptId: readAttempt.id,
-        providerMessageId: 'wamid.demo.read',
-        status: 'read',
-        occurredAt: iso(current),
-        createdAt: iso(current),
+        tenantId,
+        label: 'Welcome to BillZo! Start by creating your first invoice.',
+        createdAt: current.toISOString(),
       })
-      await database.activity.bulkAdd([
-        { id: uuid(), tenantId: session.tenantId, label: 'Demo tenant auto-login ready', createdAt: iso(current) },
-        { id: uuid(), tenantId: session.tenantId, label: '2 unpaid invoices need recovery', amount: 1247, cta: 'Send reminders', createdAt: iso(current) },
-      ])
     }
   )
 }
 
 export function notifyChanged() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('billzo:changed'))
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('billzo:changed'))
+  }
 }

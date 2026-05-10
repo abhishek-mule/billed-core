@@ -9,12 +9,15 @@ export type Tenant = {
   name: string
   ownerUserId: string
   phone?: string
-  plan: 'test' | 'starter' | 'growth' | 'pro'
+  upiId?: string
+  gstin?: string
+  plan: 'starter' | 'growth' | 'pro'
   paywallUnlocked: boolean
   invoiceCount: number
   reminderCount: number
   subscriptionId?: string
   subscriptionStatus?: string
+  cancelledAt?: string
   createdAt: string
   updatedAt: string
 }

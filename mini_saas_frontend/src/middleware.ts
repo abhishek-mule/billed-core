@@ -1,9 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/billzo/db'
+import { getActiveSession } from '@/lib/billzo/tenant'
 
-export function middleware() {
+export function middleware(request: NextRequest) {
   const response = NextResponse.next()
-  response.headers.set('x-tenant-id', 'tenant_billzo_demo_india')
-  response.headers.set('x-user-id', 'merchant_demo_owner')
+
+  const session = getActiveSession()
+
+  response.headers.set('x-tenant-id', session.tenantId)
+  response.headers.set('x-user-id', session.userId)
+
   return response
 }
 
