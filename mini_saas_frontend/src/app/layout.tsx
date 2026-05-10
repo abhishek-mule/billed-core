@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="apple-touch-icon" href="/logo-icon.svg" />
+        <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body>
         <ServiceWorkerRegister />

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  Zap, Bell, Search, Home, ScanLine, Receipt,
+  Bell, Search, Home, ScanLine, Receipt,
   ShoppingBag, Users, Package, BarChart3, Settings,
   MoreHorizontal, Menu,
 } from 'lucide-react'
@@ -45,9 +45,7 @@ function Sidebar({
     <aside className={cn('sidebar', collapsed && 'sidebar--collapsed')}>
       <div className="sidebar-header">
         <Link href="/dashboard" className="sidebar-logo" aria-label="BillZo">
-          <span className="logo-mark">
-            <Zap size={13} strokeWidth={2.5} />
-          </span>
+          <img src="/logo.png" alt="BillZo" className="logo-img" />
           <span className="logo-text">BillZo</span>
         </Link>
 
@@ -182,7 +180,7 @@ function MobileDrawer({
       >
         <div className="mobile-drawer-header">
           <Link href="/dashboard" className="sidebar-logo" onClick={onClose}>
-            <span className="logo-mark"><Zap size={13} strokeWidth={2.5} /></span>
+            <img src="/logo.png" alt="BillZo" className="logo-img" />
             <span className="logo-text">BillZo</span>
           </Link>
           <button className="icon-btn" onClick={onClose} aria-label="Close menu">
@@ -362,9 +360,8 @@ body {
   font-size: 15px; font-weight: 600; letter-spacing: -0.02em;
   white-space: nowrap; flex-shrink: 0; min-width: 0;
 }
-.logo-mark {
-  width: 26px; height: 26px; background: var(--accent); color: var(--afg);
-  border-radius: 6px; display: grid; place-items: center; flex-shrink: 0;
+.logo-img {
+  width: 26px; height: 26px; object-fit: contain; flex-shrink: 0;
 }
 .logo-text {
   overflow: hidden; max-width: 120px;
