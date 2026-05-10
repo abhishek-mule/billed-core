@@ -93,7 +93,12 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({
+          email: userData.email,
+          uid: userData.userId,
+          name: userData.name,
+          phone: userData.phone,
+        }),
       });
 
       const data = await response.json();
@@ -152,17 +157,23 @@ export default function LoginPage() {
 
     try {
       const result = await signInWithGoogle();
+      console.log('Google sign-in result:', result);
 
-      if (!result.success || !result.email || !result.userId) {
-        throw new Error(result.error || "Failed to sign in");
+      if (!result.success) {
+        throw new Error(result.error || "Failed to sign in with Google");
+      }
+
+      if (!result.userId) {
+        throw new Error("No user ID returned from Google sign-in");
       }
 
       await handleBackendAuth({
-        email: result.email,
+        email: result.email || 'google_user@example.com',
         userId: result.userId,
         name: result.name || undefined,
       });
     } catch (err: any) {
+      console.error('Google sign-in error:', err);
       setError(err.message || "Something went wrong.");
     }
   };
