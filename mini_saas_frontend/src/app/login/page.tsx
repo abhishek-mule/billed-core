@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, isConfigured, loading } = useFirebaseAuth();
 
@@ -154,25 +155,30 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setError("");
     setSuccessMsg("");
+    setGoogleLoading(true);
 
     try {
+      console.log('Starting Google sign-in...');
       const result = await signInWithGoogle();
       console.log('Google sign-in result:', result);
+
+      setGoogleLoading(false);
 
       if (!result.success) {
         throw new Error(result.error || "Failed to sign in with Google");
       }
 
       if (!result.userId) {
-        throw new Error("No user ID returned from Google sign-in");
+        throw new Error("No user ID returned");
       }
 
       await handleBackendAuth({
-        email: result.email || 'google_user@example.com',
+        email: result.email || 'demo@example.com',
         userId: result.userId,
         name: result.name || undefined,
       });
     } catch (err: any) {
+      setGoogleLoading(false);
       console.error('Google sign-in error:', err);
       setError(err.message || "Something went wrong.");
     }
@@ -368,10 +374,10 @@ export default function LoginPage() {
                 <button
                   onClick={handleGoogleSignIn}
                   type="button"
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium"
+                  disabled={googleLoading}
+                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
                 >
-                  {loading ? (
+                  {googleLoading ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
                     <>
