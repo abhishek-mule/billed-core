@@ -45,7 +45,7 @@ function Sidebar({
     <aside className={cn('sidebar', collapsed && 'sidebar--collapsed')}>
       <div className="sidebar-header">
         <Link href="/dashboard" className="sidebar-logo" aria-label="BillZo">
-          <img src="/logo.png" alt="BillZo" className="logo-img" />
+          <img src="/logo_new.png" alt="BillZo" className="logo-img" />
           <span className="logo-text">BillZo</span>
         </Link>
 
@@ -180,7 +180,7 @@ function MobileDrawer({
       >
         <div className="mobile-drawer-header">
           <Link href="/dashboard" className="sidebar-logo" onClick={onClose}>
-            <img src="/logo.png" alt="BillZo" className="logo-img" />
+            <img src="/logo_new.png" alt="BillZo" className="logo-img" />
             <span className="logo-text">BillZo</span>
           </Link>
           <button className="icon-btn" onClick={onClose} aria-label="Close menu">
