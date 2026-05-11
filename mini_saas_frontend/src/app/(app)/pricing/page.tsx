@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Check, Sparkles } from "lucide-react"
-import Script from "next/script"
 import type { PlanType } from "@/lib/billzo/plan-limits"
 
 interface PlanInfo {
@@ -23,6 +22,21 @@ interface PricingState {
   razorpayLoaded: boolean
 }
 
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => {
+      on: (event: string, handler: (response: unknown) => void) => void
+      open: () => void
+    }
+  }
+}
+
+const PLAN_FEATURES = {
+  starter: ['3 invoices', '3 reminders', 'Basic dashboard'],
+  pro: ['Unlimited invoices', 'Unlimited reminders', 'Auto recovery', 'Priority support'],
+  growth: ['Everything in Pro', 'Multi-user', 'Analytics dashboard', 'Custom branding'],
+} as const
+
 export default function PricingPage() {
   const router = useRouter()
   const [state, setState] = useState<PricingState>({
@@ -36,7 +50,32 @@ export default function PricingPage() {
 
   useEffect(() => {
     fetchPlans()
+    loadRazorpayScript()
   }, [])
+
+  const loadRazorpayScript = () => {
+    if (document.querySelector('script[src*="razorpay"]')) {
+      const checkLoaded = setInterval(() => {
+        if (typeof window !== 'undefined' && (window as any).Razorpay) {
+          setState(prev => ({ ...prev, razorpayLoaded: true }))
+          clearInterval(checkLoaded)
+        }
+      }, 500)
+      return () => clearInterval(checkLoaded)
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.onload = () => {
+      console.log('Razorpay script loaded')
+      setState(prev => ({ ...prev, razorpayLoaded: true }))
+    }
+    script.onerror = () => {
+      console.warn('Razorpay script failed to load - will use demo mode')
+    }
+    document.body.appendChild(script)
+  }
 
   const fetchPlans = async () => {
     try {
@@ -44,7 +83,15 @@ export default function PricingPage() {
       if (!response.ok) throw new Error("Failed to load plans")
 
       const data = await response.json()
-      setState((prev) => ({ ...prev, plans: data.plans || [], loading: false }))
+      setState((prev) => ({
+        ...prev,
+        plans: [
+          { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: PLAN_FEATURES.starter },
+          { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: PLAN_FEATURES.pro },
+          { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: PLAN_FEATURES.growth },
+        ],
+        loading: false,
+      }))
     } catch (err) {
       setState((prev) => ({
         ...prev,
@@ -57,11 +104,6 @@ export default function PricingPage() {
   const handleSelectPlan = async (planId: string) => {
     if (planId === "starter") {
       router.push("/dashboard")
-      return
-    }
-
-    if (!state.razorpayLoaded && !(window as any).Razorpay) {
-      setState(prev => ({ ...prev, error: "Payment gateway is still loading. Please try again in a moment." }))
       return
     }
 
@@ -82,34 +124,50 @@ export default function PricingPage() {
       })
 
       const data = await response.json()
+      console.log('Subscription API response:', data)
 
-      if (data.mock) {
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      if (data.mock || data.subscriptionId?.startsWith('sub_demo_')) {
         setTimeout(() => {
           localStorage.setItem("isPaid", "true")
+          if (tenantId) {
+            import("@/lib/billzo/db").then(({ db }) => {
+              db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
+            })
+          }
           router.push("/dashboard")
         }, 2000)
         return
       }
 
-      if (data.subscriptionId && (window as any).Razorpay) {
-        const rzp = new (window as any).Razorpay({
-          key: data.keyId,
-          subscription_id: data.subscriptionId,
-          name: "BillZo",
-          description: `BillZo ${planId} Plan`,
-          handler: async (response: { razorpay_subscription_id: string }) => {
-            console.log("Payment successful:", response)
-            localStorage.setItem("isPaid", "true")
-            router.push("/dashboard")
-          },
-          prefill: {
-            name: tenantName || "Customer",
-          },
-          theme: {
-            color: "#146c4b",
-          },
-        })
+      const rzpOptions: Record<string, unknown> = {
+        key: data.keyId,
+        subscription_id: data.subscriptionId,
+        name: "BillZo",
+        description: `BillZo ${planId} Plan`,
+        handler: async (response: { razorpay_subscription_id: string }) => {
+          console.log("Payment successful:", response)
+          localStorage.setItem("isPaid", "true")
+          if (tenantId) {
+            import("@/lib/billzo/db").then(({ db }) => {
+              db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
+            })
+          }
+          router.push("/dashboard")
+        },
+        prefill: {
+          name: tenantName || "Customer",
+        },
+        theme: {
+          color: "#146c4b",
+        },
+      }
 
+      if (typeof window !== 'undefined' && (window as any).Razorpay) {
+        const rzp = new (window as any).Razorpay(rzpOptions)
         rzp.on("payment.failed", (response: { error: { description: string } }) => {
           console.error("Payment failed:", response.error.description)
           setState((prev) => ({
@@ -118,16 +176,12 @@ export default function PricingPage() {
             processing: false,
           }))
         })
-
         rzp.open()
       } else {
-        setState((prev) => ({
-          ...prev,
-          error: "Payment gateway initialization failed. Please refresh the page.",
-          processing: false,
-        }))
+        throw new Error("Razorpay not loaded. Please refresh and try again.")
       }
     } catch (err) {
+      console.error('Payment error:', err)
       setState((prev) => ({
         ...prev,
         error: err instanceof Error ? err.message : "Failed to start payment",
@@ -165,10 +219,6 @@ export default function PricingPage() {
 
   return (
     <div className="container py-8">
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        onLoad={() => setState(prev => ({ ...prev, razorpayLoaded: true }))}
-      />
       <div className="mx-auto max-w-4xl text-center">
         <h1 className="text-3xl font-bold">Choose Your Plan</h1>
         <p className="mt-2 text-muted-foreground">
@@ -201,7 +251,7 @@ export default function PricingPage() {
 
       <div className="mt-8 text-center">
         <p className="text-sm text-muted-foreground">
-          All plans include 3 invoices and 5 reminders free to try.
+          All plans include 3 invoices and 3 reminders free to try.
           <br />
           Upgrade anytime for unlimited access.
         </p>
