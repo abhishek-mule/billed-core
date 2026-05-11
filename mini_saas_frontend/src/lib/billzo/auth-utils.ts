@@ -1,28 +1,6 @@
-import type { PlanType } from './plan-limits'
-
-export interface PhoneOTPResult {
-  success: boolean
-  error?: string
-}
-
-export interface VerifyOTPResult {
-  success: boolean
-  userId?: string
-  phone?: string
-  error?: string
-}
-
-export interface SessionUser {
-  userId: string
-  phone: string
-  createdAt: string
-}
+'use client'
 
 const OTP_TTL_MS = 5 * 60 * 1000
-
-export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
 
 export function hashOTP(otp: string, phone: string): string {
   const crypto = require('crypto')
@@ -45,10 +23,6 @@ function timingSafeEqual(a: string, b: string): boolean {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i)
   }
   return result === 0
-}
-
-export function isOTPExpired(createdAt: number): boolean {
-  return Date.now() - createdAt > OTP_TTL_MS
 }
 
 export function validatePhone(phone: string): { valid: boolean; error?: string } {
@@ -75,43 +49,6 @@ export function formatPhone(phone: string): string {
   return `91${cleaned}`
 }
 
-export function maskPhone(phone: string): string {
-  const formatted = formatPhone(phone)
-  return `${formatted.slice(0, 3)}******${formatted.slice(-4)}`
-}
-
-export interface UsageCheck {
-  allowed: boolean
-  current: number
-  limit: number
-  remaining: number
-  plan: PlanType
-}
-
-export interface OnboardingState {
-  state: 'NO_TENANT' | 'TENANT_NO_PLAN' | 'ACTIVE'
-  tenant?: {
-    id: string
-    name: string
-    plan: PlanType
-    phone: string
-  }
-  usage: {
-    invoices: number
-    reminders: number
-  }
-  limits: {
-    invoices: number
-    reminders: number
-    autoRecovery: boolean
-  }
-  paywall?: {
-    blocked: boolean
-    type?: 'invoice' | 'reminder'
-    upgradeNeeded: boolean
-  }
-}
-
 export interface TenantCreateInput {
   shopName: string
   phone: string
@@ -119,8 +56,15 @@ export interface TenantCreateInput {
   gstin?: string
 }
 
-export interface TenantCreateResult {
-  success: boolean
-  tenantId?: string
-  error?: string
+export function isOTPExpired(createdAt: number): boolean {
+  return Date.now() - createdAt > OTP_TTL_MS
+}
+
+export function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+export function maskPhone(phone: string): string {
+  const formatted = formatPhone(phone)
+  return `${formatted.slice(0, 3)}******${formatted.slice(-4)}`
 }

@@ -86,9 +86,9 @@ export default function PricingPage() {
       setState((prev) => ({
         ...prev,
         plans: [
-          { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: PLAN_FEATURES.starter },
-          { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: PLAN_FEATURES.pro },
-          { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: PLAN_FEATURES.growth },
+          { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: [...PLAN_FEATURES.starter] },
+          { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: [...PLAN_FEATURES.pro] },
+          { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: [...PLAN_FEATURES.growth] },
         ],
         loading: false,
       }))

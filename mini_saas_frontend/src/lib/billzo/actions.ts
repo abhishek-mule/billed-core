@@ -3,6 +3,7 @@ import { createRecoveryAttempt, nextRecoveryAt, nextRecoveryStage } from './reco
 import { scheduleBackgroundSync, syncPendingQueue } from './sync'
 import { getActiveSession, getTenantId } from './tenant'
 import { isPaywallBlocked, type PlanType } from './plan-limits'
+import type { RecoveryAttempt } from './types'
 import type {
   Activity,
   BillzoSnapshot,
