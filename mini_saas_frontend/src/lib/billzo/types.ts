@@ -36,6 +36,7 @@ export type Customer = {
   name: string
   phone: string
   gstin?: string
+  preferredLanguage?: 'hindi' | 'hinglish' | 'english'
   defaultTone: 'hindi' | 'english' | 'hinglish'
   lastUsedAt: string
   invoiceCount: number

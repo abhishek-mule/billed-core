@@ -30,6 +30,60 @@ export function buildRecoveryMessage(invoice: Invoice, stage: RecoveryStage) {
   return lines[stage]
 }
 
+const stageToTone: Record<RecoveryStage, 'soft' | 'nudge' | 'strong' | 'warning'> = {
+  t0_soft: 'soft',
+  t24_nudge: 'nudge',
+  t72_strong: 'strong',
+  t5_warning: 'warning',
+}
+
+export async function createRecoveryAttemptWithAI(
+  invoice: Invoice,
+  stage = invoice.recoveryStage,
+  options?: {
+    language?: 'hindi' | 'hinglish' | 'english'
+    pastPayments?: { amount: number; paidAt: string }[]
+    lastMessageRead?: boolean
+    businessName?: string
+  }
+): Promise<RecoveryAttempt> {
+  const current = new Date().toISOString()
+  const tone = stageToTone[stage]
+
+  const { generateSmartMessage } = await import('./gemini')
+
+  const daysOverdue = Math.max(0, Math.floor(
+    (new Date().getTime() - new Date(invoice.dueAt).getTime()) / (1000 * 60 * 60 * 24)
+  ))
+
+  const generated = await generateSmartMessage({
+    customerName: invoice.customerName,
+    amount: invoice.total - invoice.paidAmount,
+    invoiceDate: invoice.createdAt,
+    daysOverdue,
+    stage: tone,
+    language: options?.language || 'hinglish',
+    pastPayments: options?.pastPayments,
+    lastMessageRead: options?.lastMessageRead,
+    businessName: options?.businessName || 'BillZo',
+    invoiceId: invoice.id,
+  })
+
+  return {
+    id: uuid(),
+    tenantId: invoice.tenantId,
+    invoiceId: invoice.id,
+    stage,
+    tone,
+    message: generated.message,
+    pdfUrl: invoice.pdfUrl,
+    scheduledAt: current,
+    status: 'queued',
+    createdAt: current,
+    updatedAt: current,
+  }
+}
+
 export function createRecoveryAttempt(invoice: Invoice, stage = invoice.recoveryStage): RecoveryAttempt {
   const current = new Date().toISOString()
   const toneByStage: Record<RecoveryStage, RecoveryAttempt['tone']> = {
