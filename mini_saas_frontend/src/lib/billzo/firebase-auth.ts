@@ -84,11 +84,9 @@ export function useFirebaseAuth() {
     try {
       const auth = getAuth()
       
-      // Set persistence to browser
-      await setPersistence(auth, browserLocalPersistence)
+      await setPersistence(auth, browserLocalPersistence).catch(() => {})
       
       const provider = new GoogleAuthProvider()
-      // Add scopes if needed
       provider.addScope('email')
       provider.addScope('profile')
       
