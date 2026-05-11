@@ -64,8 +64,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Onboarding check error:', error)
     return NextResponse.json(
-      { error: 'Failed to check onboarding status' },
-      { status: 500 }
+      { state: 'NO_TENANT', error: 'Server error - redirecting to onboarding', usage: { invoices: 0, reminders: 0 }, limits: getLimits('starter'), paywall: { blocked: false, upgradeNeeded: false } },
+      { status: 200 }
     )
   }
 }
