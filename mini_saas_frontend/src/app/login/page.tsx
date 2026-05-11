@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
 
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, isConfigured, loading } = useFirebaseAuth();
 
@@ -90,6 +91,8 @@ export default function LoginPage() {
   };
 
   const handleBackendAuth = async (userData: { email?: string; userId: string; name?: string; phone?: string }) => {
+    setAuthLoading(true);
+    setError("");
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -103,18 +106,18 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
+      console.log('/api/auth/login response:', response.status, data);
+
       if (!response.ok) {
         throw new Error(data.error || "Login failed via API");
       }
 
       const uid = userData.userId;
 
-      sessionStorage.setItem("accessToken", data.accessToken);
-      sessionStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("userId", uid);
-      localStorage.setItem("isPaid", "false");
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("userId", uid);
+      localStorage.setItem("isPaid", data.isPaid ? "true" : "false");
 
       const existingTenant = await db().tenants
         .filter(t => t.ownerUserId === uid || (t as any).email === userData.email)
@@ -123,13 +126,14 @@ export default function LoginPage() {
       if (existingTenant) {
         localStorage.setItem("tenantId", existingTenant.id);
         localStorage.setItem("tenantName", existingTenant.name);
-
-        import("@/lib/billzo/notifications").then(m => m.registerDevice(existingTenant.id));
-        router.push("/onboarding");
-      } else {
-        router.push("/onboarding");
       }
+
+      console.log('Navigating to /onboarding...');
+      setAuthLoading(false);
+      router.push("/onboarding");
     } catch (err: any) {
+      setAuthLoading(false);
+      console.error('handleBackendAuth error:', err);
       setError(err.message || "Something went wrong.");
     }
   };
@@ -442,15 +446,15 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button
-              onClick={handleGoogleSignIn}
-              type="button"
-              disabled={googleLoading}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
-            >
-              {googleLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
+<button
+                  onClick={handleGoogleSignIn}
+                  type="button"
+                  disabled={googleLoading || authLoading}
+                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
+                >
+                  {googleLoading || authLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
                 <>
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
