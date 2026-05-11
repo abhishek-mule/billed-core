@@ -231,7 +231,7 @@ export async function analyzeCustomerPaymentPattern(
     return { recommendedTone: 'nudge' as const, insight: 'Not enough data for AI analysis' }
   }
 
-  const prompt = `Analyze this customer's payment pattern and give a one-line insight:\n`
+  let prompt = `Analyze this customer's payment pattern and give a one-line insight:\n`
   const totalAmount = payments.reduce((s, p) => s + p.amount, 0)
   const avgAmount = Math.round(totalAmount / payments.length)
   const daySpan = payments.length > 1
