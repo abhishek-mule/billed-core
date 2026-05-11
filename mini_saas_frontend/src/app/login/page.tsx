@@ -130,7 +130,8 @@ export default function LoginPage() {
 
       console.log('Navigating to /onboarding...');
       setAuthLoading(false);
-      router.push("/onboarding");
+      window.location.href = "/onboarding";
+      return;
     } catch (err: any) {
       setAuthLoading(false);
       console.error('handleBackendAuth error:', err);
