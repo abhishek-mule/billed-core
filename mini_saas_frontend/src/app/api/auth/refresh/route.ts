@@ -1,28 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { sessionStore } from '@/lib/billzo/auth-store'
 
-// Simple token generation (matching login)
 function generateToken(payload: object, type: 'access' | 'refresh'): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
-  
+  const secret = process.env.JWT_SECRET || 'development-secret-change-in-production'
   const expTime = type === 'access' 
-    ? Date.now() + 15 * 60 * 1000  // 15 min
-    : Date.now() + 30 * 24 * 60 * 60 * 1000  // 30 days
+    ? Math.floor(Date.now() / 1000) + 3600
+    : Math.floor(Date.now() / 1000) + 7 * 24 * 3600
   
-  const data = Buffer.from(JSON.stringify({ 
+  const data = { 
     ...payload, 
-    iat: Date.now(),
+    iat: Math.floor(Date.now() / 1000),
     exp: expTime,
     type
-  })).toString('base64url')
+  }
   
-  const signature = crypto.createHash('sha256').update(header + '.' + data).digest('base64url')
+  const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(base64Payload)
+    .digest('base64url')
   
-  return `${header}.${data}.${signature}`
+  return `${base64Payload}.${signature}`
 }
-
-// Sessions store (shared with login - in production use DB)
-const sessions = new Map<string, { userId: string; tenantId: string | null; isPaid: boolean; refreshToken: string }>()
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,36 +33,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Refresh token required' }, { status: 400 })
     }
 
-    // Find session by refresh token
-    let session = sessions.get(refreshToken)
-    
-    if (!session) {
-      // Try to find by iterating (demo only)
-      const found = Array.from(sessions.entries()).find(([_, s]) => s.refreshToken === refreshToken)
-      if (!found) {
-        return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 })
-      }
-      session = found[1]
+    // In this simple implementation, we decode the refresh token to get the sessionId
+    const [payloadBase64] = refreshToken.split('.')
+    if (!payloadBase64) {
+      return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 })
     }
 
+    const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString())
+    if (payload.type !== 'refresh' || !payload.sessionId) {
+      return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 })
+    }
+
+    const session = sessionStore.get(payload.sessionId)
     if (!session) {
       return NextResponse.json({ error: 'Session expired' }, { status: 401 })
     }
 
     // Generate new tokens
     const newAccessToken = generateToken({
+      sessionId: payload.sessionId,
       userId: session.userId,
-      tenantId: session.tenantId,
-      isPaid: session.isPaid
+      phone: session.phone
     }, 'access')
     
     const newRefreshToken = generateToken({
+      sessionId: payload.sessionId,
       userId: session.userId
     }, 'refresh')
 
-    // Update session
-    sessions.delete(refreshToken)
-    sessions.set(newRefreshToken, session)
+    // Update session timestamp if needed
+    session.createdAt = Date.now()
+    sessionStore.set(payload.sessionId, session)
 
     return NextResponse.json({
       success: true,

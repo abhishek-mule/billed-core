@@ -1,43 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { sessionStore } from '@/lib/billzo/auth-store'
 
 // Simple JWT-like token generation (for demo - use real JWT in production)
-function generateToken(payload: object, expiresIn: string = '15m'): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
-  const expTime = expiresIn === '15m' 
-    ? Date.now() + 15 * 60 * 1000 
-    : Date.now() + 30 * 24 * 60 * 60 * 1000
-  const data = Buffer.from(JSON.stringify({ 
+function generateToken(payload: object, type: 'access' | 'refresh'): string {
+  const secret = process.env.JWT_SECRET || 'development-secret-change-in-production'
+  const expTime = type === 'access' 
+    ? Math.floor(Date.now() / 1000) + 3600
+    : Math.floor(Date.now() / 1000) + 30 * 24 * 3600
+  
+  const data = { 
     ...payload, 
-    iat: Date.now(),
-    exp: expTime
-  })).toString('base64url')
-  
-  // Simple signature (in production use proper JWT signing)
-  const signature = crypto.createHash('sha256').update(header + '.' + data).digest('base64url')
-  
-  return `${header}.${data}.${signature}`
-}
-
-function verifyToken(token: string): { valid: boolean; payload?: any } {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return { valid: false }
-    
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-    
-    if (payload.exp && Date.now() > payload.exp) {
-      return { valid: false }
-    }
-    
-    return { valid: true, payload }
-  } catch {
-    return { valid: false }
+    iat: Math.floor(Date.now() / 1000),
+    exp: expTime,
+    type
   }
+  
+  const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(base64Payload)
+    .digest('base64url')
+  
+  return `${base64Payload}.${signature}`
 }
 
-// In-memory store (use Redis/DB in production)
-const sessions = new Map<string, { userId: string; tenantId: string | null; isPaid: boolean; refreshToken: string }>()
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,26 +37,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user session
+    // Create or update user session
     const userId = uid || `phone_${phone}`
-    const refreshToken = crypto.randomBytes(32).toString('hex')
+    const sessionId = crypto.randomBytes(32).toString('hex')
     
-    // Check if user has tenant (onboarding done)
-    const existingSession = Array.from(sessions.values()).find(s => s.userId === userId)
-    const tenantId = existingSession?.tenantId || null
-    const isPaid = existingSession?.isPaid || false
+    // Check if user already has a session to preserve tenantId/isPaid
+    const existingSessions = Array.from(sessionStore.values()).filter(s => s.userId === userId)
+    const tenantId = existingSessions.length > 0 ? existingSessions[0].tenantId : null
+    const isPaid = existingSessions.length > 0 ? existingSessions[0].isPaid : false
+    const phoneNum = phone || existingSessions.find(s => s.phone)?.phone
 
-    // Store session
-    sessions.set(refreshToken, { userId, tenantId, isPaid, refreshToken })
+    // Store new session
+    sessionStore.set(sessionId, {
+      userId,
+      tenantId,
+      isPaid,
+      phone: phoneNum,
+      email: email || undefined,
+      createdAt: Date.now()
+    })
 
     // Generate tokens
-    const accessToken = generateToken({ userId, tenantId, isPaid }, '15m')
-    const newRefreshToken = generateToken({ userId }, '30d')
-
-    // Replace refresh token
-    if (existingSession) {
-      sessions.delete(existingSession.refreshToken)
-    }
-    sessions.set(newRefreshToken, { userId, tenantId, isPaid, refreshToken: newRefreshToken })
+    const accessToken = generateToken({ sessionId, userId, tenantId, isPaid }, 'access')
+    const refreshToken = generateToken({ sessionId, userId }, 'refresh')
 
     return NextResponse.json({
       success: true,
@@ -77,8 +67,8 @@ export async function POST(request: NextRequest) {
       tenantId,
       isPaid,
       accessToken,
-      refreshToken: newRefreshToken,
-      expiresIn: 900 // 15 minutes in seconds
+      refreshToken,
+      expiresIn: 3600
     })
 
   } catch (error) {

@@ -1,6 +1,6 @@
 export const FREE_LIMITS = {
   invoices: 3,
-  reminders: 5,
+  reminders: 3,
   autoRecovery: false,
 } as const
 
@@ -15,8 +15,8 @@ export const PLAN_LIMITS = {
     invoices: Infinity,
     reminders: Infinity,
     autoRecovery: true,
-    multiUser: true,
     analytics: true,
+    multiUser: true,
   },
 } as const
 

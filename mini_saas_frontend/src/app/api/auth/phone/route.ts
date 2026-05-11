@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePhone, generateOTP, hashOTP } from '@/lib/billzo/auth-utils'
+import { otpStore } from '@/lib/billzo/auth-store'
 
-const otpStore = new Map<string, { hash: string; createdAt: number }>()
 
 export async function POST(request: NextRequest) {
   try {

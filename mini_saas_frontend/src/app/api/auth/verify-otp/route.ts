@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyOTPHash, hashOTP, validatePhone, formatPhone } from '@/lib/billzo/auth-utils'
 import { db } from '@/lib/billzo/db'
 import crypto from 'crypto'
+import { otpStore, sessionStore } from '@/lib/billzo/auth-store'
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-const otpStore = new Map<string, { hash: string; createdAt: number }>()
-const sessionStore = new Map<string, { userId: string; phone: string; createdAt: number }>()
 
 export async function POST(request: NextRequest) {
   try {
@@ -135,5 +134,3 @@ function createRefreshToken(sessionId: string, userId: string): string {
 
   return `${base64Payload}.${signature}`
 }
-
-export { sessionStore }

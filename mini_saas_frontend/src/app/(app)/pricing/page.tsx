@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Check, Sparkles } from "lucide-react"
+import Script from "next/script"
 import type { PlanType } from "@/lib/billzo/plan-limits"
 
 interface PlanInfo {
@@ -19,6 +20,7 @@ interface PricingState {
   error: string | null
   selectedPlan: string | null
   processing: boolean
+  razorpayLoaded: boolean
 }
 
 export default function PricingPage() {
@@ -29,6 +31,7 @@ export default function PricingPage() {
     error: null,
     selectedPlan: null,
     processing: false,
+    razorpayLoaded: false,
   })
 
   useEffect(() => {
@@ -57,7 +60,12 @@ export default function PricingPage() {
       return
     }
 
-    setState((prev) => ({ ...prev, selectedPlan: planId, processing: true }))
+    if (!state.razorpayLoaded && !(window as any).Razorpay) {
+      setState(prev => ({ ...prev, error: "Payment gateway is still loading. Please try again in a moment." }))
+      return
+    }
+
+    setState((prev) => ({ ...prev, selectedPlan: planId, processing: true, error: null }))
 
     try {
       const tenantId = localStorage.getItem("tenantId")
@@ -83,7 +91,7 @@ export default function PricingPage() {
         return
       }
 
-      if (data.subscriptionId && typeof window !== 'undefined' && (window as any).Razorpay) {
+      if (data.subscriptionId && (window as any).Razorpay) {
         const rzp = new (window as any).Razorpay({
           key: data.keyId,
           subscription_id: data.subscriptionId,
@@ -115,7 +123,7 @@ export default function PricingPage() {
       } else {
         setState((prev) => ({
           ...prev,
-          error: "Payment gateway not available",
+          error: "Payment gateway initialization failed. Please refresh the page.",
           processing: false,
         }))
       }
@@ -157,6 +165,10 @@ export default function PricingPage() {
 
   return (
     <div className="container py-8">
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        onLoad={() => setState(prev => ({ ...prev, razorpayLoaded: true }))}
+      />
       <div className="mx-auto max-w-4xl text-center">
         <h1 className="text-3xl font-bold">Choose Your Plan</h1>
         <p className="mt-2 text-muted-foreground">
