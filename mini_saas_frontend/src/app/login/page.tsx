@@ -60,7 +60,7 @@ export default function LoginPage() {
       });
 
       if (!response.ok) {
-        router.push("/login");
+        router.push("/onboarding");
         return
       }
 
@@ -107,45 +107,25 @@ export default function LoginPage() {
         throw new Error(data.error || "Login failed via API");
       }
 
-      const existingTenant = await db().tenants
-        .filter(t => t.ownerUserId === userData.userId || (t as any).email === userData.email)
-        .first();
-
       const uid = userData.userId;
 
       sessionStorage.setItem("accessToken", data.accessToken);
       sessionStorage.setItem("refreshToken", data.refreshToken);
       localStorage.setItem("userId", uid);
-      localStorage.setItem("isPaid", existingTenant ? (existingTenant.plan === 'pro' ? "true" : "false") : "false");
+      localStorage.setItem("isPaid", "false");
+
+      const existingTenant = await db().tenants
+        .filter(t => t.ownerUserId === uid || (t as any).email === userData.email)
+        .first();
 
       if (existingTenant) {
         localStorage.setItem("tenantId", existingTenant.id);
         localStorage.setItem("tenantName", existingTenant.name);
 
         import("@/lib/billzo/notifications").then(m => m.registerDevice(existingTenant.id));
-        checkOnboardingAndRedirect();
+        router.push("/onboarding");
       } else {
-        const newTenantId = data.tenantId || `tenant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const shopName = userData.name ? `${userData.name}'s Shop` : `Shop ${Date.now().toString().slice(-4)}`;
-
-        await db().tenants.add({
-          id: newTenantId,
-          name: shopName,
-          ownerUserId: uid,
-          phone: userData.phone,
-          plan: "starter",
-          paywallUnlocked: false,
-          invoiceCount: 0,
-          reminderCount: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        } as any);
-
-        localStorage.setItem("tenantId", newTenantId);
-        localStorage.setItem("tenantName", shopName);
-
-        import("@/lib/billzo/notifications").then(m => m.registerDevice(newTenantId));
-        checkOnboardingAndRedirect();
+        router.push("/onboarding");
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong.");
