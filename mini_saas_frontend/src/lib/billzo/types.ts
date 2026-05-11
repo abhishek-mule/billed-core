@@ -66,6 +66,7 @@ export type InvoiceItem = {
   name: string
   qty: number
   price: number
+  hsn?: string
   gstRate: number
   lineTotal: number
   createdAt: string

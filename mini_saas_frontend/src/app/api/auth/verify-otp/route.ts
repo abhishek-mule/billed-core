@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
     sessionStore.set(sessionId, {
       userId,
       phone: formattedPhone,
+      tenantId: null,
+      isPaid: false,
       createdAt: Date.now(),
     })
 

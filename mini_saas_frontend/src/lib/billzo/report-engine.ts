@@ -155,7 +155,7 @@ export function computeRecoveryMetrics(
     customerPhone: inv.customerPhone,
     amount: inv.total - inv.paidAmount,
     days: daysAgo(inv.dueAt),
-    status: inv.status,
+    status: inv.status as 'unpaid' | 'partial' | 'overdue',
     lastReminderAt: whatsappEvents.find(e => e.invoiceId === inv.id)?.occurredAt,
   }))
 
@@ -198,7 +198,7 @@ export function computeAgingReport(
       customerPhone: inv.customerPhone,
       amount: inv.total - inv.paidAmount,
       days: d,
-      status: inv.status,
+      status: inv.status as 'unpaid' | 'partial' | 'overdue',
     }
 
     const bucket = buckets.find(b => d >= b.minDays && d <= b.maxDays)
