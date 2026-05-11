@@ -10,8 +10,8 @@ export function Invoices() {
   const { state } = useBillzo()
   if (!state) return null
 
-  const frequent = [...state.customers].sort((a, b) => b.invoiceCount - a.invoiceCount)
-  const topProduct = state.products[0]
+  const sorted = [...state.customers].sort((a, b) => b.invoiceCount - a.invoiceCount)
+  const topProduct = state.products[0] ?? null
 
   return (
     <div className="space-y-6">
@@ -25,7 +25,7 @@ export function Invoices() {
           <RotateCcw className="h-6 w-6" />
           <span>Repeat Last</span>
         </button>
-        {frequent.slice(0, 2).map((customer) => (
+        {sorted.slice(0, 2).map((customer) => (
           <button key={customer.id} className="action-tile" onClick={() => createQuickInvoice(customer, topProduct)}>
             <span className="text-xl font-black">{customer.name.slice(0, 2)}</span>
             <span>{customer.name}</span>
@@ -36,7 +36,7 @@ export function Invoices() {
       <section className="space-y-3">
         <h2 className="section-label">Auto-suggested Customers</h2>
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {frequent.map((customer) => (
+          {sorted.map((customer) => (
             <button key={customer.id} className="rounded-full border bg-white px-4 py-2 text-sm font-black" onClick={() => createQuickInvoice(customer, topProduct)}>
               {customer.name}
             </button>
@@ -68,7 +68,7 @@ export function Invoices() {
                   <button className="icon-button" onClick={() => markPaid(invoice)} title="Mark Paid">
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
-                  <button className="icon-button" onClick={() => markPaid(invoice)} title="Process Payment">
+                  <button className="icon-button" onClick={() => {}} title="More Actions">
                     <CreditCard className="h-4 w-4" />
                   </button>
                 </>

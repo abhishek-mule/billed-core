@@ -105,8 +105,11 @@ export function generateInvoicePDF(data: InvoiceData): jsPDF {
   y += 7
 
   // Tax
-  doc.text(`Tax (${data.items[0]?.gstRate || 0}%):`, 120, y)
-  doc.text(`₹${data.tax.toFixed(0)}`, 155, y)
+  if (data.items.length > 0) {
+    doc.text(`Tax (${data.items[0]?.gstRate ?? 0}%):`, 120, y)
+    doc.text(`₹${data.tax.toFixed(0)}`, 155, y)
+    y += 7
+  }
   y += 7
 
   // Total

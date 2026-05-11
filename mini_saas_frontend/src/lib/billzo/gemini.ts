@@ -117,6 +117,7 @@ export async function generateSmartMessage(opts: GenerateMessageOptions): Promis
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY
 
   if (!apiKey) {
+    if (typeof console !== 'undefined') console.warn('[BillZo] Gemini API key not configured. Using fallback message.')
     return {
       message: buildFallbackMessage(opts),
       tone: opts.stage,

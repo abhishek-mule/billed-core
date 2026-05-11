@@ -1,7 +1,5 @@
 import { db } from '@/lib/billzo/db'
-
-const FREE_INVOICE_LIMIT = 3
-const FREE_REMINDER_LIMIT = 10
+import { FREE_LIMITS } from './plan-limits'
 
 export interface UsageLimits {
   invoiceLimit: number
@@ -15,29 +13,18 @@ export interface UsageLimits {
 
 export async function getUsageLimits(tenantId: string): Promise<UsageLimits> {
   const tenant = await db().tenants.get(tenantId)
-  
-  if (!tenant) {
-    return {
-      invoiceLimit: FREE_INVOICE_LIMIT,
-      reminderLimit: FREE_REMINDER_LIMIT,
-      isPaid: false,
-      canCreateInvoice: true,
-      canSendReminder: true,
-      currentInvoiceCount: 0,
-      currentReminderCount: 0,
-    }
-  }
-
-  const isPaid = tenant.plan === 'pro' || tenant.paywallUnlocked
-  const invoiceCount = tenant.invoiceCount || 0
-  const reminderCount = tenant.reminderCount || 0
+  const isPaid = !!(tenant?.plan === 'pro' || tenant?.paywallUnlocked)
+  const invoiceCount = tenant?.invoiceCount || 0
+  const reminderCount = tenant?.reminderCount || 0
+  const invoiceLimit = isPaid ? Infinity : FREE_LIMITS.invoices
+  const reminderLimit = isPaid ? Infinity : FREE_LIMITS.reminders
 
   return {
-    invoiceLimit: isPaid ? Infinity : FREE_INVOICE_LIMIT,
-    reminderLimit: isPaid ? Infinity : FREE_REMINDER_LIMIT,
+    invoiceLimit,
+    reminderLimit,
     isPaid,
-    canCreateInvoice: isPaid || invoiceCount < FREE_INVOICE_LIMIT,
-    canSendReminder: isPaid || reminderCount < FREE_REMINDER_LIMIT,
+    canCreateInvoice: isPaid || invoiceCount < FREE_LIMITS.invoices,
+    canSendReminder: isPaid || reminderCount < FREE_LIMITS.reminders,
     currentInvoiceCount: invoiceCount,
     currentReminderCount: reminderCount,
   }
