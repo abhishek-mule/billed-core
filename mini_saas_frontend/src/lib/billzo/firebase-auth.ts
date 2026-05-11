@@ -129,6 +129,9 @@ export function useFirebaseAuth() {
       
       const errorMsg = err.message || 'Failed to sign in with Google'
       setError(errorMsg)
+      if (err.code === 'auth/popup-closed-by-user') {
+        return { success: false, error: 'Sign-in was cancelled. Please try again.' }
+      }
       return { success: false, error: errorMsg }
     }
   }, [isReady])

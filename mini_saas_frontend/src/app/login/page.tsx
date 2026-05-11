@@ -146,12 +146,15 @@ export default function LoginPage() {
 
     try {
       console.log('Starting Google sign-in...');
-      const result = await signInWithGoogle();
+const result = await signInWithGoogle();
       console.log('Google sign-in result:', result);
 
       setGoogleLoading(false);
 
       if (!result.success) {
+        if (result.error?.includes('popup-closed') || result.error?.includes('cancelled')) {
+          return;
+        }
         throw new Error(result.error || "Failed to sign in with Google");
       }
 
