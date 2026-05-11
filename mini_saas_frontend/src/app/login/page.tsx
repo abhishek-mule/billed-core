@@ -130,7 +130,7 @@ export default function LoginPage() {
 
       console.log('Navigating to /onboarding...');
       setAuthLoading(false);
-      window.location.href = "/onboarding";
+      router.push("/onboarding");
       return;
     } catch (err: any) {
       setAuthLoading(false);
