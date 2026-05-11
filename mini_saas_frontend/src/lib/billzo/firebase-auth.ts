@@ -66,32 +66,37 @@ export function useFirebaseAuth() {
   }
 
   const signInWithGoogle = useCallback(async (): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string }> => {
-    // Demo mode - return mock user
-    if (DEMO_MODE || !isReady) {
-      console.log('[Demo Mode] Google sign-in simulating...')
-      const demoUserId = `demo_${Date.now()}`
-      return { 
-        success: true, 
-        userId: demoUserId, 
-        email: 'demo@example.com', 
-        name: 'Demo User' 
-      }
+    console.log('signInWithGoogle called. isReady:', isReady, 'DEMO_MODE:', DEMO_MODE);
+
+    if (!isReady) {
+      return { success: false, error: 'Authentication system is still initializing. Please wait a second and try again.' }
+    }
+
+    if (DEMO_MODE) {
+      console.warn('[Firebase] Attempted real sign-in in Demo Mode. Please configure environment variables.');
+      // Return error instead of silent simulation so the user knows why no popup appeared
+      return { success: false, error: 'Google Sign-In is not configured. Please add your Firebase API Key and Project ID to .env.local' }
     }
 
     setLoading(true)
     setError(null)
 
     try {
+      console.log('Initializing Firebase Auth...');
       const auth = getAuth()
       
-      await setPersistence(auth, browserLocalPersistence).catch(() => {})
+      await setPersistence(auth, browserLocalPersistence).catch(err => {
+        console.warn('Persistence error:', err);
+      })
       
       const provider = new GoogleAuthProvider()
       provider.addScope('email')
       provider.addScope('profile')
       
+      console.log('Opening Google Sign-In popup...');
       const result = await signInWithPopup(auth, provider)
       
+      console.log('Google Sign-In successful:', result.user.uid);
       setLoading(false)
       return { 
         success: true, 
