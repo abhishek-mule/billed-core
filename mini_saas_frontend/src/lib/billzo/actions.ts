@@ -5,6 +5,7 @@ import { createRecoveryAttempt, nextRecoveryAt, nextRecoveryStage } from './reco
 import { scheduleBackgroundSync, syncPendingQueue } from './sync'
 import { getActiveSession, getTenantId } from './tenant'
 import { isPaywallBlocked, type PlanType } from './plan-limits'
+import { trackEvent, events } from './analytics'
 import type { RecoveryAttempt } from './types'
 import type {
   Activity,
@@ -218,6 +219,7 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
     recoveryStage: 't0_soft',
     nextRecoveryAt: current,
     lastWhatsAppStatus: 'queued',
+    reminderCount: 0,
     pdfUrl: `/invoice/${invoiceId}`,
     version: 1,
   }
@@ -487,6 +489,7 @@ export async function handlePOSInvoice(
     recoveryStage: 't0_soft',
     nextRecoveryAt: current,
     lastWhatsAppStatus: 'queued',
+    reminderCount: 0,
     pdfUrl: `/invoice/${invoiceId}`,
     version: 1,
   }
@@ -558,6 +561,13 @@ export async function handlePOSInvoice(
 
     notifyChanged()
     scheduleBackgroundSync()
+
+    if (method !== 'udhar') {
+      trackEvent(session.tenantId, events.invoice_paid, { invoiceId, total, method })
+    } else {
+      trackEvent(session.tenantId, events.invoice_created, { invoiceId, total, customer: customerName })
+    }
+
     return { success: true, data: { ...invoice, items } as any }
   } catch (error) {
     console.error('Failed to create POS invoice:', error)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, MessageCircle, Shield, Zap, Phone } from "lucide-react";
 import { useFirebaseAuth } from "@/lib/billzo/firebase-auth";
+import { trackEvent, events } from "@/lib/billzo/analytics";
 
 type AuthMode = "google" | "phone" | "email";
 
@@ -117,6 +118,7 @@ export default function LoginPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Login failed via API");
+      trackEvent(userData.userId, userData.email ? events.login_google : events.login_phone, { email: !!userData.email })
       handlePostAuthRedirect();
     } catch (err: any) {
       setAuthLoading(false);
@@ -187,6 +189,7 @@ export default function LoginPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Invalid OTP");
+      trackEvent(data.userId, events.login_phone, { phone })
       handlePostAuthRedirect();
     } catch (err: any) {
       setError(err.message || "Verification failed. Please try again.");

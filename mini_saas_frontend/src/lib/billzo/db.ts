@@ -154,6 +154,7 @@ export async function loadSampleData(
       recoveryStage: 't0_soft' as const,
       nextRecoveryAt: dueDate,
       lastWhatsAppStatus: 'queued' as const,
+      reminderCount: 0 as const,
       pdfUrl: `/invoice/${invId}`,
       version: 1,
     }

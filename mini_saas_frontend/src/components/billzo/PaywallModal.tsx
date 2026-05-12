@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles, X, Lock, Loader2, Check, TrendingUp, Zap, ArrowRight } from "lucide-react"
+import { Sparkles, X, Lock, Loader2, Check, TrendingUp, Zap } from "lucide-react"
 import { db } from "@/lib/billzo/db"
 
 const formatINR = (n: number) => new Intl.NumberFormat('en-IN', {
@@ -17,17 +17,50 @@ interface PaywallModalProps {
   onClose: () => void
   currentCount: number
   limit: number
-  recoveredAmount?: number
 }
 
-export function PaywallModal({ type, open, onClose, currentCount, limit, recoveredAmount = 0 }: PaywallModalProps) {
+export function PaywallModal({ type, open, onClose, currentCount, limit }: PaywallModalProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [upgraded, setUpgraded] = useState(false)
+  const [recoveredAmount, setRecoveredAmount] = useState(0)
+  const [invoiceCount, setInvoiceCount] = useState(0)
+  const [pendingAmount, setPendingAmount] = useState(0)
+
+  useEffect(() => {
+    if (!open) return
+    computeRealMetrics()
+  }, [open])
+
+  async function computeRealMetrics() {
+    function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    const tenantId = getCookie('bz_tenant')
+    if (!tenantId) return
+
+    try {
+      const invoices = await db().invoices.where('tenantId').equals(tenantId).toArray()
+
+      const paidInvoices = invoices.filter((inv: any) => inv.status === 'paid' || inv.paidAmount > 0)
+      const totalRecovered = paidInvoices.reduce((sum: number, inv: any) => sum + (inv.paidAmount || 0), 0)
+      const totalPending = invoices
+        .filter((inv: any) => inv.status !== 'paid' && inv.status !== 'partial')
+        .reduce((sum: number, inv: any) => sum + ((inv.total || 0) - (inv.paidAmount || 0)), 0)
+
+      setRecoveredAmount(totalRecovered)
+      setInvoiceCount(invoices.length)
+      setPendingAmount(totalPending)
+    } catch (err) {
+      console.error('Failed to compute metrics:', err)
+    }
+  }
 
   if (!open) return null
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (plan: 'pro' | 'growth') => {
     setLoading(true)
     try {
       function getCookie(name: string) {
@@ -41,21 +74,58 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
         return
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
-      await db().tenants.update(tenantId, {
-        plan: "pro",
-        paywallUnlocked: true,
-        updatedAt: new Date().toISOString(),
+      const response = await fetch("/api/payment/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId, plan }),
       })
 
-      setUpgraded(true)
+      const data = await response.json()
 
+      if (data.orderId) {
+        const options = {
+          key: data.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+          amount: data.amount,
+          order_id: data.orderId,
+          name: 'BillZo',
+          description: plan === 'growth' ? 'BillZo Growth Plan' : 'BillZo Pro Plan',
+          handler: async () => {
+            await db().tenants.update(tenantId, {
+              plan: plan as any,
+              paywallUnlocked: true,
+              subscriptionId: data.subscriptionId,
+              updatedAt: new Date().toISOString(),
+            })
+            setUpgraded(true)
+            setTimeout(() => {
+              onClose()
+              setUpgraded(false)
+            }, 2000)
+          },
+          modal: {
+            ondismiss: () => setLoading(false)
+          }
+        }
+
+        if (typeof window !== 'undefined' && (window as any).Razorpay) {
+          const rzp = new (window as any).Razorpay(options)
+          rzp.on('payment.failed', () => setLoading(false))
+          rzp.open()
+        } else {
+          setUpgraded(true)
+          setTimeout(() => {
+            onClose()
+            setUpgraded(false)
+          }, 2000)
+        }
+        return
+      }
+
+      setUpgraded(true)
       setTimeout(() => {
         onClose()
         setUpgraded(false)
-      }, 1500)
-
+      }, 2000)
     } catch (error) {
       console.error("Upgrade failed:", error)
       alert("Upgrade failed. Please try again.")
@@ -64,36 +134,8 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
     }
   }
 
-  const handleUpgradeGrowth = async () => {
-    setLoading(true)
-    try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
-      const tenantId = getCookie('bz_tenant')
-      if (!tenantId) return
-
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      await db().tenants.update(tenantId, {
-        plan: "growth",
-        paywallUnlocked: true,
-        updatedAt: new Date().toISOString(),
-      })
-      setUpgraded(true)
-      setTimeout(() => {
-        onClose()
-        setUpgraded(false)
-      }, 1500)
-    } catch (error) {
-      console.error("Upgrade failed:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const roiMultiple = recoveredAmount > 0 ? Math.floor(recoveredAmount / 299) : 0
+  const proPrice = 299
+  const roiMultiple = recoveredAmount >= proPrice ? Math.floor(recoveredAmount / proPrice) : 0
   const limitLabel = type === 'invoice' ? 'invoices' : 'reminders'
 
   return (
@@ -119,7 +161,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
             </>
           ) : (
             <>
-              {recoveredAmount > 0 ? (
+              {recoveredAmount >= proPrice ? (
                 <>
                   <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
                     <TrendingUp className="h-8 w-8 text-white" />
@@ -129,7 +171,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
                     You recovered {formatINR(recoveredAmount)}
                   </h2>
                   <p className="mt-2 text-gray-600">
-                    That's <span className="font-bold text-green-600">{roiMultiple}x</span> what Pro costs.
+                    That&apos;s <span className="font-bold text-green-600">{roiMultiple}x</span> what Pro costs.
                     Keep the momentum going!
                   </p>
 
@@ -140,7 +182,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Zap className="h-4 w-4 text-green-600" />
-                      <span>Auto-recovery mode</span>
+                      <span>Auto-recovery reminders</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Zap className="h-4 w-4 text-green-600" />
@@ -149,7 +191,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
                   </div>
 
                   <button
-                    onClick={handleUpgrade}
+                    onClick={() => handleUpgrade('pro')}
                     disabled={loading}
                     className="mt-4 w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
@@ -164,7 +206,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
                   </button>
 
                   <button
-                    onClick={handleUpgradeGrowth}
+                    onClick={() => handleUpgrade('growth')}
                     disabled={loading}
                     className="mt-2 w-full py-2 text-sm text-gray-500 hover:text-gray-700 border rounded-xl"
                   >
@@ -192,12 +234,18 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Auto-recovery mode</span>
+                      <span>Auto-recovery reminders</span>
                     </div>
+                    {pendingAmount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap className="h-4 w-4 text-primary" />
+                        <span>{formatINR(pendingAmount)} pending from customers</span>
+                      </div>
+                    )}
                   </div>
 
                   <button
-                    onClick={handleUpgrade}
+                    onClick={() => handleUpgrade('pro')}
                     disabled={loading}
                     className="mt-4 w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-medium hover:from-yellow-500 hover:to-orange-600 disabled:opacity-50 flex items-center justify-center gap-2"
                   >

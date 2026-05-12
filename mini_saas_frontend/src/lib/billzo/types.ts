@@ -90,6 +90,7 @@ export type Invoice = {
   recoveryStage: RecoveryStage
   nextRecoveryAt: string
   lastWhatsAppStatus: WhatsAppStatus
+  reminderCount: number
   pdfUrl: string
   version: number
 }
