@@ -31,56 +31,64 @@ function tableFor(item: QueueItem) {
 }
 
 export async function syncPendingQueue() {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return
+  if (typeof window === 'undefined') return
+  if ((navigator as any).onLine === false) return
+  if ((window as any).__billzoSyncing) return
+  ;(window as any).__billzoSyncing = true
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const due = new Date().toISOString()
-  const pending = await db()
-    .queue.where('status')
-    .anyOf('pending', 'failed', 'conflict')
-    .filter((item) => item.nextAttemptAt <= due)
-    .sortBy('createdAt')
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const due = new Date().toISOString()
+    const pending = await db()
+      .queue.where('status')
+      .anyOf('pending', 'failed', 'conflict')
+      .filter((item) => item.nextAttemptAt <= due && item.attempts < 10)
+      .sortBy('createdAt')
 
-  if (pending.length === 0) return
-  if (!url || !key) {
-    await markDeferred(pending, 'Supabase env missing')
-    return
-  }
-
-  const supabase = createClient(url, key, {
-    global: {
-      headers: {
-        'x-billzo-idempotency-key': pending[0]?.idempotencyKey || '',
-      },
-    },
-  })
-
-  for (const item of pending) {
-    await db().queue.update(item.id, { status: 'syncing', attempts: item.attempts + 1, updatedAt: new Date().toISOString() })
-
-    if (item.action === 'send_whatsapp') {
-      await db().queue.update(item.id, { status: 'synced', updatedAt: new Date().toISOString() })
-      continue
+    if (pending.length === 0) return
+    if (!url || !key) {
+      await markDeferred(pending, 'Supabase env missing')
+      return
     }
 
-    const payload = normalizePayload(item.payload)
-    const { error, status } = await supabase.from(tableFor(item)).upsert(payload as Record<string, unknown>, { onConflict: 'id' })
-    if (!error) {
-      await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
-      continue
-    }
+    const supabase = createClient(url, key)
 
-    const conflict = status === 409 || error.code === '23505'
-    const nextAttemptAt = new Date(Date.now() + backoffMs(item.attempts + 1)).toISOString()
-    await db().queue.update(item.id, {
-      status: conflict ? 'conflict' : 'failed',
-      lastError: error.message,
-      nextAttemptAt,
-      updatedAt: new Date().toISOString(),
-    })
+    for (const item of pending) {
+      const current = await db().queue.get(item.id)
+      if (!current || current.status !== 'pending' && current.status !== 'failed' && current.status !== 'conflict') continue
+      if (current.attempts >= 10) {
+        await db().queue.update(item.id, { status: 'dead_letter', lastError: 'Max attempts reached', updatedAt: new Date().toISOString() })
+        continue
+      }
+
+      await db().queue.update(item.id, { status: 'syncing', attempts: current.attempts + 1, updatedAt: new Date().toISOString() })
+
+      if (item.action === 'send_whatsapp') {
+        await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
+        continue
+      }
+
+      const payload = normalizePayload(item.payload)
+      const { error, status } = await supabase.from(tableFor(item)).upsert(payload as Record<string, unknown>, { onConflict: 'id' })
+      if (!error) {
+        await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
+        continue
+      }
+
+      const conflict = status === 409 || error.code === '23505'
+      const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
+      await db().queue.update(item.id, {
+        status: conflict ? 'conflict' : 'failed',
+        lastError: error.message,
+        nextAttemptAt,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+    notifyChanged()
+  } finally {
+    ;(window as any).__billzoSyncing = false
   }
-  notifyChanged()
 }
 
 async function markDeferred(items: QueueItem[], reason: string) {

@@ -3,6 +3,8 @@ import crypto from 'crypto'
 import { db } from '@/lib/billzo/db'
 import { type PlanType } from '@/lib/billzo/plan-limits'
 
+export const dynamic = 'force-dynamic'
+
 const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
 
 interface WebhookEvent {

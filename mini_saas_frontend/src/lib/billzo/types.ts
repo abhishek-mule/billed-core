@@ -1,4 +1,4 @@
-export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'conflict'
+export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'conflict' | 'dead_letter'
 export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue'
 export type RecoveryStage = 't0_soft' | 't24_nudge' | 't72_strong' | 't5_warning'
 export type WhatsAppStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'

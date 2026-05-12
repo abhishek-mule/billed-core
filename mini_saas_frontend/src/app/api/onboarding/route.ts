@@ -4,6 +4,8 @@ import { autofillFromInput, validateGSTIN, validateUPI } from '@/lib/billzo/auto
 import { type PlanType } from '@/lib/billzo/plan-limits'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

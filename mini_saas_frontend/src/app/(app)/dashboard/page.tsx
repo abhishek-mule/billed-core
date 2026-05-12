@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [todayStats, setTodayStats] = useState({ revenue: 0, invoiceCount: 0, failedCount: 0 });
+  const [todayStats, setTodayStats] = useState({ revenue: 0, invoiceCount: 0, failedCount: 0, yesterdayRevenue: 0 });
 
   useEffect(() => {
     loadData();
@@ -40,14 +40,24 @@ export default function DashboardPage() {
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toISOString();
 
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString();
+
       const todayInvoices = invoiceData.filter((inv: any) => new Date(inv.createdAt) >= today);
       const revenue = todayInvoices.reduce((s: number, inv: any) => s + (inv.total || 0), 0);
+      const yesterdayInvoices = invoiceData.filter((inv: any) => {
+        const d = new Date(inv.createdAt);
+        return d >= yesterday && d < today;
+      });
+      const yesterdayRevenue = yesterdayInvoices.reduce((s: number, inv: any) => s + (inv.total || 0), 0);
       const failedCount = invoiceData.filter((inv: any) => inv.syncStatus === "failed").length;
 
       setTodayStats({
         revenue,
         invoiceCount: todayInvoices.length,
         failedCount,
+        yesterdayRevenue,
       });
     } catch (error) {
       console.error("Failed to load data:", error);
@@ -94,7 +104,7 @@ export default function DashboardPage() {
             <span>{todayStats.invoiceCount} invoices</span>
             <span className="opacity-50">•</span>
             <span className="inline-flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5" /> +18% vs yesterday
+              <TrendingUp className="h-3.5 w-3.5" /> {todayStats.yesterdayRevenue > 0 ? `+${Math.round(((todayStats.revenue - todayStats.yesterdayRevenue) / todayStats.yesterdayRevenue) * 100)}% vs yesterday` : "First day!"}
             </span>
           </div>
         </div>
