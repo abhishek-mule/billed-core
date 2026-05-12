@@ -1,3 +1,5 @@
+'use client'
+
 import Dexie, { type Table } from 'dexie'
 import type {
   Activity,
@@ -73,112 +75,134 @@ export function uuid() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export async function seedDemoData() {
-  const database = db()
-  const count = await database.tenants.count()
-  if (count > 0) return
-
-  const tenantId = localStorage.getItem('tenantId')
-  const businessName = localStorage.getItem('tenantName')
-
-  if (!tenantId) return
-
-  const current = new Date()
-  const overdueDate = new Date(current)
-  overdueDate.setDate(current.getDate() - 2)
-
-  const tenant: Tenant = {
-    id: tenantId,
-    name: businessName || 'My Shop',
-    ownerUserId: localStorage.getItem('userId') || '',
-    plan: 'starter',
-    paywallUnlocked: false,
-    invoiceCount: 0,
-    reminderCount: 0,
-    createdAt: current.toISOString(),
-    updatedAt: current.toISOString(),
+export function notifyChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('billzo:changed'))
   }
+}
 
-  const customers: Customer[] = [
-    {
-      id: uuid(),
-      tenantId,
-      name: 'Customer A',
-      phone: '9876543210',
-      defaultTone: 'hinglish',
-      lastUsedAt: current.toISOString(),
-      invoiceCount: 0,
-      createdAt: current.toISOString(),
-      updatedAt: current.toISOString(),
-    },
-    {
-      id: uuid(),
-      tenantId,
-      name: 'Customer B',
-      phone: '9810012300',
-      defaultTone: 'hindi',
-      lastUsedAt: current.toISOString(),
-      invoiceCount: 0,
-      createdAt: current.toISOString(),
-      updatedAt: current.toISOString(),
-    },
-  ]
+export interface SampleDataLoaderOptions {
+  customerNames?: string[]
+  customerPhones?: string[]
+  productNames?: string[]
+  productPrices?: number[]
+  productGstRates?: number[]
+}
 
-  const products: Product[] = [
+export async function loadSampleData(
+  tenantId: string,
+  tenantName: string,
+  ownerUserId: string,
+  options?: SampleDataLoaderOptions
+): Promise<void> {
+  const database = db()
+  const existing = await database.customers.where('tenantId').equals(tenantId).count()
+  if (existing > 0) return
+
+  const current = new Date().toISOString()
+  const overdueDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+
+  const customerNames = options?.customerNames ?? ['Rahul Sharma', 'Priya Patel', 'Amit Kumar']
+  const customerPhones = options?.customerPhones ?? ['9876543210', '9810012300', '9820012345']
+  const productNames = options?.productNames ?? ['LED Bulb 9W', 'USB Cable Type-C', 'Mobile Cover']
+  const productPrices = options?.productPrices ?? [150, 299, 199]
+  const productGstRates = options?.productGstRates ?? [18, 18, 12]
+
+  const customers: Customer[] = customerNames.map((name, i) => ({
+    id: uuid(),
+    tenantId,
+    name,
+    phone: customerPhones[i] || '9876543210',
+    defaultTone: 'hinglish' as const,
+    lastUsedAt: current,
+    invoiceCount: 0,
+    createdAt: current,
+    updatedAt: current,
+  }))
+
+  const products: Product[] = productNames.map((name, i) => ({
+    id: uuid(),
+    tenantId,
+    name,
+    barcode: `${1000000000000 + i}`,
+    hsn: '9405',
+    gstRate: productGstRates[i] ?? 18,
+    stock: 15,
+    lowStockAt: 5,
+    salePrice: productPrices[i] ?? 100,
+    purchasePrice: Math.round((productPrices[i] ?? 100) * 0.7),
+    createdAt: current,
+    updatedAt: current,
+  }))
+
+  const invoices: Invoice[] = customers.slice(0, 2).map((c, i) => {
+    const invId = uuid()
+    const dueDate = new Date(Date.now() + (i === 0 ? -2 : 5) * 24 * 60 * 60 * 1000).toISOString()
+    return {
+      id: invId,
+      tenantId,
+      customerId: c.id,
+      customerName: c.name,
+      customerPhone: c.phone,
+      total: productPrices[i] ?? 100,
+      paidAmount: i === 0 ? 0 : Math.round((productPrices[i] ?? 100) * 0.5),
+      status: i === 0 ? 'overdue' : 'partial' as const,
+      dueAt: dueDate,
+      createdAt: current,
+      updatedAt: current,
+      syncStatus: 'pending' as const,
+      recoveryStage: 't0_soft' as const,
+      nextRecoveryAt: dueDate,
+      lastWhatsAppStatus: 'queued' as const,
+      pdfUrl: `/invoice/${invId}`,
+      version: 1,
+    }
+  })
+
+  const invoiceItems: InvoiceItem[] = invoices.map((inv, i) => ({
+    id: uuid(),
+    tenantId,
+    invoiceId: inv.id,
+    productId: products[i]?.id,
+    name: products[i]?.name ?? 'Product',
+    qty: 1,
+    price: productPrices[i] ?? 100,
+    gstRate: productGstRates[i] ?? 18,
+    lineTotal: productPrices[i] ?? 100,
+    createdAt: current,
+    updatedAt: current,
+  }))
+
+  const activities: Activity[] = [
     {
       id: uuid(),
       tenantId,
-      name: 'Sample Product 1',
-      barcode: '1234567890123',
-      hsn: '1234',
-      gstRate: 18,
-      stock: 10,
-      lowStockAt: 5,
-      salePrice: 100,
-      purchasePrice: 80,
-      createdAt: current.toISOString(),
-      updatedAt: current.toISOString(),
+      label: `Welcome! ${tenantName} is ready to use.`,
+      createdAt: current,
     },
     {
       id: uuid(),
       tenantId,
-      name: 'Sample Product 2',
-      barcode: '1234567890124',
-      hsn: '1234',
-      gstRate: 12,
-      stock: 5,
-      lowStockAt: 8,
-      salePrice: 200,
-      purchasePrice: 160,
-      createdAt: current.toISOString(),
-      updatedAt: current.toISOString(),
+      label: 'Add products and start creating invoices.',
+      createdAt: current,
     },
   ]
 
   await database.transaction(
     'rw',
     [
-      database.tenants,
       database.customers,
       database.products,
+      database.invoices,
+      database.invoiceItems,
       database.activity,
     ],
     async () => {
-      await database.tenants.add(tenant)
       await database.customers.bulkAdd(customers)
       await database.products.bulkAdd(products)
-      await database.activity.add({
-        id: uuid(),
-        tenantId,
-        label: 'Welcome to BillZo! Start by creating your first invoice.',
-        createdAt: current.toISOString(),
-      })
+      await database.invoices.bulkAdd(invoices)
+      await database.invoiceItems.bulkAdd(invoiceItems)
+      await database.activity.bulkAdd(activities)
     }
   )
-}
-
-export function notifyChanged() {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('billzo:changed'))
-  }
 }

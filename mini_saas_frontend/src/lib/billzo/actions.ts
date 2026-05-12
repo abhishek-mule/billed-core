@@ -1,4 +1,6 @@
-import { db, notifyChanged, seedDemoData, uuid } from './db'
+'use client'
+
+import { db, notifyChanged, uuid, loadSampleData } from './db'
 import { createRecoveryAttempt, nextRecoveryAt, nextRecoveryStage } from './recovery'
 import { scheduleBackgroundSync, syncPendingQueue } from './sync'
 import { getActiveSession, getTenantId } from './tenant'
@@ -8,23 +10,21 @@ import type {
   Activity,
   BillzoSnapshot,
   Customer,
-  InventoryMovement,
   Invoice,
   InvoiceItem,
+  InventoryMovement,
   Payment,
   Product,
-  Purchase,
   QueueItem,
-  WhatsAppEvent,
 } from './types'
 
 export { syncPendingQueue }
+export { scheduleBackgroundSync }
 
-const todayKey = () => new Date().toISOString().slice(0, 10)
 const now = () => new Date().toISOString()
+const todayKey = () => now().slice(0, 10)
 
 type InvoiceWithItems = Invoice & { items: InvoiceItem[] }
-type PurchaseWithItems = Purchase & { items: InvoiceItem[] }
 
 export interface ActionResult<T = void> {
   success: boolean
@@ -35,26 +35,17 @@ export interface ActionResult<T = void> {
 }
 
 function getSession() {
-  const tenantId = getTenantId()
-  if (!tenantId) {
-    return getActiveSession()
-  }
   return getActiveSession()
 }
 
-async function incrementUsage(action: 'invoice' | 'reminder'): Promise<void> {
-  const tenantId = getTenantId()
-  if (!tenantId) return
+function getTenantIdLocal(): string | null {
+  return getTenantId()
+}
 
-  try {
-    await fetch('/api/paywall/check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, action }),
-    })
-  } catch {
-    console.warn('Failed to sync usage to server')
-  }
+async function log(label: string, amount?: number, cta?: string) {
+  const session = getSession()
+  const activity: Activity = { id: uuid(), tenantId: session.tenantId, label, amount, cta, createdAt: now() }
+  await db().activity.add(activity)
 }
 
 function enqueue(entity: QueueItem['entity'], entityId: string, action: QueueItem['action'], payload: unknown) {
@@ -78,14 +69,8 @@ function enqueue(entity: QueueItem['entity'], entityId: string, action: QueueIte
   })
 }
 
-async function log(label: string, amount?: number, cta?: string) {
-  const session = getSession()
-  const activity: Activity = { id: uuid(), tenantId: session.tenantId, label, amount, cta, createdAt: now() }
-  await db().activity.add(activity)
-}
-
 export async function checkPaywallAccess(action: 'invoice' | 'reminder'): Promise<ActionResult> {
-  const tenantId = getTenantId()
+  const tenantId = getTenantIdLocal()
   if (!tenantId) {
     return { success: true }
   }
@@ -111,19 +96,22 @@ export async function checkPaywallAccess(action: 'invoice' | 'reminder'): Promis
     return { success: true }
   } catch (error) {
     console.error('Paywall check failed:', error)
-    return { success: true }
+    return { success: false, error: 'Paywall check failed. Please try again.', blocked: 'paywall' }
   }
 }
 
 export async function ensureBillzoReady() {
   if (typeof indexedDB === 'undefined') return
 
-  const tenantId = getTenantId()
-  if (!tenantId) {
-    return
-  }
+  const tenantId = getTenantIdLocal()
+  const userId = localStorage.getItem('userId')
+  const tenantName = localStorage.getItem('tenantName')
+  if (!tenantId || !userId) return
 
-  await seedDemoData()
+  const tenant = await db().tenants.get(tenantId)
+  if (!tenant) return
+
+  await loadSampleData(tenantId, tenantName || 'My Shop', userId)
 }
 
 export async function getBillzoState() {
@@ -131,9 +119,7 @@ export async function getBillzoState() {
   const session = getSession()
 
   const tenant = await db().tenants.get(session.tenantId)
-  if (!tenant) {
-    return null
-  }
+  if (!tenant) return null
 
   const [customers, products, rawInvoices, invoiceItems, rawPurchases, inventoryMovements, payments, whatsappEvents, recoveryAttempts, queue, activity] =
     await Promise.all([
@@ -154,7 +140,7 @@ export async function getBillzoState() {
     ...invoice,
     items: invoiceItems.filter((item) => item.invoiceId === invoice.id),
   }))
-  const purchases: PurchaseWithItems[] = rawPurchases.map((purchase) => ({
+  const purchases = rawPurchases.map((purchase) => ({
     ...purchase,
     items: invoiceItems.filter((item) => item.invoiceId === purchase.id),
   }))
@@ -191,6 +177,10 @@ export async function getBillzoState() {
 }
 
 export async function createQuickInvoice(customer: Customer, product: Product, qty = 1): Promise<ActionResult<InvoiceWithItems | undefined>> {
+  if (!product) {
+    return { success: false, error: 'No products found. Please add a product first.' }
+  }
+
   const paywallCheck = await checkPaywallAccess('invoice')
   if (!paywallCheck.success && paywallCheck.blocked === 'paywall') {
     return { success: false, error: paywallCheck.error, blocked: 'paywall', blockType: paywallCheck.blockType }
@@ -244,54 +234,61 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
   }
 
   try {
+    const tenantId = getTenantIdLocal()
+    const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
+
     await db().transaction(
       'rw',
-      [db().invoices, db().invoiceItems, db().products, db().customers, db().inventoryMovements, db().queue, db().activity],
+      [db().invoices, db().invoiceItems, db().products, db().customers, db().inventoryMovements, db().tenants, db().queue, db().activity],
       async () => {
         await db().invoices.add(invoice)
         await db().invoiceItems.add(item)
         await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
-        await db().customers.update(customer.id, { lastUsedAt: current, invoiceCount: customer.invoiceCount + 1, updatedAt: current })
+        await db().customers.update(customer.id, { lastUsedAt: current, invoiceCount: (customer.invoiceCount || 0) + 1, updatedAt: current })
         await db().inventoryMovements.add(movement)
+        if (tenantId && currentTenant) {
+          await db().tenants.update(tenantId, {
+            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
+            updatedAt: current,
+          })
+        }
         await enqueue('invoice', invoice.id, 'upsert', invoice)
         await enqueue('invoice_item', item.id, 'upsert', item)
         await enqueue('inventory_movement', movement.id, 'upsert', movement)
-        await log(`Invoice made for ${customer.name}`, invoice.total, 'Recover')
+        await log(`Invoice for ${customer.name}`, invoice.total, 'Recover')
       }
     )
 
-    const tenantId = getTenantId()
-    if (tenantId) {
-      await db().tenants.update(tenantId, {
-        invoiceCount: (await db().tenants.get(tenantId))!.invoiceCount + 1,
-        updatedAt: current,
-      })
-    }
-
-    await incrementUsage('invoice')
     notifyChanged()
     scheduleBackgroundSync()
-
     return { success: true, data: { ...invoice, items: [item] } }
   } catch (error) {
     console.error('Failed to create invoice:', error)
-    return { success: false, error: 'Failed to create invoice' }
+    return { success: false, error: 'Failed to create invoice. Please try again.' }
   }
 }
 
 export async function repeatLastInvoice(): Promise<ActionResult> {
   const state = await getBillzoState()
-  if (!state) {
-    return { success: false, error: 'Session not found' }
+  if (!state) return { success: false, error: 'Session not found' }
+
+  if (state.invoices.length === 0) {
+    return { success: false, error: 'No previous invoice found. Create your first invoice to use this feature.' }
+  }
+  if (state.products.length === 0) {
+    return { success: false, error: 'No products found. Please add a product first.' }
+  }
+  if (state.customers.length === 0) {
+    return { success: false, error: 'No customers found. Please add a customer first.' }
   }
 
   const last = state.invoices[0]
-  const product = state.products.find((p) => p.id === last?.items[0]?.productId) || state.products[0]
-  const customer = state.customers.find((c) => c.id === last?.customerId) || state.customers[0]
-
-  if (!product || !customer) {
-    return { success: false, error: 'No products or customers found' }
-  }
+  const product = last?.items[0]?.productId
+    ? state.products.find((p) => p.id === last.items[0].productId) || state.products[0]
+    : state.products[0]
+  const customer = last?.customerId
+    ? state.customers.find((c) => c.id === last.customerId) || state.customers[0]
+    : state.customers[0]
 
   const result = await createQuickInvoice(customer, product, last?.items[0]?.qty || 1)
   if (!result.success) {
@@ -337,7 +334,7 @@ export async function markPaid(invoice: Invoice, amount = invoice.total - invoic
     return { success: true }
   } catch (error) {
     console.error('Failed to mark paid:', error)
-    return { success: false, error: 'Failed to mark payment' }
+    return { success: false, error: 'Failed to mark payment. Please try again.' }
   }
 }
 
@@ -348,8 +345,8 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
   }
 
   const current = now()
-
   let attempt: RecoveryAttempt
+
   try {
     const { createRecoveryAttemptWithAI } = await import('./recovery')
     attempt = await createRecoveryAttemptWithAI(invoice, invoice.recoveryStage, {
@@ -361,13 +358,13 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
     attempt = createRecoveryAttempt(invoice)
   }
 
-  const event: WhatsAppEvent = {
+  const event = {
     id: uuid(),
     tenantId: invoice.tenantId,
     invoiceId: invoice.id,
     recoveryAttemptId: attempt.id,
     providerMessageId: `wamid.test.${attempt.id}`,
-    status: 'sent',
+    status: 'sent' as const,
     occurredAt: current,
     createdAt: current,
   }
@@ -375,44 +372,47 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
   const nextAt = nextRecoveryAt(invoice.recoveryStage, 'sent')
 
   try {
-    await db().transaction('rw', [db().invoices, db().recoveryAttempts, db().whatsappEvents, db().queue, db().activity], async () => {
-      await db().recoveryAttempts.add({ ...attempt, status: 'sent', sentAt: current, updatedAt: current })
-      await db().whatsappEvents.add(event)
-      await db().invoices.update(invoice.id, {
-        lastWhatsAppStatus: 'sent',
-        recoveryStage: nextStage,
-        nextRecoveryAt: nextAt,
-        updatedAt: current,
-        syncStatus: 'pending',
-        version: invoice.version + 1,
-      })
-      await enqueue('recovery_attempt', attempt.id, 'send_whatsapp', attempt)
-      await enqueue('whatsapp_event', event.id, 'upsert', event)
-      await log(`WhatsApp sent to ${invoice.customerName}`, invoice.total - invoice.paidAmount, 'Collect')
-    })
+    const tenantId = getTenantIdLocal()
+    const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
 
-    const tenantId = getTenantId()
-    if (tenantId) {
-      await db().tenants.update(tenantId, {
-        reminderCount: ((await db().tenants.get(tenantId))?.reminderCount || 0) + 1,
-        updatedAt: current,
-      })
-    }
+    await db().transaction(
+      'rw',
+      [db().invoices, db().recoveryAttempts, db().whatsappEvents, db().tenants, db().queue, db().activity],
+      async () => {
+        await db().recoveryAttempts.add({ ...attempt, status: 'sent', sentAt: current, updatedAt: current })
+        await db().whatsappEvents.add(event)
+        await db().invoices.update(invoice.id, {
+          lastWhatsAppStatus: 'sent',
+          recoveryStage: nextStage,
+          nextRecoveryAt: nextAt,
+          updatedAt: current,
+          syncStatus: 'pending',
+          version: invoice.version + 1,
+        })
+        if (tenantId && currentTenant) {
+          await db().tenants.update(tenantId, {
+            reminderCount: (currentTenant.reminderCount || 0) + 1,
+            updatedAt: current,
+          })
+        }
+        await enqueue('recovery_attempt', attempt.id, 'send_whatsapp', attempt)
+        await enqueue('whatsapp_event', event.id, 'upsert', event)
+        await log(`WhatsApp sent to ${invoice.customerName}`, invoice.total - invoice.paidAmount, 'Collect')
+      }
+    )
 
-    await incrementUsage('reminder')
     notifyChanged()
     scheduleBackgroundSync()
-
     return { success: true }
   } catch (error) {
     console.error('Failed to send reminder:', error)
-    return { success: false, error: 'Failed to send reminder' }
+    return { success: false, error: 'Failed to send reminder. Please try again.' }
   }
 }
 
-export async function applyWhatsAppStatus(invoice: Invoice, status: WhatsAppEvent['status']): Promise<ActionResult> {
+export async function applyWhatsAppStatus(invoice: Invoice, status: 'queued' | 'sent' | 'delivered' | 'read' | 'failed'): Promise<ActionResult> {
   const current = now()
-  const event: WhatsAppEvent = {
+  const event = {
     id: uuid(),
     tenantId: invoice.tenantId,
     invoiceId: invoice.id,
@@ -437,29 +437,153 @@ export async function applyWhatsAppStatus(invoice: Invoice, status: WhatsAppEven
     return { success: true }
   } catch (error) {
     console.error('Failed to apply WhatsApp status:', error)
-    return { success: false, error: 'Failed to update status' }
+    return { success: false, error: 'Failed to update status. Please try again.' }
   }
 }
 
-export async function createPurchaseFromScan(overrides?: Partial<Purchase>): Promise<ActionResult> {
+export interface POSCartItem {
+  id: string
+  name: string
+  qty: number
+  salePrice: number
+  gstRate: number
+  stock: number
+}
+
+export async function handlePOSInvoice(
+  cart: POSCartItem[],
+  customerName: string,
+  customerPhone: string,
+  method: 'upi' | 'cash' | 'udhar'
+): Promise<ActionResult> {
+  if (cart.length === 0) {
+    return { success: false, error: 'Cart is empty. Add items before billing.' }
+  }
+
+  const paywallCheck = await checkPaywallAccess('invoice')
+  if (!paywallCheck.success && paywallCheck.blocked === 'paywall') {
+    return { success: false, error: paywallCheck.error, blocked: 'paywall', blockType: paywallCheck.blockType }
+  }
+
+  const session = getSession()
+  const current = now()
+  const invoiceId = uuid()
+  const total = cart.reduce((sum, item) => sum + item.salePrice * item.qty, 0)
+  const paidAmount = method === 'udhar' ? 0 : total
+
+  const invoice: Invoice = {
+    id: invoiceId,
+    tenantId: session.tenantId,
+    customerId: '',
+    customerName: customerName || 'Walk-in Customer',
+    customerPhone: customerPhone || '',
+    total,
+    paidAmount,
+    status: method === 'udhar' ? 'unpaid' : 'paid',
+    dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: current,
+    updatedAt: current,
+    syncStatus: 'pending',
+    recoveryStage: 't0_soft',
+    nextRecoveryAt: current,
+    lastWhatsAppStatus: 'queued',
+    pdfUrl: `/invoice/${invoiceId}`,
+    version: 1,
+  }
+
+  const items: InvoiceItem[] = cart.map((item) => ({
+    id: uuid(),
+    tenantId: session.tenantId,
+    invoiceId,
+    productId: item.id,
+    name: item.name,
+    qty: item.qty,
+    price: item.salePrice,
+    gstRate: item.gstRate,
+    lineTotal: item.salePrice * item.qty,
+    createdAt: current,
+    updatedAt: current,
+  }))
+
+  const movements: InventoryMovement[] = cart.map((item) => ({
+    id: uuid(),
+    tenantId: session.tenantId,
+    productId: item.id,
+    sourceType: 'invoice',
+    sourceId: invoiceId,
+    qtyDelta: -item.qty,
+    stockAfter: Math.max(0, item.stock - item.qty),
+    createdAt: current,
+  }))
+
+  try {
+    const tenantId = getTenantIdLocal()
+    const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
+
+    await db().transaction(
+      'rw',
+      [db().invoices, db().invoiceItems, db().products, db().inventoryMovements, db().tenants, db().queue, db().activity],
+      async () => {
+        await db().invoices.add(invoice)
+
+        for (const item of items) {
+          await db().invoiceItems.add(item)
+        }
+
+        for (const m of movements) {
+          const product = cart.find((c) => c.id === m.productId)
+          if (product) {
+            await db().products.update(m.productId, { stock: m.stockAfter, updatedAt: current })
+          }
+          await db().inventoryMovements.add(m)
+        }
+
+        if (tenantId && currentTenant) {
+          await db().tenants.update(tenantId, {
+            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
+            updatedAt: current,
+          })
+        }
+
+        await enqueue('invoice', invoice.id, 'upsert', invoice)
+        for (const item of items) {
+          await enqueue('invoice_item', item.id, 'upsert', item)
+        }
+        for (const m of movements) {
+          await enqueue('inventory_movement', m.id, 'upsert', m)
+        }
+        await log(`POS sale: ${customerName || 'Walk-in'}`, total, method.toUpperCase())
+      }
+    )
+
+    notifyChanged()
+    scheduleBackgroundSync()
+    return { success: true, data: { ...invoice, items } as any }
+  } catch (error) {
+    console.error('Failed to create POS invoice:', error)
+    return { success: false, error: 'Failed to create invoice. Please try again.' }
+  }
+}
+
+export async function createPurchaseFromScan(overrides?: Partial<{ supplier: string; gstin: string; amount: number }>): Promise<ActionResult> {
   const session = getSession()
   const state = await getBillzoState()
   if (!state || state.products.length === 0) {
-    return { success: false, error: 'No products found' }
+    return { success: false, error: 'No products found. Please add products first.' }
   }
 
   const product = state.products[0]
   const current = now()
-  const purchase: Purchase = {
+  const purchase = {
     id: uuid(),
     tenantId: session.tenantId,
-    supplier: overrides?.supplier || 'Supplier',
+    supplier: overrides?.supplier || '',
     gstin: overrides?.gstin || '',
     amount: overrides?.amount || 0,
-    source: 'scan',
+    source: 'scan' as const,
     createdAt: current,
     updatedAt: current,
-    syncStatus: 'pending',
+    syncStatus: 'pending' as const,
     version: 1,
   }
   const item: InvoiceItem = {
@@ -475,34 +599,38 @@ export async function createPurchaseFromScan(overrides?: Partial<Purchase>): Pro
     createdAt: current,
     updatedAt: current,
   }
-  const stockAfter = product.stock + item.qty
+  const stockAfter = product.stock + 1
   const movement: InventoryMovement = {
     id: uuid(),
     tenantId: session.tenantId,
     productId: product.id,
     sourceType: 'purchase',
     sourceId: purchase.id,
-    qtyDelta: item.qty,
+    qtyDelta: 1,
     stockAfter,
     createdAt: current,
   }
 
   try {
-    await db().transaction('rw', [db().purchases, db().invoiceItems, db().products, db().inventoryMovements, db().queue, db().activity], async () => {
-      await db().purchases.add(purchase)
-      await db().invoiceItems.add(item)
-      await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
-      await db().inventoryMovements.add(movement)
-      await enqueue('purchase', purchase.id, 'upsert', purchase)
-      await enqueue('invoice_item', item.id, 'upsert', item)
-      await enqueue('inventory_movement', movement.id, 'upsert', movement)
-      await log(`Purchase scanned: ${purchase.supplier}`, purchase.amount, 'Stock updated')
-    })
+    await db().transaction(
+      'rw',
+      [db().purchases, db().invoiceItems, db().products, db().inventoryMovements, db().queue, db().activity],
+      async () => {
+        await db().purchases.add(purchase)
+        await db().invoiceItems.add(item)
+        await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
+        await db().inventoryMovements.add(movement)
+        await enqueue('purchase', purchase.id, 'upsert', purchase)
+        await enqueue('invoice_item', item.id, 'upsert', item)
+        await enqueue('inventory_movement', movement.id, 'upsert', movement)
+        await log(`Purchase from ${purchase.supplier || 'Supplier'}`, purchase.amount, 'Stock updated')
+      }
+    )
     notifyChanged()
     scheduleBackgroundSync()
     return { success: true }
   } catch (error) {
     console.error('Failed to create purchase:', error)
-    return { success: false, error: 'Failed to create purchase' }
+    return { success: false, error: 'Failed to create purchase. Please try again.' }
   }
 }

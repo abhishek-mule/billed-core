@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
-import { getUsageLimits, incrementInvoiceCount } from "@/lib/billzo/usage";
+import { getUsageLimits } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
+import { handlePOSInvoice } from "@/lib/billzo/actions";
 
 type CartItem = {
   id: string;
@@ -95,77 +96,36 @@ export default function POSPage() {
     setShowPay(false);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
-    try {
-      const tenantId = localStorage.getItem("tenantId");
-      if (!tenantId) return;
+    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method);
 
-      // Check usage limits
-      const limits = await getUsageLimits(tenantId);
-      if (!limits.canCreateInvoice) {
+    if (!result.success) {
+      if (result.blocked === 'paywall') {
         setShowPaywall(true);
         return;
       }
+      console.error('POS invoice failed:', result.error);
+      return;
+    }
 
-      const invoiceId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const inv: any = {
+      id: (result.data as any)?.id,
+      number: (result.data as any)?.id?.slice(0, 8).toUpperCase(),
+      party: customer,
+      partyPhone: customerPhone,
+      amount: Math.round(total),
+      status: "synced",
+      date: "Just now",
+      method,
+      items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
+    };
 
-      await db().invoices.add({
-        id: invoiceId,
-        tenantId,
-        customerId: "",
-        customerName: customer,
-        customerPhone: customerPhone || "",
-        total: Math.round(total),
-        paidAmount: method === "cash" || method === "upi" ? Math.round(total) : 0,
-        status: method === "udhar" ? "unpaid" : "paid",
-        dueAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        syncStatus: "pending",
-        recoveryStage: "t0_soft",
-        nextRecoveryAt: new Date().toISOString(),
-        lastWhatsAppStatus: "queued",
-        pdfUrl: `/invoice/${invoiceId}`,
-        version: 1,
-      });
-
-      for (const item of cart) {
-        await db().invoiceItems.add({
-          id: `${invoiceId}-${item.id}`,
-          tenantId,
-          invoiceId,
-          productId: item.id,
-          name: item.name,
-          qty: item.qty,
-          price: item.salePrice,
-          gstRate: item.gstRate,
-          lineTotal: item.salePrice * item.qty,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      const inv: any = {
-        id: invoiceId,
-        number: invoiceId.slice(0, 8).toUpperCase(),
-        party: customer,
-        partyPhone: customerPhone,
-        amount: Math.round(total),
-        status: "synced",
-        date: "Just now",
-        method,
-        items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
-      };
-
-      // Increment invoice count
-      await incrementInvoiceCount(tenantId);
+    const tenantId = localStorage.getItem("tenantId");
+    if (tenantId) {
       const newLimits = await getUsageLimits(tenantId);
       setUsageLimits(newLimits);
-
-      setSuccess(inv);
-    } catch (error) {
-      console.error("Failed to create invoice:", error);
-      console.error("Failed to create invoice");
     }
+
+    setSuccess(inv);
   };
 
   const closeSuccess = () => {
