@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, MessageCircle, Shield, Zap, Phone, Lock, Eye, EyeOff } from "lucide-react";
+import { Loader2, MessageCircle, Shield, Zap, Phone } from "lucide-react";
 import { useFirebaseAuth } from "@/lib/billzo/firebase-auth";
-import { db } from "@/lib/billzo/db";
 
 type AuthMode = "google" | "phone" | "email";
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,29 +19,19 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("");
 
   const [mode, setMode] = useState<AuthMode>("phone");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [phoneStep, setPhoneStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [phoneStep, setPhoneStep] = useState<"phone" | "otp">("phone");
   const [otpCountdown, setOtpCountdown] = useState(0);
-  const [showPassword, setShowPassword] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isConfigured } = useFirebaseAuth();
+  const { signInWithGoogle } = useFirebaseAuth();
 
   useEffect(() => {
-    function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
     const accessToken = getCookie('bz_access')
     const tenantId = getCookie('bz_tenant')
-
     if (accessToken && tenantId) {
       checkOnboardingAndRedirect()
     }
@@ -50,21 +45,14 @@ export default function LoginPage() {
   }, [otpCountdown]);
 
   const checkOnboardingAndRedirect = async () => {
-    function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
     try {
       const accessToken = getCookie('bz_access')
       const tenantId = getCookie('bz_tenant')
-
       let userId = ''
       if (accessToken) {
         const payload = JSON.parse(atob(accessToken.split('.')[1]))
         userId = payload.userId || ''
       }
-
       if (!userId) return
 
       const response = await fetch("/api/onboarding/check", {
@@ -80,17 +68,13 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-
       switch (data.state) {
         case "NO_TENANT":
           router.push("/onboarding");
           break
         case "TENANT_NO_PLAN":
-          if (data.paywall?.blocked) {
-            router.push("/pricing")
-          } else {
-            router.push("/dashboard")
-          }
+          if (data.paywall?.blocked) router.push("/pricing")
+          else router.push("/dashboard")
           break
         case "ACTIVE":
           router.push("/dashboard");
@@ -120,19 +104,12 @@ export default function LoginPage() {
       });
 
       const data = await response.json();
-      console.log('/api/auth/login response:', response.status, data);
+      if (!response.ok) throw new Error(data.error || "Login failed via API");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed via API");
-      }
-
-      console.log('Navigating to /onboarding...');
-      setAuthLoading(false);
       router.push("/onboarding");
       return;
     } catch (err: any) {
       setAuthLoading(false);
-      console.error('handleBackendAuth error:', err);
       setError(err.message || "Something went wrong.");
     }
   };
@@ -143,22 +120,14 @@ export default function LoginPage() {
     setGoogleLoading(true);
 
     try {
-      console.log('Starting Google sign-in...');
-const result = await signInWithGoogle();
-      console.log('Google sign-in result:', result);
-
+      const result = await signInWithGoogle();
       setGoogleLoading(false);
 
       if (!result.success) {
-        if (result.error?.includes('popup-closed') || result.error?.includes('cancelled')) {
-          return;
-        }
+        if (result.error?.includes('popup-closed') || result.error?.includes('cancelled')) return;
         throw new Error(result.error || "Failed to sign in with Google");
       }
-
-      if (!result.userId) {
-        throw new Error("No user ID returned");
-      }
+      if (!result.userId) throw new Error("No user ID returned");
 
       await handleBackendAuth({
         email: result.email || undefined,
@@ -167,7 +136,6 @@ const result = await signInWithGoogle();
       });
     } catch (err: any) {
       setGoogleLoading(false);
-      console.error('Google sign-in error:', err);
       setError(err.message || "Something went wrong.");
     }
   };
@@ -175,26 +143,18 @@ const result = await signInWithGoogle();
   const handleSendOTP = async () => {
     setError("");
     const cleanedPhone = phone.replace(/\D/g, "");
-
     if (cleanedPhone.length < 10) {
       setError("Please enter a valid phone number");
       return;
     }
-
     try {
       const response = await fetch("/api/auth/phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleanedPhone }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send OTP");
-      }
-
-      setOtpSent(true);
+      if (!response.ok) throw new Error(data.error || "Failed to send OTP");
       setPhoneStep("otp");
       setOtpCountdown(60);
       setSuccessMsg(data.message || "OTP sent successfully");
@@ -206,24 +166,18 @@ const result = await signInWithGoogle();
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     if (otp.length !== 6) {
       setError("Please enter a 6-digit OTP");
       return;
     }
-
     try {
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Invalid OTP");
-      }
+      if (!response.ok) throw new Error(data.error || "Invalid OTP");
 
       await handleBackendAuth({
         userId: data.userId,
@@ -233,43 +187,6 @@ const result = await signInWithGoogle();
       setError(err.message || "Verification failed. Please try again.");
     }
   };
-
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccessMsg("");
-
-    if (!email || !password) {
-      setError("Please fill in all fields");
-      return;
-    }
-
-    try {
-      const result = await signInWithEmail(email, password);
-
-      if (result.needsVerification) {
-        setError(result.error || "Please verify your email address.");
-        return;
-      }
-
-      if (!result.success || !result.email || !result.userId) {
-        throw new Error(result.error || "Failed to sign in");
-      }
-
-      await handleBackendAuth({
-        email: result.email,
-        userId: result.userId,
-      });
-    } catch (err: any) {
-      setError(err.message || "Something went wrong.");
-    }
-  };
-
-  const features = [
-    { icon: Zap, text: "Instant invoice creation" },
-    { icon: MessageCircle, text: "Automated WhatsApp reminders" },
-    { icon: Shield, text: "Secure & encrypted data" },
-  ];
 
   return (
     <div className="min-h-screen bg-white flex flex-col lg:flex-row">
@@ -299,7 +216,11 @@ const result = await signInWithGoogle();
           </div>
 
           <div className="space-y-4">
-            {features.map((f, i) => (
+            {[
+              { icon: Zap, text: "Instant invoice creation" },
+              { icon: MessageCircle, text: "Automated WhatsApp reminders" },
+              { icon: Shield, text: "Secure & encrypted data" },
+            ].map((f, i) => (
               <div key={i} className="flex items-center gap-4 text-slate-300">
                 <div className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center">
                   <f.icon className="w-5 h-5 text-indigo-400" />
@@ -310,7 +231,7 @@ const result = await signInWithGoogle();
           </div>
         </div>
 
-        <div className="relative text-slate-500 text-sm">
+        <div className="relative text-slate-500 text-sm"></div>
       </div>
 
       <div className="flex-1 flex flex-col">
@@ -318,6 +239,7 @@ const result = await signInWithGoogle();
           <div className="flex items-center gap-2">
             <img src="/logo_new.png" alt="BillZo" className="w-8 h-8 object-contain" />
             <span className="font-bold text-slate-900">BillZo</span>
+          </div>
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6">
@@ -366,7 +288,7 @@ const result = await signInWithGoogle();
                       disabled={!phone}
                       className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
                     >
-                      {"Send OTP"}
+                      Send OTP
                     </button>
                   </div>
                 ) : (
@@ -426,28 +348,26 @@ const result = await signInWithGoogle();
               </div>
             </div>
 
-<button
-                  onClick={handleGoogleSignIn}
-                  type="button"
-                  disabled={googleLoading || authLoading}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
-                >
-                  {googleLoading || authLoading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                      </svg>
-                      Google Account
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            <button
+              onClick={handleGoogleSignIn}
+              type="button"
+              disabled={googleLoading || authLoading}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 py-3.5 px-4 rounded-xl hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
+            >
+              {googleLoading || authLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                  Google Account
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
