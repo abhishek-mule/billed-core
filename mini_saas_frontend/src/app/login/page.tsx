@@ -63,28 +63,25 @@ export default function LoginPage() {
       })
 
       if (!response.ok) {
-        router.push("/onboarding");
+        window.location.href = "/onboarding";
         return
       }
 
       const data = await response.json();
       switch (data.state) {
         case "NO_TENANT":
-          router.push("/onboarding");
-          break
         case "TENANT_NO_PLAN":
-          if (data.paywall?.blocked) router.push("/pricing")
-          else router.push("/dashboard")
+          window.location.href = "/onboarding";
           break
         case "ACTIVE":
-          router.push("/dashboard");
+          window.location.href = "/dashboard";
           break
         default:
-          router.push("/dashboard")
+          window.location.href = "/dashboard"
       }
     } catch (err) {
       console.error("Onboarding check failed:", err)
-      router.push("/dashboard")
+      window.location.href = "/dashboard"
     }
   };
 
@@ -106,7 +103,7 @@ export default function LoginPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Login failed via API");
 
-      router.push("/onboarding");
+      window.location.href = "/onboarding";
       return;
     } catch (err: any) {
       setAuthLoading(false);
@@ -171,7 +168,7 @@ export default function LoginPage() {
       return;
     }
     try {
-      const response = await fetch("/api/auth/verify-otp", {
+const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp }),
@@ -179,10 +176,7 @@ export default function LoginPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Invalid OTP");
 
-      await handleBackendAuth({
-        userId: data.userId,
-        phone: data.phone,
-      });
+      window.location.href = "/onboarding";
     } catch (err: any) {
       setError(err.message || "Verification failed. Please try again.");
     }
