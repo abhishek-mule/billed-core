@@ -27,10 +27,15 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const tenantId = localStorage.getItem("tenantId");
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
-        router.push("/login");
-        return;
+        router.push("/login")
+        return
       }
 
       const invoiceData = await db().invoices.where("tenantId").equals(tenantId).toArray();

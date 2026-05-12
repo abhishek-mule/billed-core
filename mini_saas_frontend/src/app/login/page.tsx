@@ -29,11 +29,16 @@ export default function LoginPage() {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, isConfigured } = useFirebaseAuth();
 
   useEffect(() => {
-    const accessToken = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-    const tenantId = localStorage.getItem("tenantId");
+    function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    const accessToken = getCookie('bz_access')
+    const tenantId = getCookie('bz_tenant')
 
     if (accessToken && tenantId) {
-      checkOnboardingAndRedirect();
+      checkOnboardingAndRedirect()
     }
   }, []);
 
@@ -45,20 +50,29 @@ export default function LoginPage() {
   }, [otpCountdown]);
 
   const checkOnboardingAndRedirect = async () => {
+    function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
     try {
-      const userId = localStorage.getItem("userId");
-      const tenantId = localStorage.getItem("tenantId");
+      const accessToken = getCookie('bz_access')
+      const tenantId = getCookie('bz_tenant')
 
-      if (!userId) {
-        return
+      let userId = ''
+      if (accessToken) {
+        const payload = JSON.parse(atob(accessToken.split('.')[1]))
+        userId = payload.userId || ''
       }
+
+      if (!userId) return
 
       const response = await fetch("/api/onboarding/check", {
         headers: {
           "x-user-id": userId,
           "x-tenant-id": tenantId || "",
         },
-      });
+      })
 
       if (!response.ok) {
         router.push("/onboarding");
@@ -110,22 +124,6 @@ export default function LoginPage() {
 
       if (!response.ok) {
         throw new Error(data.error || "Login failed via API");
-      }
-
-      const uid = userData.userId;
-
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("userId", uid);
-      localStorage.setItem("isPaid", data.isPaid ? "true" : "false");
-
-      const existingTenant = await db().tenants
-        .filter(t => t.ownerUserId === uid || (t as any).email === userData.email)
-        .first();
-
-      if (existingTenant) {
-        localStorage.setItem("tenantId", existingTenant.id);
-        localStorage.setItem("tenantName", existingTenant.name);
       }
 
       console.log('Navigating to /onboarding...');
