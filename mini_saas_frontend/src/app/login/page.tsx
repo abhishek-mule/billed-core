@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, MessageCircle, Shield, Zap, Phone } from "lucide-react";
 import { useFirebaseAuth } from "@/lib/billzo/firebase-auth";
 
@@ -13,11 +12,53 @@ function getCookie(name: string) {
   return match ? match[2] : null
 }
 
+function getUserIdFromCookie() {
+  const token = getCookie('bz_access')
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.userId || null
+  } catch { return null }
+}
+
+async function handlePostAuthRedirect() {
+  const userId = getUserIdFromCookie()
+  const tenantId = getCookie('bz_tenant')
+  if (!userId) {
+    window.location.href = "/login"
+    return
+  }
+  try {
+    const response = await fetch("/api/onboarding/check", {
+      headers: {
+        "x-user-id": userId,
+        "x-tenant-id": tenantId || "",
+      },
+    })
+    if (!response.ok || response.status === 401) {
+      window.location.href = "/login"
+      return
+    }
+    const data = await response.json()
+    switch (data.state) {
+      case "NO_TENANT":
+      case "TENANT_NO_PLAN":
+        window.location.href = "/onboarding"
+        break
+      case "ACTIVE":
+        window.location.href = "/dashboard"
+        break
+      default:
+        window.location.href = "/dashboard"
+    }
+  } catch {
+    window.location.href = "/login"
+  }
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
   const [mode, setMode] = useState<AuthMode>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -33,7 +74,7 @@ export default function LoginPage() {
     const accessToken = getCookie('bz_access')
     const tenantId = getCookie('bz_tenant')
     if (accessToken && tenantId) {
-      checkOnboardingAndRedirect()
+      handlePostAuthRedirect()
     }
   }, []);
 
@@ -43,47 +84,6 @@ export default function LoginPage() {
       return () => clearTimeout(timer);
     }
   }, [otpCountdown]);
-
-  const checkOnboardingAndRedirect = async () => {
-    try {
-      const accessToken = getCookie('bz_access')
-      const tenantId = getCookie('bz_tenant')
-      let userId = ''
-      if (accessToken) {
-        const payload = JSON.parse(atob(accessToken.split('.')[1]))
-        userId = payload.userId || ''
-      }
-      if (!userId) return
-
-      const response = await fetch("/api/onboarding/check", {
-        headers: {
-          "x-user-id": userId,
-          "x-tenant-id": tenantId || "",
-        },
-      })
-
-      if (!response.ok) {
-        window.location.href = "/onboarding";
-        return
-      }
-
-      const data = await response.json();
-      switch (data.state) {
-        case "NO_TENANT":
-        case "TENANT_NO_PLAN":
-          window.location.href = "/onboarding";
-          break
-        case "ACTIVE":
-          window.location.href = "/dashboard";
-          break
-        default:
-          window.location.href = "/dashboard"
-      }
-    } catch (err) {
-      console.error("Onboarding check failed:", err)
-      window.location.href = "/dashboard"
-    }
-  };
 
   const handleBackendAuth = async (userData: { email?: string; userId: string; name?: string; phone?: string }) => {
     setAuthLoading(true);
@@ -99,12 +99,9 @@ export default function LoginPage() {
           phone: userData.phone,
         }),
       });
-
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Login failed via API");
-
-      window.location.href = "/onboarding";
-      return;
+      handlePostAuthRedirect();
     } catch (err: any) {
       setAuthLoading(false);
       setError(err.message || "Something went wrong.");
@@ -115,17 +112,14 @@ export default function LoginPage() {
     setError("");
     setSuccessMsg("");
     setGoogleLoading(true);
-
     try {
       const result = await signInWithGoogle();
       setGoogleLoading(false);
-
       if (!result.success) {
         if (result.error?.includes('popup-closed') || result.error?.includes('cancelled')) return;
         throw new Error(result.error || "Failed to sign in with Google");
       }
       if (!result.userId) throw new Error("No user ID returned");
-
       await handleBackendAuth({
         email: result.email || undefined,
         userId: result.userId,
@@ -152,6 +146,7 @@ export default function LoginPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to send OTP");
+      setOtpSent(true);
       setPhoneStep("otp");
       setOtpCountdown(60);
       setSuccessMsg(data.message || "OTP sent successfully");
@@ -168,15 +163,14 @@ export default function LoginPage() {
       return;
     }
     try {
-const response = await fetch("/api/auth/verify-otp", {
+      const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Invalid OTP");
-
-      window.location.href = "/onboarding";
+      handlePostAuthRedirect();
     } catch (err: any) {
       setError(err.message || "Verification failed. Please try again.");
     }
@@ -224,8 +218,6 @@ const response = await fetch("/api/auth/verify-otp", {
             ))}
           </div>
         </div>
-
-        <div className="relative text-slate-500 text-sm"></div>
       </div>
 
       <div className="flex-1 flex flex-col">
