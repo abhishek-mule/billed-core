@@ -23,7 +23,12 @@ export default function PartiesPage() {
 
   const loadCustomers = async () => {
     try {
-      const tenantId = localStorage.getItem("tenantId");
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/login");
         return;
@@ -112,7 +117,12 @@ export default function PartiesPage() {
                 <button
                   className="px-3 py-1.5 border border-input rounded-lg font-medium text-sm"
                   onClick={async () => {
-                    const tenantId = localStorage.getItem("tenantId");
+                    const getCookie = (name: string) => {
+                      if (typeof document === 'undefined') return null
+                      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+                      return match ? match[2] : null
+                    }
+                    const tenantId = getCookie('bz_tenant')
                     if (!tenantId) return;
 
                     const limits = await getUsageLimits(tenantId);

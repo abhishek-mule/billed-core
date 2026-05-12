@@ -17,7 +17,16 @@ export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>('recovery')
 
   useEffect(() => {
-    const userId = localStorage.getItem("userId")
+    const userId = (() => {
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const token = getCookie('bz_access')
+      if (!token) return null
+      try { return JSON.parse(atob(token.split('.')[1])).userId || null } catch { return null }
+    })()
     if (!userId) router.push("/login")
   }, [router])
 

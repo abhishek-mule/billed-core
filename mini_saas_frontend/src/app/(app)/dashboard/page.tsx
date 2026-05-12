@@ -9,6 +9,16 @@ import { UsagePill } from "@/components/billzo/UsagePill";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+function getTenantName() {
+  return getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop'
+}
+
 const statusBadge: Record<string, string> = {
   synced: "bg-green-100 text-green-700",
   pending: "bg-yellow-100 text-yellow-700",
@@ -20,18 +30,16 @@ export default function DashboardPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayStats, setTodayStats] = useState({ revenue: 0, invoiceCount: 0, failedCount: 0, yesterdayRevenue: 0 });
+  const [tenantName, setTenantName] = useState('My Shop');
 
   useEffect(() => {
-    loadData();
+    const name = getTenantName()
+    setTenantName(name)
+    loadData()
   }, []);
 
   const loadData = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/login")
@@ -43,11 +51,9 @@ export default function DashboardPage() {
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString();
 
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString();
 
       const todayInvoices = invoiceData.filter((inv: any) => new Date(inv.createdAt) >= today);
       const revenue = todayInvoices.reduce((s: number, inv: any) => s + (inv.total || 0), 0);
@@ -89,7 +95,7 @@ export default function DashboardPage() {
             <Store className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">{localStorage.getItem("tenantName") || "My Shop"}</h1>
+            <h1 className="text-xl font-bold">{tenantName}</h1>
             <p className="text-xs text-muted-foreground">Dashboard</p>
           </div>
         </div>

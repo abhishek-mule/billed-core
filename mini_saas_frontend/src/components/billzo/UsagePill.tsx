@@ -16,7 +16,12 @@ export function UsagePill() {
 
   const loadUsage = async () => {
     try {
-      const tenantId = localStorage.getItem("tenantId");
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         setLoading(false);
         return;

@@ -29,9 +29,13 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
 
   const handleUpgrade = async () => {
     setLoading(true)
-
     try {
-      const tenantId = localStorage.getItem("tenantId")
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/login")
         return
@@ -45,7 +49,6 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
         updatedAt: new Date().toISOString(),
       })
 
-      localStorage.setItem("isPaid", "true")
       setUpgraded(true)
 
       setTimeout(() => {
@@ -64,7 +67,12 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
   const handleUpgradeGrowth = async () => {
     setLoading(true)
     try {
-      const tenantId = localStorage.getItem("tenantId")
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) return
 
       await new Promise(resolve => setTimeout(resolve, 1500))
@@ -73,7 +81,6 @@ export function PaywallModal({ type, open, onClose, currentCount, limit, recover
         paywallUnlocked: true,
         updatedAt: new Date().toISOString(),
       })
-      localStorage.setItem("isPaid", "true")
       setUpgraded(true)
       setTimeout(() => {
         onClose()

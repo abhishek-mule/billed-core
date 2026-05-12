@@ -22,7 +22,12 @@ export default function SettingsPage() {
 
   const loadData = async () => {
     try {
-      const tenantId = localStorage.getItem("tenantId");
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/login");
         return;
@@ -31,7 +36,7 @@ export default function SettingsPage() {
       const data = await db().tenants.get(tenantId);
       setTenant(data);
 
-      const savedPrefs = localStorage.getItem("prefs");
+      const savedPrefs = getCookie('bz_prefs') || null;
       if (savedPrefs) {
         setPrefs(JSON.parse(savedPrefs));
       }
@@ -45,7 +50,7 @@ export default function SettingsPage() {
   const updatePref = (key: string, value: any) => {
     const newPrefs = { ...prefs, [key]: value };
     setPrefs(newPrefs);
-    localStorage.setItem("prefs", JSON.stringify(newPrefs));
+    document.cookie = `bz_prefs=${encodeURIComponent(JSON.stringify(newPrefs))}; Path=/; Max-Age=${365*24*3600}; SameSite=Lax`;
   };
 
   const actionOpts: { key: string; label: string }[] = [

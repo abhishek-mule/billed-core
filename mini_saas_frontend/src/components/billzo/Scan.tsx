@@ -97,7 +97,12 @@ export function Scan() {
     if (!result) return
     
     const { db } = await import('@/lib/billzo/db')
-    const tenantId = localStorage.getItem('tenantId')
+    const getCookie = (name: string) => {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    const tenantId = getCookie('bz_tenant') || ''
     if (!tenantId) return
 
     await db().purchases.add({
@@ -119,13 +124,19 @@ export function Scan() {
 
   const saveAsInvoice = async () => {
     if (!result) return
-    
+
+    const getCookie = (name: string) => {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+
     const { db } = await import('@/lib/billzo/db')
-    const tenantId = localStorage.getItem('tenantId')
+    const tenantId = getCookie('bz_tenant') || ''
     if (!tenantId) return
 
     const invoiceId = `local-${Date.now()}`
-    
+
     await db().invoices.add({
       id: invoiceId,
       tenantId,

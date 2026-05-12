@@ -94,7 +94,8 @@ export function setAuthCookies(
   response: NextResponse,
   accessToken: string,
   refreshToken: string,
-  tenantId?: string
+  tenantId?: string,
+  tenantName?: string
 ) {
   const isProd = process.env.NODE_ENV === 'production'
   response.cookies.set(ACCESS_COOKIE, accessToken, {
@@ -119,6 +120,13 @@ export function setAuthCookies(
       maxAge: 30 * 24 * 3600,
       path: '/',
     })
+    response.cookies.set('bz_tenant_name', tenantName || '', {
+      httpOnly: false,
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 3600,
+      path: '/',
+    })
   }
 }
 
@@ -126,6 +134,7 @@ export function clearAuthCookies(response: NextResponse) {
   response.cookies.delete(ACCESS_COOKIE)
   response.cookies.delete(REFRESH_COOKIE)
   response.cookies.delete('bz_tenant')
+  response.cookies.delete('bz_tenant_name')
 }
 
 export function getTokenFromRequest(request: NextRequest): string | null {

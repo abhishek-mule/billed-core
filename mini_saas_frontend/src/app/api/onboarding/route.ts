@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
         success: true,
         tenantId: existingTenant.id,
         updated: true,
+        name: shopName.trim(),
+      }, {
+        headers: {
+          'Set-Cookie': `bz_tenant_name=${encodeURIComponent(shopName.trim())}; Path=/; Max-Age=${30*24*3600}${process.env.NODE_ENV === 'production' ? '; SameSite=Lax; Secure' : '; SameSite=Lax'}`,
+        },
       })
     }
 
@@ -99,6 +104,10 @@ export async function POST(request: NextRequest) {
       tenantId,
       created: true,
       name: inferredName,
+    }, {
+      headers: {
+        'Set-Cookie': `bz_tenant_name=${encodeURIComponent(inferredName)}; Path=/; Max-Age=${30*24*3600}${process.env.NODE_ENV === 'production' ? '; SameSite=Lax; Secure' : '; SameSite=Lax'}`,
+      },
     })
   } catch (error) {
     console.error('Tenant creation error:', error)

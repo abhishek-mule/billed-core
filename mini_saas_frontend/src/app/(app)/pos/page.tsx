@@ -23,6 +23,12 @@ type CartItem = {
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
 export default function POSPage() {
   const router = useRouter();
   const [products, setProducts] = useState<any[]>([]);
@@ -45,7 +51,12 @@ export default function POSPage() {
 
   const loadData = async () => {
     try {
-      const tenantId = localStorage.getItem("tenantId");
+      function getCookie(name: string) {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+      const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/login");
         return;
@@ -118,12 +129,8 @@ export default function POSPage() {
       method,
       items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
     };
-
-    const tenantId = localStorage.getItem("tenantId");
-    if (tenantId) {
-      const newLimits = await getUsageLimits(tenantId);
-      setUsageLimits(newLimits);
-    }
+    const newLimits = await getUsageLimits(getCookie('bz_tenant') || '');
+    if (newLimits) setUsageLimits(newLimits);
 
     setSuccess(inv);
   };
@@ -336,7 +343,7 @@ export default function POSPage() {
                     subtotal: Math.round(success.amount / 1.18),
                     tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
                     total: success.amount,
-                    businessName: localStorage.getItem('tenantName') || 'My Shop',
+                    businessName: getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop',
                   }
                   downloadInvoicePDF(pdfData)
                 }}
@@ -358,7 +365,7 @@ export default function POSPage() {
                     subtotal: Math.round(success.amount / 1.18),
                     tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
                     total: success.amount,
-                    businessName: localStorage.getItem('tenantName') || 'My Shop',
+                    businessName: getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop',
                   }
                   const waLink = getWhatsAppShareLink(pdfData)
                   window.open(waLink, '_blank')

@@ -110,8 +110,13 @@ export default function PricingPage() {
     setState((prev) => ({ ...prev, selectedPlan: planId, processing: true, error: null }))
 
     try {
-      const tenantId = localStorage.getItem("tenantId")
-      const tenantName = localStorage.getItem("tenantName")
+      function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    const tenantId = getCookie('bz_tenant') || ''
+    const tenantName = getCookie('bz_tenant_name') || ''
 
       const response = await fetch("/api/payment/create-subscription", {
         method: "POST",
@@ -132,7 +137,7 @@ export default function PricingPage() {
 
       if (data.mock || data.subscriptionId?.startsWith('sub_demo_')) {
         setTimeout(() => {
-          localStorage.setItem("isPaid", "true")
+          
           if (tenantId) {
             import("@/lib/billzo/db").then(({ db }) => {
               db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
@@ -150,7 +155,7 @@ export default function PricingPage() {
         description: `BillZo ${planId} Plan`,
         handler: async (response: { razorpay_subscription_id: string }) => {
           console.log("Payment successful:", response)
-          localStorage.setItem("isPaid", "true")
+          
           if (tenantId) {
             import("@/lib/billzo/db").then(({ db }) => {
               db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })

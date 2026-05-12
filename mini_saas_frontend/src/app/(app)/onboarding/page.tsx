@@ -23,15 +23,17 @@ export default function OnboardingPage() {
   const [autofilling, setAutofilling] = useState(false);
 
   useEffect(() => {
-    const tenantId = localStorage.getItem("tenantId");
+    function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    const tenantId = getCookie('bz_tenant')
+    const accessToken = getCookie('bz_access')
     if (tenantId) {
       router.push("/dashboard");
     }
-  }, [router]);
-
-  useEffect(() => {
-    const userId = localStorage.getItem("userId");
-    if (!userId) {
+    if (!accessToken) {
       router.push("/login");
     }
   }, [router]);
@@ -110,32 +112,38 @@ export default function OnboardingPage() {
     setErrors({});
 
     try {
-      const userId = localStorage.getItem("userId");
-      if (!userId) {
-        router.push("/login");
-        return;
-      }
+      function getCookie(name: string) {
+      if (typeof document === 'undefined') return null
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+      return match ? match[2] : null
+    }
+    let userId = ''
+    const accessToken = getCookie('bz_access')
+    if (accessToken) {
+      try { userId = JSON.parse(atob(accessToken.split('.')[1])).userId || '' } catch {}
+    }
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
 
-      const response = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shopName: shop.trim(),
-          phone: phone || undefined,
-          upiId: upiId || undefined,
-          gstin: gstin || undefined,
-          userId,
-        }),
-      });
+    const response = await fetch("/api/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shopName: shop.trim(),
+        phone: phone || undefined,
+        upiId: upiId || undefined,
+        gstin: gstin || undefined,
+        userId,
+      }),
+    });
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to create shop");
       }
-
-      localStorage.setItem("tenantId", data.tenantId);
-      localStorage.setItem("tenantName", data.name || shop.trim());
 
       setLoading("done");
       setTimeout(() => router.push("/dashboard"), 1700);
