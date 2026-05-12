@@ -2,38 +2,35 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { initializeApp, getApps } from 'firebase/app'
-import { 
-  getAuth, 
-  signInWithPopup, 
+import {
+  getAuth,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendEmailVerification,
   updateProfile,
   browserLocalPersistence,
-  setPersistence
+  setPersistence,
 } from 'firebase/auth'
 
-// Check if Firebase is properly configured
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  messagingSenderId: process.env.NEXT_PUBLIC_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_APP_ID,
 }
 
 const isFirebaseConfigured = !!(
-  firebaseConfig.apiKey && 
+  firebaseConfig.apiKey &&
   firebaseConfig.apiKey.length > 10 &&
   firebaseConfig.apiKey !== 'your_api_key_here' &&
   firebaseConfig.projectId &&
   firebaseConfig.projectId !== 'your_project_id'
 )
-
-// Demo mode - when Firebase is not configured
-const DEMO_MODE = !isFirebaseConfigured
 
 const DISPOSABLE_DOMAINS = ['mailinator.com', '10minutemail.com', 'temp-mail.org', 'guerrillamail.com', 'yopmail.com', 'throwawaymail.com'];
 
@@ -55,7 +52,7 @@ export function useFirebaseAuth() {
           setIsReady(false)
         }
       } else {
-        setIsReady(true) // Demo mode is always ready
+        setIsReady(true)
       }
     }
   }, [])
@@ -65,16 +62,19 @@ export function useFirebaseAuth() {
     return DISPOSABLE_DOMAINS.includes(domain);
   }
 
-  const signInWithGoogle = useCallback(async (): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string }> => {
-    console.log('signInWithGoogle called. isReady:', isReady, 'DEMO_MODE:', DEMO_MODE);
-
+  const signInWithGoogle = useCallback(async (): Promise<{
+    success: boolean
+    userId?: string
+    email?: string | null
+    name?: string | null
+    error?: string
+    pending?: boolean
+  }> => {
     if (!isReady) {
-      return { success: false, error: 'Authentication system is still initializing. Please wait a second and try again.' }
+      return { success: false, error: 'Authentication system is still initializing. Please wait and try again.' }
     }
 
-    if (DEMO_MODE) {
-      console.warn('[Firebase] Attempted real sign-in in Demo Mode. Please configure environment variables.');
-      // Return error instead of silent simulation so the user knows why no popup appeared
+    if (!isFirebaseConfigured) {
       return { success: false, error: 'Google Sign-In is not configured. Please add your Firebase API Key and Project ID to .env.local' }
     }
 
@@ -82,39 +82,40 @@ export function useFirebaseAuth() {
     setError(null)
 
     try {
-      console.log('Initializing Firebase Auth...');
       const auth = getAuth()
-      
+
       await setPersistence(auth, browserLocalPersistence).catch(err => {
         console.warn('Persistence error:', err);
       })
-      
+
+      const pendingResult = await getRedirectResult(auth).catch(() => null)
+      if (pendingResult?.user) {
+        setLoading(false)
+        return {
+          success: true,
+          userId: pendingResult.user.uid,
+          email: pendingResult.user.email,
+          name: pendingResult.user.displayName || pendingResult.user.email?.split('@')[0],
+        }
+      }
+
       const provider = new GoogleAuthProvider()
       provider.addScope('email')
       provider.addScope('profile')
-      
-      console.log('Opening Google Sign-In popup...');
-      const result = await signInWithPopup(auth, provider)
-      
-      console.log('Google Sign-In successful:', result.user.uid);
+
+      await signInWithRedirect(auth, provider)
       setLoading(false)
-      return { 
-        success: true, 
-        userId: result.user.uid,
-        email: result.user.email,
-        name: result.user.displayName || result.user.email?.split('@')[0]
-      }
+      return { success: false, pending: true }
     } catch (err: any) {
       setLoading(false)
       console.error('Google sign-in error:', err)
-      
-      // Handle specific Firebase auth errors
-      if (err.code === 'auth/popup-blocked') {
-        setError('Popup was blocked. Please allow popups for this site.')
-        return { success: false, error: 'Popup blocked. Please allow popups and try again.' }
+
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled. Please enable it in your Firebase console.')
+        return { success: false, error: 'Google Sign-In is not enabled in Firebase console.' }
       }
-      if (err.code === 'auth/cancelled-popup-request') {
-        return { success: false, error: 'Sign-in cancelled.' }
+      if (err.code === 'auth/no-auth-event') {
+        return { success: false, error: 'No authentication event found.' }
       }
       if (err.code === 'auth/network-request-failed') {
         setError('Network error. Please check your connection.')
@@ -123,23 +124,16 @@ export function useFirebaseAuth() {
       if (err.code === 'auth/user-disabled') {
         return { success: false, error: 'This account has been disabled.' }
       }
-      if (err.code === 'auth/invalid-credential') {
-        return { success: false, error: 'Invalid credentials. Please try again.' }
-      }
-      
+
       const errorMsg = err.message || 'Failed to sign in with Google'
       setError(errorMsg)
-      if (err.code === 'auth/popup-closed-by-user') {
-        return { success: false, error: 'Sign-in was cancelled. Please try again.' }
-      }
       return { success: false, error: errorMsg }
     }
   }, [isReady])
 
   const signUpWithEmail = useCallback(async (email: string, password: string, name: string): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string }> => {
-    if (DEMO_MODE || !isReady) {
-      const demoUserId = `demo_${Date.now()}`
-      return { success: true, userId: demoUserId, email, name }
+    if (!isReady) {
+      return { success: false, error: 'Auth not ready' }
     }
 
     if (isDisposableEmail(email)) {
@@ -152,18 +146,18 @@ export function useFirebaseAuth() {
     try {
       const auth = getAuth()
       const result = await createUserWithEmailAndPassword(auth, email, password)
-      
+
       if (name) {
         await updateProfile(result.user, { displayName: name });
       }
       await sendEmailVerification(result.user);
-      
+
       setLoading(false)
-      return { 
-        success: true, 
+      return {
+        success: true,
         userId: result.user.uid,
         email: result.user.email,
-        name: name || result.user.displayName
+        name: name || result.user.displayName,
       }
     } catch (err: any) {
       setLoading(false)
@@ -182,9 +176,8 @@ export function useFirebaseAuth() {
   }, [isReady])
 
   const signInWithEmail = useCallback(async (email: string, password: string): Promise<{ success: boolean; userId?: string; email?: string | null; name?: string | null; error?: string; needsVerification?: boolean }> => {
-    if (DEMO_MODE || !isReady) {
-      const demoUserId = `demo_${Date.now()}`
-      return { success: true, userId: demoUserId, email, name: 'Demo User' }
+    if (!isReady) {
+      return { success: false, error: 'Auth not ready' }
     }
 
     setLoading(true)
@@ -193,18 +186,18 @@ export function useFirebaseAuth() {
     try {
       const auth = getAuth()
       const result = await signInWithEmailAndPassword(auth, email, password)
-      
+
       if (!result.user.emailVerified) {
         setLoading(false)
         return { success: false, needsVerification: true, error: 'Please verify your email address before logging in.' }
       }
 
       setLoading(false)
-      return { 
-        success: true, 
+      return {
+        success: true,
         userId: result.user.uid,
         email: result.user.email,
-        name: result.user.displayName || result.user.email?.split('@')[0]
+        name: result.user.displayName || result.user.email?.split('@')[0],
       }
     } catch (err: any) {
       setLoading(false)
@@ -245,7 +238,6 @@ export function useFirebaseAuth() {
     loading,
     error,
     isConfigured: isFirebaseConfigured && isReady,
-    isDemoMode: DEMO_MODE,
     clearError: () => setError(null),
   }
 }

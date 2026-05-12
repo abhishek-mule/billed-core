@@ -75,7 +75,23 @@ export default function LoginPage() {
     const tenantId = getCookie('bz_tenant')
     if (accessToken && tenantId) {
       handlePostAuthRedirect()
+      return
     }
+
+    ;(async () => {
+      try {
+        const result = await signInWithGoogle()
+        if (result.success && result.userId) {
+          await handleBackendAuth({
+            email: result.email || undefined,
+            userId: result.userId,
+            name: result.name || undefined,
+          })
+        }
+      } catch {
+        // no pending redirect result
+      }
+    })()
   }, []);
 
   useEffect(() => {
@@ -115,8 +131,9 @@ export default function LoginPage() {
     try {
       const result = await signInWithGoogle();
       setGoogleLoading(false);
+      if ((result as any).pending) return;
       if (!result.success) {
-        if (result.error?.includes('popup-closed') || result.error?.includes('cancelled')) return;
+        if (result.error?.includes('cancelled') || result.error?.includes('No auth event')) return;
         throw new Error(result.error || "Failed to sign in with Google");
       }
       if (!result.userId) throw new Error("No user ID returned");
