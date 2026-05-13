@@ -101,14 +101,14 @@ export function setAuthCookies(
   response.cookies.set(ACCESS_COOKIE, accessToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 3600,
     path: '/',
   })
   response.cookies.set(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 30 * 24 * 3600,
     path: '/',
   })
@@ -116,7 +116,7 @@ export function setAuthCookies(
     response.cookies.set('bz_tenant', tenantId, {
       httpOnly: true,
       secure: isProd,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 30 * 24 * 3600,
       path: '/',
     })

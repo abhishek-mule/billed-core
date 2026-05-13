@@ -54,9 +54,11 @@ export async function GET(request: NextRequest) {
     const { data: sbSession, error: sbError } = await supabase.auth.exchangeCodeForSession(code)
 
     if (sbError || !sbSession?.user) {
-      console.error('[MagicLink] Error:', sbError)
+      console.error('[MagicLink] exchangeCodeForSession failed:', sbError?.message, '| session:', JSON.stringify(sbSession))
       return NextResponse.redirect(new URL('/auth?error=invalid', request.url))
     }
+
+    console.log('[MagicLink] User authenticated:', sbSession.user.id, sbSession.user.email)
 
     const userId = sbSession.user.id
     const email = sbSession.user.email || undefined
