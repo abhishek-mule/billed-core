@@ -6,6 +6,9 @@ import hmac
 import time
 import uuid
 import tempfile
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -257,11 +260,59 @@ def provision_tenant_async(tenant_id: str, domain: str, plan: str, gstin: str, a
         
         if is_healthy:
             log_audit("provisioning_completed", tenant_id, "active", {"domain": domain})
+            # Send confirmation email
+            send_confirmation_email(tenant_id, domain, admin_email)
         else:
             log_audit("provisioning_health_check_failed", tenant_id, "warning")
             
     except Exception as e:
         log_audit("provisioning_error", tenant_id, "failed", error=str(e))
+
+
+def send_confirmation_email(tenant_id: str, domain: str, admin_email: str):
+    """Send confirmation email after successful provisioning"""
+    try:
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+
+        if not all([smtp_user, smtp_password]):
+            log_audit("email_config_missing", tenant_id, "warning", {"admin_email": admin_email})
+            return
+
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = admin_email
+        msg['Subject'] = f"Your Billed-Core site {domain} is ready!"
+
+        body = f"""
+        Hi,
+
+        Your Billed-Core site has been successfully provisioned!
+
+        Site URL: https://{domain}
+        Tenant ID: {tenant_id}
+
+        You can now log in and start using your POS system.
+
+        Best regards,
+        Billed-Core Team
+        """
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_user, admin_email, msg.as_string())
+        server.quit()
+
+        log_audit("confirmation_email_sent", tenant_id, "success", {"admin_email": admin_email})
+
+    except Exception as e:
+        log_audit("confirmation_email_failed", tenant_id, "error", {"admin_email": admin_email, "error": str(e)})
+        print(f"Error sending confirmation email: {e}")
 
 
 async def verify_api_key(authorization: str = Header(None)):

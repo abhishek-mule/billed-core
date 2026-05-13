@@ -150,7 +150,8 @@ export function useFirebaseAuth() {
       if (name) {
         await updateProfile(result.user, { displayName: name });
       }
-      await sendEmailVerification(result.user);
+      // Email verification disabled for now
+      // await sendEmailVerification(result.user);
 
       setLoading(false)
       return {
@@ -187,10 +188,7 @@ export function useFirebaseAuth() {
       const auth = getAuth()
       const result = await signInWithEmailAndPassword(auth, email, password)
 
-      if (!result.user.emailVerified) {
-        setLoading(false)
-        return { success: false, needsVerification: true, error: 'Please verify your email address before logging in.' }
-      }
+      // Email verification disabled for now
 
       setLoading(false)
       return {

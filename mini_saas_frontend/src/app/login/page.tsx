@@ -109,7 +109,7 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
-        setSuccessMsg("Account created! Please check your email to verify.");
+        setSuccessMsg("Account created successfully!");
         setIsSignUp(false);
         setLoading(false);
         return;
