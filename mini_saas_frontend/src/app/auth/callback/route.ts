@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get('next') ?? '/'
 
   if (code) {
+    const response = NextResponse.next()
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -16,25 +18,11 @@ export async function GET(request: NextRequest) {
           get(name: string) {
             return request.cookies.get(name)?.value
           },
-          set(name: string, value: string, options: CookieOptions) {
-            // If the response doesn't exist yet, create one
-            // This is needed for the initial call
-            const response = NextResponse.next()
-            response.cookies.set({
-              name,
-              value,
-              ...options,
-            })
-            return response
+          set(name: string, value: string, options: any) {
+            response.cookies.set(name, value, options)
           },
-          remove(name: string, options: CookieOptions) {
-            const response = NextResponse.next()
-            response.cookies.set({
-              name,
-              value: '',
-              ...options,
-            })
-            return response
+          remove(name: string, options: any) {
+            response.cookies.delete(name)
           },
         },
       }
