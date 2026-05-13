@@ -3,6 +3,8 @@
 import { useState, useRef } from 'react'
 import { Barcode, Camera, FileImage, Receipt, Zap, Loader2, CheckCircle, X, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { BarcodeScanner } from './BarcodeScanner'
+import { lookupBarcode, type BarcodeLookupResult } from '@/lib/billzo/barcode-lookup'
 
 interface ExtractedData {
   supplier?: string
@@ -29,6 +31,8 @@ export function Scan() {
   const [result, setResult] = useState<ExtractedData | null>(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const [barcodeResult, setBarcodeResult] = useState<BarcodeLookupResult | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const formatINR = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
@@ -91,6 +95,37 @@ export function Scan() {
       console.log('File selected:', file.name, file.size)
       processUpload(file)
     }
+  }
+
+  const handleBarcodeScan = async (code: string) => {
+    setShowBarcodeScanner(false)
+    setProcessing(true)
+    setError('')
+    setBarcodeResult(null)
+
+    try {
+      const getCookie = (name: string) => {
+        if (typeof document === 'undefined') return null
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+        return match ? match[2] : null
+      }
+
+      const result = await lookupBarcode(code, { tenantId: getCookie('bz_tenant') })
+      setBarcodeResult(result)
+    } catch (err: any) {
+      setError(err.message || 'Failed to look up barcode')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const addBarcodeProduct = () => {
+    if (!barcodeResult) return
+    const params = new URLSearchParams({ barcode: barcodeResult.barcode })
+    if (barcodeResult.name) params.set('name', barcodeResult.name)
+    if (barcodeResult.brand) params.set('brand', barcodeResult.brand)
+    if (barcodeResult.source) params.set('source', barcodeResult.source)
+    router.push(`/products/add?${params.toString()}`)
   }
 
   const saveAsPurchase = async () => {
@@ -232,11 +267,46 @@ export function Scan() {
         </section>
       ) : (
         <section className="grid min-h-[350px] place-items-center rounded-lg border bg-black text-white">
-          <div className="text-center">
+          <div className="w-full max-w-sm px-6 text-center">
             <Barcode className="h-16 w-16 mx-auto mb-4 text-white/50" />
-            <p className="text-white/70">Barcode scanner coming soon</p>
+            <p className="text-white/70">Scan a barcode to find product details</p>
+            <button
+              onClick={() => setShowBarcodeScanner(true)}
+              disabled={processing}
+              className="mt-5 mx-auto flex w-full items-center justify-center gap-2 rounded-lg bg-white px-5 py-4 text-base font-black text-black disabled:opacity-50"
+            >
+              {processing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Barcode className="h-5 w-5" />}
+              {processing ? 'Looking up...' : 'Start Barcode Scan'}
+            </button>
           </div>
         </section>
+      )}
+
+      {barcodeResult && (
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="section-label">Barcode Result</p>
+              <h3 className="mt-1 font-bold">{barcodeResult.name || 'Unknown product'}</h3>
+              <p className="text-xs text-muted-foreground">
+                {barcodeResult.barcode} · {barcodeResult.source} · {Math.round(barcodeResult.confidence * 100)}% confidence
+              </p>
+            </div>
+            {barcodeResult.imageUrl && (
+              <img src={barcodeResult.imageUrl} alt="" className="h-16 w-16 rounded-lg object-cover border" />
+            )}
+          </div>
+          <button
+            onClick={addBarcodeProduct}
+            className="w-full py-2 bg-primary text-primary-foreground rounded-lg font-medium"
+          >
+            {barcodeResult.name ? 'Review & Save Product' : 'Add Product Manually'}
+          </button>
+        </div>
+      )}
+
+      {showBarcodeScanner && (
+        <BarcodeScanner onClose={() => setShowBarcodeScanner(false)} onScan={handleBarcodeScan} />
       )}
 
       {result && (

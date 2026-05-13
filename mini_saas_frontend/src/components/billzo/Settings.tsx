@@ -1,12 +1,56 @@
 'use client'
 
+import { useState } from 'react'
 import { RefreshCcw, ShieldCheck, Smartphone, Wifi } from 'lucide-react'
 import { syncPendingQueue } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
 
 export function Settings() {
   const { state } = useBillzo()
+  const [pushBusy, setPushBusy] = useState(false)
   if (!state) return null
+
+  const enablePush = async () => {
+    setPushBusy(true)
+    try {
+      const { registerDevice } = await import('@/lib/billzo/notifications')
+      if (state.session.tenantId) {
+        const success = await registerDevice(state.session.tenantId)
+        if (success) alert('Notifications enabled successfully!')
+        else alert('Failed to enable notifications. Please check browser permissions and Firebase config.')
+      }
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  const sendTestPush = async () => {
+    setPushBusy(true)
+    try {
+      const response = await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: state.session.tenantId,
+          title: 'BillZo background push works',
+          body: 'This notification was sent through Firebase Cloud Messaging.',
+          type: 'test_push',
+          url: '/dashboard',
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send test push')
+      }
+
+      alert(`Test push sent. Delivered: ${data.deliveredCount || 0}, Failed: ${data.failedCount || 0}`)
+    } catch (error: any) {
+      alert(error.message || 'Failed to send test push')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -60,16 +104,17 @@ export function Settings() {
           </div>
           <button 
             className="primary-button" 
-            onClick={async () => {
-              const { registerDevice } = await import('@/lib/billzo/notifications');
-              if (state.session.tenantId) {
-                const success = await registerDevice(state.session.tenantId);
-                if (success) alert('Notifications enabled successfully!');
-                else alert('Failed to enable notifications. Please check browser permissions.');
-              }
-            }}
+            disabled={pushBusy}
+            onClick={enablePush}
           >
-            Enable
+            {pushBusy ? 'Working...' : 'Enable'}
+          </button>
+          <button
+            className="primary-button"
+            disabled={pushBusy}
+            onClick={sendTestPush}
+          >
+            Test
           </button>
         </div>
       </section>

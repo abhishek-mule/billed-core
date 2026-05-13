@@ -4,12 +4,36 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Store, CheckCircle2, Sparkles, ArrowRight } from "lucide-react";
 import { autofillFromInput, validateGSTIN, validateUPI } from "@/lib/billzo/autofill";
+import { db, uuid } from "@/lib/billzo/db";
+import { type PlanType } from "@/lib/billzo/plan-limits";
 
 interface AutofillData {
   shopName: string
   phone: string
   upiId?: string
   gstin?: string
+}
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? decodeURIComponent(match[2]) : null
+}
+
+function setCookie(name: string, value: string, days = 30) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+}
+
+function getUserIdFromCookie() {
+  const token = getCookie('bz_access')
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[0]))
+    return payload.userId || null
+  } catch {
+    return null
+  }
 }
 
 export default function OnboardingPage() {
@@ -23,19 +47,29 @@ export default function OnboardingPage() {
   const [autofilling, setAutofilling] = useState(false);
 
   useEffect(() => {
-    function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
+    let cancelled = false
+
+    async function checkTenant() {
+      try {
+        const userId = getUserIdFromCookie()
+        if (cancelled) return
+        if (!userId) {
+          window.location.href = '/auth'
+          return
+        }
+        const tenant = await db().tenants.where('ownerUserId').equals(userId).first()
+        if (tenant) {
+          setCookie('bz_tenant', tenant.id)
+          setCookie('bz_tenant_name', tenant.name || 'My Shop')
+          router.push('/dashboard')
+        }
+      } catch {
+        // Stay on onboarding; the submit path will surface any real server error.
+      }
     }
-    const tenantId = getCookie('bz_tenant')
-    const accessToken = getCookie('bz_access')
-    if (tenantId) {
-      router.push("/dashboard");
-    }
-    if (!accessToken) {
-      window.location.href = "/auth";
-    }
+
+    checkTenant()
+    return () => { cancelled = true }
   }, [router]);
 
   const handleAutofill = async () => {
@@ -112,39 +146,54 @@ export default function OnboardingPage() {
     setErrors({});
 
     try {
-      function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
-    let userId = ''
-    const accessToken = getCookie('bz_access')
-    if (accessToken) {
-      try { userId = JSON.parse(atob(accessToken.split('.')[1])).userId || '' } catch {}
-    }
-    if (!userId) {
-      router.push("/auth");
-      return;
-    }
-
-    const response = await fetch("/api/onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        shopName: shop.trim(),
-        phone: phone || undefined,
-        upiId: upiId || undefined,
-        gstin: gstin || undefined,
-        userId,
-      }),
-    });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create shop");
+      const userId = getUserIdFromCookie()
+      if (!userId) {
+        window.location.href = "/auth"
+        return
       }
 
+      const {
+        shopName: inferredName,
+        phone: inferredPhone,
+        upiId: finalUPI,
+        gstin: finalGSTIN,
+      } = await autofillFromInput({
+        shopName: shop.trim(),
+        phone,
+        upiId: upiId || undefined,
+        gstin: gstin || undefined,
+      })
+      const existingTenant = await db().tenants.where('ownerUserId').equals(userId).first()
+      const tenantId = existingTenant?.id || `tenant_${Date.now()}_${uuid().slice(0, 8)}`
+      const now = new Date().toISOString()
+
+      if (existingTenant) {
+        await db().tenants.update(existingTenant.id, {
+          name: inferredName,
+          phone: inferredPhone || phone || existingTenant.phone,
+          upiId: finalUPI || existingTenant.upiId,
+          gstin: finalGSTIN || existingTenant.gstin,
+          updatedAt: now,
+        })
+      } else {
+        await db().tenants.add({
+          id: tenantId,
+          name: inferredName,
+          ownerUserId: userId,
+          phone: inferredPhone || phone || undefined,
+          upiId: finalUPI,
+          gstin: finalGSTIN,
+          plan: 'starter' as PlanType,
+          paywallUnlocked: false,
+          invoiceCount: 0,
+          reminderCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+      }
+
+      setCookie('bz_tenant', tenantId)
+      setCookie('bz_tenant_name', inferredName)
       setLoading("done");
       setTimeout(() => router.push("/dashboard"), 1700);
     } catch (error: any) {

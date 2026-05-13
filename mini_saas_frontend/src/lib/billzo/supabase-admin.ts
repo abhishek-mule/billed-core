@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ''
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  ''
 
-// For server-side operations, we should ideally use a service role key
-// But since we only have the publishable key in .env.local, we'll use that for now
-// NOTE: In production, add SUPABASE_SERVICE_ROLE_KEY to .env.local
 export const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
 
 export async function saveDeviceToken(tenantId: string, fcmToken: string, deviceType: string) {
@@ -36,4 +36,17 @@ export async function getDeviceTokens(tenantId: string) {
     return []
   }
   return data.map(d => d.fcm_token)
+}
+
+export async function deleteDeviceTokens(tokens: string[]) {
+  if (tokens.length === 0) return
+
+  const { error } = await supabaseAdmin
+    .from('device_tokens')
+    .delete()
+    .in('fcm_token', tokens)
+
+  if (error) {
+    console.error('Supabase token cleanup error:', error)
+  }
 }

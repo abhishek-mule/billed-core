@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDeviceTokens } from '@/lib/billzo/supabase-admin'
+import { deleteDeviceTokens, getDeviceTokens } from '@/lib/billzo/supabase-admin'
+import { getFirebaseMessaging } from '@/lib/billzo/firebase-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { tenantId, title, body: message, icon, type } = body
+    const { tenantId, title, body: message, icon, type, url } = body
 
     if (!tenantId || !title || !message) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -23,40 +24,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'No devices registered for this tenant' })
     }
 
-    console.log(`[Push Notification] To Tenant ${tenantId}: ${title} - ${message}`)
-    console.log(`[Push Notification] Target Tokens: ${tokens.length}`)
+    const messaging = getFirebaseMessaging()
+    if (!messaging) {
+      return NextResponse.json(
+        {
+          success: false,
+          deliveredCount: 0,
+          error: 'Firebase Admin is not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY.',
+        },
+        { status: 500 },
+      )
+    }
 
-    // 2. Send via FCM
-    // For now, we use the Firebase Cloud Messaging API with the API Key if possible,
-    // or simply log it. To make this work fully, you need to add FIREBASE_ADMIN_SDK_JSON to your env.
-    
-    /* 
-    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `key=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}`,
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    const clickUrl = url || '/dashboard'
+
+    const result = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title,
+        body: message,
+        imageUrl: icon,
       },
-      body: JSON.stringify({
-        registration_ids: tokens,
+      webpush: {
+        fcmOptions: {
+          link: new URL(clickUrl, appUrl).toString(),
+        },
         notification: {
           title,
           body: message,
           icon: icon || '/logo_new.png',
-          click_action: 'https://billzo.in/dashboard',
+          badge: '/logo-icon.svg',
+          tag: type || 'billzo-alert',
+          requireInteraction: type === 'daily_brief' || type === 'payment_due',
+          data: {
+            type: type || 'general',
+            tenantId,
+            url: clickUrl,
+          },
+          actions: [
+            {
+              action: 'open',
+              title: 'Open BillZo',
+            },
+          ],
         },
-        data: {
-          type,
-          tenantId
-        }
-      }),
+      },
+      data: {
+        type: type || 'general',
+        tenantId,
+        url: clickUrl,
+      },
     })
-    */
+
+    const invalidTokens = result.responses
+      .map((response, index) => ({ response, token: tokens[index] }))
+      .filter(({ response }) => {
+        const code = response.error?.code || ''
+        return code.includes('registration-token-not-registered') || code.includes('invalid-registration-token')
+      })
+      .map(({ token }) => token)
+
+    await deleteDeviceTokens(invalidTokens)
 
     return NextResponse.json({ 
       success: true, 
-      deliveredCount: tokens.length,
-      note: 'FCM delivery structure ready. Add Firebase Service Account for production.'
+      deliveredCount: result.successCount,
+      failedCount: result.failureCount,
+      cleanedInvalidTokens: invalidTokens.length,
     })
 
   } catch (error: any) {

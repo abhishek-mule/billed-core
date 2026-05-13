@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/billzo/db'
 import { autofillFromInput, validateGSTIN, validateUPI } from '@/lib/billzo/autofill'
+import { getTokenFromRequest, verifyAccessToken } from '@/lib/billzo/auth-jwt'
 import { type PlanType } from '@/lib/billzo/plan-limits'
 import crypto from 'crypto'
 
@@ -9,7 +10,10 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { shopName, phone, upiId, gstin, userId } = body
+    const { shopName, phone, upiId, gstin } = body
+    const token = getTokenFromRequest(request)
+    const authPayload = token ? verifyAccessToken(token) : null
+    const userId = authPayload?.userId
 
     if (!userId) {
       return NextResponse.json(

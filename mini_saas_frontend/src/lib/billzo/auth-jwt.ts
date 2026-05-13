@@ -99,7 +99,7 @@ export function setAuthCookies(
 ) {
   const isProd = process.env.NODE_ENV === 'production'
   response.cookies.set(ACCESS_COOKIE, accessToken, {
-    httpOnly: true,
+    httpOnly: false,
     secure: isProd,
     sameSite: 'lax',
     maxAge: 3600,
@@ -114,7 +114,7 @@ export function setAuthCookies(
   })
   if (tenantId) {
     response.cookies.set('bz_tenant', tenantId, {
-      httpOnly: true,
+      httpOnly: false,
       secure: isProd,
       sameSite: 'lax',
       maxAge: 30 * 24 * 3600,

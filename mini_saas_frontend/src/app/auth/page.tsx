@@ -18,7 +18,54 @@ function AuthForm() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (getCookie("bz_tenant") && getCookie("bz_access")) {
+    async function finishSupabaseHashLogin() {
+      const hash = window.location.hash
+      if (!hash.includes("access_token=")) return
+
+      setLoading(true)
+      setError("")
+
+      const params = new URLSearchParams(hash.slice(1))
+      const accessToken = params.get("access_token")
+
+      window.history.replaceState(null, "", window.location.pathname + window.location.search)
+
+      if (!accessToken) {
+        setError("This login link is invalid or expired. Please request a new one.")
+        setLoading(false)
+        return
+      }
+
+      try {
+        const res = await fetch("/api/auth/supabase", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken }),
+        })
+        const data = await res.json()
+
+        if (!res.ok) {
+          setError(data.error || "This login link is invalid or expired. Please request a new one.")
+          setLoading(false)
+          return
+        }
+
+        window.location.href = data.redirectTo || "/onboarding"
+      } catch {
+        setError("Could not finish login. Please try again.")
+        setLoading(false)
+      }
+    }
+
+    finishSupabaseHashLogin()
+  }, [])
+
+  useEffect(() => {
+    if (!getCookie("bz_access")) return
+
+    if (getCookie("bz_tenant")) {
+      window.location.href = "/dashboard"
+    } else {
       window.location.href = "/onboarding"
     }
   }, [])

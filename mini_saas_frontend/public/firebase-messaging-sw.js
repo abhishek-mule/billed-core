@@ -25,12 +25,45 @@ messaging.onBackgroundMessage((payload) => {
   );
   
   // Customize notification here
-  const notificationTitle = payload.notification.title || "BillZo";
+  const notificationTitle = payload.notification?.title || payload.data?.title || "BillZo";
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: payload.notification.icon || "/icon-192.png",
-    data: payload.data
+    body: payload.notification?.body || payload.data?.body || "",
+    icon: payload.notification?.icon || "/logo_new.png",
+    badge: "/logo-icon.svg",
+    tag: payload.data?.type || "billzo-alert",
+    requireInteraction: payload.data?.type === "daily_brief" || payload.data?.type === "payment_due",
+    data: {
+      url: payload.data?.url || "/dashboard",
+      ...payload.data
+    },
+    actions: [
+      {
+        action: "open",
+        title: "Open BillZo"
+      }
+    ]
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = new URL(event.notification.data?.url || "/dashboard", self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client && client.url.startsWith(self.location.origin)) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
 });

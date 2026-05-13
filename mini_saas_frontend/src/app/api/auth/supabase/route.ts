@@ -14,15 +14,56 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password } = body
-
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
-    }
+    const { email, password, accessToken: supabaseAccessToken } = body
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
+
+    if (supabaseAccessToken) {
+      const { data, error } = await supabase.auth.getUser(supabaseAccessToken)
+
+      if (error || !data.user) {
+        return NextResponse.json({ error: 'Invalid Supabase session' }, { status: 401 })
+      }
+
+      const userId = data.user.id
+      const userEmail = data.user.email || undefined
+      const existingSession = Array.from(sessionStore.values()).find((s) => s.userId === userId && s.tenantId)
+      const existingTenantId = existingSession?.tenantId || undefined
+      const sessionId = crypto.randomBytes(32).toString('hex')
+
+      sessionStore.set(sessionId, {
+        userId,
+        tenantId: existingTenantId || null,
+        isPaid: existingSession?.isPaid || false,
+        email: userEmail,
+        createdAt: Date.now(),
+      })
+
+      const billzoAccessToken = createAccessToken({
+        sessionId,
+        userId,
+        tenantId: existingTenantId,
+        email: userEmail,
+      })
+      const billzoRefreshToken = createRefreshToken({ sessionId, userId })
+
+      const response = NextResponse.json({
+        success: true,
+        userId,
+        tenantId: existingTenantId,
+        email: userEmail,
+        redirectTo: existingTenantId ? '/dashboard' : '/onboarding',
+      })
+
+      setAuthCookies(response, billzoAccessToken, billzoRefreshToken, existingTenantId)
+      return response
+    }
+
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+    }
 
     const { data: sbSession, error: sbError } = await supabase.auth.signInWithPassword({
       email,
@@ -64,8 +105,8 @@ export async function POST(request: NextRequest) {
 
     setAuthCookies(response, accessToken, refreshToken, existingTenantId ?? undefined)
     return response
-  } catch {
-    console.error('[Auth/Supabase] Error')
+  } catch (error) {
+    console.error('[Auth/Supabase] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

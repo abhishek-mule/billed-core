@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/billzo/db'
+import { getTokenFromRequest, verifyAccessToken } from '@/lib/billzo/auth-jwt'
 import { getLimits, type PlanType } from '@/lib/billzo/plan-limits'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    const userId = request.headers.get('x-user-id')
+    const token = getTokenFromRequest(request)
+    const authPayload = token ? verifyAccessToken(token) : null
+    const userId = authPayload?.userId
 
     if (!userId) {
       return NextResponse.json(

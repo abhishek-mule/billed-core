@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 
@@ -33,6 +33,20 @@ export default function AddProductPage() {
     purchasePrice: "",
     unit: "pcs",
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const barcode = params.get('barcode') || ''
+    const name = params.get('name') || ''
+
+    if (!barcode && !name) return
+
+    setFormData((prev) => ({
+      ...prev,
+      barcode: barcode || prev.barcode,
+      name: name || prev.name,
+    }))
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -89,7 +103,7 @@ export default function AddProductPage() {
       const { db } = await import("@/lib/billzo/db");
       await db().products.add({
         ...payload,
-        id: result.id || `local-${Date.now()}`,
+        id: result.product?.id || result.id || `local-${Date.now()}`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });

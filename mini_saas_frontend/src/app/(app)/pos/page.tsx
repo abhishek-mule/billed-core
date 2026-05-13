@@ -9,6 +9,7 @@ import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
 import { handlePOSInvoice } from "@/lib/billzo/actions";
+import { lookupBarcode, normalizeBarcode } from "@/lib/billzo/barcode-lookup";
 import { toast } from "sonner";
 
 type CartItem = {
@@ -46,6 +47,7 @@ export default function POSPage() {
   const [usageLimits, setUsageLimits] = useState<any>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -403,18 +405,31 @@ export default function POSPage() {
       {showScanner && (
         <BarcodeScanner 
           onClose={() => setShowScanner(false)} 
-          onScan={(code) => {
+          onScan={async (code) => {
             setShowScanner(false);
-            const product = products.find(p => p.barcode === code);
+            const barcode = normalizeBarcode(code);
+            const product = products.find(p => normalizeBarcode(p.barcode || '') === barcode);
             if (product) {
               addToCart(product);
               setQuery("");
             } else {
-              toast.error(`Product not found!`, {
-                description: `Barcode: ${code}`,
+              const tenantId = getCookie('bz_tenant')
+              setLookingUpBarcode(true)
+              const pendingToast = toast.loading("Looking up barcode...")
+              const result = await lookupBarcode(barcode, { tenantId })
+              toast.dismiss(pendingToast)
+              setLookingUpBarcode(false)
+
+              const params = new URLSearchParams({ barcode: result.barcode })
+              if (result.name) params.set('name', result.name)
+              if (result.brand) params.set('brand', result.brand)
+              if (result.source) params.set('source', result.source)
+
+              toast[result.name ? 'success' : 'error'](result.name ? "Product details found" : "Product not found", {
+                description: result.name || `Barcode: ${result.barcode}`,
                 action: {
-                  label: "Add New",
-                  onClick: () => router.push(`/products/add?barcode=${code}`)
+                  label: result.name ? "Review" : "Add New",
+                  onClick: () => router.push(`/products/add?${params.toString()}`)
                 }
               });
             }
