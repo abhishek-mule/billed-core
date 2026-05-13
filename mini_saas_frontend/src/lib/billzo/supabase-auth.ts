@@ -95,7 +95,7 @@ export function useSupabaseAuth() {
         password,
         options: {
           data: { full_name: name },
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
@@ -151,7 +151,7 @@ export function useSupabaseAuth() {
       const { data, error: sbError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             prompt: 'select_account',
           },
