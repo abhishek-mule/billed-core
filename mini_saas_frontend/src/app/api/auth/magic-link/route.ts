@@ -5,7 +5,8 @@ import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/bil
 import { sessionStore } from '@/lib/billzo/auth-store'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,23 +16,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid email required' }, { status: 400 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
+    const redirectTo = `${request.nextUrl.origin}/api/auth/magic-link`
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${request.nextUrl.origin}/api/auth/magic-link`,
-      },
+      options: { emailRedirectTo: redirectTo },
     })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      console.error('[MagicLink] Full error:', JSON.stringify(error))
+      return NextResponse.json({ error: error.message, code: error.status, statusCode: error.status }, { status: 400 })
     }
 
     return NextResponse.json({ success: true, message: 'Check your email for the magic link' })
-  } catch {
+  } catch (err: any) {
+    console.error('[MagicLink] Catch error:', err?.message || err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth', request.url))
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
