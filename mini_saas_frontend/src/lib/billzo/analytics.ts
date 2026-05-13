@@ -118,5 +118,6 @@ export const events = {
   plan_cancelled: 'plan_cancelled',
   onboarding_completed: 'onboarding_completed',
   login_google: 'login_google',
+  login_email: 'login_email',
   login_phone: 'login_phone',
 } as const

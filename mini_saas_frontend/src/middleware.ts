@@ -15,6 +15,17 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  const supabaseToken = request.cookies.get('sb-access-token')?.value ||
+                        request.cookies.get('sb-access-token-local')?.value
+  if (supabaseToken) {
+    const payload = verifyAccessToken(supabaseToken)
+    if (payload) {
+      response.headers.set('x-user-id', payload.userId)
+      response.headers.set('x-tenant-id', payload.tenantId || tenantId || '')
+      return response
+    }
+  }
+
   response.headers.set('x-user-id', '')
   response.headers.set('x-tenant-id', tenantId || '')
   return response

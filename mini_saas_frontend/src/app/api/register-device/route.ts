@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, uuid } from '@/lib/billzo/db'
+import { saveDeviceToken, supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,35 +12,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    if (!['android', 'ios', 'web'].includes(deviceType)) {
-      return NextResponse.json({ error: 'Invalid device type' }, { status: 400 })
-    }
-
-    // Check if token already exists for this tenant
-    const existing = await db().deviceTokens
-      .where('tenantId')
-      .equals(tenantId)
-      .and(t => t.fcmToken === fcmToken)
-      .first()
-
-    if (existing) {
-      return NextResponse.json({ success: true, message: 'Token already registered' })
-    }
-
-    // Add new device token
-    await db().deviceTokens.add({
-      id: uuid(),
-      tenantId,
-      fcmToken,
-      deviceType,
-      createdAt: new Date().toISOString(),
-    })
+    // Save to Supabase (Global DB)
+    await saveDeviceToken(tenantId, fcmToken, deviceType)
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Register device error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -53,21 +32,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Find and delete the token
-    const existing = await db().deviceTokens
-      .where('tenantId')
-      .equals(tenantId)
-      .and(t => t.fcmToken === fcmToken)
-      .first()
+    // Delete from Supabase
+    const { error } = await supabaseAdmin
+      .from('device_tokens')
+      .delete()
+      .match({ tenant_id: tenantId, fcm_token: fcmToken })
 
-    if (existing) {
-      await db().deviceTokens.delete(existing.id)
-    }
+    if (error) throw error
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Unregister device error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
