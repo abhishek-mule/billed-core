@@ -29,7 +29,7 @@ export default function SettingsPage() {
       }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
 
@@ -196,7 +196,7 @@ export default function SettingsPage() {
       ))}
 
       <Link
-        href="/login"
+        href="/auth"
         onClick={() => localStorage.clear()}
         className="w-full rounded-2xl border border-red-300 bg-red-50 p-4 flex items-center justify-center gap-2 text-red-600 font-medium hover:bg-red-100 transition-colors"
       >

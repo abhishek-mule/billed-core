@@ -27,7 +27,7 @@ export default function ReportsPage() {
       if (!token) return null
       try { return JSON.parse(atob(token.split('.')[1])).userId || null } catch { return null }
     })()
-    if (!userId) router.push("/login")
+    if (!userId) router.push("/auth")
   }, [router])
 
   const { loading, error, recovery, aging, gst, sales, plan } = useReportsData()

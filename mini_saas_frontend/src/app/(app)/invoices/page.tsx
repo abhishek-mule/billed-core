@@ -40,7 +40,7 @@ export default function InvoicesPage() {
       }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
       const data = await db().invoices.where("tenantId").equals(tenantId).toArray();

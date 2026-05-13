@@ -70,7 +70,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
       }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
-        router.push("/login")
+        router.push("/auth")
         return
       }
 

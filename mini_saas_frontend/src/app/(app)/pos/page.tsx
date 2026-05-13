@@ -60,7 +60,7 @@ export default function POSPage() {
       }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
 

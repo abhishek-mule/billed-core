@@ -42,7 +42,7 @@ export default function DashboardPage() {
     try {
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
-        router.push("/login")
+        router.push("/auth")
         return
       }
 

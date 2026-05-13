@@ -30,7 +30,7 @@ export default function PartiesPage() {
       }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
       const [data, usage] = await Promise.all([

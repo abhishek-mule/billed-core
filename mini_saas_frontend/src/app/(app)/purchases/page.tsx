@@ -34,7 +34,7 @@ export default function PurchasesPage() {
       }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
       const data = await db().purchases.where("tenantId").equals(tenantId).toArray();

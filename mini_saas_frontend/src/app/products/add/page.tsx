@@ -52,7 +52,7 @@ export default function AddProductPage() {
     }
     const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
-        router.push("/login");
+        router.push("/auth");
         return;
       }
 

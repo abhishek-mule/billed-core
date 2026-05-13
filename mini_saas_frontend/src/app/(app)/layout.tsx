@@ -27,13 +27,13 @@ export default function BillzoLayout({ children }: { children: React.ReactNode }
     const tenantId = getCookie('bz_tenant')
 
     if (!accessToken || !tenantId) {
-      window.location.href = "/login"
+      window.location.href = "/auth"
       return
     }
 
     const userId = getUserIdFromCookie()
     if (!userId) {
-      window.location.href = "/login"
+      window.location.href = "/auth"
       return
     }
   }, [router])

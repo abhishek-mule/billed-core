@@ -81,7 +81,7 @@ export function Dashboard() {
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState error={error} onRetry={() => router.refresh()} />
-  if (!state) return <NoSessionState onLogin={() => router.push('/login')} />
+  if (!state) return <NoSessionState onLogin={() => router.push('/auth')} />
 
   const unpaid = state.invoices.filter((invoice) => invoice.status !== 'paid')
   const lowStock = state.products.filter((product) => product.stock <= product.lowStockAt)

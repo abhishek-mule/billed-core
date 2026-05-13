@@ -54,7 +54,7 @@ export function useReportsData(): UseReportsDataReturn {
       const tenantId = localStorage.getItem('tenantId')
       const userId = localStorage.getItem('userId')
       if (!tenantId || !userId) {
-        router.push('/login')
+        router.push('/auth')
         return
       }
 

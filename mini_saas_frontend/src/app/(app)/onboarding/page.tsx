@@ -34,7 +34,7 @@ export default function OnboardingPage() {
       router.push("/dashboard");
     }
     if (!accessToken) {
-      router.push("/login");
+      window.location.href = "/auth";
     }
   }, [router]);
 
@@ -123,7 +123,7 @@ export default function OnboardingPage() {
       try { userId = JSON.parse(atob(accessToken.split('.')[1])).userId || '' } catch {}
     }
     if (!userId) {
-      router.push("/login");
+      router.push("/auth");
       return;
     }
 

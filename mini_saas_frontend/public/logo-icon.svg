@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Billzo icon">
+  <rect width="128" height="128" rx="28" fill="#146c4b" />
+  <path
+    d="M39 33h24c16 0 28 10 28 25 0 9-5 17-13 21 11 3 18 12 18 24 0 16-13 28-31 28H39V33zm16 14v27h8c8 0 13-5 13-13s-5-14-13-14h-8zm0 41v29h11c9 0 15-6 15-14 0-9-6-15-15-15H55z"
+    fill="#ffffff"
+  />
+</svg>

@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     const next = request.nextUrl.searchParams.get('next') || '/'
 
     if (!code) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      return NextResponse.redirect(new URL('/auth', request.url))
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
