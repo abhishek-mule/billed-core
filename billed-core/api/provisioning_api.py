@@ -271,111 +271,158 @@ def provision_tenant_async(tenant_id: str, domain: str, plan: str, gstin: str, a
 
 
 def send_confirmation_email(tenant_id: str, domain: str, admin_email: str):
-    """Send confirmation email after successful provisioning using Brevo API"""
+    """Send confirmation email after successful provisioning using Brevo SMTP or API"""
     try:
+        # Try Brevo API first if key is available
         brevo_api_key = os.getenv("BREVO_API_KEY")
-        if not brevo_api_key:
-            log_audit("brevo_api_key_missing", tenant_id, "warning", {"admin_email": admin_email})
+        if brevo_api_key:
+            return send_via_brevo_api(tenant_id, domain, admin_email, brevo_api_key)
+
+        # Fallback to SMTP if API key not available
+        smtp_server = os.getenv("SMTP_SERVER")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+
+        if not all([smtp_server, smtp_user, smtp_password]):
+            log_audit("email_config_missing", tenant_id, "warning", {"admin_email": admin_email})
             return
 
-        url = "https://api.brevo.com/v3/smtp/email"
-        headers = {
-            "accept": "application/json",
-            "api-key": brevo_api_key,
-            "content-type": "application/json"
-        }
+        return send_via_smtp(tenant_id, domain, admin_email, smtp_server, smtp_port, smtp_user, smtp_password)
 
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Welcome to Billed-Core</title>
-        </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #2c3e50;">Welcome to Billed-Core!</h1>
-
-                <p>Hi,</p>
-
-                <p>Your Billed-Core site has been successfully provisioned and is ready to use!</p>
-
-                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Site Details:</h3>
-                    <p><strong>Site URL:</strong> <a href="https://{domain}" style="color: #007bff;">https://{domain}</a></p>
-                    <p><strong>Tenant ID:</strong> {tenant_id}</p>
-                </div>
-
-                <p>You can now log in to your admin panel and start configuring your POS system:</p>
-                <ul>
-                    <li>Add your products and inventory</li>
-                    <li>Set up payment methods</li>
-                    <li>Configure your business settings</li>
-                    <li>Invite your team members</li>
-                </ul>
-
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="https://{domain}/app" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Go to Your Dashboard</a>
-                </div>
-
-                <p>If you have any questions, please don't hesitate to contact our support team.</p>
-
-                <p>Best regards,<br>
-                <strong>Billed-Core Team</strong></p>
-
-                <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                <p style="font-size: 12px; color: #666;">
-                    This is an automated message. Please do not reply to this email.
-                </p>
-            </div>
-        </body>
-        </html>
-        """
-
-        payload = {
-            "sender": {
-                "name": "Billed-Core",
-                "email": os.getenv("SMTP_USER", "noreply@billed-core.com")  # Use SMTP_USER as sender if available
-            },
-            "to": [
-                {
-                    "email": admin_email,
-                    "name": "Site Administrator"
-                }
-            ],
-            "subject": f"Your Billed-Core site {domain} is ready!",
-            "htmlContent": html_content,
-            "tags": ["provisioning", "welcome"]
-        }
-
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
-
-        if response.status_code == 201:
-            result = response.json()
-            log_audit("confirmation_email_sent", tenant_id, "success", {
-                "admin_email": admin_email,
-                "message_id": result.get("messageId")
-            })
-        else:
-            log_audit("confirmation_email_failed", tenant_id, "error", {
-                "admin_email": admin_email,
-                "status_code": response.status_code,
-                "response": response.text
-            })
-            print(f"Brevo API error: {response.status_code} - {response.text}")
-
-    except requests.exceptions.RequestException as e:
-        log_audit("confirmation_email_failed", tenant_id, "error", {
-            "admin_email": admin_email,
-            "error": str(e)
-        })
-        print(f"Error sending confirmation email: {e}")
     except Exception as e:
         log_audit("confirmation_email_failed", tenant_id, "error", {
             "admin_email": admin_email,
             "error": str(e)
         })
-        print(f"Unexpected error sending confirmation email: {e}")
+        print(f"Error sending confirmation email: {e}")
+
+
+def send_via_brevo_api(tenant_id: str, domain: str, admin_email: str, api_key: str):
+    """Send email via Brevo API"""
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json"
+    }
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Welcome to Billed-Core</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #2c3e50;">Welcome to Billed-Core!</h1>
+
+            <p>Hi,</p>
+
+            <p>Your Billed-Core site has been successfully provisioned and is ready to use!</p>
+
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Site Details:</h3>
+                <p><strong>Site URL:</strong> <a href="https://{domain}" style="color: #007bff;">https://{domain}</a></p>
+                <p><strong>Tenant ID:</strong> {tenant_id}</p>
+            </div>
+
+            <p>You can now log in to your admin panel and start configuring your POS system:</p>
+            <ul>
+                <li>Add your products and inventory</li>
+                <li>Set up payment methods</li>
+                <li>Configure your business settings</li>
+                <li>Invite your team members</li>
+            </ul>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://{domain}/app" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Go to Your Dashboard</a>
+            </div>
+
+            <p>If you have any questions, please don't hesitate to contact our support team.</p>
+
+            <p>Best regards,<br>
+            <strong>Billed-Core Team</strong></p>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+            <p style="font-size: 12px; color: #666;">
+                This is an automated message. Please do not reply to this email.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+
+    payload = {
+        "sender": {
+            "name": "Billed-Core",
+            "email": os.getenv("SMTP_USER", "noreply@billed-core.com")
+        },
+        "to": [
+            {
+                "email": admin_email,
+                "name": "Site Administrator"
+            }
+        ],
+        "subject": f"Your Billed-Core site {domain} is ready!",
+        "htmlContent": html_content,
+        "tags": ["provisioning", "welcome"]
+    }
+
+    response = requests.post(url, headers=headers, json=payload, timeout=10)
+
+    if response.status_code == 201:
+        result = response.json()
+        log_audit("confirmation_email_sent", tenant_id, "success", {
+            "admin_email": admin_email,
+            "method": "api",
+            "message_id": result.get("messageId")
+        })
+        return True
+    else:
+        log_audit("confirmation_email_api_failed", tenant_id, "error", {
+            "admin_email": admin_email,
+            "status_code": response.status_code,
+            "response": response.text
+        })
+        raise Exception(f"Brevo API error: {response.status_code}")
+
+
+def send_via_smtp(tenant_id: str, domain: str, admin_email: str, server: str, port: int, user: str, password: str):
+    """Send email via SMTP"""
+    msg = MIMEMultipart()
+    msg['From'] = user
+    msg['To'] = admin_email
+    msg['Subject'] = f"Your Billed-Core site {domain} is ready!"
+
+    body = f"""
+Hi,
+
+Your Billed-Core site has been successfully provisioned!
+
+Site URL: https://{domain}
+Tenant ID: {tenant_id}
+
+You can now log in and start using your POS system.
+
+Best regards,
+Billed-Core Team
+"""
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    smtp_obj = smtplib.SMTP(server, port)
+    smtp_obj.starttls()
+    smtp_obj.login(user, password)
+    smtp_obj.sendmail(user, admin_email, msg.as_string())
+    smtp_obj.quit()
+
+    log_audit("confirmation_email_sent", tenant_id, "success", {
+        "admin_email": admin_email,
+        "method": "smtp"
+    })
+    return True
 
 
 async def verify_api_key(authorization: str = Header(None)):
