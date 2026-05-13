@@ -6,6 +6,7 @@ import { scheduleBackgroundSync, syncPendingQueue } from './sync'
 import { getActiveSession, getTenantId } from './tenant'
 import { isPaywallBlocked, type PlanType } from './plan-limits'
 import { trackEvent, events } from './analytics'
+import { triggerWhatsAppNotification, triggerPushNotification } from './automation'
 import type { RecoveryAttempt } from './types'
 import type {
   Activity,
@@ -450,6 +451,7 @@ export interface POSCartItem {
   salePrice: number
   gstRate: number
   stock: number
+  lowStockAt: number
 }
 
 export async function handlePOSInvoice(
@@ -561,6 +563,44 @@ export async function handlePOSInvoice(
 
     notifyChanged()
     scheduleBackgroundSync()
+
+    // --- AUTOMATIONS ---
+    const tenantName = (typeof localStorage !== 'undefined' ? localStorage.getItem('tenantName') : null) || 'BillZo'
+    
+    // 1. WhatsApp Invoice
+    if (customerPhone && customerPhone.length >= 10) {
+       triggerWhatsAppNotification({
+         type: 'welcome', 
+         phone: customerPhone,
+         ownerName: customerName,
+         shopName: tenantName,
+         siteUrl: `https://billzo.in/i/${invoiceId}`,
+         email: 'invoice@billzo.in'
+       });
+    }
+
+    // 2. Low Stock Alerts
+    for (const m of movements) {
+       const product = cart.find(c => c.id === m.productId);
+       if (product && m.stockAfter <= product.lowStockAt) {
+          // Push notification to merchant
+          triggerPushNotification(session.tenantId, {
+            title: 'Low Stock Alert ⚠️',
+            body: `${product.name} is running low (${m.stockAfter} left). Reorder soon!`,
+            type: 'low_stock'
+          });
+
+          // WhatsApp alert to merchant
+          triggerWhatsAppNotification({
+            type: 'lowStock',
+            phone: session.phone || '', // Merchant's phone
+            shopName: tenantName,
+            itemName: product.name,
+            currentStock: m.stockAfter,
+            reorderLevel: product.lowStockAt
+          });
+       }
+    }
 
     if (method !== 'udhar') {
       trackEvent(session.tenantId, events.invoice_paid, { invoiceId, total, method })

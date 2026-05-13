@@ -9,6 +9,7 @@ import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
 import { handlePOSInvoice } from "@/lib/billzo/actions";
+import { toast } from "sonner";
 
 type CartItem = {
   id: string;
@@ -19,6 +20,7 @@ type CartItem = {
   stock: number;
   qty: number;
   unit?: string;
+  lowStockAt: number;
 };
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
@@ -92,6 +94,11 @@ export default function POSPage() {
       const ex = c.find((i) => i.id === p.id);
       if (ex) return c.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
       return [...c, { ...p, qty: 1 }];
+    });
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(20);
+    toast.success(`${p.name} added to cart`, {
+      icon: "🛒",
+      duration: 1500,
     });
   };
 
@@ -403,7 +410,13 @@ export default function POSPage() {
               addToCart(product);
               setQuery("");
             } else {
-              alert(`Product with barcode ${code} not found!`);
+              toast.error(`Product not found!`, {
+                description: `Barcode: ${code}`,
+                action: {
+                  label: "Add New",
+                  onClick: () => router.push(`/products/add?barcode=${code}`)
+                }
+              });
             }
           }} 
         />
