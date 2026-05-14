@@ -185,9 +185,7 @@ body {
 
 .user-avatar {
   width: 28px; height: 28px; border-radius: 50%;
-  background: var(--accent); color: var(--afg);
-  font-size: 10px; font-weight: 600;
-  display: grid; place-items: center; flex-shrink: 0;
+  object-fit: cover; flex-shrink: 0;
 }
 .user-info {
   flex: 1; min-width: 0; overflow: hidden;
@@ -279,8 +277,7 @@ body {
 }
 .topbar-avatar {
   width: 28px; height: 28px; border-radius: 50%;
-  background: var(--accent); color: var(--afg);
-  font-size: 10px; font-weight: 600; display: grid; place-items: center;
+  object-fit: cover; flex-shrink: 0;
 }
 
 .mobile-overlay {

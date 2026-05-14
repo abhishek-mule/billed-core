@@ -51,10 +51,12 @@ function Sidebar({
   pathname,
   collapsed,
   onToggle,
+  userName,
 }: {
   pathname: string
   collapsed: boolean
   onToggle: () => void
+  userName?: string
 }) {
   return (
     <aside className={cn('sidebar', collapsed && 'sidebar--collapsed')}>
@@ -113,14 +115,19 @@ function Sidebar({
 
       <div className="sidebar-footer">
         <div className="user-row" onClick={logout} style={{ cursor: 'pointer' }}>
-          <div className="user-avatar">BS</div>
+          <img
+            src={`https://multiavatar.com/${encodeURIComponent(userName || 'guest')}?s=80`}
+            alt="Profile"
+            className="user-avatar"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
           <div className="user-info">
-            <span className="user-name">BillZo Store</span>
+            <span className="user-name">{userName || 'My Shop'}</span>
             <span className="user-plan">Click to logout</span>
           </div>
           <LogOut size={14} className="text-muted-foreground ml-auto" />
         </div>
-        <span className="nav-tooltip nav-tooltip--user" aria-hidden="true">BillZo Store</span>
+        <span className="nav-tooltip nav-tooltip--user" aria-hidden="true">{userName || 'My Shop'}</span>
       </div>
     </aside>
   )
@@ -129,9 +136,11 @@ function Sidebar({
 function TopBar({
   title,
   onMobileMenu,
+  userName,
 }: {
   title?: string
   onMobileMenu: () => void
+  userName?: string
 }) {
   const [focused, setFocused] = useState(false)
 
@@ -163,7 +172,12 @@ function TopBar({
           <span className="notif-dot" />
         </button>
 
-        <div className="topbar-avatar">BS</div>
+        <img
+          src={`https://multiavatar.com/${encodeURIComponent(userName || 'guest')}?s=80`}
+          alt="Profile"
+          className="topbar-avatar"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+        />
       </div>
     </header>
   )
@@ -275,6 +289,11 @@ export function AppShell({
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
+  const userName = (() => {
+    const name = getCookie('bz_tenant_name')
+    return name ? decodeURIComponent(name) : undefined
+  })()
+
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
 
@@ -321,6 +340,7 @@ export function AppShell({
           pathname={pathname}
           collapsed={collapsed}
           onToggle={() => setCollapsed(c => !c)}
+          userName={userName}
         />
 
         <MobileDrawer
@@ -330,7 +350,7 @@ export function AppShell({
         />
 
         <div className="shell-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} userName={userName} />
           <main className="shell-main">{children}</main>
           <BottomNav pathname={pathname} />
         </div>
