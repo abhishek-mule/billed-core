@@ -2,33 +2,27 @@ import { createWorker, type Worker } from 'tesseract.js'
 
 let worker: Worker | null = null
 let workerPromise: Promise<Worker> | null = null
+let workerEnded = false
 
 async function getWorker(): Promise<Worker> {
-  if (worker && !worker.terminated) return worker
+  if (worker && !workerEnded) return worker
   if (workerPromise) return workerPromise
 
+  workerEnded = false
   workerPromise = (async () => {
     worker = await createWorker('eng+hin', undefined, {
       logger: (m) => {
-        if (m.status === 'loading tesseract core') {
-          if (typeof window !== 'undefined') {
-            console.log('[OCR] Loading Tesseract core...')
-          }
+        if (m.status === 'loading tesseract core' && typeof window !== 'undefined') {
+          console.log('[OCR] Loading Tesseract core...')
         }
-        if (m.status === 'initializing tesseract') {
-          if (typeof window !== 'undefined') {
-            console.log('[OCR] Initializing Tesseract...')
-          }
+        if (m.status === 'initializing tesseract' && typeof window !== 'undefined') {
+          console.log('[OCR] Initializing Tesseract...')
         }
-        if (m.status === 'loading language traineddata') {
-          if (typeof window !== 'undefined') {
-            console.log('[OCR] Loading language data...')
-          }
+        if (m.status === 'loading language traineddata' && typeof window !== 'undefined') {
+          console.log('[OCR] Loading language data...')
         }
-        if (m.status === 'initializing api') {
-          if (typeof window !== 'undefined') {
-            console.log('[OCR] Ready.')
-          }
+        if (m.status === 'initializing api' && typeof window !== 'undefined') {
+          console.log('[OCR] Ready.')
         }
       },
     })
@@ -48,37 +42,25 @@ export interface OCRResult {
 export async function extractTextFromImage(imageData: File | Blob | string): Promise<OCRResult> {
   const start = Date.now()
 
-  try {
-    const w = await getWorker()
+  const w = await getWorker()
+  const result = await w.recognize(imageData)
 
-    let imageBuffer: string | Blob
-    if (typeof imageData === 'string') {
-      imageBuffer = imageData
-    } else {
-      imageBuffer = imageData
-    }
-
-    const result = await w.recognize(imageBuffer)
-
-    return {
-      rawText: result.data.text,
-      confidence: result.data.confidence,
-      processingTimeMs: Date.now() - start,
-    }
-  } catch (err) {
-    console.error('[OCR] Tesseract error:', err)
-    throw new Error('Failed to extract text from image')
+  return {
+    rawText: result.data.text,
+    confidence: result.data.confidence,
+    processingTimeMs: Date.now() - start,
   }
 }
 
 export async function terminateWorker() {
-  if (worker && !worker.terminated) {
+  if (worker && !workerEnded) {
     await worker.terminate()
+    workerEnded = true
     worker = null
     workerPromise = null
   }
 }
 
 export function isWorkerReady(): boolean {
-  return worker !== null && !worker.terminated
+  return worker !== null && !workerEnded
 }

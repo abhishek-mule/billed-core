@@ -15,6 +15,18 @@ function setCookie(name: string, value: string, days = 30) {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
 }
 
+declare global {
+  interface Window {
+    initSendOTP?: (config: MSG91Config) => void
+  }
+}
+
+interface MSG91Config {
+  widgetId: string
+  success: (data: { response?: string; hash?: string; mobile?: string }) => void
+  failure: (error: { message?: string }) => void
+}
+
 function MagicLinkForm() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
