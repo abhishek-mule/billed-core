@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { sessionStore } from '@/lib/billzo/auth-store'
-import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { accessToken } = body
+    const { phone, otp, reqId } = body
 
-    if (!accessToken) {
-      return NextResponse.json({ error: 'Access token required' }, { status: 400 })
+    if (!phone || !otp) {
+      return NextResponse.json({ error: 'Phone and OTP are required' }, { status: 400 })
     }
 
     const apiKey = process.env.MSG91_API_KEY
@@ -18,32 +17,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
-    const verifyRes = await fetch(
-      'https://control.msg91.com/api/v5/widget/verifyAccessToken',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'authkey': apiKey,
-        },
-        body: JSON.stringify({ 'access-token': accessToken }),
-      }
-    )
+    const verifyRes = await fetch('https://verify.msg91.com/api/v5/otp/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authkey': apiKey,
+      },
+      body: JSON.stringify({
+        request_id: reqId,
+        otp,
+      }),
+    })
 
-    if (!verifyRes.ok) {
-      const errData = await verifyRes.json().catch(() => ({}))
-      console.error('[VerifyOTP] MSG91 error:', errData)
-      return NextResponse.json(
-        { error: errData.message || 'Token verification failed' },
-        { status: 401 }
-      )
-    }
-
-    const verifyData = await verifyRes.json()
-    const phone = verifyData.number || verifyData.mobile || verifyData.phone
-
-    if (!phone) {
-      return NextResponse.json({ error: 'Could not get phone number from MSG91' }, { status: 500 })
+    const data = await verifyRes.json()
+    if (!verifyRes.ok || data.type !== 'success') {
+      console.error('[VerifyOTP] MSG91 verify error:', data)
+      return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
     }
 
     const formattedPhone = phone.startsWith('91') ? phone : `91${phone.replace(/\D/g, '').slice(-10)}`
@@ -60,7 +49,7 @@ export async function POST(request: NextRequest) {
       existingTenantId = existingSessions[0].tenantId || undefined
     } else {
       userId = `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
-      console.log('[VerifyOTP] New user created:', userId)
+      console.log('[VerifyOTP] New user:', userId)
     }
 
     const sessionId = crypto.randomBytes(32).toString('hex')
