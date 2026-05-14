@@ -169,10 +169,12 @@ function MagicLinkForm() {
 
 function PhoneOtpForm() {
   const [phone, setPhone] = useState("")
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [widgetError, setWidgetError] = useState("")
+  const [widgetOpen, setWidgetOpen] = useState(false)
+  const [status, setStatus] = useState("")
   const widgetLoaded = useRef<boolean | 'ready'>(false)
+  const otpTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (widgetLoaded.current) return
@@ -183,18 +185,22 @@ function PhoneOtpForm() {
       setWidgetError("MSG91 Widget ID not configured. Please use email login.")
       return
     }
+    setStatus("Loading OTP service...")
 
     function attemptLoad(urls: string[], i = 0) {
       if (i >= urls.length) {
         setWidgetError("Could not load OTP service. Please use email login.")
+        setStatus("")
         return
       }
+      setStatus("Connecting to MSG91...")
       const s = document.createElement('script')
       s.src = urls[i]
       s.async = true
       s.onload = () => {
         if (typeof window.initSendOTP === 'function') {
           widgetLoaded.current = 'ready'
+          setStatus("")
         } else {
           attemptLoad(urls, i + 1)
         }
@@ -210,6 +216,7 @@ function PhoneOtpForm() {
   }, [])
 
   const handleSendOtp = async () => {
+    if (otpTimeout.current) clearTimeout(otpTimeout.current)
     setError("")
     const cleaned = phone.replace(/\D/g, '')
     if (cleaned.length !== 10) {
@@ -222,11 +229,22 @@ function PhoneOtpForm() {
       return
     }
 
-    setLoading(true)
+    setStatus("Opening OTP screen...")
+    setWidgetOpen(true)
+
+    otpTimeout.current = setTimeout(() => {
+      if (widgetOpen) {
+        setStatus("")
+        setWidgetOpen(false)
+      }
+    }, 15000)
+
     try {
       window.initSendOTP({
         widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID!,
         success: async (tokenData: { response?: string; hash?: string; mobile?: string }) => {
+          if (otpTimeout.current) clearTimeout(otpTimeout.current)
+          setStatus("Verifying...")
           try {
             const verifyRes = await fetch("/api/auth/verify-otp", {
               method: "POST",
@@ -240,21 +258,27 @@ function PhoneOtpForm() {
               window.location.href = verifyData.redirectTo || "/onboarding"
             } else {
               setError(verifyData.error || "Verification failed")
-              setLoading(false)
+              setWidgetOpen(false)
+              setStatus("")
             }
           } catch {
             setError("Could not verify OTP. Please try again.")
-            setLoading(false)
+            setWidgetOpen(false)
+            setStatus("")
           }
         },
         failure: (err: any) => {
+          if (otpTimeout.current) clearTimeout(otpTimeout.current)
           setError(err?.message || "OTP verification failed")
-          setLoading(false)
+          setWidgetOpen(false)
+          setStatus("")
         },
       })
     } catch {
+      if (otpTimeout.current) clearTimeout(otpTimeout.current)
       setError("Something went wrong. Please try again.")
-      setLoading(false)
+      setWidgetOpen(false)
+      setStatus("")
     }
   }
 
@@ -292,12 +316,25 @@ function PhoneOtpForm() {
 
       <button
         onClick={handleSendOtp}
-        disabled={loading || phone.length !== 10}
+        disabled={phone.length !== 10 || widgetOpen}
         className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
       >
-        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
-        {loading ? "Opening OTP..." : "Send OTP"}
+        <MessageSquare className="h-5 w-5" />
+        Send OTP
       </button>
+
+      {status && (
+        <p className="text-xs text-center text-muted-foreground">{status}</p>
+      )}
+
+      {widgetOpen && !status && (
+        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-700 text-center">
+          OTP screen opened! Enter the code sent to +91 {phone.slice(0, 3)}******{phone.slice(-4)} in the popup.<br />
+          <button onClick={() => setWidgetOpen(false)} className="mt-2 text-xs underline hover:no-underline">
+            Close
+          </button>
+        </div>
+      )}
     </div>
   )
 }
