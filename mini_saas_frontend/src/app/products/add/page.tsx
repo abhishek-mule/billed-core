@@ -38,13 +38,25 @@ export default function AddProductPage() {
     const params = new URLSearchParams(window.location.search)
     const barcode = params.get('barcode') || ''
     const name = params.get('name') || ''
+    const brand = params.get('brand') || ''
+    const category = params.get('category') || ''
+    const gstRate = params.get('gstRate') || '18'
+    const stock = params.get('stock') || '10'
+    const salePrice = params.get('salePrice') || ''
+    const purchasePrice = params.get('purchasePrice') || ''
+    const unit = params.get('unit') || 'pcs'
 
-    if (!barcode && !name) return
+    if (!barcode && !name && !salePrice && !purchasePrice) return
 
     setFormData((prev) => ({
       ...prev,
       barcode: barcode || prev.barcode,
       name: name || prev.name,
+      gstRate,
+      stock,
+      salePrice,
+      purchasePrice,
+      unit,
     }))
   }, [])
 
