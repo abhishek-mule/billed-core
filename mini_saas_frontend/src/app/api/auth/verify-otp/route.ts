@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { sessionStore } from '@/lib/billzo/auth-store'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.MSG91_API_KEY
-    if (!apiKey) {
+    if (!apiKey || apiKey.startsWith('<')) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
 
     if (!verifyRes.ok) {
       const errData = await verifyRes.json().catch(() => ({}))
+      console.error('[VerifyOTP] MSG91 error:', errData)
       return NextResponse.json(
         { error: errData.message || 'Token verification failed' },
         { status: 401 }
@@ -46,36 +47,20 @@ export async function POST(request: NextRequest) {
     }
 
     const formattedPhone = phone.startsWith('91') ? phone : `91${phone.replace(/\D/g, '').slice(-10)}`
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id, phone')
-      .eq('phone', formattedPhone)
-      .maybeSingle()
+    console.log('[VerifyOTP] Phone verified:', formattedPhone)
 
     let userId: string
     let existingTenantId: string | undefined
 
-    if (existingUser) {
-      userId = existingUser.id
-      const sessions = Array.from(sessionStore.values()).filter((s) => s.userId === userId)
-      existingTenantId = sessions.find((s) => s.tenantId)?.tenantId || undefined
+    const existingSessions = Array.from(sessionStore.values()).filter(
+      (s) => s.phone === formattedPhone && s.tenantId
+    )
+    if (existingSessions.length > 0) {
+      userId = existingSessions[0].userId
+      existingTenantId = existingSessions[0].tenantId || undefined
     } else {
-      const { data: newUser } = await supabase
-        .from('users')
-        .insert({ phone: formattedPhone })
-        .select('id')
-        .maybeSingle()
-
-      userId = newUser?.id || `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
-
-      if (!newUser) {
-        await supabase.from('users').upsert([{ id: userId, phone: formattedPhone }])
-      }
+      userId = `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+      console.log('[VerifyOTP] New user created:', userId)
     }
 
     const sessionId = crypto.randomBytes(32).toString('hex')
