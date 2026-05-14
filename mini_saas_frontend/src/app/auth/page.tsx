@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import { useSearchParams } from "next/navigation"
-import { Loader2, Mail, ArrowRight } from "lucide-react"
+import { Loader2, Mail, ArrowRight, Phone, MessageSquare } from "lucide-react"
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return null
@@ -10,7 +10,12 @@ function getCookie(name: string) {
   return match ? match[2] : null
 }
 
-function AuthForm() {
+function setCookie(name: string, value: string, days = 30) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+}
+
+function MagicLinkForm() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
@@ -27,7 +32,6 @@ function AuthForm() {
 
       const params = new URLSearchParams(hash.slice(1))
       const accessToken = params.get("access_token")
-
       window.history.replaceState(null, "", window.location.pathname + window.location.search)
 
       if (!accessToken) {
@@ -60,16 +64,6 @@ function AuthForm() {
     finishSupabaseHashLogin()
   }, [])
 
-  useEffect(() => {
-    if (!getCookie("bz_access")) return
-
-    if (getCookie("bz_tenant")) {
-      window.location.href = "/dashboard"
-    } else {
-      window.location.href = "/onboarding"
-    }
-  }, [])
-
   const hasError = searchParams?.get("error")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,76 +94,251 @@ function AuthForm() {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center lg:text-left">
-          <h2 className="text-2xl font-bold text-slate-900">
-            {sent ? "Check your email" : "Welcome to BillZo"}
-          </h2>
-          <p className="mt-1 text-slate-500">
-            {sent
-              ? `We sent a magic link to ${email}`
-              : "Enter your email to get started instantly"}
-          </p>
+    <div className="space-y-4">
+      {hasError && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+          {hasError === "invalid"
+            ? "This link is invalid or expired. Please request a new one."
+            : "Something went wrong. Please try again."}
         </div>
+      )}
 
-        {hasError && (
-          <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-            {hasError === "invalid"
-              ? "This link is invalid or expired. Please request a new one."
-              : "Something went wrong. Please try again."}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      {sent ? (
+        <div className="space-y-4">
+          <div className="p-6 bg-indigo-50 rounded-xl text-center">
+            <Mail className="w-8 h-8 text-indigo-600 mx-auto mb-3" />
+            <p className="text-sm text-indigo-700">
+              Click the link in your email to sign in.
+            </p>
           </div>
-        )}
-
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
-        {sent ? (
-          <div className="space-y-4">
-            <div className="p-6 bg-indigo-50 rounded-xl text-center">
-              <Mail className="w-8 h-8 text-indigo-600 mx-auto mb-3" />
-              <p className="text-sm text-indigo-700">
-                Click the link in your email to sign in. The link expires in 1 hour.
-              </p>
+          <button
+            onClick={() => { setSent(false); setEmail("") }}
+            className="w-full py-3.5 border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+          >
+            Use a different email
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+              />
             </div>
-            <button
-              onClick={() => { setSent(false); setEmail("") }}
-              className="w-full py-3.5 border border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
-            >
-              Use a different email
-            </button>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-            >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
-              {loading ? "Sending link..." : "Continue with Email"}
-            </button>
-          </form>
-        )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+          >
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+            {loading ? "Sending link..." : "Continue with Email"}
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+function PhoneOtpForm() {
+  const [phone, setPhone] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [widgetReady, setWidgetReady] = useState(false)
+  const [widgetError, setWidgetError] = useState("")
+  const widgetLoaded = useRef(false)
+
+  useEffect(() => {
+    if (widgetLoaded.current) return
+    widgetLoaded.current = true
+
+    const widgetId = process.env.NEXT_PUBLIC_MSG91_WIDGET_ID
+    if (!widgetId) {
+      setWidgetError("MSG91 Widget ID not configured. Please use email login.")
+      return
+    }
+
+    function attemptLoad(urls: string[], i = 0) {
+      if (i >= urls.length) {
+        setWidgetError("Could not load OTP service. Please use email login.")
+        return
+      }
+      const s = document.createElement('script')
+      s.src = urls[i]
+      s.async = true
+      s.onload = () => {
+        if (typeof window.initSendOTP === 'function') {
+          setWidgetReady(true)
+        } else {
+          attemptLoad(urls, i + 1)
+        }
+      }
+      s.onerror = () => attemptLoad(urls, i + 1)
+      document.head.appendChild(s)
+    }
+
+    attemptLoad([
+      'https://verify.msg91.com/otp-provider.js',
+      'https://verify.phone91.com/otp-provider.js',
+    ])
+  }, [])
+
+  const handleSendOtp = async () => {
+    setError("")
+    const cleaned = phone.replace(/\D/g, '')
+    if (cleaned.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number")
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch("/api/auth/phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleaned }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || "Failed to send OTP")
+        setLoading(false)
+        return
+      }
+
+      if (widgetReady && typeof window.initSendOTP === 'function') {
+        window.initSendOTP({
+          widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID!,
+          success: async (tokenData: { response?: string; hash?: string; mobile?: string }) => {
+            try {
+              const verifyRes = await fetch("/api/auth/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ accessToken: tokenData.response || tokenData.hash }),
+              })
+              const verifyData = await verifyRes.json()
+              if (verifyRes.ok && verifyData.success) {
+                setCookie('bz_tenant', verifyData.tenantId || '')
+                setCookie('bz_tenant_name', verifyData.shopName || 'My Shop')
+                window.location.href = verifyData.redirectTo || "/onboarding"
+              } else {
+                setError(verifyData.error || "Verification failed")
+              }
+            } catch {
+              setError("Could not verify OTP. Please try again.")
+            }
+          },
+          failure: (err: any) => {
+            setError(err?.message || "OTP verification failed")
+          },
+        })
+      }
+    } catch {
+      setError("Something went wrong. Please try again.")
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      {widgetError && (
+        <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-700 text-sm">
+          {widgetError}
+        </div>
+      )}
+
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">
+          Mobile Number
+        </label>
+        <div className="relative">
+          <Phone className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <span className="absolute left-10 top-1/2 -translate-y-1/2 text-slate-500 text-base font-medium">+91</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            placeholder="9876543210"
+            maxLength={10}
+            className="w-full pl-20 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+          />
+        </div>
       </div>
+
+      <button
+        onClick={handleSendOtp}
+        disabled={loading || phone.length !== 10}
+        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+      >
+        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
+        {loading ? "Sending OTP..." : "Send OTP"}
+      </button>
+
+      {!widgetReady && !widgetError && (
+        <p className="text-xs text-center text-muted-foreground">
+          Loading OTP service...
+        </p>
+      )}
+    </div>
+  )
+}
+
+function AuthForm() {
+  const [tab, setTab] = useState<'email' | 'phone'>('email')
+
+  useEffect(() => {
+    if (!getCookie("bz_access")) return
+
+    if (getCookie("bz_tenant")) {
+      window.location.href = "/dashboard"
+    } else {
+      window.location.href = "/onboarding"
+    }
+  }, [])
+
+  return (
+    <div className="w-full max-w-sm space-y-6">
+      <div className="text-center lg:text-left">
+        <h2 className="text-2xl font-bold text-slate-900">Welcome to BillZo</h2>
+        <p className="mt-1 text-slate-500">Sign in with email or phone</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+        <button
+          onClick={() => setTab('email')}
+          className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+        >
+          <Mail className="h-4 w-4" /> Email
+        </button>
+        <button
+          onClick={() => setTab('phone')}
+          className={`flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+        >
+          <Phone className="h-4 w-4" /> Phone
+        </button>
+      </div>
+
+      {tab === 'email' ? <MagicLinkForm /> : <PhoneOtpForm />}
     </div>
   )
 }
@@ -210,13 +379,15 @@ export default function AuthPage() {
           </div>
         </div>
 
-        <Suspense fallback={
-          <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-          </div>
-        }>
-          <AuthForm />
-        </Suspense>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Suspense fallback={
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          }>
+            <AuthForm />
+          </Suspense>
+        </div>
       </div>
     </div>
   )

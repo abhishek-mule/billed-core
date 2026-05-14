@@ -62,6 +62,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `OTP sent to ${maskPhone(formattedPhone)}`,
+      widgetConfig: {
+        widgetId: process.env.MSG91_WIDGET_ID,
+        autoInit: true,
+      },
     })
   } catch (error) {
     console.error('Phone auth error:', error)
