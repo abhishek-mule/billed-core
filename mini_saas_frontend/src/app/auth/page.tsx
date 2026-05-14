@@ -171,16 +171,15 @@ function PhoneOtpForm() {
   const [phone, setPhone] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [widgetReady, setWidgetReady] = useState(false)
   const [widgetError, setWidgetError] = useState("")
-  const widgetLoaded = useRef(false)
+  const widgetLoaded = useRef<boolean | 'ready'>(false)
 
   useEffect(() => {
     if (widgetLoaded.current) return
     widgetLoaded.current = true
 
     const widgetId = process.env.NEXT_PUBLIC_MSG91_WIDGET_ID
-    if (!widgetId) {
+    if (!widgetId || widgetId.startsWith('<')) {
       setWidgetError("MSG91 Widget ID not configured. Please use email login.")
       return
     }
@@ -195,7 +194,7 @@ function PhoneOtpForm() {
       s.async = true
       s.onload = () => {
         if (typeof window.initSendOTP === 'function') {
-          setWidgetReady(true)
+          widgetLoaded.current = 'ready'
         } else {
           attemptLoad(urls, i + 1)
         }
@@ -218,51 +217,45 @@ function PhoneOtpForm() {
       return
     }
 
+    if (typeof window.initSendOTP !== 'function') {
+      setWidgetError("OTP service not loaded. Please use email login.")
+      return
+    }
+
     setLoading(true)
     try {
-      const res = await fetch("/api/auth/phone", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || "Failed to send OTP")
-        setLoading(false)
-        return
-      }
-
-      if (widgetReady && typeof window.initSendOTP === 'function') {
-        window.initSendOTP({
-          widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID!,
-          success: async (tokenData: { response?: string; hash?: string; mobile?: string }) => {
-            try {
-              const verifyRes = await fetch("/api/auth/verify-otp", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ accessToken: tokenData.response || tokenData.hash }),
-              })
-              const verifyData = await verifyRes.json()
-              if (verifyRes.ok && verifyData.success) {
-                setCookie('bz_tenant', verifyData.tenantId || '')
-                setCookie('bz_tenant_name', verifyData.shopName || 'My Shop')
-                window.location.href = verifyData.redirectTo || "/onboarding"
-              } else {
-                setError(verifyData.error || "Verification failed")
-              }
-            } catch {
-              setError("Could not verify OTP. Please try again.")
+      window.initSendOTP({
+        widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID!,
+        success: async (tokenData: { response?: string; hash?: string; mobile?: string }) => {
+          try {
+            const verifyRes = await fetch("/api/auth/verify-otp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accessToken: tokenData.response || tokenData.hash }),
+            })
+            const verifyData = await verifyRes.json()
+            if (verifyRes.ok && verifyData.success) {
+              setCookie('bz_tenant', verifyData.tenantId || '')
+              setCookie('bz_tenant_name', verifyData.shopName || 'My Shop')
+              window.location.href = verifyData.redirectTo || "/onboarding"
+            } else {
+              setError(verifyData.error || "Verification failed")
+              setLoading(false)
             }
-          },
-          failure: (err: any) => {
-            setError(err?.message || "OTP verification failed")
-          },
-        })
-      }
+          } catch {
+            setError("Could not verify OTP. Please try again.")
+            setLoading(false)
+          }
+        },
+        failure: (err: any) => {
+          setError(err?.message || "OTP verification failed")
+          setLoading(false)
+        },
+      })
     } catch {
       setError("Something went wrong. Please try again.")
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -303,14 +296,8 @@ function PhoneOtpForm() {
         className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
       >
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
-        {loading ? "Sending OTP..." : "Send OTP"}
+        {loading ? "Opening OTP..." : "Send OTP"}
       </button>
-
-      {!widgetReady && !widgetError && (
-        <p className="text-xs text-center text-muted-foreground">
-          Loading OTP service...
-        </p>
-      )}
     </div>
   )
 }
