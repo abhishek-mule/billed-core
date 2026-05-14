@@ -18,11 +18,16 @@ function setCookie(name: string, value: string, days = 30) {
 declare global {
   interface Window {
     initSendOTP?: (config: MSG91Config) => void
+    sendOtp?: (identifier: string, onSuccess?: (data: any) => void, onFailure?: (err: any) => void) => void
+    retryOtp?: (onSuccess?: (data: any) => void, onFailure?: (err: any) => void) => void
+    verifyOtp?: (otp: string, onSuccess?: (data: any) => void, onFailure?: (err: any) => void) => void
   }
 }
 
 interface MSG91Config {
   widgetId: string
+  tokenAuth?: string
+  exposeMethods?: boolean
   success: (data: { response?: string; hash?: string; mobile?: string }) => void
   failure: (error: { message?: string }) => void
 }
@@ -169,11 +174,13 @@ function MagicLinkForm() {
 
 function PhoneOtpForm() {
   const [phone, setPhone] = useState("")
+  const [otp, setOtp] = useState("")
   const [error, setError] = useState("")
   const [widgetError, setWidgetError] = useState("")
-  const [widgetOpen, setWidgetOpen] = useState(false)
   const [status, setStatus] = useState("")
+  const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const widgetLoaded = useRef<boolean | 'ready'>(false)
+  const reqIdRef = useRef<string>("")
   const otpTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -181,41 +188,47 @@ function PhoneOtpForm() {
     widgetLoaded.current = true
 
     const widgetId = process.env.NEXT_PUBLIC_MSG91_WIDGET_ID
+    const tokenAuth = process.env.NEXT_PUBLIC_MSG91_AUTH_TOKEN
     if (!widgetId || widgetId.startsWith('<')) {
       setWidgetError("MSG91 Widget ID not configured. Please use email login.")
       return
     }
+    if (!tokenAuth || tokenAuth.startsWith('<')) {
+      setWidgetError("MSG91 Auth Token not configured. Please use email login.")
+      return
+    }
     setStatus("Loading OTP service...")
 
-    function attemptLoad(urls: string[], i = 0) {
-      if (i >= urls.length) {
-        setWidgetError("Could not load OTP service. Please use email login.")
+    const cfg: MSG91Config = {
+      widgetId,
+      tokenAuth,
+      exposeMethods: true,
+      success: (data) => {
         setStatus("")
-        return
-      }
-      setStatus("Connecting to MSG91...")
-      const s = document.createElement('script')
-      s.src = urls[i]
-      s.async = true
-      s.onload = () => {
-        if (typeof window.initSendOTP === 'function') {
-          widgetLoaded.current = 'ready'
-          setStatus("")
+        if (data.hash) {
+          handleVerify(data.hash)
         } else {
-          attemptLoad(urls, i + 1)
+          setError("Verification failed: no token received")
         }
-      }
-      s.onerror = () => attemptLoad(urls, i + 1)
-      document.head.appendChild(s)
+      },
+      failure: (err) => {
+        setError(err?.message || "OTP verification failed")
+        setStatus("")
+      },
     }
 
-    attemptLoad([
-      'https://verify.msg91.com/otp-provider.js',
-      'https://verify.phone91.com/otp-provider.js',
-    ])
+    window.initSendOTP?.(cfg)
+    setTimeout(() => {
+      if (status === "Loading OTP service...") {
+        setStatus("")
+        if (typeof window.initSendOTP !== 'function') {
+          setWidgetError("Could not load OTP service. Please use email login.")
+        }
+      }
+    }, 10000)
   }, [])
 
-  const handleSendOtp = async () => {
+  const handleSendOtp = () => {
     if (otpTimeout.current) clearTimeout(otpTimeout.current)
     setError("")
     const cleaned = phone.replace(/\D/g, '')
@@ -223,62 +236,112 @@ function PhoneOtpForm() {
       setError("Please enter a valid 10-digit mobile number")
       return
     }
-
-    if (typeof window.initSendOTP !== 'function') {
-      setWidgetError("OTP service not loaded. Please use email login.")
+    if (typeof window.sendOtp !== 'function') {
+      setError("OTP service not ready. Please wait a moment and try again.")
       return
     }
+    setStatus("Sending OTP...")
+    reqIdRef.current = ""
+    setOtp("")
 
-    setStatus("Opening OTP screen...")
-    setWidgetOpen(true)
-
-    otpTimeout.current = setTimeout(() => {
-      if (widgetOpen) {
+    window.sendOtp(
+      `91${cleaned}`,
+      (data: any) => {
         setStatus("")
-        setWidgetOpen(false)
+        if (data?.message && typeof data.message === 'string') {
+          reqIdRef.current = data.message
+          setStep('otp')
+        } else if (data?.hash) {
+          handleVerify(data.hash)
+        }
+      },
+      (err: any) => {
+        setError(err?.message || "Failed to send OTP. Please try again.")
+        setStatus("")
       }
-    }, 15000)
+    )
+  }
 
+  const handleVerify = async (hash?: string) => {
+    if (!hash) return
+    setStatus("Verifying...")
     try {
-      window.initSendOTP({
-        widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID!,
-        success: async (tokenData: { response?: string; hash?: string; mobile?: string }) => {
-          if (otpTimeout.current) clearTimeout(otpTimeout.current)
-          setStatus("Verifying...")
-          try {
-            const verifyRes = await fetch("/api/auth/verify-otp", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ accessToken: tokenData.response || tokenData.hash }),
-            })
-            const verifyData = await verifyRes.json()
-            if (verifyRes.ok && verifyData.success) {
-              setCookie('bz_tenant', verifyData.tenantId || '')
-              setCookie('bz_tenant_name', verifyData.shopName || 'My Shop')
-              window.location.href = verifyData.redirectTo || "/onboarding"
-            } else {
-              setError(verifyData.error || "Verification failed")
-              setWidgetOpen(false)
-              setStatus("")
-            }
-          } catch {
-            setError("Could not verify OTP. Please try again.")
-            setWidgetOpen(false)
-            setStatus("")
+      const verifyRes = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: hash }),
+      })
+      const verifyData = await verifyRes.json()
+      if (verifyRes.ok && verifyData.success) {
+        setCookie('bz_tenant', verifyData.tenantId || '')
+        setCookie('bz_tenant_name', verifyData.shopName || 'My Shop')
+        window.location.href = verifyData.redirectTo || "/onboarding"
+      } else {
+        setError(verifyData.error || "Verification failed")
+        setStatus("")
+        setStep('otp')
+      }
+    } catch {
+      setError("Could not verify OTP. Please try again.")
+      setStatus("")
+    }
+  }
+
+  const handleVerifyOtp = () => {
+    setError("")
+    if (otp.replace(/\D/g, '').length !== 6) {
+      setError("Please enter a valid 6-digit OTP")
+      return
+    }
+    if (typeof window.verifyOtp !== 'function') {
+      setError("OTP service not ready. Please try again.")
+      return
+    }
+    setStatus("Verifying OTP...")
+    otpTimeout.current = setTimeout(() => {
+      setError("OTP verification timed out. Please try again.")
+      setStatus("")
+    }, 30000)
+
+    window.verifyOtp(
+      otp,
+      (data: any) => {
+        if (otpTimeout.current) clearTimeout(otpTimeout.current)
+        if (data?.hash) {
+          handleVerify(data.hash)
+        } else {
+          setError("Verification failed")
+          setStatus("")
+        }
+      },
+      (err: any) => {
+        if (otpTimeout.current) clearTimeout(otpTimeout.current)
+        setError(err?.message || "Invalid OTP. Please try again.")
+        setStatus("")
+      }
+    )
+  }
+
+  const handleResend = () => {
+    setOtp("")
+    setStep('phone')
+    if (typeof window.retryOtp === 'function') {
+      setStatus("Resending OTP...")
+      window.retryOtp(
+        (data: any) => {
+          setStatus("")
+          if (data?.message) {
+            reqIdRef.current = data.message
+            setStep('otp')
           }
         },
-        failure: (err: any) => {
-          if (otpTimeout.current) clearTimeout(otpTimeout.current)
-          setError(err?.message || "OTP verification failed")
-          setWidgetOpen(false)
+        (err: any) => {
+          setError(err?.message || "Failed to resend OTP")
           setStatus("")
-        },
-      })
-    } catch {
-      if (otpTimeout.current) clearTimeout(otpTimeout.current)
-      setError("Something went wrong. Please try again.")
-      setWidgetOpen(false)
-      setStatus("")
+        }
+      )
+    } else {
+      handleSendOtp()
     }
   }
 
@@ -309,32 +372,39 @@ function PhoneOtpForm() {
             onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
             placeholder="9876543210"
             maxLength={10}
-            className="w-full pl-20 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+            disabled={step === 'otp'}
+            className="w-full pl-20 pr-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all disabled:opacity-50"
           />
         </div>
       </div>
 
-      <button
-        onClick={handleSendOtp}
-        disabled={phone.length !== 10 || widgetOpen}
-        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-      >
-        <MessageSquare className="h-5 w-5" />
-        Send OTP
-      </button>
-
-      {status && (
-        <p className="text-xs text-center text-muted-foreground">{status}</p>
-      )}
-
-      {widgetOpen && !status && (
-        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-700 text-center">
-          OTP screen opened! Enter the code sent to +91 {phone.slice(0, 3)}******{phone.slice(-4)} in the popup.<br />
-          <button onClick={() => setWidgetOpen(false)} className="mt-2 text-xs underline hover:no-underline">
-            Close
+      {step === 'otp' && (
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Enter OTP
+          </label>
+          <input
+            type="text"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="------"
+            maxLength={6}
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-center text-2xl tracking-widest font-mono"
+          />
+          <button onClick={handleResend} className="mt-2 text-xs text-indigo-600 hover:underline">
+            Resend OTP
           </button>
         </div>
       )}
+
+      <button
+        onClick={step === 'otp' ? handleVerifyOtp : handleSendOtp}
+        disabled={status !== "" || (step === 'phone' ? phone.length !== 10 : otp.length !== 6)}
+        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+      >
+        {status ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
+        {status || (step === 'otp' ? 'Verify OTP' : 'Send OTP')}
+      </button>
     </div>
   )
 }
