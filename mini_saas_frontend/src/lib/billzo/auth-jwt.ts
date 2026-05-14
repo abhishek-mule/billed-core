@@ -15,7 +15,7 @@ export function createAccessToken(payload: {
   const data = {
     ...payload,
     iat: now,
-    exp: now + 3600,
+    exp: now + 15 * 24 * 3600,
     type: 'access',
   }
   const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')

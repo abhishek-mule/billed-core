@@ -1,28 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { sessionStore } from '@/lib/billzo/auth-store'
-
-function generateToken(payload: object, type: 'access' | 'refresh'): string {
-  const secret = process.env.JWT_SECRET || 'development-secret-change-in-production'
-  const expTime = type === 'access' 
-    ? Math.floor(Date.now() / 1000) + 3600
-    : Math.floor(Date.now() / 1000) + 7 * 24 * 3600
-  
-  const data = { 
-    ...payload, 
-    iat: Math.floor(Date.now() / 1000),
-    exp: expTime,
-    type
-  }
-  
-  const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')
-  const signature = crypto
-    .createHmac('sha256', secret)
-    .update(base64Payload)
-    .digest('base64url')
-  
-  return `${base64Payload}.${signature}`
-}
+import { verifyRefreshToken, createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,47 +11,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Refresh token required' }, { status: 400 })
     }
 
-    // In this simple implementation, we decode the refresh token to get the sessionId
-    const [payloadBase64] = refreshToken.split('.')
-    if (!payloadBase64) {
-      return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 })
+    const oldPayload = verifyRefreshToken(refreshToken)
+    if (!oldPayload) {
+      return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
     }
 
-    const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString())
-    if (payload.type !== 'refresh' || !payload.sessionId) {
-      return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401 })
-    }
+    const newAccessToken = createAccessToken({
+      sessionId: oldPayload.sessionId,
+      userId: oldPayload.userId,
+    })
+    const newRefreshToken = createRefreshToken(oldPayload)
 
-    const session = sessionStore.get(payload.sessionId)
-    if (!session) {
-      return NextResponse.json({ error: 'Session expired' }, { status: 401 })
-    }
-
-    // Generate new tokens
-    const newAccessToken = generateToken({
-      sessionId: payload.sessionId,
-      userId: session.userId,
-      phone: session.phone
-    }, 'access')
-    
-    const newRefreshToken = generateToken({
-      sessionId: payload.sessionId,
-      userId: session.userId
-    }, 'refresh')
-
-    // Update session timestamp if needed
-    session.createdAt = Date.now()
-    sessionStore.set(payload.sessionId, session)
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: 900
+      expiresIn: 15 * 24 * 3600,
     })
 
+    setAuthCookies(response, newAccessToken, newRefreshToken)
+    return response
   } catch (error) {
-    console.error('Refresh error:', error)
+    console.error('[Refresh] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

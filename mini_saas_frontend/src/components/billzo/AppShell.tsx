@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
   Bell, Search, Home, ScanLine, Receipt,
   ShoppingBag, Users, Package, BarChart3, Settings,
-  MoreHorizontal, Menu,
+  MoreHorizontal, Menu, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import '@/styles/app-shell.css'
@@ -32,6 +32,20 @@ const MOBILE_NAV = [
   { href: '/products',  label: 'Stock', icon: Package,        primary: false },
   { href: '/more',      label: 'More',  icon: MoreHorizontal, primary: false },
 ]
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+function logout() {
+  document.cookie = 'bz_access=; Max-Age=0; path=/'
+  document.cookie = 'bz_refresh=; Max-Age=0; path=/'
+  document.cookie = 'bz_tenant=; Max-Age=0; path=/'
+  document.cookie = 'bz_tenant_name=; Max-Age=0; path=/'
+  window.location.href = '/auth'
+}
 
 function Sidebar({
   pathname,
@@ -98,12 +112,13 @@ function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <div className="user-row">
+        <div className="user-row" onClick={logout} style={{ cursor: 'pointer' }}>
           <div className="user-avatar">BS</div>
           <div className="user-info">
             <span className="user-name">BillZo Store</span>
-            <span className="user-plan">Free plan</span>
+            <span className="user-plan">Click to logout</span>
           </div>
+          <LogOut size={14} className="text-muted-foreground ml-auto" />
         </div>
         <span className="nav-tooltip nav-tooltip--user" aria-hidden="true">BillZo Store</span>
       </div>
@@ -259,6 +274,45 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    function scheduleRefresh() {
+      try {
+        const token = document.cookie.match(/(?:^|;\s*)bz_access=([^;]+)/)?.[1]
+        if (!token) return
+
+        const payload = JSON.parse(atob(token.split('.')[0]))
+        const exp = payload.exp
+        const now = Math.floor(Date.now() / 1000)
+        const ttl = exp - now
+        const refreshAt = ttl > 0 ? (ttl - 300) * 1000 : 0
+
+        if (interval) clearInterval(interval)
+        if (refreshAt > 0) {
+          interval = setTimeout(async () => {
+            try {
+              const refreshTok = document.cookie.match(/(?:^|;\s*)bz_refresh=([^;]+)/)?.[1]
+              if (!refreshTok) return
+              const res = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: refreshTok }),
+              })
+              if (res.ok) {
+                const setCookie = res.headers.get('set-cookie') || ''
+                document.cookie = setCookie
+              }
+            } catch { /* silent */ }
+          }, refreshAt)
+        }
+      } catch { /* silent */ }
+    }
+
+    scheduleRefresh()
+    return () => { if (interval) clearTimeout(interval) }
+  }, [])
 
   return (
     <>
