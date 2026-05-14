@@ -177,7 +177,6 @@ function PhoneOtpForm() {
   const [otp, setOtp] = useState("")
   const [error, setError] = useState("")
   const [widgetError, setWidgetError] = useState("")
-  const [status, setStatus] = useState("")
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const widgetLoaded = useRef<boolean | 'ready'>(false)
   const reqIdRef = useRef<string>("")
@@ -197,14 +196,12 @@ function PhoneOtpForm() {
       setWidgetError("MSG91 Auth Token not configured. Please use email login.")
       return
     }
-    setStatus("Loading OTP service...")
 
     const cfg: MSG91Config = {
       widgetId,
       tokenAuth,
       exposeMethods: true,
       success: (data) => {
-        setStatus("")
         if (data.hash) {
           handleVerify(data.hash)
         } else {
@@ -213,19 +210,10 @@ function PhoneOtpForm() {
       },
       failure: (err) => {
         setError(err?.message || "OTP verification failed")
-        setStatus("")
       },
     }
 
     window.initSendOTP?.(cfg)
-    setTimeout(() => {
-      if (status === "Loading OTP service...") {
-        setStatus("")
-        if (typeof window.initSendOTP !== 'function') {
-          setWidgetError("Could not load OTP service. Please use email login.")
-        }
-      }
-    }, 10000)
   }, [])
 
   const handleSendOtp = () => {
@@ -240,14 +228,12 @@ function PhoneOtpForm() {
       setError("OTP service not ready. Please wait a moment and try again.")
       return
     }
-    setStatus("Sending OTP...")
     reqIdRef.current = ""
     setOtp("")
 
     window.sendOtp(
       `91${cleaned}`,
       (data: any) => {
-        setStatus("")
         if (data?.message && typeof data.message === 'string') {
           reqIdRef.current = data.message
           setStep('otp')
@@ -257,14 +243,12 @@ function PhoneOtpForm() {
       },
       (err: any) => {
         setError(err?.message || "Failed to send OTP. Please try again.")
-        setStatus("")
       }
     )
   }
 
   const handleVerify = async (hash?: string) => {
     if (!hash) return
-    setStatus("Verifying...")
     try {
       const verifyRes = await fetch("/api/auth/verify-otp", {
         method: "POST",
@@ -278,12 +262,10 @@ function PhoneOtpForm() {
         window.location.href = verifyData.redirectTo || "/onboarding"
       } else {
         setError(verifyData.error || "Verification failed")
-        setStatus("")
         setStep('otp')
       }
     } catch {
       setError("Could not verify OTP. Please try again.")
-      setStatus("")
     }
   }
 
@@ -297,27 +279,18 @@ function PhoneOtpForm() {
       setError("OTP service not ready. Please try again.")
       return
     }
-    setStatus("Verifying OTP...")
-    otpTimeout.current = setTimeout(() => {
-      setError("OTP verification timed out. Please try again.")
-      setStatus("")
-    }, 30000)
 
     window.verifyOtp(
       otp,
       (data: any) => {
-        if (otpTimeout.current) clearTimeout(otpTimeout.current)
         if (data?.hash) {
           handleVerify(data.hash)
         } else {
           setError("Verification failed")
-          setStatus("")
         }
       },
       (err: any) => {
-        if (otpTimeout.current) clearTimeout(otpTimeout.current)
         setError(err?.message || "Invalid OTP. Please try again.")
-        setStatus("")
       }
     )
   }
@@ -326,10 +299,8 @@ function PhoneOtpForm() {
     setOtp("")
     setStep('phone')
     if (typeof window.retryOtp === 'function') {
-      setStatus("Resending OTP...")
       window.retryOtp(
         (data: any) => {
-          setStatus("")
           if (data?.message) {
             reqIdRef.current = data.message
             setStep('otp')
@@ -337,7 +308,6 @@ function PhoneOtpForm() {
         },
         (err: any) => {
           setError(err?.message || "Failed to resend OTP")
-          setStatus("")
         }
       )
     } else {
@@ -399,11 +369,11 @@ function PhoneOtpForm() {
 
       <button
         onClick={step === 'otp' ? handleVerifyOtp : handleSendOtp}
-        disabled={status !== "" || (step === 'phone' ? phone.length !== 10 : otp.length !== 6)}
+        disabled={step === 'phone' ? phone.length !== 10 : otp.length !== 6}
         className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
       >
-        {status ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
-        {status || (step === 'otp' ? 'Verify OTP' : 'Send OTP')}
+        <MessageSquare className="h-5 w-5" />
+        {step === 'otp' ? 'Verify OTP' : 'Send OTP'}
       </button>
     </div>
   )
