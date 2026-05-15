@@ -7,7 +7,6 @@ import {
   computeRecoveryMetrics,
   computeAgingReport,
   computeGSTReport,
-  computeSalesMetrics,
   computeSalesMetricsForRange,
   isInDateRange,
   type RecoveryMetrics,
@@ -147,20 +146,20 @@ export function useReportsData(): UseReportsDataReturn {
 
   const recovery = useMemo<RecoveryMetrics | null>(() => {
     if (data.loading || data.invoices.length === 0) return null
-    return computeRecoveryMetrics(data.payments, data.invoices, data.whatsappEvents, data.plan)
-  }, [data])
+    return computeRecoveryMetrics(data.payments, data.invoices, data.whatsappEvents, data.plan, dateRange)
+  }, [data, dateRange])
 
   const aging = useMemo<AgingBucket[]>(() => {
     if (data.loading || data.invoices.length === 0) return []
-    return computeAgingReport(data.invoices, data.plan)
-  }, [data])
+    return computeAgingReport(data.invoices, data.plan, dateRange)
+  }, [data, dateRange])
 
   const gst = useMemo<GSTReport>(() => {
     if (data.loading || data.invoices.length === 0) {
       return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
     }
-    return computeGSTReport(data.invoices, data.invoiceItems, data.purchases)
-  }, [data])
+    return computeGSTReport(data.invoices, data.invoiceItems, data.purchases, dateRange)
+  }, [data, dateRange])
 
   const sales = useMemo<SalesMetrics>(() => {
     if (data.loading || data.invoices.length === 0) {

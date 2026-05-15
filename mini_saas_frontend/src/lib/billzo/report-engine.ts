@@ -145,17 +145,23 @@ export function computeRecoveryMetrics(
   payments: Payment[],
   invoices: Invoice[],
   whatsappEvents: WhatsAppEvent[],
-  plan: PlanType = 'starter'
+  plan: PlanType = 'starter',
+  dateRange?: DateRange
 ): RecoveryMetrics {
-  const thisMonth = getMonthRange(0)
-  const lastMonth = getMonthRange(1)
+  const range = dateRange || getMonthRange(0)
+  const rangeStart = new Date(range.start)
+  const rangeEnd = new Date(range.end)
+  const rangeMs = rangeEnd.getTime() - rangeStart.getTime()
+  const prevStart = new Date(rangeStart.getTime() - rangeMs - 24 * 60 * 60 * 1000)
+  const prevEnd = new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000)
+  const prevRange = { start: prevStart.toISOString().slice(0, 10), end: prevEnd.toISOString().slice(0, 10) }
 
   const successfulPayments = payments.filter(p => p.status === 'success')
 
   const totalRecovered = successfulPayments.reduce((s, p) => s + p.amount, 0)
 
-  const thisMonthPayments = successfulPayments.filter(p => isInDateRange(p.createdAt, thisMonth.start, thisMonth.end))
-  const lastMonthPayments = successfulPayments.filter(p => isInDateRange(p.createdAt, lastMonth.start, lastMonth.end))
+  const thisMonthPayments = successfulPayments.filter(p => isInDateRange(p.createdAt, range.start, range.end))
+  const lastMonthPayments = successfulPayments.filter(p => isInDateRange(p.createdAt, prevRange.start, prevRange.end))
 
   const thisMonthRecovered = thisMonthPayments.reduce((s, p) => s + p.amount, 0)
   const lastMonthRecovered = lastMonthPayments.reduce((s, p) => s + p.amount, 0)
@@ -164,8 +170,8 @@ export function computeRecoveryMetrics(
     ? Math.round(((thisMonthRecovered - lastMonthRecovered) / lastMonthRecovered) * 100)
     : thisMonthRecovered > 0 ? 100 : 0
 
-  const unpaidInvoices = invoices.filter(i => i.status !== 'paid')
-  const paidInvoices = invoices.filter(i => i.status === 'paid')
+  const unpaidInvoices = invoices.filter(i => i.status !== 'paid' && isInDateRange(i.dueAt, range.start, range.end))
+  const paidInvoices = invoices.filter(i => i.status === 'paid' && isInDateRange(i.createdAt, range.start, range.end))
 
   const pendingAmount = unpaidInvoices.reduce((s, i) => s + i.total - i.paidAmount, 0)
 
@@ -213,9 +219,11 @@ export function computeRecoveryMetrics(
 
 export function computeAgingReport(
   invoices: Invoice[],
-  _plan: PlanType = 'starter'
+  _plan: PlanType = 'starter',
+  dateRange?: DateRange
 ): AgingBucket[] {
-  const unpaidInvoices = invoices.filter(i => i.status !== 'paid')
+  const range = dateRange || { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10) }
+  const unpaidInvoices = invoices.filter(i => i.status !== 'paid' && isInDateRange(i.dueAt, range.start, range.end))
 
   const buckets: AgingBucket[] = [
     { label: '0-7 days', minDays: 0, maxDays: 7, count: 0, amount: 0, color: 'text-green-600 bg-green-50', invoices: [] },
@@ -249,10 +257,11 @@ export function computeAgingReport(
 export function computeGSTReport(
   invoices: Invoice[],
   invoiceItems: InvoiceItem[],
-  purchases: { amount: number; createdAt: string }[] = []
+  purchases: { amount: number; createdAt: string }[] = [],
+  dateRange?: DateRange
 ): GSTReport {
-  const thisMonth = getMonthRange(0)
-  const monthInvoices = invoices.filter(inv => isInDateRange(inv.createdAt, thisMonth.start, thisMonth.end))
+  const range = dateRange || getMonthRange(0)
+  const monthInvoices = invoices.filter(inv => isInDateRange(inv.createdAt, range.start, range.end))
 
   const totalSales = monthInvoices.reduce((s, inv) => s + inv.total, 0)
 
