@@ -26,9 +26,9 @@ declare global {
 
 interface MSG91Config {
   widgetId: string
-  tokenAuth?: string
+  tokenAuth: string
   exposeMethods?: boolean
-  success: (data: { response?: string; hash?: string; mobile?: string }) => void
+  success: (data: { hash?: string; mobile?: string }) => void
   failure: (error: { message?: string }) => void
 }
 
@@ -176,58 +176,65 @@ function PhoneOtpForm() {
   const [phone, setPhone] = useState("")
   const [otp, setOtp] = useState("")
   const [error, setError] = useState("")
+  const [widgetError, setWidgetError] = useState("")
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [sending, setSending] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const reqIdRef = useRef<string>("")
   const phoneRef = useRef<string>("")
+  const initialized = useRef(false)
 
-  const handleSendOtp = async () => {
-    setError("")
-    const cleaned = phone.replace(/\D/g, '')
-    if (cleaned.length !== 10) {
-      setError("Please enter a valid 10-digit mobile number")
+  useEffect(() => {
+    if (initialized.current) return
+    initialized.current = true
+
+    const widgetId = process.env.NEXT_PUBLIC_MSG91_WIDGET_ID
+    const tokenAuth = process.env.NEXT_PUBLIC_MSG91_AUTH_TOKEN
+
+    if (!widgetId || !tokenAuth) {
+      setWidgetError("MSG91 not configured. Please use email login.")
       return
     }
 
-    setSending(true)
-    try {
-      const res = await fetch("/api/auth/phone", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || "Failed to send OTP")
-        setSending(false)
-        return
-      }
+    window.initSendOTP?.({
+      widgetId,
+      tokenAuth,
+      exposeMethods: true,
+      success: async (data) => {
+        if (!data.hash) return
+        try {
+          const res = await fetch("/api/auth/verify-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hash: data.hash }),
+          })
+          const d = await res.json()
+          if (res.ok && d.success) {
+            setCookie('bz_tenant', d.tenantId || '')
+            setCookie('bz_tenant_name', d.shopName || 'My Shop')
+            window.location.href = d.redirectTo || "/onboarding"
+          } else {
+            setError(d.error || "Verification failed")
+            setVerifying(false)
+          }
+        } catch {
+          setError("Could not verify OTP.")
+          setVerifying(false)
+        }
+      },
+      failure: (err) => {
+        setError(err?.message || "OTP verification failed")
+        setVerifying(false)
+      },
+    })
+  }, [])
 
-      phoneRef.current = `91${cleaned}`
-      if (data.reqId) {
-        reqIdRef.current = data.reqId
-      }
-      setStep('otp')
-    } catch {
-      setError("Something went wrong. Please try again.")
-    }
-    setSending(false)
-  }
-
-  const handleVerify = async () => {
-    setError("")
-    if (otp.replace(/\D/g, '').length !== 6) {
-      setError("Please enter a valid 6-digit OTP")
-      return
-    }
-    setVerifying(true)
-
+  const handleVerify = async (hash: string) => {
     try {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phoneRef.current, otp, reqId: reqIdRef.current }),
+        body: JSON.stringify({ hash }),
       })
       const data = await res.json()
       if (res.ok && data.success) {
@@ -237,6 +244,7 @@ function PhoneOtpForm() {
       } else {
         setError(data.error || "Verification failed")
         setVerifying(false)
+        setStep('otp')
       }
     } catch {
       setError("Could not verify OTP. Please try again.")
@@ -244,13 +252,98 @@ function PhoneOtpForm() {
     }
   }
 
-  const handleResend = async () => {
+  const handleSendOtp = () => {
+    setError("")
+    const cleaned = phone.replace(/\D/g, '').slice(0, 10)
+    if (cleaned.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number")
+      return
+    }
+
+    setSending(true)
+    reqIdRef.current = ""
+    setOtp("")
+    phoneRef.current = `91${cleaned}`
+
+    if (typeof window.sendOtp !== 'function') {
+      setWidgetError("OTP service not ready. Please use email login.")
+      setSending(false)
+      return
+    }
+
+    window.sendOtp(
+      phoneRef.current,
+      (data: any) => {
+        setSending(false)
+        if (data?.message) {
+          reqIdRef.current = data.message
+          setStep('otp')
+        } else if (data?.hash) {
+          handleVerify(data.hash)
+        }
+      },
+      (err: any) => {
+        setError(err?.message || "Failed to send OTP")
+        setSending(false)
+      }
+    )
+  }
+
+  const handleVerifyOtp = () => {
+    setError("")
+    if (otp.replace(/\D/g, '').length < 4) {
+      setError("Please enter a valid OTP")
+      return
+    }
+    if (typeof window.verifyOtp !== 'function') {
+      setWidgetError("OTP service not ready. Please use email login.")
+      return
+    }
+
+    setVerifying(true)
+    window.verifyOtp(
+      otp,
+      (data: any) => {
+        if (data?.hash) {
+          handleVerify(data.hash)
+        } else {
+          setError("Verification failed")
+          setVerifying(false)
+        }
+      },
+      (err: any) => {
+        setError(err?.message || "Invalid OTP")
+        setVerifying(false)
+      }
+    )
+  }
+
+  const handleResend = () => {
     setOtp("")
     setStep('phone')
+    if (typeof window.retryOtp === 'function' && reqIdRef.current) {
+      window.retryOtp(
+        (data: any) => {
+          if (data?.message) {
+            reqIdRef.current = data.message
+            setStep('otp')
+          }
+        },
+        (err: any) => {
+          setError(err?.message || "Failed to resend")
+        }
+      )
+    }
   }
 
   return (
     <div className="space-y-4">
+      {widgetError && (
+        <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-700 text-sm">
+          {widgetError}
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
           {error}
@@ -296,11 +389,11 @@ function PhoneOtpForm() {
       )}
 
       <button
-        onClick={step === 'otp' ? handleVerify : handleSendOtp}
-        disabled={sending || verifying || (step === 'phone' ? phone.length !== 10 : otp.length !== 6)}
+        onClick={step === 'otp' ? handleVerifyOtp : handleSendOtp}
+        disabled={sending || verifying || (step === 'phone' ? phone.length !== 10 : otp.length < 4)}
         className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
       >
-        {sending || verifying ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
+        {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <MessageSquare className="h-5 w-5" />}
         {sending ? "Sending..." : verifying ? "Verifying..." : step === 'otp' ? 'Verify OTP' : 'Send OTP'}
       </button>
     </div>

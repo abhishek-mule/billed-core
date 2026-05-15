@@ -6,10 +6,10 @@ import { sessionStore } from '@/lib/billzo/auth-store'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { phone, otp, reqId } = body
+    const { hash, phone } = body
 
-    if (!phone || !otp) {
-      return NextResponse.json({ error: 'Phone and OTP are required' }, { status: 400 })
+    if (!hash) {
+      return NextResponse.json({ error: 'Hash token required' }, { status: 400 })
     }
 
     const apiKey = process.env.MSG91_API_KEY
@@ -17,15 +17,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
-    const verifyRes = await fetch(`https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=${phone}&otp=${otp}`)
+    const verifyRes = await fetch(
+      'https://control.msg91.com/api/v5/widget/verifyAccessToken',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'authkey': apiKey,
+        },
+        body: JSON.stringify({ 'access-token': hash }),
+      }
+    )
 
     const data = await verifyRes.json()
-    if (!verifyRes.ok || data.type !== 'success') {
-      console.error('[VerifyOTP] MSG91 verify error:', data)
-      return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
+    if (!verifyRes.ok) {
+      console.error('[VerifyOTP] MSG91 error:', data)
+      return NextResponse.json({ error: data.message || 'Token verification failed' }, { status: 401 })
     }
 
-    const formattedPhone = phone.startsWith('91') ? phone : `91${phone.replace(/\D/g, '').slice(-10)}`
+    const verifiedPhone = data.number || data.mobile || data.phone || phone
+    const formattedPhone = verifiedPhone?.startsWith('91')
+      ? verifiedPhone
+      : `91${String(verifiedPhone || '').replace(/\D/g, '').slice(-10)}`
+
     console.log('[VerifyOTP] Phone verified:', formattedPhone)
 
     let userId: string
