@@ -18,6 +18,8 @@ import {
   type DateRange,
 } from '@/lib/billzo/report-engine'
 
+export type { DateRange }
+
 export interface ReportsData {
   invoices: any[]
   invoiceItems: any[]
@@ -28,11 +30,6 @@ export interface ReportsData {
   totalRecovered: number
   loading: boolean
   error: string | null
-}
-
-export interface DateRange {
-  start: string
-  end: string
 }
 
 export interface UseReportsDataReturn extends ReportsData {

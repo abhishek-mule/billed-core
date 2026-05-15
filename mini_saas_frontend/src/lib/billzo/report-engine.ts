@@ -115,9 +115,30 @@ function getMonthRange(offset: number = 0): { start: string; end: string } {
   }
 }
 
-function isInDateRange(dateStr: string, start: string, end: string): boolean {
+export function isInDateRange(dateStr: string, start: string, end: string): boolean {
   const d = dateStr.slice(0, 10)
   return d >= start && d <= end
+}
+
+export function buildWeeklyBreakdown(invoices: Invoice[]): WeeklyData[] {
+  const weeks: WeeklyData[] = []
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  for (let i = 0; i < 4; i++) {
+    const wStart = new Date(monthStart.getTime() + i * 7 * 24 * 60 * 60 * 1000)
+    const wEnd = new Date(monthStart.getTime() + (i + 1) * 7 * 24 * 60 * 60 * 1000 - 1)
+    const weekInvoices = invoices.filter(inv => {
+      const d = new Date(inv.createdAt)
+      return d >= wStart && d <= wEnd
+    })
+    weeks.push({
+      week: `Week ${i + 1}`,
+      sales: weekInvoices.reduce((s, inv) => s + inv.total, 0),
+      count: weekInvoices.length,
+    })
+  }
+  return weeks
 }
 
 export function computeRecoveryMetrics(
