@@ -15,30 +15,33 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.MSG91_API_KEY
     const isProviderConfigured = !!(apiKey && !apiKey.startsWith('<'))
-    const { e164: formattedPhone, local } = normalizePhone(phone)
+    const { e164: formattedPhone } = normalizePhone(phone)
+    const storedOtp = otpStore.get(formattedPhone)
+
+    if (!storedOtp) {
+      return NextResponse.json({ error: 'OTP not found. Please request a new OTP.' }, { status: 404 })
+    }
+    if (isOTPExpired(storedOtp.createdAt)) {
+      otpStore.delete(formattedPhone)
+      return NextResponse.json({ error: 'OTP expired. Please request a new OTP.' }, { status: 401 })
+    }
+    if (!verifyOTPHash(storedOtp.hash, otp, formattedPhone)) {
+      return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 })
+    }
+
+    otpStore.delete(formattedPhone)
 
     if (isProviderConfigured) {
-      const url = `https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=91${local}&otp=${otp}`
-      const res = await fetch(url)
-      const data = await res.json()
-
-      if (!res.ok || data.type !== 'success') {
-        console.error('[Phone/verify] MSG91 error:', data)
-        return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
+      const url = `https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=${formattedPhone}&otp=${otp}`
+      try {
+        const res = await fetch(url)
+        const data = await res.json()
+        if (!res.ok || data.type !== 'success') {
+          console.error('[Phone/verify] MSG91 verify failed (but local passed):', data)
+        }
+      } catch (e) {
+        console.error('[Phone/verify] MSG91 verify call failed:', e)
       }
-    } else {
-      const storedOtp = otpStore.get(formattedPhone)
-      if (!storedOtp) {
-        return NextResponse.json({ error: 'OTP not found. Please request a new OTP.' }, { status: 404 })
-      }
-      if (isOTPExpired(storedOtp.createdAt)) {
-        otpStore.delete(formattedPhone)
-        return NextResponse.json({ error: 'OTP expired. Please request a new OTP.' }, { status: 401 })
-      }
-      if (!verifyOTPHash(storedOtp.hash, otp, formattedPhone)) {
-        return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 })
-      }
-      otpStore.delete(formattedPhone)
     }
 
     console.log('[Phone/verify] Verified:', formattedPhone)

@@ -274,9 +274,10 @@ function PhoneOtpForm() {
             className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-center text-2xl tracking-widest font-mono"
           />
           {devOtp && (
-            <p className="mt-2 text-xs text-amber-700">
-              Dev OTP: <span className="font-semibold">{devOtp}</span>
-            </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+              <p className="font-semibold text-amber-900">DEV OTP: {devOtp}</p>
+              <p className="text-xs text-amber-600 mt-1">This is the OTP for testing. Enter it in the field above.</p>
+            </div>
           )}
           <button onClick={handleResend} className="mt-2 text-xs text-indigo-600 hover:underline">
             Resend OTP
