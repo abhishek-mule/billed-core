@@ -1,5 +1,3 @@
-'use client'
-
 const OTP_TTL_MS = 5 * 60 * 1000
 
 export function hashOTP(otp: string, phone: string): string {
@@ -36,8 +34,8 @@ export function validatePhone(phone: string): { valid: boolean; error?: string }
     return { valid: false, error: 'Invalid Indian phone number' }
   }
 
-  if (!cleaned.startsWith('91') && cleaned.length < 10) {
-    return { valid: false, error: 'Invalid phone number' }
+  if (!cleaned.startsWith('91') && cleaned.length !== 10) {
+    return { valid: false, error: 'Please enter a valid 10-digit mobile number' }
   }
 
   return { valid: true }
@@ -47,6 +45,18 @@ export function formatPhone(phone: string): string {
   const cleaned = phone.replace(/\D/g, '')
   if (cleaned.startsWith('91')) return cleaned
   return `91${cleaned}`
+}
+
+export function getPhoneDigits(phone: string): string {
+  return phone.replace(/\D/g, '').slice(-10)
+}
+
+export function normalizePhone(phone: string): { e164: string; local: string } {
+  const local = getPhoneDigits(phone)
+  return {
+    e164: `91${local}`,
+    local,
+  }
 }
 
 export interface TenantCreateInput {

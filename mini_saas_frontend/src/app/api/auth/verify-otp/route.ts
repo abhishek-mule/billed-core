@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
-import { sessionStore } from '@/lib/billzo/auth-store'
+import { otpStore, sessionStore } from '@/lib/billzo/auth-store'
+import { isOTPExpired, normalizePhone, verifyOTPHash } from '@/lib/billzo/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,20 +14,31 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.MSG91_API_KEY
-    if (!apiKey || apiKey.startsWith('<')) {
-      return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
-    }
+    const isProviderConfigured = !!(apiKey && !apiKey.startsWith('<'))
+    const { e164: formattedPhone, local } = normalizePhone(phone)
 
-    const formattedPhone = phone.startsWith('91') ? phone : `91${phone.replace(/\D/g, '').slice(-10)}`
-    const mobile = phone.replace(/\D/g, '').slice(-10)
+    if (isProviderConfigured) {
+      const url = `https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=91${local}&otp=${otp}`
+      const res = await fetch(url)
+      const data = await res.json()
 
-    const url = `https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=91${mobile}&otp=${otp}`
-    const res = await fetch(url)
-    const data = await res.json()
-
-    if (!res.ok || data.type !== 'success') {
-      console.error('[Phone/verify] MSG91 error:', data)
-      return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
+      if (!res.ok || data.type !== 'success') {
+        console.error('[Phone/verify] MSG91 error:', data)
+        return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
+      }
+    } else {
+      const storedOtp = otpStore.get(formattedPhone)
+      if (!storedOtp) {
+        return NextResponse.json({ error: 'OTP not found. Please request a new OTP.' }, { status: 404 })
+      }
+      if (isOTPExpired(storedOtp.createdAt)) {
+        otpStore.delete(formattedPhone)
+        return NextResponse.json({ error: 'OTP expired. Please request a new OTP.' }, { status: 401 })
+      }
+      if (!verifyOTPHash(storedOtp.hash, otp, formattedPhone)) {
+        return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 })
+      }
+      otpStore.delete(formattedPhone)
     }
 
     console.log('[Phone/verify] Verified:', formattedPhone)

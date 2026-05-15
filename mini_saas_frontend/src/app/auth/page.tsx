@@ -158,6 +158,7 @@ function MagicLinkForm() {
 function PhoneOtpForm() {
   const [phone, setPhone] = useState("")
   const [otp, setOtp] = useState("")
+  const [devOtp, setDevOtp] = useState("")
   const [error, setError] = useState("")
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [sending, setSending] = useState(false)
@@ -173,6 +174,7 @@ function PhoneOtpForm() {
     }
 
     setSending(true)
+    setDevOtp("")
     phoneRef.current = `91${cleaned}`
 
     try {
@@ -187,6 +189,7 @@ function PhoneOtpForm() {
         setSending(false)
         return
       }
+      setDevOtp(data.otp || "")
       setStep('otp')
     } catch {
       setError("Something went wrong. Please try again.")
@@ -226,6 +229,7 @@ function PhoneOtpForm() {
 
   const handleResend = () => {
     setOtp("")
+    setDevOtp("")
     setStep('phone')
   }
 
@@ -269,6 +273,11 @@ function PhoneOtpForm() {
             maxLength={6}
             className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-center text-2xl tracking-widest font-mono"
           />
+          {devOtp && (
+            <p className="mt-2 text-xs text-amber-700">
+              Dev OTP: <span className="font-semibold">{devOtp}</span>
+            </p>
+          )}
           <button onClick={handleResend} className="mt-2 text-xs text-indigo-600 hover:underline">
             Resend OTP
           </button>

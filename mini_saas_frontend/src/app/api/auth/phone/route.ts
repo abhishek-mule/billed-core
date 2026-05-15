@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validatePhone } from '@/lib/billzo/auth-utils'
+import { generateOTP, hashOTP, normalizePhone, validatePhone } from '@/lib/billzo/auth-utils'
+import { otpStore } from '@/lib/billzo/auth-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,13 +14,37 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.MSG91_API_KEY
     const senderId = process.env.MSG91_SENDER_ID || 'BILLZOT'
+    const templateId = process.env.MSG91_TEMPLATE_ID
+    const isProviderConfigured = !!(apiKey && !apiKey.startsWith('<'))
+    const { e164, local } = normalizePhone(phone)
 
-    if (!apiKey || apiKey.startsWith('<')) {
-      return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
+    if (!isProviderConfigured) {
+      const devOtp = process.env.DEV_OTP || generateOTP()
+      otpStore.set(e164, {
+        hash: hashOTP(devOtp, e164),
+        createdAt: Date.now(),
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: `OTP generated for +91 ${local.slice(0, 3)}******${local.slice(-4)}`,
+        ...(process.env.NODE_ENV !== 'production' ? { otp: devOtp, provider: 'local-dev' } : {}),
+      })
     }
 
-    const mobile = phone.replace(/\D/g, '').slice(-10)
-    const url = `https://api.msg91.com/api/sendotp.php?authkey=${apiKey}&sender=${senderId}&mobile=91${mobile}&message=Your%20verification%20code%20is%20%23%23OTP%23%23`
+    const params = new URLSearchParams({
+      authkey: apiKey,
+      sender: senderId,
+      mobile: e164,
+      message: 'Your verification code is ##OTP##',
+      otp_length: '6',
+    })
+
+    if (templateId) {
+      params.set('template_id', templateId)
+    }
+
+    const url = `https://api.msg91.com/api/sendotp.php?${params.toString()}`
 
     const res = await fetch(url)
     const data = await res.json()
@@ -31,7 +56,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `OTP sent to +91 ${mobile.slice(0, 3)}******${mobile.slice(-4)}`,
+      message: `OTP sent to +91 ${local.slice(0, 3)}******${local.slice(-4)}`,
+      provider: 'msg91',
     })
   } catch (error) {
     console.error('[Phone/send] Error:', error)
