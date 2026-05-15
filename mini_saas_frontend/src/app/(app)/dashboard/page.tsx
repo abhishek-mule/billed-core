@@ -106,7 +106,7 @@ export default function DashboardPage() {
           {tenantName && (
             <Image
               unoptimized
-              src={`https://api.multiavatar.com/${encodeURIComponent(tenantName)}.png`}
+              src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(tenantName)}&backgroundColor=0ea5e9&textColor=ffffff`}
               alt={displayName}
               width={48}
               height={48}
