@@ -6,10 +6,10 @@ import { sessionStore } from '@/lib/billzo/auth-store'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { hash, phone } = body
+    const { phone, otp } = body
 
-    if (!hash) {
-      return NextResponse.json({ error: 'Hash token required' }, { status: 400 })
+    if (!phone || !otp) {
+      return NextResponse.json({ error: 'Phone and OTP are required' }, { status: 400 })
     }
 
     const apiKey = process.env.MSG91_API_KEY
@@ -17,30 +17,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
-    const verifyRes = await fetch(
-      'https://control.msg91.com/api/v5/widget/verifyAccessToken',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'authkey': apiKey,
-        },
-        body: JSON.stringify({ 'access-token': hash }),
-      }
-    )
+    const formattedPhone = phone.startsWith('91') ? phone : `91${phone.replace(/\D/g, '').slice(-10)}`
+    const mobile = phone.replace(/\D/g, '').slice(-10)
 
-    const data = await verifyRes.json()
-    if (!verifyRes.ok) {
-      console.error('[VerifyOTP] MSG91 error:', data)
-      return NextResponse.json({ error: data.message || 'Token verification failed' }, { status: 401 })
+    const url = `https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=91${mobile}&otp=${otp}`
+    const res = await fetch(url)
+    const data = await res.json()
+
+    if (!res.ok || data.type !== 'success') {
+      console.error('[Phone/verify] MSG91 error:', data)
+      return NextResponse.json({ error: data.message || 'Invalid OTP' }, { status: 401 })
     }
 
-    const verifiedPhone = data.number || data.mobile || data.phone || phone
-    const formattedPhone = verifiedPhone?.startsWith('91')
-      ? verifiedPhone
-      : `91${String(verifiedPhone || '').replace(/\D/g, '').slice(-10)}`
-
-    console.log('[VerifyOTP] Phone verified:', formattedPhone)
+    console.log('[Phone/verify] Verified:', formattedPhone)
 
     let userId: string
     let existingTenantId: string | undefined
@@ -53,7 +42,6 @@ export async function POST(request: NextRequest) {
       existingTenantId = existingSessions[0].tenantId || undefined
     } else {
       userId = `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
-      console.log('[VerifyOTP] New user:', userId)
     }
 
     const sessionId = crypto.randomBytes(32).toString('hex')
@@ -65,12 +53,7 @@ export async function POST(request: NextRequest) {
       createdAt: Date.now(),
     })
 
-    const accessTokenJwt = createAccessToken({
-      sessionId,
-      userId,
-      phone: formattedPhone,
-      tenantId: existingTenantId,
-    })
+    const accessTokenJwt = createAccessToken({ sessionId, userId, phone: formattedPhone, tenantId: existingTenantId })
     const refreshTokenJwt = createRefreshToken({ sessionId, userId })
 
     const response = NextResponse.json({
@@ -83,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error: any) {
-    console.error('[VerifyOTP] Error:', error?.message || error)
+    console.error('[Phone/verify] Error:', error?.message || error)
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
   }
 }
