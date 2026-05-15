@@ -116,10 +116,10 @@ function Sidebar({
       <div className="sidebar-footer">
         <div className="user-row" onClick={logout} style={{ cursor: 'pointer' }}>
           <img
-            src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(userName || 'guest')}&backgroundColor=0ea5e9&textColor=ffffff`}
+            src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}`}
             alt="Profile"
             className="user-avatar"
-            onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || 'guest')}&background=0ea5e9&color=fff&size=64` }}
+            onError={(e) => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}&backgroundColor=bbf7d0` }}
           />
           <div className="user-info">
             <span className="user-name">{userName || 'My Shop'}</span>
@@ -173,10 +173,10 @@ function TopBar({
         </button>
 
         <img
-          src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(userName || 'guest')}&backgroundColor=0ea5e9&textColor=ffffff`}
+          src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}`}
           alt="Profile"
           className="topbar-avatar"
-          onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || 'guest')}&background=0ea5e9&color=fff&size=64` }}
+          onError={(e) => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}&backgroundColor=bbf7d0` }}
         />
       </div>
     </header>
