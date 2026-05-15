@@ -36,12 +36,13 @@ export async function POST(request: NextRequest) {
       authkey: apiKey,
       sender: senderId,
       mobile: e164,
-      message: 'Your verification code is ##OTP##',
       otp_length: '6',
     })
 
     if (templateId) {
       params.set('template_id', templateId)
+    } else {
+      params.set('message', 'Your verification code is ##OTP##')
     }
 
     const url = `https://api.msg91.com/api/sendotp.php?${params.toString()}`
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
 
     if (!res.ok || data.type !== 'success') {
-      console.error('[Phone/send] MSG91 error:', data)
+      console.error('[Phone/send] MSG91 error:', JSON.stringify(data))
       return NextResponse.json({ error: data.message || 'Failed to send OTP' }, { status: 500 })
     }
 
