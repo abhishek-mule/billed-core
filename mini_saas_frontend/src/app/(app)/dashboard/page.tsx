@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2, Store } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 import { UsagePill } from "@/components/billzo/UsagePill";
@@ -16,7 +17,9 @@ function getCookie(name: string) {
 }
 
 function getTenantName() {
-  return getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop'
+  const raw = getCookie('bz_tenant_name')
+  if (!raw) return null
+  try { return decodeURIComponent(raw) } catch { return raw }
 }
 
 const statusBadge: Record<string, string> = {
@@ -30,7 +33,7 @@ export default function DashboardPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayStats, setTodayStats] = useState({ revenue: 0, invoiceCount: 0, failedCount: 0, yesterdayRevenue: 0 });
-  const [tenantName, setTenantName] = useState('My Shop');
+  const [tenantName, setTenantName] = useState<string | null>(null);
 
   useEffect(() => {
     const name = getTenantName()
@@ -79,6 +82,15 @@ export default function DashboardPage() {
 
   const allSynced = todayStats.failedCount === 0;
 
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  })()
+
+  const displayName = tenantName || 'My Shop'
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -90,12 +102,20 @@ export default function DashboardPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground">
-            <Store className="h-5 w-5" />
-          </div>
+        <div className="flex items-center gap-4">
+          {tenantName && (
+            <Image
+              unoptimized
+              src={`https://api.multiavatar.com/${encodeURIComponent(tenantName)}.png`}
+              alt={displayName}
+              width={48}
+              height={48}
+              className="rounded-2xl border-2 border-primary/10 shadow-sm"
+            />
+          )}
           <div>
-            <h1 className="text-xl font-bold">{tenantName}</h1>
+            <p className="text-sm text-muted-foreground font-medium">{greeting}</p>
+            <h1 className="text-xl font-bold leading-tight">{displayName}</h1>
             <p className="text-xs text-muted-foreground">Dashboard</p>
           </div>
         </div>

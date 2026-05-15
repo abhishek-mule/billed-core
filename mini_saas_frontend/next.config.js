@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: { unoptimized: true },
+  images: {
+    unoptimized: true,
+    remotePatterns: [{ protocol: 'https', hostname: 'api.multiavatar.com' }],
+  },
   webpack: (config) => {
     config.cache = false
     return config
