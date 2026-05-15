@@ -116,7 +116,7 @@ function Sidebar({
       <div className="sidebar-footer">
         <div className="user-row" onClick={logout} style={{ cursor: 'pointer' }}>
           <img
-            src={`https://multiavatar.com/${encodeURIComponent(userName || 'guest')}?s=80`}
+            src={`https://api.multiavatar.com/${encodeURIComponent(userName || 'guest')}.png`}
             alt="Profile"
             className="user-avatar"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
@@ -173,7 +173,7 @@ function TopBar({
         </button>
 
         <img
-          src={`https://multiavatar.com/${encodeURIComponent(userName || 'guest')}?s=80`}
+          src={`https://api.multiavatar.com/${encodeURIComponent(userName || 'guest')}.png`}
           alt="Profile"
           className="topbar-avatar"
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
