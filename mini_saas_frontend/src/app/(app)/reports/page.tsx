@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Download, Loader2 } from "lucide-react"
 import { TrendingUp, Clock, FileText, DollarSign } from "lucide-react"
+import { DateRangePicker } from "@/components/reports/DateRangePicker"
 import { useReportsData } from "@/components/reports/useReportsData"
 import { RecoveryTab } from "@/components/reports/RecoveryTab"
 import { AgingTab } from "@/components/reports/AgingTab"
@@ -30,7 +31,7 @@ export default function ReportsPage() {
     if (!userId) router.push("/auth")
   }, [router])
 
-  const { loading, error, recovery, aging, gst, sales, plan } = useReportsData()
+  const { loading, error, recovery, aging, gst, sales, plan, dateRange, setDateRange } = useReportsData()
 
   if (loading) {
     return (
@@ -60,15 +61,12 @@ export default function ReportsPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
           <p className="text-sm text-muted-foreground">Track your recovery performance</p>
         </div>
-        <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-          <Download className="h-4 w-4" />
-          Export
-        </button>
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b">

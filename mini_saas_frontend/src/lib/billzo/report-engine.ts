@@ -71,6 +71,19 @@ export interface SalesMetrics {
   topProducts: ProductSales[]
   invoiceCount: number
   avgInvoiceValue: number
+  weeklyBreakdown: WeeklyData[]
+  dateRangeLabel: string
+}
+
+export interface WeeklyData {
+  week: string
+  sales: number
+  count: number
+}
+
+export interface DateRange {
+  start: string
+  end: string
 }
 
 export interface CustomerSales {
@@ -315,14 +328,132 @@ export function computeSalesMetrics(
     .slice(0, 5)
     .map(c => ({ name: c.name, phone: c.phone, totalAmount: c.total, invoiceCount: c.count }))
 
+  const productMap = new Map<string, { name: string; qty: number; revenue: number }>()
+  for (const inv of thisMonthInvoices) {
+    const items = (inv as any).items || []
+    for (const item of items) {
+      if (!productMap.has(item.name)) {
+        productMap.set(item.name, { name: item.name, qty: 0, revenue: 0 })
+      }
+      const p = productMap.get(item.name)!
+      p.qty += item.qty || 0
+      p.revenue += item.lineTotal || 0
+    }
+  }
+  const topProducts = Array.from(productMap.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+
+  const weeklyBreakdown = buildWeeklyBreakdown(thisMonthInvoices)
+
   return {
     thisMonth: thisMonthTotal,
     lastMonth: lastMonthTotal,
     trend,
     topCustomers,
-    topProducts: [],
+    topProducts,
     invoiceCount: thisMonthInvoices.length,
     avgInvoiceValue: thisMonthInvoices.length > 0 ? Math.round(thisMonthTotal / thisMonthInvoices.length) : 0,
+    weeklyBreakdown,
+    dateRangeLabel: 'This Month',
+  }
+}
+
+export function buildRangeBreakdown(invoices: Invoice[], range: DateRange): WeeklyData[] {
+  const start = new Date(range.start)
+  const end = new Date(range.end)
+  const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (totalDays <= 31) {
+    return buildWeeklyBreakdown(invoices)
+  }
+
+  const numPeriods = Math.min(6, Math.ceil(totalDays / 7))
+  const periodDays = Math.ceil(totalDays / numPeriods)
+  const labels: string[] = totalDays <= 90
+    ? Array.from({ length: numPeriods }, (_, i) => `Week ${i + 1}`)
+    : Array.from({ length: numPeriods }, (_, i) => {
+        const pStart = new Date(start.getTime() + i * periodDays * 24 * 60 * 60 * 1000)
+        return pStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+      })
+
+  return Array.from({ length: numPeriods }, (_, i) => {
+    const pStart = new Date(start.getTime() + i * periodDays * 24 * 60 * 60 * 1000)
+    const pEnd = new Date(start.getTime() + (i + 1) * periodDays * 24 * 60 * 60 * 1000 - 1)
+    const periodInvoices = invoices.filter(inv => {
+      const d = new Date(inv.createdAt)
+      return d >= pStart && d <= pEnd
+    })
+    return {
+      week: labels[i],
+      sales: periodInvoices.reduce((s, inv) => s + inv.total, 0),
+      count: periodInvoices.length,
+    }
+  })
+}
+
+export function computeSalesMetricsForRange(
+  invoices: Invoice[],
+  range: DateRange,
+  dateRangeLabel: string = ''
+): SalesMetrics {
+  const rangeInvoices = invoices.filter(inv => isInDateRange(inv.createdAt, range.start, range.end))
+  const total = rangeInvoices.reduce((s, inv) => s + inv.total, 0)
+
+  const rangeMs = new Date(range.end).getTime() - new Date(range.start).getTime()
+  const prevStart = new Date(new Date(range.start).getTime() - rangeMs - 24 * 60 * 60 * 1000)
+  const prevEnd = new Date(new Date(range.start).getTime() - 24 * 60 * 60 * 1000)
+  const prevRange = { start: prevStart.toISOString().slice(0, 10), end: prevEnd.toISOString().slice(0, 10) }
+  const prevInvoices = invoices.filter(inv => isInDateRange(inv.createdAt, prevRange.start, prevRange.end))
+  const prevTotal = prevInvoices.reduce((s, inv) => s + inv.total, 0)
+
+  const trend = prevTotal > 0
+    ? Math.round(((total - prevTotal) / prevTotal) * 100)
+    : total > 0 ? 100 : 0
+
+  const customerMap = new Map<string, { name: string; phone: string; total: number; count: number }>()
+  for (const inv of rangeInvoices) {
+    const key = inv.customerPhone || inv.customerName
+    if (!customerMap.has(key)) {
+      customerMap.set(key, { name: inv.customerName, phone: inv.customerPhone, total: 0, count: 0 })
+    }
+    const entry = customerMap.get(key)!
+    entry.total += inv.total
+    entry.count++
+  }
+  const topCustomers = Array.from(customerMap.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5)
+    .map(c => ({ name: c.name, phone: c.phone, totalAmount: c.total, invoiceCount: c.count }))
+
+  const productMap = new Map<string, { name: string; qty: number; revenue: number }>()
+  for (const inv of rangeInvoices) {
+    const items = (inv as any).items || []
+    for (const item of items) {
+      if (!productMap.has(item.name)) {
+        productMap.set(item.name, { name: item.name, qty: 0, revenue: 0 })
+      }
+      const p = productMap.get(item.name)!
+      p.qty += item.qty || 0
+      p.revenue += item.lineTotal || 0
+    }
+  }
+  const topProducts = Array.from(productMap.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+
+  const weeklyBreakdown = buildRangeBreakdown(rangeInvoices, range)
+
+  return {
+    thisMonth: total,
+    lastMonth: prevTotal,
+    trend,
+    topCustomers,
+    topProducts,
+    invoiceCount: rangeInvoices.length,
+    avgInvoiceValue: rangeInvoices.length > 0 ? Math.round(total / rangeInvoices.length) : 0,
+    weeklyBreakdown,
+    dateRangeLabel,
   }
 }
 

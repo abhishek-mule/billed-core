@@ -1,9 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Download, CheckCircle2, Zap } from 'lucide-react'
+import { Download, CheckCircle2, Zap, FileText } from 'lucide-react'
 import type { AgingBucket, PlanType } from '@/lib/billzo/report-engine'
 import { formatINR, exportToCSV } from '@/lib/billzo/report-engine'
+import { downloadAgingReportPDF } from '@/lib/billzo/pdf'
 import { PaywallTeaser } from './MetricCard'
 
 const money = (n: number) => formatINR(n)
@@ -113,13 +114,22 @@ export function AgingTab({ buckets, plan }: AgingTabProps) {
         </div>
       )}
 
-      <button
-        onClick={handleExport}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium"
-      >
-        <Download className="h-4 w-4" />
-        Export to CSV
-      </button>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={handleExport}
+          className="flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium"
+        >
+          <Download className="h-4 w-4" />
+          CSV Export
+        </button>
+        <button
+          onClick={() => downloadAgingReportPDF(buckets, 'BillZo Business')}
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-3 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+        >
+          <FileText className="h-4 w-4" />
+          Download PDF
+        </button>
+      </div>
     </div>
   )
 }

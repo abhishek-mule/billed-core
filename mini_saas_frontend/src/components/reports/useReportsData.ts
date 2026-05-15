@@ -8,11 +8,14 @@ import {
   computeAgingReport,
   computeGSTReport,
   computeSalesMetrics,
+  computeSalesMetricsForRange,
+  isInDateRange,
   type RecoveryMetrics,
   type AgingBucket,
   type GSTReport,
   type SalesMetrics,
   type PlanType,
+  type DateRange,
 } from '@/lib/billzo/report-engine'
 
 export interface ReportsData {
@@ -27,16 +30,69 @@ export interface ReportsData {
   error: string | null
 }
 
+export interface DateRange {
+  start: string
+  end: string
+}
+
 export interface UseReportsDataReturn extends ReportsData {
   recovery: RecoveryMetrics | null
   aging: AgingBucket[]
   gst: GSTReport
   sales: SalesMetrics
+  dateRange: DateRange
+  setDateRange: (range: DateRange) => void
   reload: () => void
+}
+
+function getDefaultRange(): DateRange {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+}
+
+export function getDateRangeOptions(): { label: string; value: string; range: DateRange }[] {
+  const now = new Date()
+  const thisMonth: DateRange = {
+    start: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+  const lastMonth: DateRange = {
+    start: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10),
+    end: new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10),
+  }
+  const thisQuarter: DateRange = {
+    start: new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1).toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+  const thisYear: DateRange = {
+    start: new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+  const last7: DateRange = {
+    start: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+  const last30: DateRange = {
+    start: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    end: now.toISOString().slice(0, 10),
+  }
+  return [
+    { label: 'This Month', value: 'this_month', range: thisMonth },
+    { label: 'Last Month', value: 'last_month', range: lastMonth },
+    { label: 'Last 7 Days', value: 'last_7', range: last7 },
+    { label: 'Last 30 Days', value: 'last_30', range: last30 },
+    { label: 'This Quarter', value: 'this_quarter', range: thisQuarter },
+    { label: 'This Year', value: 'this_year', range: thisYear },
+  ]
 }
 
 export function useReportsData(): UseReportsDataReturn {
   const router = useRouter()
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange)
   const [data, setData] = useState<ReportsData>({
     invoices: [],
     invoiceItems: [],
@@ -111,10 +167,16 @@ export function useReportsData(): UseReportsDataReturn {
 
   const sales = useMemo<SalesMetrics>(() => {
     if (data.loading || data.invoices.length === 0) {
-      return { thisMonth: 0, lastMonth: 0, trend: 0, topCustomers: [], topProducts: [], invoiceCount: 0, avgInvoiceValue: 0 }
+      return { thisMonth: 0, lastMonth: 0, trend: 0, topCustomers: [], topProducts: [], invoiceCount: 0, avgInvoiceValue: 0, weeklyBreakdown: [], dateRangeLabel: '' }
     }
-    return computeSalesMetrics(data.invoices, [], [], data.plan)
-  }, [data])
+    const invoicesWithItems = data.invoices.map(inv => ({
+      ...inv,
+      items: data.invoiceItems.filter(item => item.invoiceId === inv.id),
+    }))
+    const options = getDateRangeOptions()
+    const label = options.find(o => o.range.start === dateRange.start && o.range.end === dateRange.end)?.label || 'Custom'
+    return computeSalesMetricsForRange(invoicesWithItems, dateRange, label)
+  }, [data, dateRange])
 
   return {
     ...data,
@@ -122,6 +184,8 @@ export function useReportsData(): UseReportsDataReturn {
     aging,
     gst,
     sales,
+    dateRange,
+    setDateRange,
     reload: loadData,
   }
 }
