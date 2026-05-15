@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { db } from '@/lib/billzo/db'
 import {
@@ -39,6 +39,12 @@ export interface UseReportsDataReturn extends ReportsData {
   dateRange: DateRange
   setDateRange: (range: DateRange) => void
   reload: () => void
+}
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
 }
 
 function getDefaultRange(): DateRange {
@@ -88,7 +94,7 @@ export function getDateRangeOptions(): { label: string; value: string; range: Da
 
 export function useReportsData(): UseReportsDataReturn {
   const router = useRouter()
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultRange)
+  const [dateRange, setDateRangeState] = useState<DateRange>(getDefaultRange)
   const [data, setData] = useState<ReportsData>({
     invoices: [],
     invoiceItems: [],
@@ -101,10 +107,18 @@ export function useReportsData(): UseReportsDataReturn {
     error: null,
   })
 
+  const setDateRange = useCallback((range: DateRange) => {
+    setDateRangeState(range)
+  }, [])
+
   const loadData = useCallback(async () => {
     try {
-      const tenantId = localStorage.getItem('tenantId')
-      const userId = localStorage.getItem('userId')
+      const tenantId = getCookie('bz_tenant')
+      const token = getCookie('bz_access')
+      let userId: string | null = null
+      if (token) {
+        try { userId = JSON.parse(atob(token.split('.')[1])).userId || null } catch { userId = null }
+      }
       if (!tenantId || !userId) {
         router.push('/auth')
         return
@@ -144,23 +158,6 @@ export function useReportsData(): UseReportsDataReturn {
     loadData()
   }, [loadData])
 
-  const recovery = useMemo<RecoveryMetrics | null>(() => {
-    if (data.loading || data.invoices.length === 0) return null
-    return computeRecoveryMetrics(data.payments, data.invoices, data.whatsappEvents, data.plan, dateRange)
-  }, [data, dateRange])
-
-  const aging = useMemo<AgingBucket[]>(() => {
-    if (data.loading || data.invoices.length === 0) return []
-    return computeAgingReport(data.invoices, data.plan, dateRange)
-  }, [data, dateRange])
-
-  const gst = useMemo<GSTReport>(() => {
-    if (data.loading || data.invoices.length === 0) {
-      return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
-    }
-    return computeGSTReport(data.invoices, data.invoiceItems, data.purchases, dateRange)
-  }, [data, dateRange])
-
   const sales = useMemo<SalesMetrics>(() => {
     if (data.loading || data.invoices.length === 0) {
       return { thisMonth: 0, lastMonth: 0, trend: 0, topCustomers: [], topProducts: [], invoiceCount: 0, avgInvoiceValue: 0, weeklyBreakdown: [], dateRangeLabel: '' }
@@ -172,7 +169,24 @@ export function useReportsData(): UseReportsDataReturn {
     const options = getDateRangeOptions()
     const label = options.find(o => o.range.start === dateRange.start && o.range.end === dateRange.end)?.label || 'Custom'
     return computeSalesMetricsForRange(invoicesWithItems, dateRange, label)
-  }, [data, dateRange])
+  }, [data.loading, data.invoices.length, data.invoiceItems, dateRange])
+
+  const recovery = useMemo<RecoveryMetrics | null>(() => {
+    if (data.loading || data.invoices.length === 0) return null
+    return computeRecoveryMetrics(data.payments, data.invoices, data.whatsappEvents, data.plan, dateRange)
+  }, [data.loading, data.invoices, data.payments, data.whatsappEvents, data.plan, dateRange])
+
+  const aging = useMemo<AgingBucket[]>(() => {
+    if (data.loading || data.invoices.length === 0) return []
+    return computeAgingReport(data.invoices, data.plan, dateRange)
+  }, [data.loading, data.invoices, data.plan, dateRange])
+
+  const gst = useMemo<GSTReport>(() => {
+    if (data.loading || data.invoices.length === 0) {
+      return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
+    }
+    return computeGSTReport(data.invoices, data.invoiceItems, data.purchases, dateRange)
+  }, [data.loading, data.invoices, data.invoiceItems, data.purchases, dateRange])
 
   return {
     ...data,

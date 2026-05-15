@@ -120,25 +120,41 @@ export function isInDateRange(dateStr: string, start: string, end: string): bool
   return d >= start && d <= end
 }
 
-export function buildWeeklyBreakdown(invoices: Invoice[]): WeeklyData[] {
+export function buildWeeklyBreakdown(invoices: Invoice[], range?: DateRange): WeeklyData[] {
   const weeks: WeeklyData[] = []
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const monthStart = range
+    ? new Date(new Date(range.start).getFullYear(), new Date(range.start).getMonth(), 1)
+    : new Date(now.getFullYear(), now.getMonth(), 1)
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate()
 
-  for (let i = 0; i < 4; i++) {
-    const wStart = new Date(monthStart.getTime() + i * 7 * 24 * 60 * 60 * 1000)
-    const wEnd = new Date(monthStart.getTime() + (i + 1) * 7 * 24 * 60 * 60 * 1000 - 1)
-    const weekInvoices = invoices.filter(inv => {
-      const d = new Date(inv.createdAt)
-      return d >= wStart && d <= wEnd
-    })
-    weeks.push({
-      week: `Week ${i + 1}`,
-      sales: weekInvoices.reduce((s, inv) => s + inv.total, 0),
-      count: weekInvoices.length,
-    })
-  }
-  return weeks
+  const week1End = Math.min(7, daysInMonth)
+  const week2End = Math.min(14, daysInMonth)
+  const week3End = Math.min(21, daysInMonth)
+
+  const week1 = invoices.filter(inv => {
+    const d = new Date(inv.createdAt).getDate()
+    return d >= 1 && d <= week1End
+  })
+  const week2 = invoices.filter(inv => {
+    const d = new Date(inv.createdAt).getDate()
+    return d >= week1End + 1 && d <= week2End
+  })
+  const week3 = invoices.filter(inv => {
+    const d = new Date(inv.createdAt).getDate()
+    return d >= week2End + 1 && d <= week3End
+  })
+  const week4 = invoices.filter(inv => {
+    const d = new Date(inv.createdAt).getDate()
+    return d >= week3End + 1 && d <= daysInMonth
+  })
+
+  return [
+    { week: 'Week 1', sales: week1.reduce((s, inv) => s + inv.total, 0), count: week1.length },
+    { week: 'Week 2', sales: week2.reduce((s, inv) => s + inv.total, 0), count: week2.length },
+    { week: 'Week 3', sales: week3.reduce((s, inv) => s + inv.total, 0), count: week3.length },
+    { week: 'Week 4', sales: week4.reduce((s, inv) => s + inv.total, 0), count: week4.length },
+  ]
 }
 
 export function computeRecoveryMetrics(
@@ -395,7 +411,12 @@ export function buildRangeBreakdown(invoices: Invoice[], range: DateRange): Week
   const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
 
   if (totalDays <= 31) {
-    return buildWeeklyBreakdown(invoices)
+    const firstDay = new Date(range.start)
+    const filtered = invoices.filter(inv => {
+      const d = new Date(inv.createdAt)
+      return d >= firstDay && d <= end
+    })
+    return buildWeeklyBreakdown(filtered, range)
   }
 
   const numPeriods = Math.min(6, Math.ceil(totalDays / 7))
