@@ -17,17 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
-    const verifyRes = await fetch('https://verify.msg91.com/api/v5/otp/verify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'authkey': apiKey,
-      },
-      body: JSON.stringify({
-        request_id: reqId,
-        otp,
-      }),
-    })
+    const verifyRes = await fetch(`https://api.msg91.com/api/verifyRequestOTP.php?authkey=${apiKey}&mobile=${phone}&otp=${otp}`)
 
     const data = await verifyRes.json()
     if (!verifyRes.ok || data.type !== 'success') {

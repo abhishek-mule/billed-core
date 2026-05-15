@@ -11,40 +11,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const formattedPhone = `91${phone.replace(/\D/g, '').slice(-10)}`
     const apiKey = process.env.MSG91_API_KEY
-    const flowId = process.env.MSG91_FLOW_ID
+    const senderId = process.env.MSG91_SENDER_ID || 'BILLZOT'
 
-    if (!apiKey || apiKey.startsWith('<') || !flowId || flowId.startsWith('<')) {
+    if (!apiKey || apiKey.startsWith('<')) {
       return NextResponse.json({ error: 'MSG91 not configured' }, { status: 500 })
     }
 
-    const verifyRes = await fetch('https://verify.msg91.com/api/v5/otp/request', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'authkey': apiKey,
-      },
-      body: JSON.stringify({
-        widget_id: process.env.MSG91_WIDGET_ID,
-        country_code: '91',
-        mobile: phone.replace(/\D/g, '').slice(-10),
-      }),
+    const cleaned = phone.replace(/\D/g, '').slice(-10)
+    const mobile = `91${cleaned}`
+    const params = new URLSearchParams({
+      authkey: apiKey,
+      mobile,
+      sender: senderId,
+      message: 'Your verification code is ##OTP##',
     })
 
+    const verifyRes = await fetch(`https://api.msg91.com/api/sendotp.php?${params}`)
     const data = await verifyRes.json()
-    if (!verifyRes.ok) {
-      console.error('[Phone] MSG91 error:', data)
+
+    if (!verifyRes.ok || data.type !== 'success') {
+      console.error('[Phone] MSG91 send error:', data)
       return NextResponse.json({ error: data.message || 'Failed to send OTP' }, { status: 500 })
     }
 
-    const reqId = data.data?.request_ids?.[0] || data.request_id || data.reqId || ''
-
-    console.log(`[Phone] OTP sent to ${formattedPhone}, reqId: ${reqId}`)
+    const reqId = data.message || ''
 
     return NextResponse.json({
       success: true,
-      message: `OTP sent to +91 ${phone.slice(-4)}`,
+      message: `OTP sent to +91 ${cleaned.slice(0, 3)}******${cleaned.slice(-4)}`,
       reqId,
     })
   } catch (error) {
