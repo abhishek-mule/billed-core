@@ -35,13 +35,34 @@ export type Customer = {
   tenantId: string
   name: string
   phone: string
+  whatsapp_number?: string
   gstin?: string
   preferredLanguage?: 'hindi' | 'hinglish' | 'english'
   defaultTone: 'hindi' | 'english' | 'hinglish'
+  opt_in: boolean
+  opt_in_at?: string
+  address?: string
+  email?: string
+  notes?: string
   lastUsedAt: string
   invoiceCount: number
   createdAt: string
   updatedAt: string
+}
+
+export type CustomerImportRow = {
+  name: string
+  phone: string
+  whatsapp_number?: string
+  gstin?: string
+  email?: string
+}
+
+export type BulkImportResult = {
+  created: number
+  updated: number
+  skipped: { row: CustomerImportRow; reason: string }[]
+  errors: { row: CustomerImportRow; error: string }[]
 }
 
 export type Product = {

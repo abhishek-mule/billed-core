@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, MessageCircle, Phone, Plus, Loader2 } from "lucide-react";
+import { Search, MessageCircle, Phone, Plus, Loader2, Upload, Users } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 import { getUsageLimits, incrementReminderCount } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
@@ -59,26 +59,40 @@ export default function PartiesPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-4xl mx-auto space-y-4">
-      <div className="rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-6 shadow-lg">
-        <div className="text-sm opacity-80">Total pending (Udhar)</div>
-        <div className="mt-2 text-4xl font-bold">{formatINR(totalPending)}</div>
-        <div className="mt-2 text-xs opacity-80">{customers.filter((p) => p.pending > 0).length} parties owe you money</div>
-      </div>
-
-      <div className="flex gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search parties"
-            className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+      <div className="flex items-center justify-between">
+        <div className="rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-6 shadow-lg flex-1">
+          <div className="text-sm opacity-80">Total pending (Udhar)</div>
+          <div className="mt-2 text-4xl font-bold">{formatINR(totalPending)}</div>
+          <div className="mt-2 text-xs opacity-80">{customers.filter((p) => p.pending > 0).length} parties owe you money</div>
         </div>
-        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium">
-          <Plus className="h-4 w-4" /> Add
+        <button
+          onClick={() => router.push('/parties/import')}
+          className="ml-4 h-14 w-14 rounded-2xl border-2 border-indigo-200 bg-indigo-50 flex flex-col items-center justify-center gap-1 hover:bg-indigo-100 transition-colors"
+        >
+          <Upload className="h-5 w-5 text-indigo-600" />
+          <span className="text-[10px] font-bold text-indigo-600">Import</span>
         </button>
       </div>
+
+      <div className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search parties"
+                  className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <button
+                onClick={() => router.push('/parties/add')}
+                className="h-11 px-4 bg-primary text-primary-foreground rounded-xl font-medium flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" /> Add
+              </button>
+            </div>
+          </div>
 
       {customers.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 text-center">

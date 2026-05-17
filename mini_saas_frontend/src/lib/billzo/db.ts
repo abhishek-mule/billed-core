@@ -47,7 +47,7 @@ class BillzoDB extends Dexie {
     this.version(1).stores({
       tenants: 'id, ownerUserId, updatedAt',
       users: 'id, phone, email, createdAt',
-      customers: 'id, tenantId, name, phone, lastUsedAt, updatedAt',
+      customers: 'id, tenantId, name, phone, whatsapp_number, gstin, opt_in, lastUsedAt, updatedAt',
       products: 'id, tenantId, barcode, name, stock, updatedAt',
       invoices: 'id, tenantId, status, customerName, dueAt, nextRecoveryAt, lastWhatsAppStatus, updatedAt, syncStatus',
       invoiceItems: 'id, tenantId, invoiceId, productId, updatedAt',
