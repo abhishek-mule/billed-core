@@ -36,25 +36,25 @@ export function clearSession() {
 const MOCK_TENANT_ID = 'tenant_billzo_demo_india'
 const MOCK_USER_ID = 'merchant_demo_owner'
 
-export function getActiveSession(): Session {
+export function getActiveSession(): Session | null {
   if (typeof window === 'undefined') {
-    return getMockSession()
+    return null
   }
 
   const tenantId = localStorage.getItem(SESSION_KEYS.tenantId)
   const userId = localStorage.getItem(SESSION_KEYS.userId)
   const businessName = localStorage.getItem(SESSION_KEYS.businessName)
 
-  if (tenantId && userId) {
-    return {
-      tenantId,
-      userId,
-      businessName: businessName || 'My Shop',
-      phone: localStorage.getItem(SESSION_KEYS.phone) || '',
-    }
+  if (!tenantId || !userId) {
+    return null
   }
 
-  return getMockSession()
+  return {
+    tenantId,
+    userId,
+    businessName: businessName || 'My Shop',
+    phone: localStorage.getItem(SESSION_KEYS.phone) || '',
+  }
 }
 
 export function getMockSession() {

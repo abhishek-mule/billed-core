@@ -37,7 +37,9 @@ export interface ActionResult<T = void> {
 }
 
 function getSession() {
-  return getActiveSession()
+  const session = getActiveSession()
+  if (!session) throw new Error('No active session')
+  return session
 }
 
 function getTenantIdLocal(): string | null {
@@ -566,40 +568,40 @@ export async function handlePOSInvoice(
 
     // --- AUTOMATIONS ---
     const tenantName = (typeof localStorage !== 'undefined' ? localStorage.getItem('tenantName') : null) || 'BillZo'
-    
+
     // 1. WhatsApp Invoice
     if (customerPhone && customerPhone.length >= 10) {
-       triggerWhatsAppNotification({
-         type: 'welcome', 
-         phone: customerPhone,
-         ownerName: customerName,
-         shopName: tenantName,
-         siteUrl: `https://billzo.in/i/${invoiceId}`,
-         email: 'invoice@billzo.in'
-       });
+      triggerWhatsAppNotification({
+        type: 'welcome',
+        phone: customerPhone,
+        ownerName: customerName,
+        shopName: tenantName,
+        siteUrl: `https://billzo.in/i/${invoiceId}`,
+        email: 'invoice@billzo.in'
+      });
     }
 
     // 2. Low Stock Alerts
     for (const m of movements) {
-       const product = cart.find(c => c.id === m.productId);
-       if (product && m.stockAfter <= product.lowStockAt) {
-          // Push notification to merchant
-          triggerPushNotification(session.tenantId, {
-            title: 'Low Stock Alert ⚠️',
-            body: `${product.name} is running low (${m.stockAfter} left). Reorder soon!`,
-            type: 'low_stock'
-          });
+      const product = cart.find(c => c.id === m.productId);
+      if (product && m.stockAfter <= product.lowStockAt) {
+        // Push notification to merchant
+        triggerPushNotification(session.tenantId, {
+          title: 'Low Stock Alert ⚠️',
+          body: `${product.name} is running low (${m.stockAfter} left). Reorder soon!`,
+          type: 'low_stock'
+        });
 
-          // WhatsApp alert to merchant
-          triggerWhatsAppNotification({
-            type: 'lowStock',
-            phone: session.phone || '', // Merchant's phone
-            shopName: tenantName,
-            itemName: product.name,
-            currentStock: m.stockAfter,
-            reorderLevel: product.lowStockAt
-          });
-       }
+        // WhatsApp alert to merchant
+        triggerWhatsAppNotification({
+          type: 'lowStock',
+          phone: session.phone || '', // Merchant's phone
+          shopName: tenantName,
+          itemName: product.name,
+          currentStock: m.stockAfter,
+          reorderLevel: product.lowStockAt
+        });
+      }
     }
 
     if (method !== 'udhar') {
