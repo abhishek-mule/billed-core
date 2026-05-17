@@ -4,6 +4,24 @@ export type RecoveryStage = 't0_soft' | 't24_nudge' | 't72_strong' | 't5_warning
 export type WhatsAppStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
 export type ConflictPolicy = 'latest_write_wins' | 'server_authority'
 
+export type TenantWhatsAppConfig = {
+  gupshupApiKey?: string
+  gupshupAppName?: string
+  sourceNumber?: string
+  autoSend: boolean
+  paymentLinkEnabled: boolean
+  paymentLinkExpiry: number
+  optInMessage?: string
+  templateNames: {
+    invoice?: string
+    reminderGentle?: string
+    reminderFirm?: string
+    receipt?: string
+    udharGentle?: string
+    udharFirm?: string
+  }
+}
+
 export type Tenant = {
   id: string
   name: string
@@ -18,6 +36,7 @@ export type Tenant = {
   subscriptionId?: string
   subscriptionStatus?: string
   cancelledAt?: string
+  whatsappConfig?: TenantWhatsAppConfig
   createdAt: string
   updatedAt: string
 }

@@ -180,8 +180,8 @@ export default function SettingsPage() {
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{g.title}</div>
           <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
             {g.items.map(({ icon: Icon, label, desc }) => (
-              <button key={label} className="w-full p-4 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
+              <Link href="/settings/whatsapp" className="w-full p-4 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-green-100 text-green-600">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -189,7 +189,7 @@ export default function SettingsPage() {
                   <div className="text-xs text-muted-foreground">{desc}</div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
+              </Link>
             ))}
           </div>
         </div>

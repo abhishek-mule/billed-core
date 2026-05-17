@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2 } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 
 const statusStyle: Record<string, string> = {
@@ -20,6 +20,13 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sendingWA, setSendingWA] = useState(false);
+  const [waError, setWaError] = useState('');
+  const [waSuccess, setWaSuccess] = useState(false);
+  const [showWAModal, setShowWAModal] = useState(false);
+  const [personalNote, setPersonalNote] = useState('');
+  const [genLinkLoading, setGenLinkLoading] = useState(false);
+  const [paymentLink, setPaymentLink] = useState('');
 
   const id = params.id as string;
 
@@ -52,6 +59,68 @@ export default function InvoiceDetailPage() {
       setLoading(false);
     }
   };
+
+  const sendWhatsApp = async () => {
+    if (!invoice?.customerPhone) return
+    setSendingWA(true)
+    setWaError('')
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          customerId: invoice.customerId,
+          invoiceId: invoice.id,
+          templateKey: paid ? 'receipt' : 'invoice',
+          vars: {
+            '1': invoice.customerName,
+            '2': formatINR(total),
+            '3': invoice.id?.slice(-8) || '',
+            '4': invoice.paymentLinkUrl || '',
+          },
+          personalNote: personalNote.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send')
+      setWaSuccess(true)
+      setShowWAModal(false)
+      setPersonalNote('')
+      setTimeout(() => setWaSuccess(false), 3000)
+    } catch (err: any) {
+      setWaError(err.message)
+    } finally {
+      setSendingWA(false)
+    }
+  }
+
+  const generatePaymentLink = async () => {
+    if (!invoice || invoice.status === 'paid') return
+    setGenLinkLoading(true)
+    try {
+      const res = await fetch('/api/payment/payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoiceId: invoice.id,
+          amount: total,
+          customerName: invoice.customerName,
+          customerPhone: invoice.customerPhone,
+          purpose: `Invoice #${invoice.id?.slice(-8)} payment`,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to generate link')
+      setPaymentLink(data.short_url)
+      await loadInvoice()
+    } catch (err: any) {
+      setWaError(err.message)
+    } finally {
+      setGenLinkLoading(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -122,6 +191,97 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setShowWAModal(true)}
+            className="flex items-center justify-center gap-2 rounded-2xl bg-green-600 py-4 text-sm font-bold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+          >
+            {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+            Send via WhatsApp
+          </button>
+          <button
+            onClick={generatePaymentLink}
+            disabled={genLinkLoading || invoice?.status === 'paid'}
+            className="flex items-center justify-center gap-2 rounded-2xl border-2 border-indigo-200 bg-indigo-50 py-4 text-sm font-bold text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+          >
+            {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            {paymentLink || invoice?.paymentLinkUrl ? 'Copy Link' : 'Generate Payment Link'}
+          </button>
+        </div>
+
+        {(paymentLink || invoice?.paymentLinkUrl) && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+            <a
+              href={paymentLink || invoice?.paymentLinkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-700 font-medium underline break-all"
+            >
+              {paymentLink || invoice?.paymentLinkUrl}
+            </a>
+          </div>
+        )}
+
+        {(waSuccess) && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+            <span className="text-xs text-green-700 font-medium">Message sent!</span>
+          </div>
+        )}
+      </div>
+
+      {showWAModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-bold text-lg">Send via WhatsApp</h2>
+              <button onClick={() => { setShowWAModal(false); setWaError('') }} className="p-2 rounded-lg hover:bg-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground mb-1">Preview</div>
+                <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 leading-relaxed">
+                  {paid
+                    ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
+                    : `Hello ${invoice.customerName}, your invoice for ₹${total} is ready. Pay now: ${invoice.paymentLinkUrl || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Personal Note (optional)</label>
+                <textarea
+                  value={personalNote}
+                  onChange={e => setPersonalNote(e.target.value)}
+                  rows={2}
+                  placeholder="Add a personal note..."
+                  className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+              {waError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {waError}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 p-5 border-t bg-slate-50">
+              <button onClick={() => { setShowWAModal(false); setWaError('') }} className="flex-1 h-11 rounded-xl border font-medium">Cancel</button>
+              <button
+                onClick={sendWhatsApp}
+                disabled={sendingWA}
+                className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
+                {sendingWA ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length > 0 && (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
