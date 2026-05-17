@@ -54,7 +54,7 @@ async function tryRefresh(request: NextRequest, refreshToken: string): Promise<N
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 24 * 3600,
+      maxAge: 14 * 24 * 3600,
       path: '/',
     })
     newResponse.cookies.set('bz_refresh', data.refreshToken, {

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       isPaid: existingIsPaid,
       accessToken,
       refreshToken,
-      expiresIn: 3600,
+      expiresIn: 14 * 24 * 3600,
     })
 
     setAuthCookies(response, accessToken, refreshToken, existingTenantId || undefined)

@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       success: true,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: 15 * 24 * 3600,
+      expiresIn: 14 * 24 * 3600,
     })
 
     setAuthCookies(response, newAccessToken, newRefreshToken)
