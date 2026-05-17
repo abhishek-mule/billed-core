@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { AlertTriangle, Bell, CheckCircle2, IndianRupee, PackageMinus, RefreshCcw, RotateCcw, ScanLine, Send, TrendingUp, Wallet, Zap } from 'lucide-react'
 import { applyWhatsAppStatus, createPurchaseFromScan, getBillzoState, markPaid, repeatLastInvoice, sendReminder, type ActionResult } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
+import { Loader } from './Loader'
 
 const money = (value: number) => `₹${value.toLocaleString('en-IN')}`
 
@@ -553,12 +554,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function LoadingState() {
   return (
-    <div className="rounded-lg border bg-white p-6">
-      <div className="mb-3 flex items-center gap-2 font-black">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        Loading...
-      </div>
-      <p className="text-sm font-bold text-muted-foreground">Fetching your data...</p>
+    <div className="rounded-lg border bg-white p-8 flex flex-col items-center justify-center min-h-[300px]">
+      <Loader className="mb-4" />
+      <div className="text-base font-black text-foreground">Loading...</div>
+      <p className="text-xs font-bold text-muted-foreground mt-1">Fetching your data...</p>
     </div>
   )
 }

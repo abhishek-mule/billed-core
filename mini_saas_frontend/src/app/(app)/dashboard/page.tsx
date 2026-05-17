@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2, Store } from "lucide-react";
 import { db } from "@/lib/billzo/db";
 import { UsagePill } from "@/components/billzo/UsagePill";
+import { Loader } from "@/components/billzo/Loader";
 
 const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
@@ -94,7 +95,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader />
       </div>
     );
   }
