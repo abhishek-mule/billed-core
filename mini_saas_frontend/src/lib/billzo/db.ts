@@ -41,6 +41,8 @@ class BillzoDB extends Dexie {
   queue!: Table<QueueItem, string>
   activity!: Table<Activity, string>
   deviceTokens!: Table<DeviceToken, string>
+  otps!: Table<{ id: string; phone: string; hash: string; createdAt: number }, string>
+  sessions!: Table<import('@/lib/billzo/auth-store').Session & { id: string }, string>
 
   constructor() {
     super('billzo_production_v1')
@@ -59,6 +61,9 @@ class BillzoDB extends Dexie {
       queue: 'id, tenantId, status, entity, entityId, nextAttemptAt, idempotencyKey',
       activity: 'id, tenantId, createdAt',
       deviceTokens: 'id, tenantId, fcmToken, deviceType, createdAt',
+    }).version(2).stores({
+      otps: 'id, phone, createdAt',
+      sessions: 'id, sessionId, userId, phone, tenantId, createdAt',
     })
   }
 }

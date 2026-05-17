@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production'
+const rawSecret = process.env.JWT_SECRET
+if (process.env.NODE_ENV === 'production' && !rawSecret) {
+  throw new Error('[BillZo] JWT_SECRET env var is required in production')
+}
+const JWT_SECRET = rawSecret || 'dev-secret-change-in-production'
 const ACCESS_COOKIE = 'bz_access'
 const REFRESH_COOKIE = 'bz_refresh'
 
@@ -99,7 +103,7 @@ export function setAuthCookies(
 ) {
   const isProd = process.env.NODE_ENV === 'production'
   response.cookies.set(ACCESS_COOKIE, accessToken, {
-    httpOnly: false,
+    httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
     maxAge: 14 * 24 * 3600,

@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { sessionStore } from '@/lib/billzo/auth-store'
-import {
-  createAccessToken,
-  createRefreshToken,
-  setAuthCookies,
-} from '@/lib/billzo/auth-jwt'
+import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
+import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,15 +13,16 @@ export async function POST(request: NextRequest) {
     }
 
     const userId: string = uid || `phone_${phone}`
+
+    const existingSessions = await findSessionsByUserId(userId)
+    const existingTenantId = existingSessions.find(s => s.tenantId)?.tenantId || undefined
+    const existingIsPaid = existingSessions.find(s => s.tenantId)?.isPaid || false
+    const existingPhone = existingSessions.find(s => s.phone)?.phone
+
     const sessionId = crypto.randomBytes(32).toString('hex')
-
-    const existingSessions = Array.from(sessionStore.values()).filter((s) => s.userId === userId)
-    const existingTenantId = existingSessions.length > 0 ? existingSessions[0].tenantId : undefined
-    const existingIsPaid = existingSessions.length > 0 ? existingSessions[0].isPaid : false
-    const existingPhone = existingSessions.find((s) => s.phone)?.phone
-
-    sessionStore.set(sessionId, {
+    await setSession(sessionId, {
       userId,
+      sessionId,
       tenantId: existingTenantId || null,
       isPaid: existingIsPaid,
       phone: phone || existingPhone,

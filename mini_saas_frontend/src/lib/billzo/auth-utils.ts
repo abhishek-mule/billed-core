@@ -59,6 +59,11 @@ export function normalizePhone(phone: string): { e164: string; local: string } {
   }
 }
 
+export function normalizePhoneE164(phone: string): string {
+  const local = getPhoneDigits(phone)
+  return `+91${local}`
+}
+
 export interface TenantCreateInput {
   shopName: string
   phone: string

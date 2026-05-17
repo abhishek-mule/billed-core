@@ -6,10 +6,23 @@ import {
   createRefreshToken,
   setAuthCookies,
 } from '@/lib/billzo/auth-jwt'
-import { sessionStore } from '@/lib/billzo/auth-store'
+import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+
+async function upsertSession(userId: string, data: { email?: string; tenantId?: string | null; isPaid?: boolean }) {
+  const sessionId = crypto.randomBytes(32).toString('hex')
+  await setSession(sessionId, {
+    userId,
+    sessionId,
+    tenantId: data.tenantId ?? null,
+    isPaid: data.isPaid ?? false,
+    email: data.email,
+    createdAt: Date.now(),
+  })
+  return sessionId
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,16 +42,14 @@ export async function POST(request: NextRequest) {
 
       const userId = data.user.id
       const userEmail = data.user.email || undefined
-      const existingSession = Array.from(sessionStore.values()).find((s) => s.userId === userId && s.tenantId)
-      const existingTenantId = existingSession?.tenantId || undefined
-      const sessionId = crypto.randomBytes(32).toString('hex')
+      const existingSessions = await findSessionsByUserId(userId)
+      const existingWithTenant = existingSessions.find(s => s.tenantId)
+      const existingTenantId = existingWithTenant?.tenantId || undefined
 
-      sessionStore.set(sessionId, {
-        userId,
-        tenantId: existingTenantId || null,
-        isPaid: existingSession?.isPaid || false,
+      const sessionId = await upsertSession(userId, {
         email: userEmail,
-        createdAt: Date.now(),
+        tenantId: existingTenantId,
+        isPaid: existingWithTenant?.isPaid || false,
       })
 
       const billzoAccessToken = createAccessToken({
@@ -75,17 +86,14 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = sbSession.user.id
-    const sessionId = crypto.randomBytes(32).toString('hex')
+    const existingSessions = await findSessionsByUserId(userId)
+    const existingWithTenant = existingSessions.find(s => s.tenantId)
+    const existingTenantId = existingWithTenant?.tenantId || undefined
 
-    const existingSessions = Array.from(sessionStore.values()).filter((s) => s.userId === userId)
-    const existingTenantId = existingSessions.length > 0 ? existingSessions[0].tenantId : undefined
-
-    sessionStore.set(sessionId, {
-      userId,
-      tenantId: existingTenantId || null,
-      isPaid: existingSessions.length > 0 ? existingSessions[0].isPaid : false,
+    const sessionId = await upsertSession(userId, {
       email,
-      createdAt: Date.now(),
+      tenantId: existingTenantId,
+      isPaid: existingWithTenant?.isPaid || false,
     })
 
     const accessToken = createAccessToken({
@@ -133,19 +141,14 @@ export async function GET(request: NextRequest) {
 
     const userId = sbSession.user.id
     const email = sbSession.user.email || undefined
-    const name = sbSession.user.user_metadata?.full_name || sbSession.user.user_metadata?.name || undefined
+    const existingSessions = await findSessionsByUserId(userId)
+    const existingWithTenant = existingSessions.find(s => s.tenantId)
+    const existingTenantId = existingWithTenant?.tenantId || undefined
 
-    const sessionId = crypto.randomBytes(32).toString('hex')
-
-    const existingSessions = Array.from(sessionStore.values()).filter((s) => s.userId === userId)
-    const existingTenantId = existingSessions.length > 0 ? existingSessions[0].tenantId : undefined
-
-    sessionStore.set(sessionId, {
-      userId,
-      tenantId: existingTenantId || null,
-      isPaid: existingSessions.length > 0 ? existingSessions[0].isPaid : false,
+    const sessionId = await upsertSession(userId, {
       email,
-      createdAt: Date.now(),
+      tenantId: existingTenantId,
+      isPaid: existingWithTenant?.isPaid || false,
     })
 
     const accessToken = createAccessToken({

@@ -51,7 +51,7 @@ async function tryRefresh(request: NextRequest, refreshToken: string): Promise<N
 
     const newResponse = NextResponse.next()
     newResponse.cookies.set('bz_access', data.accessToken, {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 14 * 24 * 3600,

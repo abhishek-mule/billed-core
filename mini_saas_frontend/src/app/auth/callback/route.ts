@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
-import { sessionStore } from '@/lib/billzo/auth-store'
+import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -29,14 +29,16 @@ export async function GET(request: NextRequest) {
       if (!error && data.session?.user) {
         const userId = data.session.user.id
         const email = data.session.user.email || undefined
-        const existingSession = Array.from(sessionStore.values()).find((s) => s.userId === userId && s.tenantId)
-        const existingTenantId = existingSession?.tenantId || undefined
+        const existingSessions = await findSessionsByUserId(userId)
+        const existingWithTenant = existingSessions.find((s) => s.tenantId)
+        const existingTenantId = existingWithTenant?.tenantId || undefined
         const sessionId = crypto.randomBytes(32).toString('hex')
 
-        sessionStore.set(sessionId, {
+        await setSession(sessionId, {
           userId,
+          sessionId,
           tenantId: existingTenantId || null,
-          isPaid: existingSession?.isPaid || false,
+          isPaid: existingWithTenant?.isPaid || false,
           email,
           createdAt: Date.now(),
         })

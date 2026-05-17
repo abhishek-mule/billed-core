@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
-import { sessionStore } from '@/lib/billzo/auth-store'
+import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY!
@@ -62,15 +62,17 @@ export async function GET(request: NextRequest) {
 
     const userId = sbSession.user.id
     const email = sbSession.user.email || undefined
-    const existingSession = Array.from(sessionStore.values()).find((s) => s.userId === userId && s.tenantId)
-    const existingTenantId = existingSession?.tenantId || undefined
+    const existingSessions = await findSessionsByUserId(userId)
+    const existingWithTenant = existingSessions.find((s) => s.tenantId)
+    const existingTenantId = existingWithTenant?.tenantId || undefined
 
     const sessionId = crypto.randomBytes(32).toString('hex')
 
-    sessionStore.set(sessionId, {
+    await setSession(sessionId, {
       userId,
+      sessionId,
       tenantId: existingTenantId || null,
-      isPaid: existingSession?.isPaid || false,
+      isPaid: existingWithTenant?.isPaid || false,
       email,
       createdAt: Date.now(),
     })

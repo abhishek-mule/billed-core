@@ -132,6 +132,9 @@ export type Invoice = {
   lastWhatsAppStatus: WhatsAppStatus
   reminderCount: number
   pdfUrl: string
+  paymentLinkId?: string
+  paymentLinkUrl?: string
+  paymentLinkExpiry?: string
   version: number
 }
 
@@ -176,10 +179,13 @@ export type WhatsAppEvent = {
   id: string
   tenantId: string
   invoiceId: string
+  customerId?: string
+  phone?: string
+  messageType?: string
+  failureReason?: string
   recoveryAttemptId?: string
   providerMessageId?: string
   status: WhatsAppStatus
-  failureReason?: string
   occurredAt: string
   createdAt: string
 }

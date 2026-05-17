@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { db } from '@/lib/billzo/db'
+import { normalizePhoneE164 } from '@/lib/billzo/auth-utils'
 import type { Customer } from '@/lib/billzo/types'
 
 function getTenantId(request: NextRequest): string | null {
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
+    const offset = parseInt(searchParams.get('offset') || '0')
 
     let customers = await db().customers.where('tenantId').equals(tenantId).toArray()
 
@@ -41,7 +44,10 @@ export async function GET(request: NextRequest) {
 
     customers.sort((a, b) => (b.lastUsedAt > a.lastUsedAt ? 1 : -1))
 
-    return NextResponse.json({ customers })
+    const total = customers.length
+    const paginated = customers.slice(offset, offset + limit)
+
+    return NextResponse.json({ customers: paginated, total, limit, offset })
   } catch (err: any) {
     console.error('[CustomerAPI] GET error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (!phone || !phone.trim()) return NextResponse.json({ error: 'Phone is required' }, { status: 400 })
 
     const normalizedPhone = normalizePhone(phone)
-    if (!normalizedPhone) return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
+    if (!normalizedPhone || normalizedPhone === '+91') return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 })
 
     const existing = await db().customers
       .where('tenantId').equals(tenantId)
@@ -163,10 +169,5 @@ export async function DELETE(request: NextRequest) {
 }
 
 function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 10) return `+91${digits}`
-  if (digits.length === 11 && digits.startsWith('0')) return `+91${digits.slice(1)}`
-  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`
-  if (digits.length > 12 && digits.startsWith('91')) return `+${digits}`
-  return `+${digits}`
+  return normalizePhoneE164(phone)
 }
