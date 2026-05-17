@@ -30,7 +30,7 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
     { name: 'Pending', value: recovery.invoicesPending, color: '#f59e0b' },
   ]
 
-  const hasData = recovery.totalRecovered > 0 || recovery.pendingAmount > 0
+  const hasData = !!(recovery.invoicesRecovered > 0 || recovery.invoicesPending > 0 || recovery.totalRecovered > 0 || recovery.pendingAmount > 0 || recovery.pendingBreakdown.length > 0)
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
