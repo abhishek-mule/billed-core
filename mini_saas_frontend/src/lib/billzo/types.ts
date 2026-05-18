@@ -95,6 +95,7 @@ export type Product = {
   lowStockAt: number
   salePrice: number
   purchasePrice: number
+  unit?: string
   createdAt: string
   updatedAt: string
 }
@@ -130,6 +131,7 @@ export type Invoice = {
   recoveryStage: RecoveryStage
   nextRecoveryAt: string
   lastWhatsAppStatus: WhatsAppStatus
+  lastWhatsAppAt?: string
   reminderCount: number
   pdfUrl: string
   paymentLinkId?: string
@@ -178,14 +180,16 @@ export type Payment = {
 export type WhatsAppEvent = {
   id: string
   tenantId: string
-  invoiceId: string
+  invoiceId?: string
   customerId?: string
   phone?: string
   messageType?: string
   failureReason?: string
+  error?: string
   recoveryAttemptId?: string
   providerMessageId?: string
   status: WhatsAppStatus
+  syncStatus?: SyncStatus
   occurredAt: string
   createdAt: string
 }

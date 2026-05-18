@@ -61,7 +61,8 @@ class BillzoDB extends Dexie {
       queue: 'id, tenantId, status, entity, entityId, nextAttemptAt, idempotencyKey',
       activity: 'id, tenantId, createdAt',
       deviceTokens: 'id, tenantId, fcmToken, deviceType, createdAt',
-    }).version(2).stores({
+    })
+    this.version(2).stores({
       otps: 'id, phone, createdAt',
       sessions: 'id, sessionId, userId, phone, tenantId, createdAt',
     })
@@ -118,6 +119,7 @@ export async function loadSampleData(
     tenantId,
     name,
     phone: customerPhones[i] || '9876543210',
+    opt_in: false,
     defaultTone: 'hinglish' as const,
     lastUsedAt: current,
     invoiceCount: 0,

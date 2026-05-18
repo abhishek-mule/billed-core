@@ -33,7 +33,9 @@ export interface Contact {
   phone: string
   whatsapp_number?: string
   email?: string
+  isDuplicate?: boolean
 }
+
 
 export interface ImportState {
   contacts: Contact[]

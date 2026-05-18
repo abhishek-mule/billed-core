@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { getOtp, deleteOtp, setSession, findSessionsByPhone } from '@/lib/billzo/auth-store'
-import { normalizePhone, verifyOTPHash } from '@/lib/billzo/auth-utils'
+import { normalizePhoneE164, verifyOTPHash } from '@/lib/billzo/auth-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.MSG91_API_KEY
     const isProviderConfigured = !!(apiKey && !apiKey.startsWith('<') && apiKey.length > 10)
-    const e164 = normalizePhone(phone)
+    const e164 = normalizePhoneE164(phone)
     const storedOtp = await getOtp(e164)
 
     if (!storedOtp) {

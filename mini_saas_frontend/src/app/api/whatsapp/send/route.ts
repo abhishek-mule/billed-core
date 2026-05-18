@@ -83,15 +83,18 @@ export async function POST(request: NextRequest) {
 
     let finalMessage = message || ''
 
-    if (templateKey && config.templateNames?.[templateKey]) {
-      const templateVars = {
-        '1': vars?.['1'] || customerName,
-        '2': vars?.['2'] || '',
-        '3': vars?.['3'] || (tenant?.name || 'Our Shop'),
-        '4': vars?.['4'] || (tenant?.name || 'Our Shop'),
-        '5': vars?.['5'] || '',
+    if (templateKey && config.templateNames) {
+      const templateName = (config.templateNames as Record<string, string | undefined>)[templateKey]
+      if (templateName) {
+        const templateVars = {
+          '1': vars?.['1'] || customerName,
+          '2': vars?.['2'] || '',
+          '3': vars?.['3'] || (tenant?.name || 'Our Shop'),
+          '4': vars?.['4'] || (tenant?.name || 'Our Shop'),
+          '5': vars?.['5'] || '',
+        }
+        finalMessage = interpolate(templateName, templateVars)
       }
-      finalMessage = interpolate(config.templateNames[templateKey], templateVars)
     }
 
     if (personalNote && personalNote.trim()) {
@@ -117,6 +120,7 @@ export async function POST(request: NextRequest) {
           status: 'failed',
           messageType: templateKey || 'text',
           occurredAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
           syncStatus: 'failed',
           error: sendErr.message,
         }
@@ -136,6 +140,7 @@ export async function POST(request: NextRequest) {
       status: gupshupResponse ? 'queued' : 'sent',
       messageType: templateKey || 'text',
       occurredAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       syncStatus: gupshupResponse ? 'pending' : 'synced',
     }
     await db().whatsappEvents.add(event)

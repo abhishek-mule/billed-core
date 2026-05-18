@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const senderId = process.env.MSG91_SENDER_ID || 'BILLZOT'
     const templateId = process.env.MSG91_TEMPLATE_ID
     const isProviderConfigured = !!(apiKey && !apiKey.startsWith('<') && apiKey.length > 10)
-    const { e164 } = normalizePhoneE164(phone)
+    const e164 = normalizePhoneE164(phone)
 
     if (!isProviderConfigured) {
       const devOtp = process.env.DEV_OTP || generateOTP()

@@ -56,7 +56,7 @@ export async function setSession(sessionId: string, session: Session): Promise<v
   if (existing) {
     await database.sessions.update(existing.id, { ...session, createdAt: session.createdAt || Date.now() })
   } else {
-    await database.sessions.add({ ...session, sessionId })
+    await database.sessions.add({ ...session, sessionId, id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` })
   }
 }
 

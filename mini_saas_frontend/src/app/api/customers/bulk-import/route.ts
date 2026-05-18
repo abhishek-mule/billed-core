@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         } else {
           const updates: Partial<Customer> = {
             name: row.name.trim(),
-            whatsapp_number: row.whatsapp_number ? normalizePhone(row.whatsapp_number) : undefined,
+            whatsapp_number: row.whatsapp_number ? (normalizePhone(row.whatsapp_number) ?? undefined) : undefined,
             gstin: row.gstin?.trim() || undefined,
             email: row.email?.trim() || undefined,
             updatedAt: now,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
           tenantId,
           name: row.name.trim(),
           phone,
-          whatsapp_number: row.whatsapp_number ? normalizePhone(row.whatsapp_number) : undefined,
+          whatsapp_number: row.whatsapp_number ? (normalizePhone(row.whatsapp_number) ?? undefined) : undefined,
           gstin: row.gstin?.trim() || undefined,
           email: row.email?.trim() || undefined,
           opt_in: false,
