@@ -4,9 +4,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, uuid } from '@/lib/billzo/db'
 import type { Invoice } from '@/lib/billzo/types'
 
-const GUPSHUP_API_KEY = process.env.GUPSHUP_API_KEY
-const GUPSHUP_APP_NAME = process.env.GUPSHUP_APP_NAME || 'billzo'
-
 const STAGE_HOURS: Record<string, number> = {
   t0_soft: 24,
   t24_nudge: 72,
@@ -18,138 +15,149 @@ const STAGE_ORDER: string[] = ['t0_soft', 't24_nudge', 't72_strong', 't5_warning
 
 function nextStage(stage: string): string {
   const idx = STAGE_ORDER.indexOf(stage)
-  return STAGE_ORDER[Math.min(idx + 1, STAGE_ORDER.length - 1)]
+  return idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : stage
 }
 
-async function sendWhatsAppMessage(phone: string, message: string, tenantId: string, invoiceId: string) {
-  const cleanPhone = phone.replace(/\D/g, '')
-  const withCountryCode = cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`
-
-  if (!GUPSHUP_API_KEY) {
-    console.warn('[ReminderEngine] Gupshup API key not configured')
-    await db().whatsappEvents.add({
-      id: uuid(),
-      tenantId,
-      invoiceId,
-      status: 'failed',
-      failureReason: 'Gupshup API key not configured',
-      occurredAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    } as any)
-    return false
-  }
-
-  try {
-    const response = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': GUPSHUP_API_KEY,
-      },
-      body: JSON.stringify({
-        channel: 'whatsapp',
-        source: GUPSHUP_APP_NAME,
-        destination: withCountryCode,
-        message: message,
-      }),
-    })
-
-    const data = await response.json() as any
-
-    if (response.ok && (data.status === 'submitted' || data.status === 'success')) {
-      await db().whatsappEvents.add({
-        id: uuid(),
-        tenantId,
-        invoiceId,
-        providerMessageId: data.messageId || data.id,
-        status: 'sent',
-        occurredAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      } as any)
-      return true
-    } else {
-      await db().whatsappEvents.add({
-        id: uuid(),
-        tenantId,
-        invoiceId,
-        status: 'failed',
-        failureReason: data.message || 'Unknown error',
-        occurredAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      } as any)
-      return false
-    }
-  } catch (err: any) {
-    console.error('[ReminderEngine] WhatsApp send error:', err)
-    await db().whatsappEvents.add({
-      id: uuid(),
-      tenantId,
-      invoiceId,
-      status: 'failed',
-      failureReason: err.message,
-      occurredAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    } as any)
-    return false
-  }
-}
-
-function buildMessage(invoice: Invoice, stage: string): string {
+function buildMessage(invoice: Invoice, stage: string, tenantName: string): string {
   const amount = invoice.total - (invoice.paidAmount || 0)
-  const amountStr = `Rs ${amount.toLocaleString('en-IN')}`
+  const amountStr = `₹${amount.toLocaleString('en-IN')}`
   const name = invoice.customerName || 'Customer'
   const invId = invoice.id.slice(0, 8).toUpperCase()
-  const dueDate = new Date(invoice.dueAt).toLocaleDateString('en-IN')
-  const daysOverdue = Math.floor((Date.now() - new Date(invoice.dueAt).getTime()) / (1000 * 60 * 60 * 24))
+  const daysOverdue = Math.max(0, Math.floor((Date.now() - new Date(invoice.dueAt).getTime()) / (1000 * 60 * 60 * 24)))
 
   const messages: Record<string, string> = {
-    t0_soft: `Namaste ${name}, your Billzo invoice for ${amountStr} is pending. Invoice: ${invId}. Please clear payment.`,
-    t24_nudge: `Reminder ${name}: ${amountStr} still pending for your invoice ${invId}. Please pay today.`,
-    t72_strong: `${name}, payment of ${amountStr} for invoice ${invId} is ${daysOverdue} days overdue. Please settle now.`,
-    t5_warning: `FINAL NOTICE: ${name}, ${amountStr} is ${daysOverdue} days overdue on invoice ${invId}. Please pay immediately.`,
+    t0_soft: `Namaste ${name} ji, your invoice ${invId} for ${amountStr} from ${tenantName} is pending. Please pay when convenient. 🙏`,
+    t24_nudge: `Hi ${name}, ${amountStr} for invoice ${invId} is still pending from ${tenantName}. Please clear it today. 📋`,
+    t72_strong: `${name} ji, ${amountStr} for ${invId} is ${daysOverdue} days overdue. Please settle with ${tenantName} now.`,
+    t5_warning: `${name} ji, final follow-up: ${amountStr} for ${invId} is ${daysOverdue} days overdue with ${tenantName}. Please pay immediately.`,
   }
   return messages[stage] || messages['t0_soft']
+}
+
+async function sendViaGupshup(config: any, to: string, message: string): Promise<boolean> {
+  if (!config?.gupshupApiKey || !config?.gupshupAppName || !config?.sourceNumber) {
+    console.log('[Collections] Simulating send:', { to, message })
+    return true
+  }
+
+  const cleanPhone = to.replace(/\D/g, '').replace(/^91/, '')
+  const payload = new URLSearchParams({
+    api_key: config.gupshupApiKey,
+    app_name: config.gupshupAppName,
+    channel: 'whatsapp',
+    source: config.sourceNumber,
+    destination: cleanPhone,
+    message: message,
+    'message[0][type]': 'text',
+    'message[0][text]': message,
+  })
+
+  try {
+    const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payload.toString(),
+    })
+    const data = await res.json() as any
+    return res.ok && data.status === 'queued'
+  } catch {
+    return false
+  }
+}
+
+async function triggerN8nCollections(tenants: any[]) {
+  const n8nUrl = process.env.N8N_WEBHOOK_URL
+  if (!n8nUrl || n8nUrl.includes('n8n.your-instance.com') || n8nUrl.includes('localhost')) {
+    return false
+  }
+
+  const invoicesToProcess: any[] = []
+  for (const tenant of tenants) {
+    const config = tenant.whatsappConfig || {}
+    const dueInvoices = await db().invoices
+      .where('tenantId').equals(tenant.id)
+      .filter((inv: any) =>
+        inv.status !== 'paid' &&
+        inv.nextRecoveryAt &&
+        inv.nextRecoveryAt <= new Date().toISOString()
+      )
+      .toArray()
+
+    for (const invoice of dueInvoices) {
+      invoicesToProcess.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        invoiceId: invoice.id,
+        customerName: invoice.customerName,
+        customerPhone: invoice.customerPhone,
+        total: invoice.total,
+        paidAmount: invoice.paidAmount,
+        stage: invoice.recoveryStage || 't0_soft',
+        dueAt: invoice.dueAt,
+        gupshupConfig: config,
+      })
+    }
+  }
+
+  if (invoicesToProcess.length === 0) return false
+
+  try {
+    await fetch(`${n8nUrl}/webhook/billzo-collections`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoices: invoicesToProcess, timestamp: new Date().toISOString() }),
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
-if (!cronSecret) {
-  throw new Error('[BillZo] CRON_SECRET env var is required')
-}
+  if (!cronSecret) {
+    throw new Error('[BillZo] CRON_SECRET env var is required')
+  }
 
   if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const now = new Date().toISOString()
+    const n8nTriggered = await triggerN8nCollections(await db().tenants.toArray())
+
+    if (n8nTriggered) {
+      return NextResponse.json({
+        success: true,
+        mode: 'n8n',
+        message: 'Collections delegated to n8n',
+        timestamp: new Date().toISOString(),
+      })
+    }
 
     const allTenants = await db().tenants.toArray()
     let processed = 0
     let sent = 0
 
     for (const tenant of allTenants) {
+      const config = tenant.whatsappConfig || {}
+      const tenantName = tenant.name || 'BillZo'
+
       const dueInvoices = await db().invoices
-        .where('tenantId')
-        .equals(tenant.id)
+        .where('tenantId').equals(tenant.id)
         .filter((inv: any) =>
           inv.status !== 'paid' &&
           inv.nextRecoveryAt &&
-          inv.nextRecoveryAt <= now
+          inv.nextRecoveryAt <= new Date().toISOString()
         )
         .toArray()
 
       for (const invoice of dueInvoices) {
         const stage = invoice.recoveryStage || 't0_soft'
-        const message = buildMessage(invoice as Invoice, stage)
+        const message = buildMessage(invoice as Invoice, stage, tenantName)
 
-        const success = await sendWhatsAppMessage(
-          invoice.customerPhone || '',
-          message,
-          tenant.id,
-          invoice.id
-        )
+        const success = await sendViaGupshup(config, invoice.customerPhone || '', message)
 
         const newStage = nextStage(stage)
         const nextHours = STAGE_HOURS[newStage] || 24
@@ -160,24 +168,22 @@ if (!cronSecret) {
           recoveryStage: newStage as any,
           nextRecoveryAt: nextAt.toISOString(),
           lastWhatsAppStatus: success ? 'sent' : 'failed',
-          reminderCount: (tenant.reminderCount || 0) + 1,
+          lastWhatsAppAt: new Date().toISOString(),
+          reminderCount: (invoice.reminderCount || 0) + 1,
           updatedAt: new Date().toISOString(),
         })
 
-        await db().recoveryAttempts.add({
+        await db().whatsappEvents.add({
           id: uuid(),
           tenantId: tenant.id,
           invoiceId: invoice.id,
-          stage: newStage as any,
-          tone: newStage === 't0_soft' ? 'soft' : newStage === 't24_nudge' ? 'nudge' : newStage === 't72_strong' ? 'strong' : 'warning',
-          message,
-          pdfUrl: invoice.pdfUrl || '',
-          scheduledAt: now,
-          sentAt: success ? now : undefined,
+          customerId: invoice.customerId,
+          phone: invoice.customerPhone,
+          messageType: `reminder_${stage}`,
           status: success ? 'sent' : 'failed',
-          createdAt: now,
-          updatedAt: now,
-        } as any)
+          occurredAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        })
 
         if (success) sent++
         processed++
@@ -186,13 +192,14 @@ if (!cronSecret) {
 
     return NextResponse.json({
       success: true,
+      mode: 'direct',
       processed,
       sent,
-      timestamp: now,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('[ReminderEngine] Error:', error)
-    return NextResponse.json({ error: 'Failed to process reminders' }, { status: 500 })
+    console.error('[Collections] Error:', error)
+    return NextResponse.json({ error: 'Failed to process collections' }, { status: 500 })
   }
 }
 

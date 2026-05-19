@@ -1,17 +1,14 @@
-/**
- * BillZo Automation Helper
- * Handles triggers for n8n workflows (WhatsApp, Daily Digest, etc.)
- */
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://n8n.your-instance.com'
+const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || ''
 
-const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_URL || 'https://n8n.your-instance.com'
-
-export type WhatsAppNotifyType = 
-  | 'welcome' 
-  | 'credentials' 
-  | 'dailySummary' 
-  | 'lowStock' 
-  | 'planExpiry' 
+export type WhatsAppNotifyType =
+  | 'welcome'
+  | 'credentials'
+  | 'dailySummary'
+  | 'lowStock'
+  | 'planExpiry'
   | 'invoice_sent'
+  | 'collections_reminder'
 
 export async function triggerWhatsAppNotification(data: {
   type: WhatsAppNotifyType
@@ -31,29 +28,65 @@ export async function triggerWhatsAppNotification(data: {
   params?: string[]
 }) {
   try {
-    const response = await fetch(`${N8N_WEBHOOK_URL}/webhook/whatsapp-notify`, {
+    const webhookUrl = `${N8N_WEBHOOK_URL}/webhook/whatsapp-notify`
+    if (webhookUrl.includes('n8n.your-instance.com')) {
+      console.log('[Automation] n8n not configured, skipping notification')
+      return false
+    }
+
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(N8N_WEBHOOK_SECRET ? { 'X-n8n-secret': N8N_WEBHOOK_SECRET } : {}),
       },
       body: JSON.stringify(data),
     })
-    
+
     if (!response.ok) {
-      console.warn('n8n WhatsApp trigger failed:', await response.text())
+      console.warn('[Automation] n8n WhatsApp trigger failed:', await response.text())
       return false
     }
-    
+
     return true
   } catch (error) {
-    console.error('Failed to trigger WhatsApp notification:', error)
+    console.error('[Automation] Failed to trigger WhatsApp notification:', error)
     return false
   }
 }
 
-/**
- * Triggers a push notification via the server-side API
- */
+export async function triggerCollectionsWorkflow(invoices: any[]) {
+  try {
+    const webhookUrl = `${N8N_WEBHOOK_URL}/webhook/billzo-collections`
+    if (webhookUrl.includes('n8n.your-instance.com')) {
+      console.log('[Automation] n8n collections not configured')
+      return false
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(N8N_WEBHOOK_SECRET ? { 'X-n8n-secret': N8N_WEBHOOK_SECRET } : {}),
+      },
+      body: JSON.stringify({
+        invoices,
+        timestamp: new Date().toISOString(),
+      }),
+    })
+
+    if (!response.ok) {
+      console.warn('[Automation] n8n collections trigger failed:', await response.text())
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error('[Automation] Failed to trigger collections workflow:', error)
+    return false
+  }
+}
+
 export async function triggerPushNotification(tenantId: string, payload: {
   title: string
   body: string
@@ -71,10 +104,10 @@ export async function triggerPushNotification(tenantId: string, payload: {
         ...payload
       }),
     })
-    
+
     return response.ok
   } catch (error) {
-    console.error('Failed to trigger push notification:', error)
+    console.error('[Automation] Failed to trigger push notification:', error)
     return false
   }
 }
