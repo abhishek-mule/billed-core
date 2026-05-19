@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBillzoState } from '@/lib/billzo/actions'
 import { scheduleBackgroundSync } from '@/lib/billzo/sync'
 
@@ -11,12 +11,15 @@ interface UseBillzoResult {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
+  liveEvents: Array<{ type: string; data: any; timestamp: number }>
 }
 
 export function useBillzo(): UseBillzoResult {
   const [state, setState] = useState<BillzoState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [liveEvents, setLiveEvents] = useState<Array<{ type: string; data: any; timestamp: number }>>([])
+  const eventSourceRef = useRef<EventSource | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -58,5 +61,40 @@ export function useBillzo(): UseBillzoResult {
     }
   }, [refresh])
 
-  return { state, loading, error, refresh }
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const es = new EventSource('/api/events/stream')
+    eventSourceRef.current = es
+
+    es.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        setLiveEvents(prev => [...prev.slice(-50), { type: data.type, data, timestamp: Date.now() }])
+
+        if (data.type === 'payment.success' || data.type === 'invoice.created') {
+          refresh()
+        }
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.onerror = () => {
+      console.warn('[SSE] Connection lost, reconnecting...')
+      es.close()
+      setTimeout(() => {
+        if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
+          // browser will auto-reconnect
+        }
+      }, 3000)
+    }
+
+    return () => {
+      es.close()
+      eventSourceRef.current = null
+    }
+  }, [refresh])
+
+  return { state, loading, error, refresh, liveEvents }
 }
