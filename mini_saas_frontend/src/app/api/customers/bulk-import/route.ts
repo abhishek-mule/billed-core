@@ -4,6 +4,8 @@ import { db } from '@/lib/billzo/db'
 import { normalizePhoneE164 } from '@/lib/billzo/auth-utils'
 import type { Customer, CustomerImportRow, BulkImportResult } from '@/lib/billzo/types'
 
+export const dynamic = 'force-dynamic'
+
 function getTenantId(request: NextRequest): string | null {
   const cookieStore = cookies()
   return cookieStore.get('bz_tenant')?.value || null

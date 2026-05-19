@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { db } from '@/lib/billzo/db'
 import { isPaywallBlocked } from '@/lib/billzo/plan-limits'
 
+export const dynamic = 'force-dynamic'
+
 function getTenantId(): string | null {
   return cookies().get('bz_tenant')?.value || null
 }

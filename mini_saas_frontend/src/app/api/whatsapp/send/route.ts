@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { db } from '@/lib/billzo/db'
 import type { TenantWhatsAppConfig, WhatsAppEvent } from '@/lib/billzo/types'
 
+export const dynamic = 'force-dynamic'
+
 function getTenantId(request: NextRequest): string | null {
   return cookies().get('bz_tenant')?.value || null
 }

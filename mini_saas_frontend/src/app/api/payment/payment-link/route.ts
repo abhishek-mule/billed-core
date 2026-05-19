@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { db } from '@/lib/billzo/db'
 
+export const dynamic = 'force-dynamic'
+
 function getTenantId(request: NextRequest): string | null {
   return cookies().get('bz_tenant')?.value || null
 }

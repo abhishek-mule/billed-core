@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { db, uuid } from '@/lib/billzo/db'
 import type { Product } from '@/lib/billzo/types'
 
+export const dynamic = 'force-dynamic'
+
 function getTenantId(request: NextRequest): string | null {
   const cookieStore = cookies()
   return cookieStore.get('bz_tenant')?.value || null

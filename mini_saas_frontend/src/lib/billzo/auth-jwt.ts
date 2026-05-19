@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const rawSecret = process.env.JWT_SECRET
-if (process.env.NODE_ENV === 'production' && !rawSecret) {
-  throw new Error('[BillZo] JWT_SECRET env var is required in production')
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production'
+
+function assertSecret() {
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    throw new Error('[BillZo] JWT_SECRET env var is required in production')
+  }
 }
-const JWT_SECRET = rawSecret || 'dev-secret-change-in-production'
 const ACCESS_COOKIE = 'bz_access'
 const REFRESH_COOKIE = 'bz_refresh'
 
@@ -15,6 +17,7 @@ export function createAccessToken(payload: {
   phone?: string
   email?: string
 }): string {
+  assertSecret()
   const now = Math.floor(Date.now() / 1000)
   const data = {
     ...payload,
@@ -31,6 +34,7 @@ export function createAccessToken(payload: {
 }
 
 export function createRefreshToken(payload: { sessionId: string; userId: string }): string {
+  assertSecret()
   const now = Math.floor(Date.now() / 1000)
   const data = {
     ...payload,
