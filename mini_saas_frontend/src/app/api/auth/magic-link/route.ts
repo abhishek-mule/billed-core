@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const redirectTo = `${request.nextUrl.origin}/api/auth/magic-link`
+    const redirectTo = `${request.nextUrl.origin}/auth/callback`
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo },

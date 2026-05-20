@@ -9,18 +9,18 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/onboarding'
 
-  try {
-    // Check if required env vars are set
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+  try {
     if (!supabaseUrl || !supabaseKey) {
-      console.error('Supabase environment variables not configured')
+      console.error('[Callback] Supabase not configured')
       return NextResponse.redirect(new URL('/auth?error=config', request.url))
     }
 
     if (code) {
-      const supabase = createClient(supabaseUrl, supabaseKey, {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       })
 
@@ -51,20 +51,22 @@ export async function GET(request: NextRequest) {
         })
         const refreshToken = createRefreshToken({ sessionId, userId })
 
-        const response = NextResponse.redirect(new URL(existingTenantId ? '/dashboard' : next, request.url))
+        const redirectUrl = existingTenantId ? '/dashboard' : next
+        console.log('[Callback] Redirecting to:', redirectUrl, 'tenantId:', existingTenantId)
+
+        const response = NextResponse.redirect(new URL(redirectUrl, request.url))
         setAuthCookies(response, accessToken, refreshToken, existingTenantId)
         return response
       }
 
       if (error) {
-        console.error('Failed to exchange code for session:', error)
+        console.error('[Callback] exchangeCodeForSession error:', error.message)
       }
     }
 
-    // No code or error - redirect to login with error
     return NextResponse.redirect(new URL('/auth?error=auth', request.url))
   } catch (err) {
-    console.error('Auth callback error:', err)
+    console.error('[Callback] Error:', err)
     return NextResponse.redirect(new URL('/auth?error=server', request.url))
   }
 }
