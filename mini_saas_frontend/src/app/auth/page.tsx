@@ -66,6 +66,20 @@ function MagicLinkForm() {
 
   const hasError = searchParams?.get("error")
 
+  const errorMessage = hasError
+    ? hasError === "missing_code"
+      ? "No login code found. Please click the link in your email again."
+      : hasError === "config"
+        ? "Email login is not configured. Please use phone OTP."
+        : hasError === "invalid_code"
+          ? "This login link is invalid or expired. Please request a new one."
+          : hasError === "no_user"
+            ? "Could not find your account. Please request a new link."
+            : hasError === "failed"
+              ? "Something went wrong during login. Please try again."
+              : "Something went wrong. Please try again."
+    : ""
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -95,11 +109,9 @@ function MagicLinkForm() {
 
   return (
     <div className="space-y-4">
-      {hasError && (
+      {errorMessage && (
         <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-          {hasError === "invalid"
-            ? "This link is invalid or expired. Please request a new one."
-            : "Something went wrong. Please try again."}
+          {errorMessage}
         </div>
       )}
 

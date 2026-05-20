@@ -27,13 +27,15 @@ function setCookie(name: string, value: string, days = 30) {
 
 function getUserIdFromCookie() {
   const token = getCookie('bz_access')
-  if (!token) return null
-  try {
-    const payload = JSON.parse(atob(token.split('.')[0]))
-    return payload.userId || null
-  } catch {
-    return null
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[0]))
+      return payload.userId || null
+    } catch {
+      return null
+    }
   }
+  return null
 }
 
 export default function OnboardingPage() {
