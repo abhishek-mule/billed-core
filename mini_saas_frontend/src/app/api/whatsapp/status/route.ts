@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { db } from '@/lib/billzo/db'
+import { supabase } from '@/lib/billzo/supabase'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(request: NextRequest): string | null {
+function getTenantId(): string | null {
   return cookies().get('bz_tenant')?.value || null
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getTenantId()
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const tenant = await db().tenants.get(tenantId)
-    if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    if (!supabase) {
+      return NextResponse.json({ connected: false, reason: 'Database not available' }, { status: 200 })
+    }
 
-    const config = tenant.whatsappConfig
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('whatsapp_config')
+      .eq('id', tenantId)
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+    const config = data?.whatsapp_config
     if (!config?.gupshupApiKey) {
       return NextResponse.json({ connected: false, reason: 'Gupshup API key not configured' }, { status: 200 })
     }

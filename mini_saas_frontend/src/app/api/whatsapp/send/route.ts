@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { db } from '@/lib/billzo/db'
-import type { TenantWhatsAppConfig, WhatsAppEvent } from '@/lib/billzo/types'
+import { supabase } from '@/lib/billzo/supabase'
+import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(request: NextRequest): string | null {
+function getTenantId(): string | null {
   return cookies().get('bz_tenant')?.value || null
 }
 
@@ -29,8 +29,6 @@ async function sendViaGupshup(config: TenantWhatsAppConfig, to: string, message:
     source: source,
     destination: to.replace(/\D/g, '').replace(/^91/, ''),
     message: message,
-    'message[0][type]': 'text',
-    'message[0][text]': message,
   })
 
   const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
@@ -48,8 +46,12 @@ async function sendViaGupshup(config: TenantWhatsAppConfig, to: string, message:
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getTenantId()
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not available' }, { status: 503 })
+    }
 
     const body = await request.json()
     const { customerId, templateKey, vars, message, personalNote, invoiceId, sendWhatsAppDirect } = body as {
@@ -62,15 +64,27 @@ export async function POST(request: NextRequest) {
       sendWhatsAppDirect?: boolean
     }
 
-    const tenant = await db().tenants.get(tenantId)
-    const config: TenantWhatsAppConfig = tenant?.whatsappConfig || {} as TenantWhatsAppConfig
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('whatsapp_config, name')
+      .eq('id', tenantId)
+      .single()
+
+    const config: TenantWhatsAppConfig = tenant?.whatsapp_config || {} as TenantWhatsAppConfig
 
     let toNumber: string | null = null
     let customerName = 'Customer'
 
     if (customerId) {
-      const customer = await db().customers.get(customerId)
-      if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', customerId)
+        .single()
+
+      if (customerError || !customer) {
+        return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      }
       toNumber = (customer.whatsapp_number || customer.phone).replace(/\D/g, '')
       customerName = customer.name
 
@@ -79,7 +93,10 @@ export async function POST(request: NextRequest) {
           const optInText = interpolate(config.optInMessage, { name: customerName })
           await sendViaGupshup(config, customer.whatsapp_number || customer.phone, optInText)
         }
-        await db().customers.update(customerId, { opt_in: true, opt_in_at: new Date().toISOString() })
+        await supabase
+          .from('customers')
+          .update({ opt_in: true, opt_in_at: new Date().toISOString() })
+          .eq('id', customerId)
       }
     }
 
@@ -93,7 +110,6 @@ export async function POST(request: NextRequest) {
           '2': vars?.['2'] || '',
           '3': vars?.['3'] || (tenant?.name || 'Our Shop'),
           '4': vars?.['4'] || (tenant?.name || 'Our Shop'),
-          '5': vars?.['5'] || '',
         }
         finalMessage = interpolate(templateName, templateVars)
       }
@@ -113,54 +129,52 @@ export async function POST(request: NextRequest) {
         gupshupResponse = await sendViaGupshup(config, `+${toNumber}`, finalMessage)
       } catch (sendErr: any) {
         console.error('[WhatsAppSend] Gupshup send failed:', sendErr)
-        const event: WhatsAppEvent = {
-          id: `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          tenantId,
-          invoiceId: invoiceId || undefined,
-          customerId: customerId || undefined,
+        await supabase.from('whatsapp_events').insert({
+          tenant_id: tenantId,
+          invoice_id: invoiceId || null,
+          customer_id: customerId || null,
           phone: `+${toNumber}`,
           status: 'failed',
-          messageType: templateKey || 'text',
-          occurredAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          syncStatus: 'failed',
+          message_type: templateKey || 'text',
+          occurred_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          sync_status: 'failed',
           error: sendErr.message,
-        }
-        await db().whatsappEvents.add(event)
-        return NextResponse.json({ error: sendErr.message, event }, { status: 502 })
+        })
+        return NextResponse.json({ error: sendErr.message }, { status: 502 })
       }
     } else {
       console.log('[WhatsAppSend] No Gupshup config — simulating send:', { to: toNumber, message: finalMessage })
     }
 
-    const event: WhatsAppEvent = {
-      id: gupshupResponse?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      tenantId,
-      invoiceId: invoiceId || undefined,
-      customerId: customerId || undefined,
+    const eventId = gupshupResponse?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    await supabase.from('whatsapp_events').insert({
+      id: eventId,
+      tenant_id: tenantId,
+      invoice_id: invoiceId || null,
+      customer_id: customerId || null,
       phone: `+${toNumber}`,
       status: gupshupResponse ? 'queued' : 'sent',
-      messageType: templateKey || 'text',
-      occurredAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      syncStatus: gupshupResponse ? 'pending' : 'synced',
-    }
-    await db().whatsappEvents.add(event)
+      message_type: templateKey || 'text',
+      occurred_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      sync_status: gupshupResponse ? 'pending' : 'synced',
+    })
 
     if (invoiceId) {
-      const invoice = await db().invoices.get(invoiceId)
-      if (invoice) {
-        await db().invoices.update(invoiceId, {
-          lastWhatsAppStatus: event.status,
-          lastWhatsAppAt: event.occurredAt,
-          syncStatus: 'pending',
+      await supabase
+        .from('invoices')
+        .update({
+          last_whatsapp_status: gupshupResponse ? 'queued' : 'sent',
+          last_whatsapp_at: new Date().toISOString(),
+          sync_status: 'pending',
         })
-      }
+        .eq('id', invoiceId)
     }
 
     return NextResponse.json({
       success: true,
-      event,
+      event: { id: eventId, status: gupshupResponse ? 'queued' : 'sent' },
       message: finalMessage,
       simulated: !gupshupResponse,
     })

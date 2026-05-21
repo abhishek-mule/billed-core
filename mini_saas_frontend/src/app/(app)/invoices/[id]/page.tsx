@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline";
+import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
 
 const statusStyle: Record<string, string> = {
   synced: "bg-green-100 text-green-700",
@@ -27,20 +29,25 @@ export default function InvoiceDetailPage() {
   const [personalNote, setPersonalNote] = useState('');
   const [genLinkLoading, setGenLinkLoading] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
+  const [recoveryTimeline, setRecoveryTimeline] = useState<any[]>([]);
+  const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
   const id = params.id as string;
 
   useEffect(() => {
     loadInvoice();
+    loadRecoveryData();
   }, [id]);
+
+  const getCookie = (name: string) => {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+    return match ? match[2] : null
+  }
 
   const loadInvoice = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
@@ -57,6 +64,24 @@ export default function InvoiceDetailPage() {
       console.error("Failed to load invoice:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRecoveryData = async () => {
+    try {
+      setTimelineLoading(true);
+      const res = await fetch(`/api/recovery/timeline?invoiceId=${id}`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecoveryTimeline(data.events || []);
+        setRecoveryAttribution(data.attribution);
+      }
+    } catch (error) {
+      console.error("Failed to load recovery data:", error);
+    } finally {
+      setTimelineLoading(false);
     }
   };
 
@@ -87,6 +112,7 @@ export default function InvoiceDetailPage() {
       setWaSuccess(true)
       setShowWAModal(false)
       setPersonalNote('')
+      loadRecoveryData()
       setTimeout(() => setWaSuccess(false), 3000)
     } catch (err: any) {
       setWaError(err.message)
@@ -165,6 +191,13 @@ export default function InvoiceDetailPage() {
                 {paid ? "PAID" : "UNPAID"}
               </span>
               <span className="text-xs text-muted-foreground capitalize">· {invoice.status}</span>
+              {paid && recoveryAttribution?.attributed && (
+                <RecoveryBadge
+                  recoveredAmount={total}
+                  attributionType={recoveryAttribution.attributionType}
+                  confidenceScore={recoveryAttribution.confidenceScore}
+                />
+              )}
             </div>
           </div>
           <div className="text-right text-xs text-muted-foreground hidden sm:block">
@@ -310,6 +343,18 @@ export default function InvoiceDetailPage() {
             <Row label="Total" value={formatINR(total)} bold />
           </div>
         </div>
+      )}
+
+      {/* Recovery Timeline */}
+      {timelineLoading ? (
+        <div className="rounded-2xl border border-border bg-card p-5 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <RecoveryTimeline
+          events={recoveryTimeline}
+          recoveredAmount={paid && recoveryAttribution?.attributed ? total : 0}
+        />
       )}
 
       <div className="text-center text-[11px] text-muted-foreground pt-4">

@@ -5,6 +5,26 @@ import { useRouter } from "next/navigation";
 import { Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut, Printer, Send, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { db } from "@/lib/billzo/db";
+import { getTenantId } from "@/lib/billzo/tenant";
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+function setCookie(name: string, value: string, days = 365) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
+}
+
+function clearAllCookies() {
+  const cookies = ['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id', 'bz_prefs']
+  cookies.forEach(name => {
+    document.cookie = `${name}=; Max-Age=0; path=/`
+    document.cookie = `${name}=; Max-Age=0; path=/; domain=${window.location.hostname}`
+  })
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -22,13 +42,9 @@ export default function SettingsPage() {
 
   const loadData = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
-      const tenantId = getCookie('bz_tenant');
-      if (!tenantId) {
+      const tenantId = getTenantId();
+      const userId = getCookie('bz_user_id');
+      if (!tenantId || !userId) {
         router.push("/auth");
         return;
       }
@@ -36,12 +52,16 @@ export default function SettingsPage() {
       const data = await db().tenants.get(tenantId);
       setTenant(data);
 
-      const savedPrefs = getCookie('bz_prefs') || null;
+      const savedPrefs = getCookie('bz_prefs');
       if (savedPrefs) {
-        setPrefs(JSON.parse(savedPrefs));
+        try {
+          setPrefs(JSON.parse(savedPrefs));
+        } catch {
+          // ignore parse errors
+        }
       }
     } catch (error) {
-      console.error("Failed to load data:", error);
+      console.error("Failed to load settings:", error);
     } finally {
       setLoading(false);
     }
@@ -50,7 +70,13 @@ export default function SettingsPage() {
   const updatePref = (key: string, value: any) => {
     const newPrefs = { ...prefs, [key]: value };
     setPrefs(newPrefs);
-    document.cookie = `bz_prefs=${encodeURIComponent(JSON.stringify(newPrefs))}; Path=/; Max-Age=${365*24*3600}; SameSite=Lax`;
+    setCookie('bz_prefs', JSON.stringify(newPrefs));
+  };
+
+  const handleSignOut = () => {
+    clearAllCookies();
+    localStorage.clear();
+    router.push("/auth");
   };
 
   const actionOpts: { key: string; label: string }[] = [
@@ -77,11 +103,11 @@ export default function SettingsPage() {
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-2xl mx-auto space-y-6">
       <div className="rounded-2xl border border-border bg-card p-5 flex items-center gap-4">
         <div className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xl font-bold">
-          {tenant?.name?.charAt(0) || "R"}
+          {tenant?.name?.charAt(0) || "M"}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold">{tenant?.name || "My Shop"}</div>
-          <div className="text-xs text-muted-foreground">{tenant?.phone || "+91 98765 43210"} · Pro plan</div>
+          <div className="text-xs text-muted-foreground">{tenant?.phone || "+91 98765 43210"} · {tenant?.plan || "Starter"} plan</div>
         </div>
         <span className="rounded-full bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1">Active</span>
       </div>
@@ -159,49 +185,52 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {[
-        {
-          title: "Business",
-          items: [
-            { icon: Store, label: "Profile", desc: "Shop name, address, logo" },
-            { icon: Receipt, label: "GST", desc: "GSTIN, invoice format, HSN" },
-            { icon: MessageCircle, label: "WhatsApp", desc: "Sender number, templates" },
-          ],
-        },
-        {
-          title: "Account",
-          items: [
-            { icon: Users, label: "Users & roles", desc: "Manage staff access" },
-            { icon: Shield, label: "Security", desc: "PIN, 2FA, session devices" },
-          ],
-        },
-      ].map((g) => (
-        <div key={g.title}>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{g.title}</div>
-          <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-            {g.items.map(({ icon: Icon, label, desc }) => (
-              <Link href="/settings/whatsapp" className="w-full p-4 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-green-100 text-green-600">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold">{label}</div>
-                  <div className="text-xs text-muted-foreground">{desc}</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
-            ))}
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Business</div>
+        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+          <Link href="/settings/whatsapp" className="w-full p-4 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-green-100 text-green-600">
+              <MessageCircle className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">WhatsApp</div>
+              <div className="text-xs text-muted-foreground">API key, templates, auto-send</div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Account</div>
+        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+          <div className="w-full p-4 flex items-center gap-3 text-left opacity-50 cursor-not-allowed">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-400">
+              <Users className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">Users & roles</div>
+              <div className="text-xs text-muted-foreground">Coming soon</div>
+            </div>
+          </div>
+          <div className="w-full p-4 flex items-center gap-3 text-left opacity-50 cursor-not-allowed">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-400">
+              <Shield className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">Security</div>
+              <div className="text-xs text-muted-foreground">Coming soon</div>
+            </div>
           </div>
         </div>
-      ))}
+      </div>
 
-      <Link
-        href="/auth"
-        onClick={() => localStorage.clear()}
+      <button
+        onClick={handleSignOut}
         className="w-full rounded-2xl border border-red-300 bg-red-50 p-4 flex items-center justify-center gap-2 text-red-600 font-medium hover:bg-red-100 transition-colors"
       >
         <LogOut className="h-4 w-4" /> Sign out
-      </Link>
+      </button>
     </div>
   );
 }

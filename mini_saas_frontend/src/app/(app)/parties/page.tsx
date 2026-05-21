@@ -16,28 +16,48 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true);
   const [usageLimits, setUsageLimits] = useState<any>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [sendingWA, setSendingWA] = useState<string | null>(null);
+  const [waSuccess, setWaSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadCustomers();
   }, []);
 
+  const getCookie = (name: string) => {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+    return match ? match[2] : null
+  }
+
   const loadCustomers = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/auth");
         return;
       }
-      const [data, usage] = await Promise.all([
+      const [data, invoices, usage] = await Promise.all([
         db().customers.where("tenantId").equals(tenantId).toArray(),
+        db().invoices.where("tenantId").equals(tenantId).toArray(),
         getUsageLimits(tenantId),
       ]);
-      setCustomers(data);
+
+      const customerMap = new Map<string, number>();
+      for (const inv of invoices) {
+        if (inv.customerId) {
+          const pending = (inv.total || 0) - (inv.paidAmount || 0);
+          if (inv.status !== "paid") {
+            customerMap.set(inv.customerId, (customerMap.get(inv.customerId) || 0) + pending);
+          }
+        }
+      }
+
+      const customersWithPending = data.map((c) => ({
+        ...c,
+        pending: customerMap.get(c.id) || 0,
+      }));
+
+      setCustomers(customersWithPending);
       setUsageLimits(usage);
     } catch (error) {
       console.error("Failed to load customers:", error);
@@ -47,7 +67,46 @@ export default function PartiesPage() {
   };
 
   const filtered = customers.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
-  const totalPending = 0;
+  const totalPending = customers.reduce((s, p) => s + (p.pending || 0), 0);
+
+  const sendReminder = async (customer: any) => {
+    const tenantId = getCookie('bz_tenant')
+    if (!tenantId) return;
+
+    const limits = await getUsageLimits(tenantId);
+    if (!limits.canSendReminder) {
+      setShowPaywall(true);
+      return;
+    }
+
+    setSendingWA(customer.id);
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          customerId: customer.id,
+          templateKey: 'udharGentle',
+          vars: {
+            '1': customer.name,
+            '2': formatINR(customer.pending),
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      await incrementReminderCount(tenantId);
+      setWaSuccess(customer.id);
+      setTimeout(() => setWaSuccess(null), 3000);
+      const newLimits = await getUsageLimits(tenantId);
+      setUsageLimits(newLimits);
+    } catch (err: any) {
+      console.error('Reminder failed:', err);
+    } finally {
+      setSendingWA(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -106,17 +165,23 @@ export default function PartiesPage() {
         <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
           {filtered.map((p) => (
             <div key={p.id} className="p-4 flex items-center gap-3">
-              <div className={`grid h-11 w-11 place-items-center rounded-full font-semibold text-sm ${
-                p.pending > 0 ? "bg-yellow-100 text-yellow-700" : "bg-secondary text-muted-foreground"
-              }`}>
+              <button
+                onClick={() => router.push(`/parties/${p.id}`)}
+                className={`grid h-11 w-11 place-items-center rounded-full font-semibold text-sm shrink-0 ${
+                  p.pending > 0 ? "bg-yellow-100 text-yellow-700" : "bg-secondary text-muted-foreground"
+                }`}
+              >
                 {p.name?.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
+              </button>
+              <button
+                onClick={() => router.push(`/parties/${p.id}`)}
+                className="flex-1 min-w-0 text-left"
+              >
                 <div className="font-semibold text-sm truncate">{p.name}</div>
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <Phone className="h-3 w-3" /> {p.phone}
                 </div>
-              </div>
+              </button>
               <div className="text-right">
                 {p.pending > 0 ? (
                   <>
@@ -129,29 +194,18 @@ export default function PartiesPage() {
               </div>
               {p.pending > 0 && (
                 <button
-                  className="px-3 py-1.5 border border-input rounded-lg font-medium text-sm"
-                  onClick={async () => {
-                    const getCookie = (name: string) => {
-                      if (typeof document === 'undefined') return null
-                      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-                      return match ? match[2] : null
-                    }
-                    const tenantId = getCookie('bz_tenant')
-                    if (!tenantId) return;
-
-                    const limits = await getUsageLimits(tenantId);
-                    if (!limits.canSendReminder) {
-                      setShowPaywall(true);
-                      return;
-                    }
-
-                    console.log(`Reminder sent to ${p.name} on WhatsApp`);
-                    await incrementReminderCount(tenantId);
-                    const newLimits = await getUsageLimits(tenantId);
-                    setUsageLimits(newLimits);
-                  }}
+                  className="px-3 py-1.5 border border-input rounded-lg font-medium text-sm flex items-center gap-1.5 disabled:opacity-50"
+                  disabled={sendingWA === p.id}
+                  onClick={() => sendReminder(p)}
                 >
-                  <MessageCircle className="h-3.5 w-3.5" /> Remind
+                  {sendingWA === p.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : waSuccess === p.id ? (
+                    <span className="text-green-600">Sent ✓</span>
+                  ) : (
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  )}
+                  {sendingWA === p.id ? "" : waSuccess === p.id ? "" : "Remind"}
                 </button>
               )}
             </div>
