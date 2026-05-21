@@ -102,7 +102,7 @@ async function tryRefresh(request: NextRequest, refreshToken: string): Promise<N
       path: '/',
     })
 
-    const newPayload = verifyAccessToken(data.accessToken)
+    const newPayload = await verifyAccessTokenEdge(data.accessToken)
     if (newPayload) {
       newResponse.headers.set('x-user-id', newPayload.userId)
       newResponse.headers.set('x-tenant-id', newPayload.tenantId || '')
