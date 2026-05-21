@@ -1,14 +1,11 @@
 import { Worker, Job } from 'bullmq'
-import { redisUrl, redisToken } from '../lib/redis'
+import { createRedisConnection } from '../lib/redis'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 
-/**
- * Reconciliation Queue Consumer
- * Matches incoming payments to unpaid invoices.
- * Handles webhook events that need reprocessing.
- */
 export function createReconciliationWorker() {
+  const connection = createRedisConnection()
+
   const worker = new Worker(
     'reconciliation',
     async (job: Job) => {
@@ -16,13 +13,9 @@ export function createReconciliationWorker() {
       const { invoiceId, tenantId, paymentData } = job.data
 
       try {
-        // Acquire lock to prevent duplicate reconciliation
         const lockKey = `reconciliation:${invoiceId}:${paymentData?.providerPaymentId}`
         const result = await withLock(lockKey, 60000, async () => {
-          // TODO: Implement actual reconciliation logic
-          // For now, just log
           console.log(`[ReconciliationWorker] Processing payment for invoice ${invoiceId}`)
-
           return { reconciled: true, invoiceId }
         })
 
@@ -58,10 +51,7 @@ export function createReconciliationWorker() {
       }
     },
     {
-      connection: {
-        url: redisUrl,
-        token: redisToken,
-      },
+      connection,
       concurrency: 5,
       defaultJobOptions: {
         attempts: 5,

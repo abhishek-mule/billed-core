@@ -1,11 +1,4 @@
-# BillZo Render Configuration
-# Deploy: Connect GitHub repo → Render auto-detects this file
-# Docs: https://render.com/docs/blueprint-spec
-
 services:
-  # ============================================================
-  # Background Worker — BullMQ consumers for recovery automation
-  # ============================================================
   - type: worker
     name: billzo-worker
     env: node
@@ -13,15 +6,13 @@ services:
     plan: starter
     branch: master
     rootDir: worker
-    buildCommand: npm install
-    startCommand: npx ts-node index.ts
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: UPSTASH_REDIS_REST_URL
-        sync: false
-      - key: UPSTASH_REDIS_REST_TOKEN
+      - key: UPSTASH_REDIS_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false

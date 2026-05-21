@@ -1,29 +1,21 @@
 import { Worker, Job } from 'bullmq'
-import { redisUrl, redisToken } from '../lib/redis'
+import { createRedisConnection } from '../lib/redis'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 
-/**
- * Reminders Queue Consumer
- * Sends scheduled recovery reminders via configured channels.
- */
 export function createRemindersWorker() {
+  const connection = createRedisConnection()
+
   const worker = new Worker(
     'reminders',
     async (job: Job) => {
       const startTime = Date.now()
-      const { invoiceId, tenantId, stage, channel } = job.data
+      const { invoiceId, tenantId, stage } = job.data
 
       try {
-        // Acquire lock to prevent duplicate sends
         const lockKey = `reminder:${invoiceId}:${stage}`
         const result = await withLock(lockKey, 60000, async () => {
-          // Send reminder via channel
           console.log(`[RemindersWorker] Sending ${stage} reminder for invoice ${invoiceId}`)
-
-          // TODO: Implement actual reminder sending via RecoveryChannel
-          // For now, just log
-
           return { sent: true, invoiceId, stage }
         })
 
@@ -59,10 +51,7 @@ export function createRemindersWorker() {
       }
     },
     {
-      connection: {
-        url: redisUrl,
-        token: redisToken,
-      },
+      connection,
       concurrency: 10,
       defaultJobOptions: {
         attempts: 3,

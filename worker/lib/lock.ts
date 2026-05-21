@@ -1,32 +1,27 @@
-import { redis } from './redis'
+import { createRedisConnection } from './redis'
 
-/**
- * Acquire a distributed lock using Redis.
- * Returns true if lock acquired, false otherwise.
- */
 export async function acquireLock(
   key: string,
   ttlMs: number = 30000
 ): Promise<boolean> {
-  const result = await redis.set(`lock:${key}`, '1', {
-    nx: true,
-    ex: Math.floor(ttlMs / 1000),
-  })
-
-  return result === 'OK'
+  const redis = createRedisConnection()
+  try {
+    const result = await redis.set(`lock:${key}`, '1', 'PX', ttlMs, 'NX')
+    return result === 'OK'
+  } finally {
+    await redis.quit()
+  }
 }
 
-/**
- * Release a distributed lock.
- */
 export async function releaseLock(key: string): Promise<void> {
-  await redis.del(`lock:${key}`)
+  const redis = createRedisConnection()
+  try {
+    await redis.del(`lock:${key}`)
+  } finally {
+    await redis.quit()
+  }
 }
 
-/**
- * Execute a function with a distributed lock.
- * If lock cannot be acquired, returns null.
- */
 export async function withLock<T>(
   key: string,
   ttlMs: number,

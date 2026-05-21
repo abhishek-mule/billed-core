@@ -1,15 +1,12 @@
 import { Worker, Job } from 'bullmq'
-import { redis, redisUrl, redisToken } from '../lib/redis'
-import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed } from '../../src/lib/billzo/outbox'
+import { createRedisConnection } from '../lib/redis'
+import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed } from '../src/lib/billzo/outbox'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 
-/**
- * Outbox Queue Consumer
- * Polls the Supabase outbox table and processes pending events.
- * Each event type is dispatched to its appropriate handler.
- */
 export function createOutboxWorker() {
+  const connection = createRedisConnection()
+
   const worker = new Worker(
     'outbox',
     async (job: Job) => {
@@ -27,17 +24,12 @@ export function createOutboxWorker() {
         for (const event of events) {
           const eventStartTime = Date.now()
 
-          // Acquire lock for this event
           const lockKey = `outbox:${event.id}`
           const result = await withLock(lockKey, 30000, async () => {
-            // Mark as processing
             await markEventProcessing(event.id)
 
             try {
-              // Process event based on type
               await processOutboxEvent(event)
-
-              // Mark as completed
               await markEventCompleted(event.id)
 
               const duration = Date.now() - eventStartTime
@@ -68,8 +60,7 @@ export function createOutboxWorker() {
                 message: `Failed to process event: ${event.type}`,
               })
 
-              // Mark as failed with retry
-              const retryResult = await markEventFailed(event.id, event.attempts + 1)
+              await markEventFailed(event.id, event.attempts + 1)
               return false
             }
           })
@@ -93,10 +84,7 @@ export function createOutboxWorker() {
       }
     },
     {
-      connection: {
-        url: redisUrl,
-        token: redisToken,
-      },
+      connection,
       concurrency: 5,
       defaultJobOptions: {
         attempts: 3,
@@ -121,24 +109,18 @@ export function createOutboxWorker() {
   return worker
 }
 
-/**
- * Process a single outbox event based on its type.
- */
 async function processOutboxEvent(event: any): Promise<void> {
   switch (event.type) {
     case 'payment.completed':
     case 'payment.reconciled':
-      // Trigger recovery attribution
       await handlePaymentEvent(event)
       break
 
     case 'recovery.reminder.sent':
-      // Track reminder delivery
       await handleReminderEvent(event)
       break
 
     case 'invoice.overdue':
-      // Schedule next recovery stage
       await handleOverdueEvent(event)
       break
 
@@ -148,16 +130,13 @@ async function processOutboxEvent(event: any): Promise<void> {
 }
 
 async function handlePaymentEvent(event: any): Promise<void> {
-  // Import dynamically to avoid circular dependencies
-  const { attributeRecovery } = await import('../../src/lib/billzo/attribution')
+  const { attributeRecovery } = await import('../src/lib/billzo/attribution')
 
   const invoiceId = event.entityId
   const tenantId = event.tenantId
-  const amount = event.payload?.amount || 0
 
   if (!invoiceId || !tenantId) return
 
-  // Attribute recovery
   await attributeRecovery({
     invoiceId,
     tenantId,
@@ -167,11 +146,9 @@ async function handlePaymentEvent(event: any): Promise<void> {
 }
 
 async function handleReminderEvent(event: any): Promise<void> {
-  // Track reminder delivery status
   console.log(`[OutboxWorker] Reminder sent: ${event.entityId}`)
 }
 
 async function handleOverdueEvent(event: any): Promise<void> {
-  // Schedule next recovery stage
   console.log(`[OutboxWorker] Invoice overdue: ${event.entityId}`)
 }
