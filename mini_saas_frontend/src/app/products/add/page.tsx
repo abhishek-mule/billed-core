@@ -3,6 +3,13 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { db, uuid } from "@/lib/billzo/db";
+
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
 
 interface ProductFormData {
   name: string;
@@ -38,10 +45,8 @@ export default function AddProductPage() {
     const params = new URLSearchParams(window.location.search)
     const barcode = params.get('barcode') || ''
     const name = params.get('name') || ''
-    const brand = params.get('brand') || ''
-    const category = params.get('category') || ''
     const gstRate = params.get('gstRate') || '18'
-    const stock = params.get('stock') || '10'
+    const stock = params.get('stock') || '0'
     const salePrice = params.get('salePrice') || ''
     const purchasePrice = params.get('purchasePrice') || ''
     const unit = params.get('unit') || 'pcs'
@@ -71,20 +76,19 @@ export default function AddProductPage() {
     setError("");
 
     try {
-      function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
-    const tenantId = getCookie('bz_tenant');
+      const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
         return;
       }
 
-      const payload = {
+      const now = new Date().toISOString();
+      const productId = uuid();
+
+      await db().products.add({
+        id: productId,
         tenantId,
-        name: formData.name,
+        name: formData.name.trim(),
         barcode: formData.barcode || undefined,
         hsn: formData.hsn || undefined,
         gstRate: parseFloat(formData.gstRate) || 0,
@@ -92,37 +96,18 @@ export default function AddProductPage() {
         lowStockAt: parseInt(formData.lowStockAt) || 10,
         salePrice: parseFloat(formData.salePrice) || 0,
         purchasePrice: parseFloat(formData.purchasePrice) || 0,
-        unit: formData.unit,
-      };
-
-      const response = await fetch("/api/products", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create product");
-      }
-
-      const result = await response.json();
-      console.log("Product created:", result);
-
-      // Also save to local Dexie DB for offline
-      const { db } = await import("@/lib/billzo/db");
-      await db().products.add({
-        ...payload,
-        id: result.product?.id || result.id || `local-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        unit: formData.unit || 'pcs',
+        createdAt: now,
+        updatedAt: now,
       });
 
       router.push("/products");
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      if (err.name === 'ConstraintError') {
+        setError("A product with this barcode already exists.");
+      } else {
+        setError(err.message || "Failed to create product");
+      }
       console.error("Failed to create product:", err);
     } finally {
       setLoading(false);

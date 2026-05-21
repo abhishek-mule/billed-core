@@ -1,61 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { db, uuid } from '@/lib/billzo/db'
+import { supabaseTenants } from '@/lib/billzo/supabase'
 import type { Product } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(request: NextRequest): string | null {
+function getTenantId(): string | null {
   const cookieStore = cookies()
   return cookieStore.get('bz_tenant')?.value || null
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const tenantId = getTenantId(request)
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const body = await request.json()
-    const { name, barcode, hsn, gstRate, stock, lowStockAt, salePrice, purchasePrice, unit } = body
-
-    if (!name || !name.trim()) {
-      return NextResponse.json({ error: 'Product name is required' }, { status: 400 })
-    }
-
-    const now = new Date().toISOString()
-    const product: Product = {
-      id: uuid(),
-      tenantId,
-      name: name.trim(),
-      barcode: barcode || undefined,
-      hsn: hsn || undefined,
-      gstRate: gstRate ?? 0,
-      stock: stock ?? 0,
-      lowStockAt: lowStockAt ?? 10,
-      salePrice: salePrice ?? 0,
-      purchasePrice: purchasePrice ?? 0,
-      unit: unit || 'pcs',
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    await db().products.add(product)
-    return NextResponse.json({ success: true, product })
-  } catch (error) {
-    console.error('Error creating product:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getTenantId()
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const products = await db().products.where('tenantId').equals(tenantId).toArray()
+    const tenantsTable = await supabaseTenants()
+    if (!tenantsTable) {
+      return NextResponse.json({ error: 'Database not available' }, { status: 503 })
+    }
+
+    const { data, error } = await tenantsTable
+      .select('products')
+      .eq('id', tenantId)
+      .single()
+
+    if (error) {
+      console.error('[Products/GET] Supabase error:', error.message)
+      return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+    }
+
+    const products: Product[] = data?.products || []
     return NextResponse.json({ success: true, products })
-  } catch (error) {
-    console.error('Error fetching products:', error)
+  } catch (error: any) {
+    console.error('[Products/GET] Error:', error?.message || error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
