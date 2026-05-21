@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, AlertTriangle, Package, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { getTenantId } from "@/lib/billzo/tenant";
+import { useLiveQueryState } from "@/lib/billzo/use-live-query";
+import { useSyncHealth } from "@/lib/billzo/sync-health";
+import { retryProductSync } from "@/lib/billzo/products-service";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -13,33 +17,22 @@ const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "curren
 export default function ProductsPage() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
+  const tenantId = getTenantId();
 
-  const loadProducts = async () => {
-    try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
-      const tenantId = getCookie('bz_tenant');
-      if (!tenantId) {
-        router.push("/auth");
-        return;
-      }
-      const data = await db().products.where("tenantId").equals(tenantId).toArray();
-      setProducts(data);
-    } catch (error) {
-      console.error("Failed to load products:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: products, loading: productsLoading, error: productsError } = useLiveQueryState<any[]>(
+    async () => {
+      if (!tenantId) return [];
+      return db().products.where("tenantId").equals(tenantId).toArray();
+    },
+    [tenantId],
+    [],
+  );
+
+  const { data: syncHealth } = useSyncHealth(tenantId);
+
+  const loading = productsLoading;
+  const loadError = productsError;
 
   const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
   const lowStock = products.filter((p) => (p.stock || 0) < (p.lowStockAt || 20)).length;
@@ -89,6 +82,25 @@ export default function ProductsPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-4">
+      {loadError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+      {(syncHealth.failedCount > 0 || syncHealth.conflictCount > 0) && (
+        <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex items-center justify-between gap-3">
+          <span>
+            {syncHealth.failedCount + syncHealth.conflictCount} product sync operation{syncHealth.failedCount + syncHealth.conflictCount > 1 ? "s" : ""} failed. Data may be stale.
+          </span>
+          <button
+            onClick={() => retryProductSync()}
+            className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 font-medium text-yellow-900"
+          >
+            Retry sync
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Total products" value={products.length.toString()} />
         <Stat label="Low stock" value={lowStock.toString()} warn={lowStock > 0} />

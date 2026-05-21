@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
-import { db, uuid } from "@/lib/billzo/db";
+import { getTenantId } from "@/lib/billzo/tenant";
+import { createProduct } from "@/lib/billzo/products-service";
 
 function getCookie(name: string) {
   if (typeof document === 'undefined') return null
@@ -76,19 +77,15 @@ export default function AddProductPage() {
     setError("");
 
     try {
-      const tenantId = getCookie('bz_tenant');
+      const tenantId = getTenantId();
       if (!tenantId) {
         router.push("/auth");
         return;
       }
 
-      const now = new Date().toISOString();
-      const productId = uuid();
-
-      await db().products.add({
-        id: productId,
+      const result = await createProduct({
         tenantId,
-        name: formData.name.trim(),
+        name: formData.name,
         barcode: formData.barcode || undefined,
         hsn: formData.hsn || undefined,
         gstRate: parseFloat(formData.gstRate) || 0,
@@ -96,18 +93,17 @@ export default function AddProductPage() {
         lowStockAt: parseInt(formData.lowStockAt) || 10,
         salePrice: parseFloat(formData.salePrice) || 0,
         purchasePrice: parseFloat(formData.purchasePrice) || 0,
-        unit: formData.unit || 'pcs',
-        createdAt: now,
-        updatedAt: now,
+        unit: formData.unit,
       });
+
+      if (!result.success) {
+        setError(result.error || "Failed to create product");
+        return;
+      }
 
       router.push("/products");
     } catch (err: any) {
-      if (err.name === 'ConstraintError') {
-        setError("A product with this barcode already exists.");
-      } else {
-        setError(err.message || "Failed to create product");
-      }
+      setError(err.message || "Something went wrong");
       console.error("Failed to create product:", err);
     } finally {
       setLoading(false);

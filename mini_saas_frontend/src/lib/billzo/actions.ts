@@ -226,18 +226,6 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
     pdfUrl: `/invoice/${invoiceId}`,
     version: 1,
   }
-  const stockAfter = Math.max(0, product.stock - qty)
-  const movement: InventoryMovement = {
-    id: uuid(),
-    tenantId: session.tenantId,
-    productId: product.id,
-    sourceType: 'invoice',
-    sourceId: invoice.id,
-    qtyDelta: -qty,
-    stockAfter,
-    createdAt: current,
-  }
-
   try {
     const tenantId = getTenantIdLocal()
     const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
@@ -246,6 +234,26 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
       'rw',
       [db().invoices, db().invoiceItems, db().products, db().customers, db().inventoryMovements, db().tenants, db().queue, db().activity],
       async () => {
+        const latestProduct = await db().products.get(product.id)
+        if (!latestProduct) {
+          throw new Error('Product no longer exists.')
+        }
+        if (latestProduct.stock < qty) {
+          throw new Error(`Not enough stock for ${latestProduct.name}. Only ${latestProduct.stock} left.`)
+        }
+
+        const stockAfter = latestProduct.stock - qty
+        const movement: InventoryMovement = {
+          id: uuid(),
+          tenantId: session.tenantId,
+          productId: product.id,
+          sourceType: 'invoice',
+          sourceId: invoice.id,
+          qtyDelta: -qty,
+          stockAfter,
+          createdAt: current,
+        }
+
         await db().invoices.add(invoice)
         await db().invoiceItems.add(item)
         await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
@@ -259,7 +267,7 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
         }
         await enqueue('invoice', invoice.id, 'upsert', invoice)
         await enqueue('invoice_item', item.id, 'upsert', item)
-        await enqueue('inventory_movement', movement.id, 'upsert', movement)
+        await enqueue('product', product.id, 'upsert', { ...latestProduct, stock: stockAfter, updatedAt: current })
         await log(`Invoice for ${customer.name}`, invoice.total, 'Recover')
       }
     )
@@ -477,7 +485,7 @@ export async function handlePOSInvoice(
   const total = cart.reduce((sum, item) => sum + item.salePrice * item.qty, 0)
   const paidAmount = method === 'udhar' ? 0 : total
 
-  const invoice: Invoice = {
+  const invoice: Invoice & { paymentMode?: string } = {
     id: invoiceId,
     tenantId: session.tenantId,
     customerId: '',
@@ -496,6 +504,7 @@ export async function handlePOSInvoice(
     reminderCount: 0,
     pdfUrl: `/invoice/${invoiceId}`,
     version: 1,
+    paymentMode: method,
   }
 
   const items: InvoiceItem[] = cart.map((item) => ({
@@ -511,38 +520,63 @@ export async function handlePOSInvoice(
     createdAt: current,
     updatedAt: current,
   }))
-
-  const movements: InventoryMovement[] = cart.map((item) => ({
-    id: uuid(),
-    tenantId: session.tenantId,
-    productId: item.id,
-    sourceType: 'invoice',
-    sourceId: invoiceId,
-    qtyDelta: -item.qty,
-    stockAfter: Math.max(0, item.stock - item.qty),
-    createdAt: current,
-  }))
+  const payment: Payment | null = method === 'udhar'
+    ? null
+    : {
+        id: uuid(),
+        tenantId: session.tenantId,
+        invoiceId,
+        provider: method,
+        amount: total,
+        status: 'success',
+        createdAt: current,
+        updatedAt: current,
+        syncStatus: 'pending',
+      }
 
   try {
     const tenantId = getTenantIdLocal()
     const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
+    const appliedMovements: InventoryMovement[] = []
+    const updatedProducts: Product[] = []
 
     await db().transaction(
       'rw',
-      [db().invoices, db().invoiceItems, db().products, db().inventoryMovements, db().tenants, db().queue, db().activity],
+      [db().invoices, db().invoiceItems, db().products, db().inventoryMovements, db().payments, db().tenants, db().queue, db().activity],
       async () => {
         await db().invoices.add(invoice)
 
         for (const item of items) {
           await db().invoiceItems.add(item)
         }
+        if (payment) {
+          await db().payments.add(payment)
+        }
 
-        for (const m of movements) {
-          const product = cart.find((c) => c.id === m.productId)
-          if (product) {
-            await db().products.update(m.productId, { stock: m.stockAfter, updatedAt: current })
+        for (const cartItem of cart) {
+          const latestProduct = await db().products.get(cartItem.id)
+          if (!latestProduct) {
+            throw new Error(`${cartItem.name} is no longer available.`)
           }
-          await db().inventoryMovements.add(m)
+          if (latestProduct.stock < cartItem.qty) {
+            throw new Error(`Not enough stock for ${latestProduct.name}. Only ${latestProduct.stock} left.`)
+          }
+
+          const movement: InventoryMovement = {
+            id: uuid(),
+            tenantId: session.tenantId,
+            productId: cartItem.id,
+            sourceType: 'invoice',
+            sourceId: invoiceId,
+            qtyDelta: -cartItem.qty,
+            stockAfter: latestProduct.stock - cartItem.qty,
+            createdAt: current,
+          }
+
+          appliedMovements.push(movement)
+          updatedProducts.push({ ...latestProduct, stock: movement.stockAfter, updatedAt: current })
+          await db().products.update(movement.productId, { stock: movement.stockAfter, updatedAt: current })
+          await db().inventoryMovements.add(movement)
         }
 
         if (tenantId && currentTenant) {
@@ -556,8 +590,11 @@ export async function handlePOSInvoice(
         for (const item of items) {
           await enqueue('invoice_item', item.id, 'upsert', item)
         }
-        for (const m of movements) {
-          await enqueue('inventory_movement', m.id, 'upsert', m)
+        for (const updatedProduct of updatedProducts) {
+          await enqueue('product', updatedProduct.id, 'upsert', updatedProduct)
+        }
+        if (payment) {
+          await enqueue('payment', payment.id, 'upsert', payment)
         }
         await log(`POS sale: ${customerName || 'Walk-in'}`, total, method.toUpperCase())
       }
@@ -582,7 +619,7 @@ export async function handlePOSInvoice(
     }
 
     // 2. Low Stock Alerts
-    for (const m of movements) {
+    for (const m of appliedMovements) {
       const product = cart.find(c => c.id === m.productId);
       if (product && m.stockAfter <= product.lowStockAt) {
         // Push notification to merchant
@@ -651,30 +688,35 @@ export async function createPurchaseFromScan(overrides?: Partial<{ supplier: str
     createdAt: current,
     updatedAt: current,
   }
-  const stockAfter = product.stock + 1
-  const movement: InventoryMovement = {
-    id: uuid(),
-    tenantId: session.tenantId,
-    productId: product.id,
-    sourceType: 'purchase',
-    sourceId: purchase.id,
-    qtyDelta: 1,
-    stockAfter,
-    createdAt: current,
-  }
-
   try {
     await db().transaction(
       'rw',
       [db().purchases, db().invoiceItems, db().products, db().inventoryMovements, db().queue, db().activity],
       async () => {
+        const latestProduct = await db().products.get(product.id)
+        if (!latestProduct) {
+          throw new Error('Product no longer exists.')
+        }
+
+        const stockAfter = latestProduct.stock + 1
+        const movement: InventoryMovement = {
+          id: uuid(),
+          tenantId: session.tenantId,
+          productId: product.id,
+          sourceType: 'purchase',
+          sourceId: purchase.id,
+          qtyDelta: 1,
+          stockAfter,
+          createdAt: current,
+        }
+
         await db().purchases.add(purchase)
         await db().invoiceItems.add(item)
         await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
         await db().inventoryMovements.add(movement)
         await enqueue('purchase', purchase.id, 'upsert', purchase)
         await enqueue('invoice_item', item.id, 'upsert', item)
-        await enqueue('inventory_movement', movement.id, 'upsert', movement)
+        await enqueue('product', product.id, 'upsert', { ...latestProduct, stock: stockAfter, updatedAt: current })
         await log(`Purchase from ${purchase.supplier || 'Supplier'}`, purchase.amount, 'Stock updated')
       }
     )

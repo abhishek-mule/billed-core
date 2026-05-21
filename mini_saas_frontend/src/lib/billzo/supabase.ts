@@ -21,6 +21,11 @@ export async function supabaseTenants() {
   return supabase.from('tenants')
 }
 
+export async function supabaseProducts() {
+  if (!supabase) return null
+  return supabase.from('products')
+}
+
 export async function supabaseUsers() {
   if (!supabase) return null
   return supabase.from('users')

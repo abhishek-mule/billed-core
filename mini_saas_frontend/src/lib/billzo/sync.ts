@@ -30,6 +30,98 @@ function tableFor(item: QueueItem) {
   return tables[item.entity]
 }
 
+function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
+  const payload = item.payload as Record<string, any>
+
+  switch (item.entity) {
+    case 'customer':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        customer_name: payload.name,
+        phone: payload.phone,
+        email: payload.email ?? null,
+        gstin: payload.gstin ?? null,
+        billing_address: payload.address ?? null,
+        created_at: payload.createdAt,
+        updated_at: payload.updatedAt,
+      }
+    case 'product':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        item_name: payload.name,
+        barcode: payload.barcode ?? null,
+        hsn_code: payload.hsn ?? null,
+        gst_rate: payload.gstRate ?? 0,
+        stock_quantity: payload.stock ?? 0,
+        low_stock_at: payload.lowStockAt ?? 10,
+        rate: payload.salePrice ?? 0,
+        standard_rate: payload.purchasePrice ?? 0,
+        unit: payload.unit ?? null,
+        created_at: payload.createdAt,
+        updated_at: payload.updatedAt,
+      }
+    case 'invoice':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        invoice_number: payload.id,
+        customer_id: payload.customerId || null,
+        customer_name: payload.customerName,
+        customer_phone: payload.customerPhone || null,
+        subtotal: payload.total,
+        total: payload.total,
+        grand_total: payload.total,
+        payment_mode: payload.paymentMode ?? (payload.paidAmount > 0 ? 'cash' : 'udhar'),
+        payment_status: payload.status === 'paid' ? 'PAID' : payload.paidAmount > 0 ? 'PARTIAL' : 'PENDING',
+        status: payload.status?.toUpperCase?.() || 'ACTIVE',
+        due_date: payload.dueAt ? String(payload.dueAt).slice(0, 10) : null,
+        is_pos: !payload.customerId,
+        created_at: payload.createdAt,
+        updated_at: payload.updatedAt,
+        idempotency_key: `${payload.tenantId}:${payload.id}`,
+      }
+    case 'invoice_item':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        invoice_id: payload.invoiceId,
+        product_id: payload.productId ?? null,
+        item_name: payload.name,
+        quantity: payload.qty,
+        rate: payload.price,
+        gst_rate: payload.gstRate ?? 0,
+        amount: payload.lineTotal,
+        created_at: payload.createdAt,
+      }
+    case 'purchase':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        supplier_name: payload.supplier || null,
+        supplier_gstin: payload.gstin || null,
+        total: payload.amount ?? 0,
+        grand_total: payload.amount ?? 0,
+        source: payload.source ?? 'manual',
+        created_at: payload.createdAt,
+        updated_at: payload.updatedAt,
+      }
+    case 'payment':
+      return {
+        id: payload.id,
+        tenant_id: payload.tenantId,
+        invoice_id: payload.invoiceId ?? null,
+        amount: payload.amount ?? 0,
+        payment_mode: payload.provider ?? 'cash',
+        razorpay_payment_id: payload.providerPaymentId ?? null,
+        created_at: payload.createdAt,
+      }
+    default:
+      return normalizePayload(payload) as Record<string, unknown>
+  }
+}
+
 export async function syncPendingQueue() {
   if (typeof window === 'undefined') return
   if ((navigator as any).onLine === false) return
@@ -69,7 +161,7 @@ export async function syncPendingQueue() {
         continue
       }
 
-      const payload = normalizePayload(item.payload)
+      const payload = serializeQueuePayload(item)
       const { error, status } = await supabase.from(tableFor(item)).upsert(payload as Record<string, unknown>, { onConflict: 'id' })
       if (!error) {
         await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })

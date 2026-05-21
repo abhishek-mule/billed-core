@@ -4,12 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2 } from "lucide-react";
 import { db } from "@/lib/billzo/db";
+import { getTenantId } from "@/lib/billzo/tenant";
 import { getUsageLimits } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
 import { handlePOSInvoice } from "@/lib/billzo/actions";
 import { lookupBarcode, normalizeBarcode } from "@/lib/billzo/barcode-lookup";
+import { retryProductSync } from "@/lib/billzo/products-service";
+import { useSyncHealth } from "@/lib/billzo/sync-health";
+import { useLiveQueryState } from "@/lib/billzo/use-live-query";
 import { toast } from "sonner";
 
 type CartItem = {
@@ -34,9 +38,7 @@ function getCookie(name: string) {
 
 export default function POSPage() {
   const router = useRouter();
-  const [products, setProducts] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<string>("Walk-in Customer");
@@ -48,39 +50,60 @@ export default function POSPage() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
+  const [usageLoading, setUsageLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
+    const activeTenantId = getTenantId();
+    if (!activeTenantId) {
+      router.push("/auth");
+      return;
+    }
+
+    setTenantId(activeTenantId);
   }, []);
 
-  const loadData = async () => {
-    try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
-      const tenantId = getCookie('bz_tenant')
-      if (!tenantId) {
-        router.push("/auth");
-        return;
-      }
+  useEffect(() => {
+    if (!tenantId) return;
 
-      const [productData, customerData, usage] = await Promise.all([
-        db().products.where("tenantId").equals(tenantId).toArray(),
-        db().customers.where("tenantId").equals(tenantId).toArray(),
-        getUsageLimits(tenantId),
-      ]);
+    let active = true;
 
-      setProducts(productData);
-      setCustomers(customerData);
-      setUsageLimits(usage);
-    } catch (error) {
-      console.error("Failed to load data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const loadUsage = async () => {
+      setUsageLoading(true);
+      try {
+        const usage = await getUsageLimits(tenantId);
+        if (active) setUsageLimits(usage);
+      } catch (error) {
+        console.error("Failed to load usage:", error);
+      } finally {
+        if (active) setUsageLoading(false);
+      }
+    };
+
+    loadUsage();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
+
+  const { data: products, loading: productsLoading, error: productsError } = useLiveQueryState<any[]>(
+    async () => {
+      if (!tenantId) return [];
+      return db().products.where("tenantId").equals(tenantId).toArray();
+    },
+    [tenantId],
+    [],
+  );
+  const { data: customers, loading: customersLoading, error: customersError } = useLiveQueryState<any[]>(
+    async () => {
+      if (!tenantId) return [];
+      return db().customers.where("tenantId").equals(tenantId).toArray();
+    },
+    [tenantId],
+    [],
+  );
+  const { data: syncHealth } = useSyncHealth(tenantId);
+  const loading = productsLoading || customersLoading || usageLoading;
+  const loadError = productsError || customersError;
 
   const filtered = useMemo(
     () => products.filter((p) => p.name?.toLowerCase().includes(query.toLowerCase())),
@@ -138,7 +161,7 @@ export default function POSPage() {
       method,
       items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
     };
-    const newLimits = await getUsageLimits(getCookie('bz_tenant') || '');
+    const newLimits = await getUsageLimits(tenantId || getCookie('bz_tenant') || '');
     if (newLimits) setUsageLimits(newLimits);
 
     setSuccess(inv);
@@ -161,6 +184,24 @@ export default function POSPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
+      {loadError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+      {(syncHealth.failedCount > 0 || syncHealth.conflictCount > 0) && (
+        <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex items-center justify-between gap-3">
+          <span>
+            {syncHealth.failedCount + syncHealth.conflictCount} billing sync operation{syncHealth.failedCount + syncHealth.conflictCount > 1 ? "s" : ""} failed. Inventory may be stale until retry succeeds.
+          </span>
+          <button
+            onClick={() => retryProductSync()}
+            className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 font-medium text-yellow-900"
+          >
+            Retry sync
+          </button>
+        </div>
+      )}
       <div className="grid lg:grid-cols-[1fr_400px] gap-6">
         <div>
           <div className="relative flex gap-2">
