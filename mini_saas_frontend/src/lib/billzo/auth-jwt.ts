@@ -98,6 +98,89 @@ export function verifyRefreshToken(token: string): { sessionId: string; userId: 
   }
 }
 
+async function signWithWebCrypto(payloadBase64Url: string): Promise<string | null> {
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET)
+    const key = await crypto.subtle.importKey(
+      'raw',
+      secret,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(payloadBase64Url)
+    )
+    return uint8ArrayToBase64Url(new Uint8Array(signature))
+  } catch {
+    return null
+  }
+}
+
+function decodeBase64UrlJson<T>(value: string): T | null {
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+    return JSON.parse(atob(padded)) as T
+  } catch {
+    return null
+  }
+}
+
+function uint8ArrayToBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+export async function verifyAccessTokenEdge(token: string): Promise<{
+  sessionId: string
+  userId: string
+  tenantId?: string
+  phone?: string
+  email?: string
+} | null> {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 2) return null
+    const payload = decodeBase64UrlJson<any>(parts[0])
+    if (!payload) return null
+    if (payload.type !== 'access') return null
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null
+    const expectedSig = await signWithWebCrypto(parts[0])
+    if (!expectedSig || expectedSig !== parts[1]) return null
+    return {
+      sessionId: payload.sessionId,
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      phone: payload.phone,
+      email: payload.email,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function verifyRefreshTokenEdge(token: string): Promise<{ sessionId: string; userId: string } | null> {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 2) return null
+    const payload = decodeBase64UrlJson<any>(parts[0])
+    if (!payload) return null
+    if (payload.type !== 'refresh') return null
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null
+    const expectedSig = await signWithWebCrypto(parts[0])
+    if (!expectedSig || expectedSig !== parts[1]) return null
+    return { sessionId: payload.sessionId, userId: payload.userId }
+  } catch {
+    return null
+  }
+}
+
 export function setAuthCookies(
   response: NextResponse,
   accessToken: string,

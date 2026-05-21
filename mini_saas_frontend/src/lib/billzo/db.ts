@@ -47,7 +47,7 @@ class BillzoDB extends Dexie {
   constructor() {
     super('billzo_production_v1')
     this.version(1).stores({
-      tenants: 'id, ownerUserId, updatedAt',
+      tenants: 'id, ownerUserId, createdAt, updatedAt',
       users: 'id, phone, email, createdAt',
       customers: 'id, tenantId, name, phone, whatsapp_number, gstin, opt_in, lastUsedAt, updatedAt',
       products: 'id, tenantId, barcode, name, stock, updatedAt',
@@ -65,6 +65,9 @@ class BillzoDB extends Dexie {
     this.version(2).stores({
       otps: 'id, phone, createdAt',
       sessions: 'id, sessionId, userId, phone, tenantId, createdAt',
+    })
+    this.version(3).stores({
+      tenants: 'id, ownerUserId, createdAt, updatedAt',
     })
   }
 }

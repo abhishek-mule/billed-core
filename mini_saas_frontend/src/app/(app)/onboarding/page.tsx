@@ -26,16 +26,7 @@ function setCookie(name: string, value: string, days = 30) {
 }
 
 function getUserIdFromCookie() {
-  const token = getCookie('bz_access')
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[0]))
-      return payload.userId || null
-    } catch {
-      return null
-    }
-  }
-  return null
+  return getCookie('bz_user_id')
 }
 
 export default function OnboardingPage() {
@@ -54,19 +45,17 @@ export default function OnboardingPage() {
     async function checkTenant() {
       try {
         const userId = getUserIdFromCookie()
+        const tenant = userId
+          ? await db().tenants.where('ownerUserId').equals(userId).first()
+          : null
         if (cancelled) return
-        if (!userId) {
-          window.location.href = '/auth'
-          return
-        }
-        const tenant = await db().tenants.where('ownerUserId').equals(userId).first()
         if (tenant) {
           setCookie('bz_tenant', tenant.id)
           setCookie('bz_tenant_name', tenant.name || 'My Shop')
           router.push('/dashboard')
         }
       } catch {
-        // Stay on onboarding; the submit path will surface any real server error.
+        // Stay on onboarding
       }
     }
 
@@ -154,6 +143,9 @@ export default function OnboardingPage() {
         return
       }
 
+      const existingTenant = await db().tenants.where('ownerUserId').equals(userId).first()
+      const tenantId = existingTenant?.id || `tenant_${Date.now()}_${uuid().slice(0, 8)}`
+
       const {
         shopName: inferredName,
         phone: inferredPhone,
@@ -165,8 +157,6 @@ export default function OnboardingPage() {
         upiId: upiId || undefined,
         gstin: gstin || undefined,
       })
-      const existingTenant = await db().tenants.where('ownerUserId').equals(userId).first()
-      const tenantId = existingTenant?.id || `tenant_${Date.now()}_${uuid().slice(0, 8)}`
       const now = new Date().toISOString()
 
       if (existingTenant) {

@@ -61,7 +61,7 @@ export default function ReportsPage() {
       const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
       return match ? match[2] : null
     }
-    const token = getCookie('bz_access')
+    const token = getCookie('bz_user_id')
     if (!token) router.push('/auth')
   }, [router])
 

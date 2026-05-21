@@ -9,7 +9,10 @@ import {
 import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+const supabaseAuthKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 async function upsertSession(userId: string, data: { email?: string; tenantId?: string | null; isPaid?: boolean }) {
   const sessionId = crypto.randomBytes(32).toString('hex')
@@ -29,7 +32,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password, accessToken: supabaseAccessToken } = body
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabase = createClient(supabaseUrl, supabaseAuthKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
@@ -65,10 +68,17 @@ export async function POST(request: NextRequest) {
         userId,
         tenantId: existingTenantId,
         email: userEmail,
-        redirectTo: existingTenantId ? '/dashboard' : '/onboarding',
+        redirectTo: '/auth/resolve',
       })
 
       setAuthCookies(response, billzoAccessToken, billzoRefreshToken, existingTenantId)
+      response.cookies.set('bz_user_id', userId, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 3600,
+        path: '/',
+      })
       return response
     }
 
@@ -112,6 +122,13 @@ export async function POST(request: NextRequest) {
     })
 
     setAuthCookies(response, accessToken, refreshToken, existingTenantId ?? undefined)
+    response.cookies.set('bz_user_id', userId, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 3600,
+      path: '/',
+    })
     return response
   } catch (error) {
     console.error('[Auth/Supabase] Error:', error)
@@ -122,13 +139,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get('code')
-    const next = request.nextUrl.searchParams.get('next') || '/'
-
     if (!code) {
       return NextResponse.redirect(new URL('/auth', request.url))
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabase = createClient(supabaseUrl, supabaseAuthKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
@@ -159,8 +174,15 @@ export async function GET(request: NextRequest) {
     })
     const refreshToken = createRefreshToken({ sessionId, userId })
 
-    const response = NextResponse.redirect(new URL(next, request.url))
+    const response = NextResponse.redirect(new URL('/auth/resolve', request.url))
     setAuthCookies(response, accessToken, refreshToken, existingTenantId ?? undefined)
+    response.cookies.set('bz_user_id', userId, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 3600,
+      path: '/',
+    })
 
     return response
   } catch {

@@ -75,9 +75,16 @@ export async function POST(request: NextRequest) {
       success: true,
       userId,
       phone: e164,
-      redirectTo: existingTenantId ? '/dashboard' : '/onboarding',
+      redirectTo: '/auth/resolve',
     })
     setAuthCookies(response, accessTokenJwt, refreshTokenJwt, existingTenantId)
+    response.cookies.set('bz_user_id', userId, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 3600,
+      path: '/',
+    })
 
     return response
   } catch (error: any) {

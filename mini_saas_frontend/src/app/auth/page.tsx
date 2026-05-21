@@ -69,15 +69,17 @@ function MagicLinkForm() {
   const errorMessage = hasError
     ? hasError === "missing_code"
       ? "No login code found. Please click the link in your email again."
+      : hasError === "missing_token"
+        ? "No login token found. Please click the link in your email again."
       : hasError === "config"
         ? "Email login is not configured. Please use phone OTP."
-        : hasError === "invalid_code"
-          ? "This login link is invalid or expired. Please request a new one."
-          : hasError === "no_user"
-            ? "Could not find your account. Please request a new link."
-            : hasError === "failed"
-              ? "Something went wrong during login. Please try again."
-              : "Something went wrong. Please try again."
+      : (hasError === "invalid_code" || hasError === "invalid")
+        ? "This login link is invalid or expired. Please request a new one."
+        : hasError === "no_user"
+          ? "Could not find your account. Please request a new link."
+          : hasError === "failed"
+            ? "Something went wrong during login. Please try again."
+            : "Something went wrong. Please try again."
     : ""
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -226,9 +228,13 @@ function PhoneOtpForm() {
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        setCookie('bz_tenant', data.tenantId || '')
-        setCookie('bz_tenant_name', data.shopName || 'My Shop')
-        window.location.href = data.redirectTo || "/onboarding"
+        if (data.tenantId) {
+          setCookie('bz_tenant', data.tenantId)
+        }
+        if (data.shopName) {
+          setCookie('bz_tenant_name', data.shopName)
+        }
+        window.location.href = data.redirectTo || "/auth/resolve"
       } else {
         setError(data.error || "Invalid OTP")
         setVerifying(false)
@@ -311,16 +317,6 @@ function PhoneOtpForm() {
 
 function AuthForm() {
   const [tab, setTab] = useState<'email' | 'phone'>('email')
-
-  useEffect(() => {
-    if (!getCookie("bz_access")) return
-
-    if (getCookie("bz_tenant")) {
-      window.location.href = "/dashboard"
-    } else {
-      window.location.href = "/onboarding"
-    }
-  }, [])
 
   return (
     <div className="w-full max-w-sm space-y-6">

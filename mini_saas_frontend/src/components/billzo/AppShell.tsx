@@ -44,6 +44,7 @@ function logout() {
   document.cookie = 'bz_refresh=; Max-Age=0; path=/'
   document.cookie = 'bz_tenant=; Max-Age=0; path=/'
   document.cookie = 'bz_tenant_name=; Max-Age=0; path=/'
+  document.cookie = 'bz_user_id=; Max-Age=0; path=/'
   localStorage.clear()
   window.location.href = '/auth'
 }
