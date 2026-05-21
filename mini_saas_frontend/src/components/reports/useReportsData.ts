@@ -114,11 +114,7 @@ export function useReportsData(): UseReportsDataReturn {
   const loadData = useCallback(async () => {
     try {
       const tenantId = getCookie('bz_tenant')
-      const token = getCookie('bz_access')
-      let userId: string | null = null
-      if (token) {
-        try { userId = JSON.parse(atob(token.split('.')[1])).userId || null } catch { userId = null }
-      }
+      const userId = getCookie('bz_user_id')
       if (!tenantId || !userId) {
         router.push('/auth')
         return
