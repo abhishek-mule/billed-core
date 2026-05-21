@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
@@ -10,7 +10,7 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[2]) : null
 }
 
-export default function AuthCallbackPage() {
+function CallbackContent() {
   const [error, setError] = useState("")
   const resolved = useRef(false)
   const searchParams = useSearchParams()
@@ -24,7 +24,6 @@ export default function AuthCallbackPage() {
       const type = searchParams?.get("type")
       const code = searchParams?.get("code")
 
-      // Query param flow (Supabase PKCE or OTP)
       if (tokenHash || code) {
         console.log("[AuthCallback] Query param flow:", { tokenHash: !!tokenHash, type, code: !!code })
         try {
@@ -51,7 +50,6 @@ export default function AuthCallbackPage() {
         }
       }
 
-      // Hash-based flow (Supabase default email template)
       const hash = window.location.hash
       if (hash.includes("access_token=")) {
         console.log("[AuthCallback] Hash-based flow detected")
@@ -84,7 +82,6 @@ export default function AuthCallbackPage() {
         }
       }
 
-      // No token found
       setError("No login token found. Please click the link in your email again.")
     }
 
@@ -111,5 +108,20 @@ export default function AuthCallbackPage() {
         <span>Finishing sign in...</span>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="flex items-center gap-3 text-slate-600">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    }>
+      <CallbackContent />
+    </Suspense>
   )
 }
