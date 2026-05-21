@@ -43,6 +43,9 @@ export function getUserId(): string | null {
   const stored = localStorage.getItem(SESSION_KEYS.userId)
   if (stored) return stored
 
+  const userIdCookie = getCookie('bz_user_id')
+  if (userIdCookie) return userIdCookie
+
   const token = getCookie('bz_access')
   if (token) {
     const payload = decodeJwtPayload(token)
@@ -63,22 +66,20 @@ export function syncSessionFromCookies(): Session | null {
   if (typeof window === 'undefined') return null
 
   const tenantId = getCookie('bz_tenant')
-  const token = getCookie('bz_access')
-  const payload = token ? decodeJwtPayload(token) : null
+  const userId = getCookie('bz_user_id')
 
-  if (!tenantId || !payload?.userId) return null
+  if (!tenantId || !userId) return null
 
   const session: Session = {
     tenantId,
-    userId: payload.userId,
+    userId,
     businessName: getCookie('bz_tenant_name') || 'My Shop',
-    phone: localStorage.getItem(SESSION_KEYS.phone) || payload.phone || '',
+    phone: localStorage.getItem(SESSION_KEYS.phone) || '',
   }
 
   localStorage.setItem(SESSION_KEYS.tenantId, tenantId)
-  localStorage.setItem(SESSION_KEYS.userId, payload.userId)
+  localStorage.setItem(SESSION_KEYS.userId, userId)
   localStorage.setItem(SESSION_KEYS.businessName, session.businessName)
-  if (payload.phone) localStorage.setItem(SESSION_KEYS.phone, payload.phone)
 
   return session
 }

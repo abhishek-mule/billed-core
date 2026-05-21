@@ -38,7 +38,8 @@ export interface ActionResult<T = void> {
 
 function getSession() {
   const session = getActiveSession()
-  if (!session) throw new Error('No active session')
+  console.log('[Actions] getActiveSession:', session)
+  if (!session) throw new Error('No active session. Please log in again.')
   return session
 }
 

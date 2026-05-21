@@ -39,6 +39,15 @@ export default function DashboardPage() {
   useEffect(() => {
     const name = getTenantName()
     setTenantName(name)
+
+    const userId = getCookie('bz_user_id')
+    const tenantId = getCookie('bz_tenant')
+    if (userId) localStorage.setItem('userId', userId)
+    if (tenantId) {
+      localStorage.setItem('tenantId', tenantId)
+      if (name) localStorage.setItem('tenantName', name)
+    }
+
     loadData()
   }, []);
 

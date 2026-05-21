@@ -186,6 +186,9 @@ export default function OnboardingPage() {
 
       setCookie('bz_tenant', tenantId)
       setCookie('bz_tenant_name', inferredName)
+      localStorage.setItem('tenantId', tenantId)
+      localStorage.setItem('tenantName', inferredName)
+      if (userId) localStorage.setItem('userId', userId)
       setLoading("done");
       setTimeout(() => router.push("/dashboard"), 1700);
     } catch (error: any) {

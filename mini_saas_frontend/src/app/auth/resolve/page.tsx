@@ -15,6 +15,12 @@ function setCookie(name: string, value: string, days = 30) {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
 }
 
+function syncSession(userId: string, tenantId: string, tenantName: string) {
+  localStorage.setItem("userId", userId)
+  localStorage.setItem("tenantId", tenantId)
+  localStorage.setItem("tenantName", tenantName)
+}
+
 export default function AuthResolvePage() {
   const resolved = useRef(false)
 
@@ -33,8 +39,11 @@ export default function AuthResolvePage() {
       }
 
       const tenantId = getCookie("bz_tenant")
+      const tenantName = getCookie("bz_tenant_name") || "My Shop"
+
       if (tenantId) {
-        console.log("[AuthResolve] Has tenant cookie, going to /dashboard")
+        console.log("[AuthResolve] Has tenant cookie, syncing and going to /dashboard")
+        syncSession(userId, tenantId, tenantName)
         window.location.href = "/dashboard"
         return
       }
@@ -42,9 +51,10 @@ export default function AuthResolvePage() {
       try {
         const tenant = await db().tenants.orderBy("createdAt").first()
         if (tenant) {
-          console.log("[AuthResolve] Found tenant in DB, going to /dashboard")
+          console.log("[AuthResolve] Found tenant in DB, syncing and going to /dashboard")
           setCookie("bz_tenant", tenant.id)
           setCookie("bz_tenant_name", tenant.name || "My Shop")
+          syncSession(userId, tenant.id, tenant.name || "My Shop")
           window.location.href = "/dashboard"
           return
         }
@@ -53,6 +63,7 @@ export default function AuthResolvePage() {
       }
 
       console.log("[AuthResolve] No tenant, going to /onboarding")
+      localStorage.setItem("userId", userId)
       window.location.href = "/onboarding"
     }
 

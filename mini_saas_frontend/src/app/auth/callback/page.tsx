@@ -10,6 +10,14 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[2]) : null
 }
 
+function syncSessionToLocalStorage(userId: string) {
+  const tenantId = getCookie("bz_tenant")
+  const tenantName = getCookie("bz_tenant_name")
+  if (userId) localStorage.setItem("userId", userId)
+  if (tenantId) localStorage.setItem("tenantId", tenantId)
+  if (tenantName) localStorage.setItem("tenantName", tenantName)
+}
+
 function CallbackContent() {
   const [error, setError] = useState("")
   const resolved = useRef(false)
@@ -40,7 +48,9 @@ function CallbackContent() {
             return
           }
 
-          console.log("[AuthCallback] Exchange success, redirecting to:", data.redirectTo)
+          console.log("[AuthCallback] Exchange success, userId:", data.userId)
+          syncSessionToLocalStorage(data.userId)
+
           window.location.href = data.redirectTo || "/onboarding"
           return
         } catch (e) {
@@ -73,6 +83,8 @@ function CallbackContent() {
             setError(data.error || "Login failed. Please request a new link.")
             return
           }
+
+          syncSessionToLocalStorage(data.userId)
 
           window.location.href = data.redirectTo || "/onboarding"
           return

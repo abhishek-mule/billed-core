@@ -139,7 +139,11 @@ export default function POSPage() {
     setShowPay(false);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
+    console.log('[POS] handlePay called:', { method, cartItems: cart.length, customer, customerPhone, tenantId })
+
     const result = await handlePOSInvoice(cart, customer, customerPhone || "", method);
+
+    console.log('[POS] handlePOSInvoice result:', result)
 
     if (!result.success) {
       if (result.blocked === 'paywall') {
