@@ -117,7 +117,10 @@ export async function attributeRecovery(params: {
  * Get recovery attributions for an invoice.
  * Returns the timeline of reminders and payments.
  */
-export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<any[]> {
+export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<{
+  events: any[]
+  attributions: any[]
+}> {
   // Get all outbox events for this invoice
   const { data: events, error } = await supabaseAdmin
     .from('outbox')
@@ -133,7 +136,7 @@ export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<any
     ])
     .order('created_at', { ascending: true })
 
-  if (error || !events) return []
+  if (error || !events) return { events: [], attributions: [] }
 
   // Get attributions for this invoice
   const { data: attributions } = await supabaseAdmin

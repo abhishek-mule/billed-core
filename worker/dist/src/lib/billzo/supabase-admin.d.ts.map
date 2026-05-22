@@ -1,0 +1,1 @@
+{"version":3,"file":"supabase-admin.d.ts","sourceRoot":"","sources":["../../../../src/lib/billzo/supabase-admin.ts"],"names":[],"mappings":"AAQA,eAAO,MAAM,aAAa,mFAAyC,CAAA;AAEnE,wBAAsB,eAAe,CAAC,QAAQ,EAAE,MAAM,EAAE,QAAQ,EAAE,MAAM,EAAE,UAAU,EAAE,MAAM,iBAe3F;AAED,wBAAsB,eAAe,CAAC,QAAQ,EAAE,MAAM,kBAWrD;AAED,wBAAsB,kBAAkB,CAAC,MAAM,EAAE,MAAM,EAAE,iBAWxD"}

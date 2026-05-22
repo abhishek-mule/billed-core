@@ -6,8 +6,8 @@ services:
     plan: starter
     branch: master
     rootDir: worker
-    buildCommand: pnpm install && pnpm run build
-    startCommand: pnpm start
+    buildCommand: cd worker && pnpm install && pnpm run build
+    startCommand: cd worker && pnpm start
     autoDeploy: true
     envVars:
       - key: NODE_ENV
