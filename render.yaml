@@ -6,8 +6,8 @@ services:
     plan: starter
     branch: master
     rootDir: worker
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: pnpm install && pnpm run build
+    startCommand: pnpm start
     autoDeploy: true
     envVars:
       - key: NODE_ENV
