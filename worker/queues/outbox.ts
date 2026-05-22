@@ -86,15 +86,6 @@ export function createOutboxWorker() {
     {
       connection,
       concurrency: 5,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000,
-        },
-        removeOnComplete: 1000,
-        removeOnFail: false,
-      },
     }
   )
 

@@ -53,15 +53,6 @@ export function createReconciliationWorker() {
     {
       connection,
       concurrency: 5,
-      defaultJobOptions: {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 60000,
-        },
-        removeOnComplete: 1000,
-        removeOnFail: false,
-      },
     }
   )
 

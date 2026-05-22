@@ -53,15 +53,6 @@ export function createRemindersWorker() {
     {
       connection,
       concurrency: 10,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'fixed',
-          delay: 30000,
-        },
-        removeOnComplete: 1000,
-        removeOnFail: false,
-      },
     }
   )
 
