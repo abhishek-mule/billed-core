@@ -1,6 +1,24 @@
+import http from 'node:http'
 import { createOutboxWorker } from './queues/outbox'
 import { createRemindersWorker } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
+
+function startHealthServer() {
+  const port = parseInt(process.env.PORT || '10000', 10)
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ status: 'ok' }))
+    } else {
+      res.writeHead(200)
+      res.end('BillZo Worker')
+    }
+  })
+  server.listen(port, () => {
+    console.log(`[Worker] Health server listening on port ${port}`)
+  })
+  return server
+}
 
 async function main() {
   console.log('[Worker] Starting BillZo worker service...')
@@ -19,6 +37,8 @@ async function main() {
   console.log('[Worker] Redis:', process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...')
   console.log('[Worker] Supabase:', process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set')
 
+  const healthServer = startHealthServer()
+
   const outboxWorker = createOutboxWorker()
   const remindersWorker = createRemindersWorker()
   const reconciliationWorker = createReconciliationWorker()
@@ -27,6 +47,7 @@ async function main() {
 
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
+    healthServer.close()
     await Promise.all([
       outboxWorker.close(),
       remindersWorker.close(),
