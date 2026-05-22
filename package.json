@@ -1,0 +1,8 @@
+{
+  "name": "billzo",
+  "private": true,
+  "scripts": {
+    "build": "cd worker && pnpm install && pnpm run build",
+    "start": "cd worker && pnpm start"
+  }
+}
