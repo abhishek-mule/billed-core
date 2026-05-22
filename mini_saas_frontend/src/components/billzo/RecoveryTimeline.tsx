@@ -84,9 +84,9 @@ export function RecoveryTimeline({ events, recoveredAmount }: RecoveryTimelinePr
                   minute: "2-digit",
                 })}
               </div>
-              {event.payload?.channel && (
+              {!!event.payload?.channel && (
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  via {event.payload.channel}
+                  via {String(event.payload.channel)}
                 </div>
               )}
             </div>

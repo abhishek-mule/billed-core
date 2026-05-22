@@ -215,19 +215,19 @@ export async function getOutboxEventsByCorrelation(correlationId: string): Promi
 export async function cleanupCompletedEvents(olderThanHours: number = 24): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000).toISOString()
 
-  const { count, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('outbox')
     .delete()
     .eq('status', 'completed')
     .lt('created_at', cutoff)
-    .select('*', { count: 'exact', head: true })
+    .select()
 
   if (error) {
     console.error('[Outbox] Failed to cleanup events:', error)
     return 0
   }
 
-  return count || 0
+  return Array.isArray(data) ? data.length : 0
 }
 
 function mapOutboxRow(row: any): OutboxEvent {

@@ -101,7 +101,7 @@ export interface BillzoEvent {
  *     correlationId: generateCorrelationId(invoiceId),
  *   })
  */
-export async function emitEvent(event: Omit<BillzoEvent, 'version' | 'producer'>): Promise<string> {
+export async function emitEvent(event: Omit<BillzoEvent, 'version'>): Promise<string> {
   const options: OutboxWriteOptions = {
     type: event.type,
     tenantId: event.tenantId,

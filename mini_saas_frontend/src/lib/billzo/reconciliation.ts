@@ -51,15 +51,17 @@ export class RazorpayWebhookSource implements PaymentSignalSource {
     if (!entity) return null
 
     const amount = (entity.amount as number) / 100 // Convert paise to rupees
-    const phone = (entity.contact as string) || (entity.notes?.phone as string) || null
-    const upiReference = (entity.acquirer_data?.upi_transaction_id as string)
-      || (entity.acquirer_data?.rrn as string)
+    const notes = (entity.notes || {}) as Record<string, unknown>
+    const acquirerData = (entity.acquirer_data || {}) as Record<string, unknown>
+    const phone = (entity.contact as string) || (notes.phone as string) || null
+    const upiReference = (acquirerData.upi_transaction_id as string)
+      || (acquirerData.rrn as string)
       || null
-    const customerName = (entity.notes?.customer_name as string)
-      || (entity.notes?.name as string)
+    const customerName = (notes.customer_name as string)
+      || (notes.name as string)
       || null
     const paymentLinkId = (entity.payment_link_id as string)
-      || (entity.notes?.invoiceId as string)
+      || (notes.invoiceId as string)
       || null
 
     return {
