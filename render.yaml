@@ -5,7 +5,6 @@ services:
     region: oregon
     plan: starter
     branch: master
-    rootDir: worker
     buildCommand: cd worker && pnpm install && pnpm run build
     startCommand: cd worker && pnpm start
     autoDeploy: true
