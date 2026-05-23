@@ -2,7 +2,7 @@
 
 A multi-tenant GST billing SaaS for Indian retailers, powered by **Next.js + n8n + Frappe/ERPNext**.
 
-## Architecture 
+## Architecture  
 
 ```
 ┌─────────────────────────────────────────────────┐
