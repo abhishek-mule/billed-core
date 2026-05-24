@@ -46,27 +46,27 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
 
       {/* Main Stats */}
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">This month</div>
-          <div className="mt-2 text-3xl font-black text-slate-900">{money(metrics.thisMonth)}</div>
-          <div className="mt-1 text-xs font-medium text-slate-500">{metrics.invoiceCount} invoices generated</div>
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+          <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">This month</div>
+          <div className="mt-2 text-3xl font-black text-foreground">{money(metrics.thisMonth)}</div>
+          <div className="mt-1 text-xs font-medium text-muted-foreground">{metrics.invoiceCount} invoices generated</div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Growth</div>
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+          <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Growth</div>
           <div className="mt-2 flex items-center gap-2">
             <div className={`flex items-center gap-1 text-2xl font-black ${metrics.trend >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {metrics.trend >= 0 ? <TrendingUp className="h-6 w-6" /> : <TrendingDown className="h-6 w-6" />}
               {Math.abs(metrics.trend)}%
             </div>
           </div>
-          <div className="mt-1 text-xs font-medium text-slate-500">vs {money(metrics.lastMonth)} last month</div>
+          <div className="mt-1 text-xs font-medium text-muted-foreground">vs {money(metrics.lastMonth)} last month</div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Ticket</div>
-          <div className="mt-2 text-3xl font-black text-slate-900">{money(metrics.avgInvoiceValue)}</div>
-          <div className="mt-1 text-xs font-medium text-slate-500">per customer visit</div>
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+          <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Avg Ticket</div>
+          <div className="mt-2 text-3xl font-black text-foreground">{money(metrics.avgInvoiceValue)}</div>
+          <div className="mt-1 text-xs font-medium text-muted-foreground">per customer visit</div>
         </div>
       </div>
 
@@ -77,7 +77,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
             <h3 className="font-bold text-lg">Sales Performance</h3>
             <p className="text-xs text-muted-foreground">{metrics.dateRangeLabel || 'Custom range'}</p>
           </div>
-          <BarChart3 className="h-5 w-5 text-indigo-500" />
+          <BarChart3 className="h-5 w-5 text-primary" />
         </div>
 
         <div className="h-[250px] w-full">
@@ -85,8 +85,8 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
             <AreaChart data={metrics.weeklyBreakdown}>
               <defs>
                 <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#15803d" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#15803d" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -114,7 +114,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
               <Area
                 type="monotone"
                 dataKey="sales"
-                stroke="#6366f1"
+                stroke="#15803d"
                 strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#colorSales)"
@@ -133,12 +133,12 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
             {metrics.topProducts.map((p, i) => (
               <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-50 rounded-xl transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                     {i + 1}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">{p.name}</p>
-                    <p className="text-[11px] text-slate-500 font-medium tracking-tight">{p.qty} units sold</p>
+                    <p className="font-bold text-foreground">{p.name}</p>
+                    <p className="text-[11px] font-medium tracking-tight text-muted-foreground">{p.qty} units sold</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -159,12 +159,12 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
             {metrics.topCustomers.map((c, i) => (
               <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-50 rounded-xl transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                     {i + 1}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">{c.name}</p>
-                    <p className="text-[11px] text-slate-500 font-medium uppercase tracking-tight">{c.invoiceCount} invoices · {c.phone}</p>
+                    <p className="font-bold text-foreground">{c.name}</p>
+                    <p className="text-[11px] font-medium uppercase tracking-tight text-muted-foreground">{c.invoiceCount} invoices · {c.phone}</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -179,14 +179,14 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-100 py-4 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-200 transition-all"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-border py-4 text-sm font-bold text-muted-foreground transition-all hover:border-border/80 hover:bg-muted"
         >
           <Download className="h-4 w-4" />
           CSV Export
         </button>
         <button
           onClick={() => downloadSalesReportPDF(metrics, 'BillZo Business', metrics.dateRangeLabel || 'This Month')}
-          className="flex items-center justify-center gap-2 rounded-2xl border-2 border-indigo-200 bg-indigo-50 py-4 text-sm font-bold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-all"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-primary/20 bg-primary/5 py-4 text-sm font-bold text-primary transition-all hover:border-primary/30 hover:bg-primary/10"
         >
           <FileText className="h-4 w-4" />
           Download PDF

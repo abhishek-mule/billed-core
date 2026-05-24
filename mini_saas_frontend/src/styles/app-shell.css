@@ -16,7 +16,7 @@
   --afg:     hsl(var(--primary-foreground));
   --green:   hsl(var(--primary));
   --sw:      220px;
-  --sw-c:    56px;
+  --sw-c:    64px;
   --tbh:     52px;
   --r:       6px;
   --ease:    cubic-bezier(0.16, 1, 0.3, 1);
@@ -133,6 +133,12 @@ body {
 }
 .nav-item:hover { background: var(--bg); color: var(--text); }
 .nav-item--active { background: var(--bg); color: var(--text); font-weight: 500; }
+.nav-item--active::before {
+  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--green);
+}
+.sidebar--collapsed .nav-item--active::before { left: 0; top: 4px; bottom: 4px; }
 
 .sidebar--collapsed .nav-item {
   justify-content: center; padding: 8px 0;

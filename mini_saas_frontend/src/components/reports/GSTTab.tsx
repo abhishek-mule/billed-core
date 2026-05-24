@@ -1,18 +1,20 @@
 'use client'
 
 import { Download, FileText, ArrowRight } from 'lucide-react'
-import type { GSTReport } from '@/lib/billzo/report-engine'
+import { useRouter } from 'next/navigation'
+import type { GSTReport, PlanType } from '@/lib/billzo/report-engine'
 import { formatINR, exportToCSV } from '@/lib/billzo/report-engine'
 import { downloadGSTReportPDF } from '@/lib/billzo/pdf'
-import { MetricCard } from './MetricCard'
+import { MetricCard, PaywallTeaser } from './MetricCard'
 
 const money = (n: number) => formatINR(n)
 
 interface GSTTabProps {
   report: GSTReport
+  plan: PlanType
 }
 
-export function GSTTab({ report }: GSTTabProps) {
+export function GSTTab({ report, plan }: GSTTabProps) {
   const handleExport = () => {
     const rows = report.hsnBreakdown.map(item => ({
       HSN: item.hsn,
@@ -27,9 +29,11 @@ export function GSTTab({ report }: GSTTabProps) {
     exportToCSV(rows, 'gst-report')
   }
 
+  const router = useRouter()
+
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white p-6 shadow-lg">
+    <div className="animate-fade-in space-y-5">
+      <div className="rounded-2xl bg-gradient-to-br from-primary to-emerald-600 p-6 text-white shadow-lg">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-medium opacity-80">GST Summary</p>
@@ -104,24 +108,26 @@ export function GSTTab({ report }: GSTTabProps) {
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center">
-          <FileText className="h-10 w-10 mx-auto text-slate-300" />
-          <p className="mt-2 font-semibold text-slate-500">No GST data yet</p>
+        <div className="rounded-2xl border-2 border-dashed border-border p-6 text-center">
+          <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
+          <p className="mt-2 font-semibold text-muted-foreground">No GST data yet</p>
           <p className="mt-1 text-sm text-muted-foreground">Create invoices to see GST breakdown</p>
         </div>
       )}
 
+      <PaywallTeaser plan={plan} />
+
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-border py-4 text-sm font-bold text-muted-foreground transition-all hover:border-border/80 hover:bg-muted"
         >
           <Download className="h-4 w-4" />
           CSV Export
         </button>
         <button
           onClick={() => downloadGSTReportPDF(report, 'BillZo Business')}
-          className="flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-3 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-primary/20 bg-primary/5 py-4 text-sm font-bold text-primary transition-all hover:border-primary/30 hover:bg-primary/10"
         >
           <FileText className="h-4 w-4" />
           Download PDF

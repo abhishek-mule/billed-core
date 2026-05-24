@@ -54,11 +54,13 @@ function Sidebar({
   collapsed,
   onToggle,
   userName,
+  userEmail,
 }: {
   pathname: string
   collapsed: boolean
   onToggle: () => void
   userName?: string
+  userEmail?: string
 }) {
   return (
     <aside className={cn('sidebar', collapsed && 'sidebar--collapsed')}>
@@ -125,7 +127,7 @@ function Sidebar({
           />
           <div className="user-info">
             <span className="user-name">{userName || 'My Shop'}</span>
-            <span className="user-plan">Click to logout</span>
+            <span className="user-plan">{userEmail || 'Click to logout'}</span>
           </div>
           <LogOut size={14} className="text-muted-foreground ml-auto" />
         </div>
@@ -304,9 +306,20 @@ export function AppShell({
     }
   }, [])
 
-  const userName = (() => {
+  const { userName, userEmail } = (() => {
     const name = getCookie('bz_tenant_name')
-    return name ? decodeURIComponent(name) : undefined
+    let email: string | undefined
+    try {
+      const token = getCookie('bz_access')
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        email = payload.email
+      }
+    } catch {}
+    return {
+      userName: name ? decodeURIComponent(name) : undefined,
+      userEmail: email,
+    }
   })()
 
   useEffect(() => {
@@ -356,6 +369,7 @@ export function AppShell({
           collapsed={collapsed}
           onToggle={() => setCollapsed(c => !c)}
           userName={userName}
+          userEmail={userEmail}
         />
 
         <MobileDrawer

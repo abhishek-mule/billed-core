@@ -10,7 +10,7 @@ interface MetricCardProps {
 
 export function MetricCard({ label, value, sub, icon, highlight }: MetricCardProps) {
   return (
-    <div className="rounded-xl border bg-white p-4">
+    <div className="rounded-2xl border bg-card p-4">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         {icon}
         {label}
@@ -37,7 +37,7 @@ interface ActionCardProps {
 
 export function ActionCard({ title, amount, count, color, actionLabel, onAction }: ActionCardProps) {
   return (
-    <div className={`rounded-xl border p-4 ${color}`}>
+    <div className={`rounded-2xl border p-4 ${color}`}>
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-semibold">{title}</div>

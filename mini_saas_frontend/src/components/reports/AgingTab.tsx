@@ -33,10 +33,10 @@ export function AgingTab({ buckets, plan }: AgingTabProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <PaywallTeaser plan={plan} />
 
-      <div className="rounded-2xl border bg-white p-5">
+      <div className="rounded-2xl border bg-card p-5">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold">Outstanding Receivables</h3>
@@ -57,9 +57,9 @@ export function AgingTab({ buckets, plan }: AgingTabProps) {
       </div>
 
       {totalCount === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center">
-          <CheckCircle2 className="h-12 w-12 mx-auto text-green-400" />
-          <p className="mt-3 font-bold text-slate-500">All clear!</p>
+        <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
+          <p className="mt-3 font-bold text-muted-foreground">All clear!</p>
           <p className="mt-1 text-sm text-muted-foreground">No outstanding invoices</p>
         </div>
       ) : (
@@ -117,14 +117,14 @@ export function AgingTab({ buckets, plan }: AgingTabProps) {
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-border py-4 text-sm font-bold text-muted-foreground transition-all hover:border-border/80 hover:bg-muted"
         >
           <Download className="h-4 w-4" />
           CSV Export
         </button>
         <button
           onClick={() => downloadAgingReportPDF(buckets, 'BillZo Business')}
-          className="flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-3 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-primary/20 bg-primary/5 py-4 text-sm font-bold text-primary transition-all hover:border-primary/30 hover:bg-primary/10"
         >
           <FileText className="h-4 w-4" />
           Download PDF

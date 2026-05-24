@@ -22,18 +22,18 @@ const EmptyState = ({ tab }: { tab: Tab }) => {
   }
   const { title, desc, action } = labels[tab]
   return (
-    <div className="rounded-3xl border-2 border-dashed border-slate-200 p-12 text-center bg-slate-50/50">
-      <div className="w-20 h-20 bg-white rounded-full border shadow-sm flex items-center justify-center mx-auto">
-        {tab === 'recovery' ? <TrendingUp className="h-10 w-10 text-slate-300" /> :
-         tab === 'aging' ? <Clock className="h-10 w-10 text-slate-300" /> :
-         tab === 'gst' ? <FileText className="h-10 w-10 text-slate-300" /> :
-         <DollarSign className="h-10 w-10 text-slate-300" />}
+    <div className="rounded-2xl border-2 border-dashed border-border p-12 text-center bg-muted/30">
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border bg-card shadow-sm">
+        {tab === 'recovery' ? <TrendingUp className="h-10 w-10 text-muted-foreground/40" /> :
+         tab === 'aging' ? <Clock className="h-10 w-10 text-muted-foreground/40" /> :
+         tab === 'gst' ? <FileText className="h-10 w-10 text-muted-foreground/40" /> :
+         <DollarSign className="h-10 w-10 text-muted-foreground/40" />}
       </div>
-      <h3 className="mt-6 font-black text-xl text-slate-900">{title}</h3>
-      <p className="mt-2 text-slate-500 max-w-xs mx-auto">{desc}</p>
+      <h3 className="mt-6 text-xl font-black text-foreground">{title}</h3>
+      <p className="mx-auto mt-2 max-w-xs text-muted-foreground">{desc}</p>
       <button
         onClick={() => router.push('/pos')}
-        className="mt-6 flex items-center gap-2 mx-auto rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all active:scale-95"
+        className="mx-auto mt-6 flex items-center gap-2 rounded-xl bg-primary px-8 py-4 text-sm font-black text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:opacity-90 active:scale-95"
       >
         <Plus className="h-4 w-4" />
         {action}
@@ -45,9 +45,9 @@ const EmptyState = ({ tab }: { tab: Tab }) => {
 const TabSkeleton = () => (
   <div className="space-y-4 animate-pulse">
     <div className="grid grid-cols-3 gap-3">
-      {[0,1,2].map(i => <div key={i} className="h-28 rounded-2xl bg-slate-100" />)}
+      {[0,1,2].map(i => <div key={i} className="h-28 rounded-2xl bg-muted" />)}
     </div>
-    <div className="h-64 rounded-2xl bg-slate-100" />
+    <div className="h-64 rounded-2xl bg-muted" />
   </div>
 )
 
@@ -70,8 +70,8 @@ export default function ReportsPage() {
   if (loading) {
     return (
       <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-6">
-        <div className="h-16 rounded-2xl bg-slate-100 animate-pulse" />
-        <div className="h-10 rounded-xl bg-slate-100 animate-pulse" />
+        <div className="h-16 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-10 animate-pulse rounded-xl bg-muted" />
         <TabSkeleton />
       </div>
     )
@@ -79,10 +79,10 @@ export default function ReportsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="flex min-h-[50vh] items-center justify-center">
         <div className="text-center">
-          <p className="text-red-500 font-medium">{error}</p>
-          <button onClick={() => window.location.reload()} className="mt-3 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm">Retry</button>
+          <p className="font-medium text-destructive">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-3 rounded-xl bg-destructive/10 px-4 py-2 text-sm font-semibold text-destructive">Retry</button>
         </div>
       </div>
     )
@@ -133,7 +133,7 @@ export default function ReportsPage() {
         aging.length > 0 ? <AgingTab buckets={aging} plan={plan} /> : <EmptyState tab={tab} />
       )}
       {tab === 'gst' && (
-        gst.invoiceCount > 0 ? <GSTTab report={gst} /> : <EmptyState tab={tab} />
+        gst.invoiceCount > 0 ? <GSTTab report={gst} plan={plan} /> : <EmptyState tab={tab} />
       )}
       {tab === 'sales' && (
         sales.invoiceCount > 0 ? <SalesTab metrics={sales} plan={plan} /> : <EmptyState tab={tab} />
