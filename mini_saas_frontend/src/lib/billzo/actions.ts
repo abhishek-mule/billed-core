@@ -594,6 +594,7 @@ export async function handlePOSInvoice(
         if (tenantId && currentTenant) {
           await db().tenants.update(tenantId, {
             invoiceCount: (currentTenant.invoiceCount || 0) + 1,
+            invoiceNumberCounter: nextCounter,
             updatedAt: current,
           })
         }

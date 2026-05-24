@@ -60,6 +60,8 @@ export function RazorpayCheckoutButton({
               response.razorpay_payment_id,
               response.razorpay_signature,
               invoiceId,
+              amount,
+              tenantId,
             )
             if (result.verified) {
               setSuccess(true)

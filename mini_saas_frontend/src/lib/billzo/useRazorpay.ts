@@ -64,11 +64,13 @@ export function useRazorpay() {
     razorpay_payment_id: string,
     razorpay_signature: string,
     invoiceId?: string,
+    amount?: number,
+    tenantId?: string,
   ) => {
     const res = await fetch('/api/payment/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId }),
+      body: JSON.stringify({ razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount, tenantId }),
     })
     if (!res.ok) {
       const err = await res.json()

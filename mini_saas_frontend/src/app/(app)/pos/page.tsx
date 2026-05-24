@@ -112,9 +112,15 @@ export default function POSPage() {
     [query, products],
   );
 
-  const subtotal = cart.reduce((s, i) => s + i.salePrice * i.qty, 0);
-  const tax = cart.reduce((s, i) => s + (i.salePrice * i.qty * i.gstRate) / 100, 0);
-  const total = subtotal + tax;
+  const totalMrp = cart.reduce((s, i) => s + i.salePrice * i.qty, 0);
+  const itemTaxDetails = cart.map(i => {
+    const lineTotal = i.salePrice * i.qty;
+    const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
+    return { ...i, lineTotal, taxable, gstAmount: lineTotal - taxable };
+  });
+  const subtotal = itemTaxDetails.reduce((s, i) => s + i.taxable, 0);
+  const tax = itemTaxDetails.reduce((s, i) => s + i.gstAmount, 0);
+  const total = totalMrp;
 
   const addToCart = (p: any) => {
     setCart((c) => {
@@ -161,7 +167,7 @@ export default function POSPage() {
       number: (result.data as any)?.invoiceNumber || (result.data as any)?.id?.slice(0, 8).toUpperCase(),
       party: customer,
       partyPhone: customerPhone,
-      amount: Math.round(total),
+      amount: Math.round(totalMrp),
       status: "synced",
       date: "Just now",
       method,
@@ -390,14 +396,21 @@ export default function POSPage() {
             <div className="mt-4 flex gap-2">
               <button 
                 onClick={async () => {
+                  const itemsForPdf = (success.items || []).map((i: any) => {
+                    const lineTotal = i.price * i.qty;
+                    const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
+                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst, taxable };
+                  });
+                  const pdfSubtotal = itemsForPdf.reduce((s: number, i: any) => s + i.taxable, 0);
+                  const pdfTax = success.amount - pdfSubtotal;
                   const pdfData = {
                     invoiceNumber: success.number,
                     date: new Date().toLocaleDateString('en-IN'),
                     customerName: success.party,
                     customerPhone: success.partyPhone,
-                    items: success.items?.map((i: any) => ({ name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst })) || [],
-                    subtotal: Math.round(success.amount / 1.18),
-                    tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
+                    items: itemsForPdf,
+                    subtotal: pdfSubtotal,
+                    tax: pdfTax,
                     total: success.amount,
                     businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
                     businessPhone: tenantData?.phone,
@@ -420,14 +433,21 @@ export default function POSPage() {
               </button>
               <button 
                 onClick={() => {
+                  const itemsForPdf = (success.items || []).map((i: any) => {
+                    const lineTotal = i.price * i.qty;
+                    const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
+                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst, taxable };
+                  });
+                  const pdfSubtotal = itemsForPdf.reduce((s: number, i: any) => s + i.taxable, 0);
+                  const pdfTax = success.amount - pdfSubtotal;
                   const pdfData = {
                     invoiceNumber: success.number,
                     date: new Date().toLocaleDateString('en-IN'),
                     customerName: success.party,
                     customerPhone: success.partyPhone,
-                    items: success.items?.map((i: any) => ({ name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst })) || [],
-                    subtotal: Math.round(success.amount / 1.18),
-                    tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
+                    items: itemsForPdf,
+                    subtotal: pdfSubtotal,
+                    tax: pdfTax,
                     total: success.amount,
                     businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
                     businessPhone: tenantData?.phone,

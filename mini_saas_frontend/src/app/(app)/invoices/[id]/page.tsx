@@ -166,10 +166,17 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const tax = items.reduce((s, i) => s + (i.price * i.qty * i.gstRate) / 100, 0);
-  const total = subtotal + tax || invoice.total;
-  const paid = invoice.status !== "unpaid" && invoice.status !== "overdue";
+  const invoiceTotal = items.reduce((s, i) => s + i.price * i.qty, 0) || invoice.total;
+  const itemsWithTax = items.map(i => {
+    const lineTotal = i.price * i.qty;
+    const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
+    return { ...i, taxable, gstAmount: lineTotal - taxable };
+  });
+  const subtotal = itemsWithTax.reduce((s, i) => s + i.taxable, 0);
+  const tax = itemsWithTax.reduce((s, i) => s + i.gstAmount, 0);
+  const total = invoiceTotal;
+  const paid = invoice.status === "paid";
+  const partial = invoice.status === "partial";
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-5">
@@ -188,11 +195,16 @@ export default function InvoiceDetailPage() {
               <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${statusStyle[invoice.syncStatus] || statusStyle.pending}`}>
                 {invoice.syncStatus || "pending"}
               </span>
-              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${paid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                {paid ? "PAID" : "UNPAID"}
-              </span>
-              <span className="text-xs text-muted-foreground capitalize">· {invoice.status}</span>
-              {paid && recoveryAttribution?.attributed && (
+              {partial ? (
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-orange-100 text-orange-700">
+                  PARTIAL
+                </span>
+              ) : (
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${paid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                  {paid ? "PAID" : "UNPAID"}
+                </span>
+              )}
+              {(paid || partial) && recoveryAttribution?.attributed && (
                 <RecoveryBadge
                   recoveredAmount={total}
                   attributionType={recoveryAttribution.attributionType}

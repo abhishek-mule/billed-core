@@ -2,19 +2,21 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { db } from '@/lib/billzo/db'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 interface VerifyRequest {
   razorpay_order_id: string
   razorpay_payment_id: string
   razorpay_signature: string
   invoiceId?: string
+  amount?: number
+  tenantId?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: VerifyRequest = await request.json()
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId } = body
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount, tenantId } = body
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json(
@@ -42,11 +44,32 @@ export async function POST(request: NextRequest) {
 
     if (invoiceId) {
       try {
-        await db().invoices.update(invoiceId, {
-          status: 'paid',
-          paidAmount: (await db().invoices.get(invoiceId))?.total || 0,
-          updatedAt: new Date().toISOString(),
-        })
+        const { error: updateError } = await supabaseAdmin
+          .from('invoices')
+          .update({
+            status: 'paid',
+            paid_amount: amount || 0,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', invoiceId)
+
+        if (updateError) {
+          console.error('[VerifyPayment] Supabase update failed:', updateError)
+        } else {
+          const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
+          await writeOutboxEvent({
+            type: 'payment.completed',
+            entityId: invoiceId,
+            tenantId: tenantId || '',
+            correlationId: razorpay_order_id,
+            payload: {
+              amount: amount || 0,
+              provider: 'razorpay',
+              providerPaymentId: razorpay_payment_id,
+              razorpay_order_id,
+            },
+          })
+        }
       } catch (dbError) {
         console.error('[VerifyPayment] DB update failed:', dbError)
       }

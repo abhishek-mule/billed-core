@@ -39,13 +39,15 @@ function getCookie(name: string) {
   return match ? match[2] : null
 }
 
-function logout() {
+function doLogout() {
   document.cookie = 'bz_access=; Max-Age=0; path=/'
   document.cookie = 'bz_refresh=; Max-Age=0; path=/'
   document.cookie = 'bz_tenant=; Max-Age=0; path=/'
   document.cookie = 'bz_tenant_name=; Max-Age=0; path=/'
   document.cookie = 'bz_user_id=; Max-Age=0; path=/'
-  localStorage.clear()
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
+  localStorage.removeItem('tokenExpiry')
   window.location.href = '/auth'
 }
 
@@ -53,12 +55,14 @@ function Sidebar({
   pathname,
   collapsed,
   onToggle,
+  onLogout,
   userName,
   userEmail,
 }: {
   pathname: string
   collapsed: boolean
   onToggle: () => void
+  onLogout: () => void
   userName?: string
   userEmail?: string
 }) {
@@ -118,7 +122,7 @@ function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <div className="user-row" onClick={logout} style={{ cursor: 'pointer' }}>
+        <div className="user-row" onClick={onLogout} style={{ cursor: 'pointer' }}>
           <img
             src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}`}
             alt="Profile"
@@ -291,6 +295,7 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
@@ -368,6 +373,7 @@ export function AppShell({
           pathname={pathname}
           collapsed={collapsed}
           onToggle={() => setCollapsed(c => !c)}
+          onLogout={() => setShowLogoutConfirm(true)}
           userName={userName}
           userEmail={userEmail}
         />
@@ -392,6 +398,29 @@ export function AppShell({
           <BottomNav pathname={pathname} />
         </div>
       </div>
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="w-full max-w-sm mx-4 rounded-2xl bg-card p-6 shadow-xl border border-border" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold">Sign out of BillZo?</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Your local data will remain on this device. You can sign back in anytime.</p>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 rounded-xl border border-input py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowLogoutConfirm(false); doLogout() }}
+                className="flex-1 rounded-xl bg-destructive text-destructive-foreground py-2.5 text-sm font-medium hover:opacity-90 transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
