@@ -288,8 +288,21 @@ export function AppShell({
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const goOnline = () => setIsOnline(true)
+    const goOffline = () => setIsOnline(false)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
 
   const userName = (() => {
     const name = getCookie('bz_tenant_name')
@@ -353,7 +366,15 @@ export function AppShell({
 
         <div className="shell-body">
           <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} userName={userName} />
-          <main className="shell-main">{children}</main>
+
+          {!isOnline && (
+            <div className="flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-semibold text-destructive-foreground">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+              You are offline — changes will sync when reconnected
+            </div>
+          )}
+
+          <main className="shell-main animate-fade-in">{children}</main>
           <BottomNav pathname={pathname} />
         </div>
       </div>

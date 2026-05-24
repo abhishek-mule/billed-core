@@ -1,20 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --font:    'DM Sans', system-ui, sans-serif;
+  --font:    'Inter', system-ui, sans-serif;
   --mono:    'DM Mono', monospace;
-  --bg:      #F7F6F4;
-  --surface: #FFFFFF;
-  --border:  #E6E3DC;
-  --border2: #C8C4BC;
-  --text:    #1C1B18;
-  --text2:   #6A6760;
-  --text3:   #A9A6A0;
-  --accent:  #1C1B18;
-  --afg:     #FFFFFF;
-  --green:   #15803D;
+  --bg:      hsl(var(--background));
+  --surface: hsl(var(--card));
+  --border:  hsl(var(--border));
+  --border2: hsl(var(--input));
+  --text:    hsl(var(--foreground));
+  --text2:   hsl(var(--muted-foreground));
+  --text3:   hsl(var(--muted-foreground));
+  --accent:  hsl(var(--foreground));
+  --afg:     hsl(var(--primary-foreground));
+  --green:   hsl(var(--primary));
   --sw:      220px;
   --sw-c:    56px;
   --tbh:     52px;
