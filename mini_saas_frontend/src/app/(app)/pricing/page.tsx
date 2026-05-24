@@ -22,15 +22,6 @@ interface PricingState {
   razorpayLoaded: boolean
 }
 
-declare global {
-  interface Window {
-    Razorpay: new (options: Record<string, unknown>) => {
-      on: (event: string, handler: (response: unknown) => void) => void
-      open: () => void
-    }
-  }
-}
-
 const PLAN_FEATURES = {
   starter: ['3 invoices', '3 reminders', 'Basic dashboard'],
   pro: ['Unlimited invoices', 'Unlimited reminders', 'Auto recovery', 'Priority support'],

@@ -22,17 +22,31 @@ export type TenantWhatsAppConfig = {
   }
 }
 
+export type BankDetails = {
+  bankName?: string
+  accountNumber?: string
+  ifsc?: string
+  accountHolder?: string
+}
+
 export type Tenant = {
   id: string
   name: string
   ownerUserId: string
   phone?: string
+  email?: string
+  address?: string
   upiId?: string
   gstin?: string
+  pan?: string
+  bankDetails?: BankDetails
+  whiteLabel: boolean
+  autoMode: boolean
   plan: 'starter' | 'growth' | 'pro'
   paywallUnlocked: boolean
   invoiceCount: number
   reminderCount: number
+  invoiceNumberCounter?: number
   subscriptionId?: string
   subscriptionStatus?: string
   cancelledAt?: string
@@ -124,6 +138,7 @@ export type Invoice = {
   total: number
   paidAmount: number
   status: InvoiceStatus
+  invoiceNumber?: string
   dueAt: string
   createdAt: string
   updatedAt: string

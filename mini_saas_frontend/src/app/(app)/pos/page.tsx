@@ -51,6 +51,7 @@ export default function POSPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
   const [usageLoading, setUsageLoading] = useState(true);
+  const [tenantData, setTenantData] = useState<any>(null);
 
   useEffect(() => {
     const activeTenantId = getTenantId();
@@ -60,6 +61,7 @@ export default function POSPage() {
     }
 
     setTenantId(activeTenantId);
+    db().tenants.get(activeTenantId).then(t => setTenantData(t));
   }, []);
 
   useEffect(() => {
@@ -156,7 +158,7 @@ export default function POSPage() {
 
     const inv: any = {
       id: (result.data as any)?.id,
-      number: (result.data as any)?.id?.slice(0, 8).toUpperCase(),
+      number: (result.data as any)?.invoiceNumber || (result.data as any)?.id?.slice(0, 8).toUpperCase(),
       party: customer,
       partyPhone: customerPhone,
       amount: Math.round(total),
@@ -387,19 +389,27 @@ export default function POSPage() {
 
             <div className="mt-4 flex gap-2">
               <button 
-                onClick={() => {
+                onClick={async () => {
                   const pdfData = {
                     invoiceNumber: success.number,
                     date: new Date().toLocaleDateString('en-IN'),
                     customerName: success.party,
                     customerPhone: success.partyPhone,
-                    items: success.items || [],
+                    items: success.items?.map((i: any) => ({ name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst })) || [],
                     subtotal: Math.round(success.amount / 1.18),
                     tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
                     total: success.amount,
-                    businessName: getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop',
+                    businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
+                    businessPhone: tenantData?.phone,
+                    businessGstin: tenantData?.gstin,
+                    businessPan: tenantData?.pan,
+                    businessAddress: tenantData?.address,
+                    bankDetails: tenantData?.bankDetails,
+                    upiId: tenantData?.upiId,
+                    whiteLabel: tenantData?.whiteLabel,
+                    placeOfSupply: tenantData?.gstin ? tenantData.gstin.slice(0, 2) : undefined,
                   }
-                  downloadInvoicePDF(pdfData)
+                  await downloadInvoicePDF(pdfData)
                 }}
                 className="flex-1 rounded-xl border border-input py-3 text-sm font-medium hover:bg-secondary transition-colors flex items-center justify-center gap-2"
               >
@@ -415,11 +425,17 @@ export default function POSPage() {
                     date: new Date().toLocaleDateString('en-IN'),
                     customerName: success.party,
                     customerPhone: success.partyPhone,
-                    items: success.items || [],
+                    items: success.items?.map((i: any) => ({ name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst })) || [],
                     subtotal: Math.round(success.amount / 1.18),
                     tax: Math.round(success.amount - Math.round(success.amount / 1.18)),
                     total: success.amount,
-                    businessName: getCookie('bz_tenant_name') || getCookie('bz_tenant')?.slice(-8) || 'My Shop',
+                    businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
+                    businessPhone: tenantData?.phone,
+                    businessGstin: tenantData?.gstin,
+                    businessPan: tenantData?.pan,
+                    bankDetails: tenantData?.bankDetails,
+                    upiId: tenantData?.upiId,
+                    whiteLabel: tenantData?.whiteLabel,
                   }
                   const waLink = getWhatsAppShareLink(pdfData)
                   window.open(waLink, '_blank')

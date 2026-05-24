@@ -405,7 +405,7 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
         })
         if (tenantId && currentTenant) {
           await db().tenants.update(tenantId, {
-            reminderCount: (currentTenant.reminderCount || 0) + 1,
+            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
             updatedAt: current,
           })
         }
@@ -486,6 +486,16 @@ export async function handlePOSInvoice(
   const total = cart.reduce((sum, item) => sum + item.salePrice * item.qty, 0)
   const paidAmount = method === 'udhar' ? 0 : total
 
+  const tenantId = getTenantIdLocal()
+  const currentTenant = tenantId ? await db().tenants.get(tenantId) : null
+  const nextCounter = (currentTenant?.invoiceNumberCounter || 0) + 1
+  const fy = (() => {
+    const d = new Date(); const y = d.getFullYear(); const m = d.getMonth() + 1
+    return m >= 4 ? `${y}-${(y + 1).toString().slice(2)}` : `${y - 1}-${y.toString().slice(2)}`
+  })()
+  const prefix = (currentTenant?.name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() || 'BIZ'
+  const invoiceNumber = `${prefix}-${fy}-${String(nextCounter).padStart(6, '0')}`
+
   const invoice: Invoice & { paymentMode?: string } = {
     id: invoiceId,
     tenantId: session.tenantId,
@@ -495,6 +505,7 @@ export async function handlePOSInvoice(
     total,
     paidAmount,
     status: method === 'udhar' ? 'unpaid' : 'paid',
+    invoiceNumber,
     dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     createdAt: current,
     updatedAt: current,

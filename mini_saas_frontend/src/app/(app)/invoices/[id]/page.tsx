@@ -4,6 +4,7 @@ import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
 import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline";
 import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
@@ -226,22 +227,41 @@ export default function InvoiceDetailPage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => setShowWAModal(true)}
             className="flex items-center justify-center gap-2 rounded-2xl bg-green-600 py-4 text-sm font-bold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
           >
             {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-            Send via WhatsApp
+            WhatsApp
           </button>
-          <button
-            onClick={generatePaymentLink}
-            disabled={genLinkLoading || invoice?.status === 'paid'}
-            className="flex items-center justify-center gap-2 rounded-2xl border-2 border-indigo-200 bg-indigo-50 py-4 text-sm font-bold text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50"
-          >
-            {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-            {paymentLink || invoice?.paymentLinkUrl ? 'Copy Link' : 'Generate Payment Link'}
-          </button>
+
+          {!paid && (
+            <RazorpayCheckoutButton
+              invoiceId={invoice.id}
+              amount={total}
+              customerName={invoice.customerName}
+              customerPhone={invoice.customerPhone}
+              onPaymentSuccess={() => { loadInvoice(); loadRecoveryData(); }}
+              className="rounded-2xl py-4"
+            />
+          )}
+
+          {paid ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl bg-green-100 py-4 text-sm font-bold text-green-700">
+              <CheckCircle2 className="h-4 w-4" />
+              Paid
+            </div>
+          ) : (
+            <button
+              onClick={generatePaymentLink}
+              disabled={genLinkLoading}
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              {paymentLink || invoice?.paymentLinkUrl ? 'Copy Link' : 'Payment Link'}
+            </button>
+          )}
         </div>
 
         {(paymentLink || invoice?.paymentLinkUrl) && (

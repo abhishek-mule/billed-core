@@ -96,16 +96,17 @@ export async function createInvoiceFromWhatsApp(
 
     try {
       const tenant = await db().tenants.get(tenantId)
-      const pdfDoc = generateInvoicePDF({
+      const pdfDoc = await generateInvoicePDF({
         invoiceNumber: invoice.id.slice(0, 8).toUpperCase(),
         date: invoice.createdAt,
         customerName: invoice.customerName,
         customerPhone: invoice.customerPhone,
         items: invoiceItems.map(item => ({
           name: item.name,
+          hsn: item.hsn,
           qty: item.qty,
           price: item.price,
-          lineTotal: item.lineTotal,
+          gstRate: item.gstRate,
         })),
         subtotal: total - Math.round(total * 0.18 / 1.18),
         tax: Math.round(total * 0.18 / 1.18),
@@ -113,6 +114,11 @@ export async function createInvoiceFromWhatsApp(
         businessName: tenant?.name || 'BillZo',
         businessPhone: tenant?.phone,
         businessGstin: tenant?.gstin,
+        businessPan: tenant?.pan,
+        businessAddress: tenant?.address,
+        bankDetails: tenant?.bankDetails,
+        upiId: tenant?.upiId,
+        whiteLabel: tenant?.whiteLabel,
       })
       if (pdfDoc) {
         const pdfBlob = (pdfDoc as any).output('blob')

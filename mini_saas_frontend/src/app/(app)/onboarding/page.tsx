@@ -177,6 +177,8 @@ export default function OnboardingPage() {
           gstin: finalGSTIN,
           plan: 'starter' as PlanType,
           paywallUnlocked: false,
+          whiteLabel: false,
+          autoMode: true,
           invoiceCount: 0,
           reminderCount: 0,
           createdAt: now,
