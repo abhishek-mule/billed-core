@@ -3,7 +3,8 @@
 import { useRouter } from 'next/navigation'
 import { Download, CheckCircle2, Zap, FileText } from 'lucide-react'
 import type { AgingBucket, PlanType } from '@/lib/billzo/report-engine'
-import { formatINR, exportToCSV } from '@/lib/billzo/report-engine'
+import { formatINR } from '@/lib/utils'
+import { exportToCSV } from '@/lib/billzo/report-engine'
 import { downloadAgingReportPDF } from '@/lib/billzo/pdf'
 import { PaywallTeaser } from './MetricCard'
 

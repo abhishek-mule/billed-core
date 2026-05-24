@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { TrendingUp, TrendingDown, Send, AlertCircle, CheckCircle2, PieChart as PieIcon } from 'lucide-react'
 import type { RecoveryMetrics, PlanType } from '@/lib/billzo/report-engine'
-import { formatINR } from '@/lib/billzo/report-engine'
+import { formatINR } from '@/lib/utils'
 import { PaywallTeaser } from './MetricCard'
 import {
   PieChart,

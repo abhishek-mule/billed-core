@@ -4,27 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut, Printer, Send, Loader2, Save, Building, Banknote, SwitchCamera, Zap } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
-
-function getCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
-
-function setCookie(name: string, value: string, days = 365) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString()
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
-}
-
-function clearAllCookies() {
-  const cookies = ['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id', 'bz_prefs']
-  cookies.forEach(name => {
-    document.cookie = `${name}=; Max-Age=0; path=/`
-    document.cookie = `${name}=; Max-Age=0; path=/; domain=${window.location.hostname}`
-  })
-}
+import { getCookie, setCookie, clearAuthCookies } from "@/lib/cookies";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -168,7 +151,7 @@ export default function SettingsPage() {
   };
 
   const handleSignOut = () => {
-    clearAllCookies();
+    clearAuthCookies();
     localStorage.clear();
     router.push("/auth");
   };
@@ -308,10 +291,9 @@ export default function SettingsPage() {
             <label className="block text-xs font-medium text-muted-foreground mb-1">UPI ID (for QR code on invoice)</label>
             <input value={form.upiId} onChange={e => setForm(f => ({ ...f, upiId: e.target.value }))} placeholder="shop@upi" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
-          <button onClick={saveBusinessDetails} disabled={saving === 'business'} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">
-            {saving === 'business' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving === 'business' ? 'Saving...' : 'Save Business Details'}
-          </button>
+          <Button onClick={saveBusinessDetails} loading={saving === 'business'}>
+            <Save className="h-4 w-4" /> Save Business Details
+          </Button>
         </div>
       </div>
 
@@ -336,10 +318,9 @@ export default function SettingsPage() {
             <label className="block text-xs font-medium text-muted-foreground mb-1">IFSC Code</label>
             <input value={form.ifsc} onChange={e => setForm(f => ({ ...f, ifsc: e.target.value.toUpperCase() }))} placeholder="HDFC0001234" maxLength={11} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
-          <button onClick={saveBankDetails} disabled={saving === 'bank'} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">
-            {saving === 'bank' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving === 'bank' ? 'Saving...' : 'Save Bank Details'}
-          </button>
+          <Button variant="secondary" onClick={saveBankDetails} loading={saving === 'bank'}>
+            <Save className="h-4 w-4" /> Save Bank Details
+          </Button>
         </div>
       </div>
 
@@ -419,12 +400,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <button
-        onClick={handleSignOut}
-        className="w-full rounded-2xl border border-red-300 bg-red-50 p-4 flex items-center justify-center gap-2 text-red-600 font-medium hover:bg-red-100 transition-colors"
-      >
+      <Button variant="danger" className="w-full" onClick={handleSignOut}>
         <LogOut className="h-4 w-4" /> Sign out
-      </button>
+      </Button>
     </div>
   );
 }

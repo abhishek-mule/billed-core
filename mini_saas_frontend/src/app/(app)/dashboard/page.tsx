@@ -4,18 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2, Store } from "lucide-react";
+import { Plus, ScanLine, Package, Users, AlertTriangle, CheckCircle2, ArrowRight, TrendingUp, Loader2, Store, Receipt } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { UsagePill } from "@/components/billzo/UsagePill";
 import { Loader } from "@/components/billzo/Loader";
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
-
-function getCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
+import { EmptyState } from '@/components/billzo/EmptyState';
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 function getTenantName() {
   const raw = getCookie('bz_tenant_name')
@@ -168,9 +164,9 @@ export default function DashboardPage() {
           </div>
         </div>
         {!allSynced && (
-          <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium text-sm">
+          <Button size="sm">
             Retry
-          </button>
+          </Button>
         )}
       </div>
 
@@ -204,7 +200,7 @@ export default function DashboardPage() {
           </Link>
         </div>
         {invoices.length === 0 ? (
-          <div className="p-12 text-center text-sm text-muted-foreground">No invoices yet</div>
+          <div className="p-12"><EmptyState icon={<Receipt className="h-8 w-8" />} title="No invoices yet" /></div>
         ) : (
           <ul className="divide-y divide-border">
             {invoices.slice(0, 6).map((inv) => (

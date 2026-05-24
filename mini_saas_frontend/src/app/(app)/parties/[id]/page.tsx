@@ -4,11 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, MapPin, Hash, MessageCircle, Plus, CreditCard, Loader2, ExternalLink, Receipt, Calendar, TrendingUp, TrendingDown } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getUsageLimits, incrementReminderCount } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 export default function PartyDetailPage() {
   const params = useParams();
@@ -31,12 +32,6 @@ export default function PartyDetailPage() {
   useEffect(() => {
     loadParty();
   }, [id]);
-
-  const getCookie = (name: string) => {
-    if (typeof document === "undefined") return null;
-    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-    return match ? match[2] : null;
-  };
 
   const loadParty = async () => {
     try {
@@ -340,7 +335,7 @@ export default function PartyDetailPage() {
               )}
             </div>
             <div className="flex gap-3 p-5 border-t bg-slate-50">
-              <button onClick={() => { setShowWAModal(false); setWaError(""); }} className="flex-1 h-11 rounded-xl border font-medium">Cancel</button>
+              <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(""); }}>Cancel</Button>
               <button
                 onClick={() => sendReminder(selectedInvoiceId || undefined)}
                 disabled={sendingWA}

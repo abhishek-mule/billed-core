@@ -3,7 +3,8 @@
 import { Download, FileText, ArrowRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { GSTReport, PlanType } from '@/lib/billzo/report-engine'
-import { formatINR, exportToCSV } from '@/lib/billzo/report-engine'
+import { formatINR } from '@/lib/utils'
+import { exportToCSV } from '@/lib/billzo/report-engine'
 import { downloadGSTReportPDF } from '@/lib/billzo/pdf'
 import { MetricCard, PaywallTeaser } from './MetricCard'
 

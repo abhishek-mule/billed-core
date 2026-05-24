@@ -3,16 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, AlertTriangle, Package, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
 import { useLiveQueryState } from "@/lib/billzo/use-live-query";
 import { useSyncHealth } from "@/lib/billzo/sync-health";
 import { retryProductSync } from "@/lib/billzo/products-service";
+import { EmptyState } from '@/components/billzo/EmptyState';
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+import { formatINR } from "@/lib/utils";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -92,12 +93,9 @@ export default function ProductsPage() {
           <span>
             {syncHealth.failedCount + syncHealth.conflictCount} product sync operation{syncHealth.failedCount + syncHealth.conflictCount > 1 ? "s" : ""} failed. Data may be stale.
           </span>
-          <button
-            onClick={() => retryProductSync()}
-            className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 font-medium text-yellow-900"
-          >
+          <Button size="sm" variant="outline" onClick={() => retryProductSync()}>
             Retry sync
-          </button>
+          </Button>
         </div>
       )}
 
@@ -117,32 +115,24 @@ export default function ProductsPage() {
             className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-input flex items-center gap-2" onClick={exportExcel}>
+        <Button variant="outline" size="sm" onClick={exportExcel}>
           <FileSpreadsheet className="h-4 w-4 text-green-600" /> <span className="hidden sm:inline">Excel</span>
-        </button>
-        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-xl font-medium border border-input flex items-center gap-2" onClick={exportPDF}>
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportPDF}>
           <FileText className="h-4 w-4 text-red-600" /> <span className="hidden sm:inline">PDF</span>
-        </button>
-        <button
-          onClick={() => router.push("/products/add")}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium"
-        >
+        </Button>
+        <Button onClick={() => router.push("/products/add")}>
           <Plus className="h-4 w-4" /> Add
-        </button>
+        </Button>
       </div>
 
       {products.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center">
-          <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold">No products yet</h3>
-          <p className="text-muted-foreground mt-1">Add your first product to get started</p>
-          <button
-            onClick={() => router.push("/products/add")}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium"
-          >
-            <Plus className="h-4 w-4" /> Add Product
-          </button>
-        </div>
+        <EmptyState
+          icon={<Package className="h-12 w-12" />}
+          title="No products yet"
+          description="Add your first product to get started"
+          action={<Button onClick={() => router.push("/products/add")}><Plus className="h-4 w-4" /> Add Product</Button>}
+        />
       ) : (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="hidden sm:grid grid-cols-[1fr_100px_100px_100px_100px] gap-4 px-5 py-3 border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">

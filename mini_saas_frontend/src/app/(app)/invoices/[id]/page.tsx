@@ -4,18 +4,19 @@ import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
 import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline";
 import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 const statusStyle: Record<string, string> = {
   synced: "bg-green-100 text-green-700",
   pending: "bg-yellow-100 text-yellow-700",
   failed: "bg-red-100 text-red-700",
 };
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -40,12 +41,6 @@ export default function InvoiceDetailPage() {
     loadInvoice();
     loadRecoveryData();
   }, [id]);
-
-  const getCookie = (name: string) => {
-    if (typeof document === 'undefined') return null
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-    return match ? match[2] : null
-  }
 
   const loadInvoice = async () => {
     try {
@@ -334,7 +329,7 @@ export default function InvoiceDetailPage() {
               )}
             </div>
             <div className="flex gap-3 p-5 border-t bg-slate-50">
-              <button onClick={() => { setShowWAModal(false); setWaError('') }} className="flex-1 h-11 rounded-xl border font-medium">Cancel</button>
+              <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError('') }}>Cancel</Button>
               <button
                 onClick={sendWhatsApp}
                 disabled={sendingWA}

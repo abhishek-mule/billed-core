@@ -3,8 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Upload, FileText, CheckCircle2, Loader2, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
+import { EmptyState } from '@/components/billzo/EmptyState';
 import { db } from "@/lib/billzo/db";
 import Tesseract from "tesseract.js";
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 type Step = "scan" | "extracting" | "verify" | "saved";
 
@@ -27,11 +31,6 @@ export default function PurchasesPage() {
 
   const loadPurchases = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
@@ -97,11 +96,6 @@ export default function PurchasesPage() {
 
   const save = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) return;
 
@@ -137,8 +131,6 @@ export default function PurchasesPage() {
       </div>
     );
   }
-
-  const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-2xl mx-auto">
@@ -200,8 +192,8 @@ export default function PurchasesPage() {
           </div>
 
           <div className="mt-6 flex gap-3">
-            <button className="flex-1 px-4 py-2 border border-input rounded-xl font-medium" onClick={() => setStep("scan")}>Cancel</button>
-            <button className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium" onClick={save}>Save purchase</button>
+            <Button variant="outline" className="flex-1" onClick={() => setStep("scan")}>Cancel</Button>
+            <Button className="flex-1" onClick={save}>Save purchase</Button>
           </div>
         </div>
       )}
@@ -220,9 +212,10 @@ export default function PurchasesPage() {
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent</h3>
           {recentPurchases.length === 0 ? (
-            <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
-              No recent purchases
-            </div>
+            <EmptyState
+              icon={<FileText className="h-8 w-8" />}
+              title="No recent purchases"
+            />
           ) : (
             <div className="rounded-2xl border border-border bg-card divide-y divide-border">
               {recentPurchases.map((p) => (

@@ -1,6 +1,7 @@
 'use client'
 
 import type { Invoice, Payment, WhatsAppEvent, RecoveryAttempt, InvoiceItem, Product, Customer } from './types'
+import { formatINR } from '@/lib/utils'
 
 export type PlanType = 'starter' | 'pro' | 'growth'
 
@@ -528,12 +529,4 @@ export function exportToCSV(data: Record<string, unknown>[], filename: string) {
   a.download = `${filename}.csv`
   a.click()
   URL.revokeObjectURL(url)
-}
-
-export function formatINR(n: number): string {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(n)
 }

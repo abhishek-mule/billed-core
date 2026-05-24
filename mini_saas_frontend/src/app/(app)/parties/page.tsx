@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, MessageCircle, Phone, Plus, Loader2, Upload, Users } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getUsageLimits, incrementReminderCount } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+import { EmptyState } from '@/components/billzo/EmptyState';
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 export default function PartiesPage() {
   const router = useRouter();
@@ -22,12 +24,6 @@ export default function PartiesPage() {
   useEffect(() => {
     loadCustomers();
   }, []);
-
-  const getCookie = (name: string) => {
-    if (typeof document === 'undefined') return null
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-    return match ? match[2] : null
-  }
 
   const loadCustomers = async () => {
     try {
@@ -144,23 +140,21 @@ export default function PartiesPage() {
                   className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              <button
+              <Button
                 onClick={() => router.push('/parties/add')}
-                className="h-11 px-4 bg-primary text-primary-foreground rounded-xl font-medium flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" /> Add
-              </button>
+              </Button>
             </div>
           </div>
 
       {customers.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center">
-          <h3 className="text-lg font-semibold">No parties yet</h3>
-          <p className="text-muted-foreground mt-1">Add customers and suppliers</p>
-          <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium">
-            <Plus className="h-4 w-4" /> Add Party
-          </button>
-        </div>
+        <EmptyState
+          icon={<Users className="h-12 w-12" />}
+          title="No parties yet"
+          description="Add customers and suppliers"
+          action={<Button onClick={() => router.push('/parties/add')}><Plus className="h-4 w-4" /> Add Party</Button>}
+        />
       ) : (
         <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
           {filtered.map((p) => (

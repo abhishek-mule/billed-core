@@ -2,19 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2 } from "lucide-react";
+import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2, Package } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
 import { getUsageLimits } from "@/lib/billzo/usage";
 import { PaywallModal } from "@/components/billzo/PaywallModal";
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
+import { EmptyState } from '@/components/billzo/EmptyState';
 import { handlePOSInvoice } from "@/lib/billzo/actions";
 import { lookupBarcode, normalizeBarcode } from "@/lib/billzo/barcode-lookup";
 import { retryProductSync } from "@/lib/billzo/products-service";
 import { useSyncHealth } from "@/lib/billzo/sync-health";
 import { useLiveQueryState } from "@/lib/billzo/use-live-query";
 import { toast } from "sonner";
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 type CartItem = {
   id: string;
@@ -27,14 +31,6 @@ type CartItem = {
   unit?: string;
   lowStockAt: number;
 };
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
-
-function getCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
 
 export default function POSPage() {
   const router = useRouter();
@@ -206,12 +202,9 @@ export default function POSPage() {
           <span>
             {syncHealth.failedCount + syncHealth.conflictCount} billing sync operation{syncHealth.failedCount + syncHealth.conflictCount > 1 ? "s" : ""} failed. Inventory may be stale until retry succeeds.
           </span>
-          <button
-            onClick={() => retryProductSync()}
-            className="rounded-lg border border-yellow-300 bg-white px-3 py-1.5 font-medium text-yellow-900"
-          >
+          <Button size="sm" variant="outline" onClick={() => retryProductSync()}>
             Retry sync
-          </button>
+          </Button>
         </div>
       )}
       <div className="grid lg:grid-cols-[1fr_400px] gap-6">
@@ -239,13 +232,12 @@ export default function POSPage() {
           </div>
 
           {products.length === 0 ? (
-            <div className="mt-8 rounded-2xl border border-border bg-card p-12 text-center">
-              <h3 className="text-lg font-semibold">No products yet</h3>
-              <p className="text-muted-foreground mt-1">Add products to start billing</p>
-              <button className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium" onClick={() => router.push("/products/add")}>
-                <Plus className="h-4 w-4" /> Add Product
-              </button>
-            </div>
+            <EmptyState
+              icon={<Package className="h-12 w-12" />}
+              title="No products yet"
+              description="Add products to start billing"
+              action={<Button onClick={() => router.push("/products/add")}><Plus className="h-4 w-4" /> Add Product</Button>}
+            />
           ) : (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
               {filtered.map((p) => {
@@ -468,9 +460,9 @@ export default function POSPage() {
                 WhatsApp
               </button>
             </div>
-            <button onClick={closeSuccess} className="w-full mt-2 rounded-xl border border-input py-3 text-sm font-medium hover:bg-secondary transition-colors">
+            <Button variant="outline" className="w-full mt-2" onClick={closeSuccess}>
               New sale
-            </button>
+            </Button>
           </div>
         </div>
       )}

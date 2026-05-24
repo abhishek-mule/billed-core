@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { BarcodeScanner } from './BarcodeScanner'
 import { lookupBarcode, type BarcodeLookupResult } from '@/lib/billzo/barcode-lookup'
 import { extractTextFromImage } from '@/lib/billzo/ocr'
+import { formatINR } from '@/lib/utils'
+import { getCookie } from '@/lib/cookies'
 
 interface LineItem {
   name: string
@@ -51,8 +53,6 @@ export function Scan() {
   const [barcodeResult, setBarcodeResult] = useState<BarcodeLookupResult | null>(null)
   const [enrichedProduct, setEnrichedProduct] = useState<EnrichedProduct | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const formatINR = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
 
   const processUpload = async (file?: File) => {
     if (!file) return
@@ -494,10 +494,4 @@ export function Scan() {
       </div>
     </div>
   )
-}
-
-function getCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
 }

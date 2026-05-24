@@ -3,13 +3,10 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sparkles, X, Lock, Loader2, Check, TrendingUp, Zap } from "lucide-react"
+import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
-
-const formatINR = (n: number) => new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-}).format(n)
+import { formatINR } from "@/lib/utils"
+import { getCookie } from "@/lib/cookies"
 
 interface PaywallModalProps {
   type: "invoice" | "reminder"
@@ -33,11 +30,6 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
   }, [open])
 
   async function computeRealMetrics() {
-    function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
     const tenantId = getCookie('bz_tenant')
     if (!tenantId) return
 
@@ -63,11 +55,6 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
   const handleUpgrade = async (plan: 'pro' | 'growth') => {
     setLoading(true)
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant')
       if (!tenantId) {
         router.push("/auth")
@@ -259,12 +246,13 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                     )}
                   </button>
 
-                  <button
+                  <Button
+                    variant="ghost"
+                    className="w-full mt-3"
                     onClick={onClose}
-                    className="mt-3 w-full py-2 text-sm text-gray-500 hover:text-gray-700"
                   >
                     Maybe later
-                  </button>
+                  </Button>
                 </>
               )}
             </>

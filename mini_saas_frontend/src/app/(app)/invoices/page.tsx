@@ -3,11 +3,15 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, AlertTriangle, RefreshCw, Plus, Filter, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Search, AlertTriangle, RefreshCw, Plus, Filter, Loader2, Download, FileSpreadsheet, FileText, Receipt } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
+import { EmptyState } from '@/components/billzo/EmptyState';
 import { db } from "@/lib/billzo/db";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatINR } from "@/lib/utils";
+import { getCookie } from "@/lib/cookies";
 
 const tabs = ["All", "Synced", "Pending", "Failed"] as const;
 type Tab = typeof tabs[number];
@@ -17,8 +21,6 @@ const statusStyle: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
   failed: "bg-red-100 text-red-700",
 };
-
-const formatINR = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 export default function InvoicesPage() {
   const router = useRouter();
@@ -33,11 +35,6 @@ export default function InvoicesPage() {
 
   const loadInvoices = async () => {
     try {
-      function getCookie(name: string) {
-        if (typeof document === 'undefined') return null
-        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-        return match ? match[2] : null
-      }
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
@@ -111,9 +108,9 @@ export default function InvoicesPage() {
             <span className="font-semibold text-yellow-700">{failedCount} invoices failed to sync.</span>
             <span className="text-muted-foreground ml-1">Retry anytime — your data is safe.</span>
           </div>
-          <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium" onClick={() => console.log("Retrying sync…")}>
+          <Button size="sm" onClick={() => console.log("Retrying sync…")}>
             <RefreshCw className="h-3.5 w-3.5" /> Retry all
-          </button>
+          </Button>
         </div>
       )}
 
@@ -127,12 +124,12 @@ export default function InvoicesPage() {
             className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium border border-input flex items-center gap-2" onClick={exportExcel}>
+        <Button variant="outline" size="sm" onClick={exportExcel}>
           <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel
-        </button>
-        <button className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium border border-input flex items-center gap-2" onClick={exportPDF}>
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportPDF}>
           <FileText className="h-4 w-4 text-red-600" /> PDF
-        </button>
+        </Button>
       </div>
 
       <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit">
@@ -150,15 +147,12 @@ export default function InvoicesPage() {
       </div>
 
       {invoices.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center">
-          <h3 className="text-lg font-semibold">No invoices yet</h3>
-          <p className="text-muted-foreground mt-1">Create your first invoice from POS</p>
-          <Link href="/pos">
-            <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium">
-              <Plus className="h-4 w-4" /> Create Invoice
-            </button>
-          </Link>
-        </div>
+        <EmptyState
+          icon={<Receipt className="h-12 w-12" />}
+          title="No invoices yet"
+          description="Create your first invoice from POS"
+          action={<Link href="/pos"><Button><Plus className="h-4 w-4" /> Create Invoice</Button></Link>}
+        />
       ) : (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="hidden md:grid grid-cols-[1fr_1fr_120px_120px_100px] gap-4 px-5 py-3 border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
