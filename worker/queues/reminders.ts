@@ -1,54 +1,201 @@
-import { Worker, Job } from 'bullmq'
+import { Worker, Job, Queue } from 'bullmq'
 import { createRedisConnection } from '../lib/redis'
+import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
+import { emitRecoveryReminderSent } from '../src/lib/billzo/events'
+
+const STAGE_ORDER = ['t1_soft', 't2_firm', 't3_urgent', 't4_final']
+const STAGE_LABELS: Record<string, string> = {
+  t1_soft: 'friendly reminder',
+  t2_firm: 'payment follow-up',
+  t3_urgent: 'urgent reminder',
+  t4_final: 'final notice',
+}
+
+function buildMessage(stage: string, customerName: string, amount: number, businessName: string): string {
+  const stageLabel = STAGE_LABELS[stage] || 'reminder'
+  const amountText = `₹${amount.toLocaleString('en-IN')}`
+  return [
+    `Dear ${customerName},`,
+    '',
+    `This is a ${stageLabel} regarding your pending amount of ${amountText}.`,
+    stage === 't4_final'
+      ? 'Please arrange payment immediately to avoid any further escalation.'
+      : 'Please clear the dues at your earliest convenience.',
+    '',
+    `Regards,\n${businessName}`,
+  ].join('\n')
+}
+
+async function sendViaGupshup(
+  apiKey: string,
+  appName: string,
+  source: string,
+  destination: string,
+  message: string,
+): Promise<{ messageId: string }> {
+  const payload = new URLSearchParams({
+    api_key: apiKey,
+    app_name: appName,
+    channel: 'whatsapp',
+    source: source,
+    destination: destination.replace(/\D/g, '').replace(/^91/, ''),
+    message: message,
+  })
+
+  const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: payload.toString(),
+  })
+
+  const data = await res.json() as any
+  if (!res.ok && data.status !== 'queued') {
+    throw new Error(data.error || `Gupshup error: ${res.status}`)
+  }
+  return { messageId: data.messageId || `wa_${Date.now()}` }
+}
+
+interface ReminderJobData {
+  invoiceId: string
+  tenantId: string
+  stage: string
+}
 
 export function createRemindersWorker() {
   const connection = createRedisConnection()
 
-  const worker = new Worker(
+  const worker = new Worker<ReminderJobData>(
     'reminders',
-    async (job: Job) => {
+    async (job: Job<ReminderJobData>) => {
       const startTime = Date.now()
       const { invoiceId, tenantId, stage } = job.data
 
-      try {
-        const lockKey = `reminder:${invoiceId}:${stage}`
-        const result = await withLock(lockKey, 60000, async () => {
-          console.log(`[RemindersWorker] Sending ${stage} reminder for invoice ${invoiceId}`)
-          return { sent: true, invoiceId, stage }
-        })
+      const lockKey = `reminder:${invoiceId}:${stage}`
+      const result = await withLock(lockKey, 60000, async () => {
+        console.log(`[RemindersWorker] Sending ${stage} reminder for invoice ${invoiceId}`)
 
-        if (!result) {
-          return { skipped: true, reason: 'lock_not_acquired' }
+        // 1. Fetch invoice + customer + tenant data from Supabase
+        const [invoiceResult, tenantResult] = await Promise.all([
+          supabaseAdmin.from('invoices').select('*, customers!inner(*)').eq('id', invoiceId).single(),
+          supabaseAdmin.from('tenants').select('name, whatsapp_config').eq('id', tenantId).single(),
+        ])
+
+        if (invoiceResult.error || !invoiceResult.data) {
+          throw new Error(`Invoice not found: ${invoiceResult.error?.message || invoiceId}`)
+        }
+        if (tenantResult.error || !tenantResult.data) {
+          throw new Error(`Tenant not found: ${tenantResult.error?.message || tenantId}`)
         }
 
-        const duration = Date.now() - startTime
-        logWorkerEvent({
+        const invoice = invoiceResult.data
+        const customer = invoice.customers as any
+        const tenant = tenantResult.data
+        const config = (tenant.whatsapp_config || {}) as Record<string, any>
+
+        // 2. Determine customer phone number
+        const phoneNumber = customer?.whatsapp_number || customer?.phone
+        if (!phoneNumber) {
+          console.log(`[RemindersWorker] No phone for customer ${customer?.id}, skipping`)
+          return { skipped: true, reason: 'no_phone', invoiceId, stage }
+        }
+        const cleanPhone = phoneNumber.replace(/\D/g, '')
+
+        // 3. Build message text
+        const message = buildMessage(stage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo')
+
+        // 4. Send via Gupshup
+        const gupshupApiKey = config.gupshupApiKey
+        const gupshupAppName = config.gupshupAppName
+        const sourceNumber = config.sourceNumber
+
+        let gupshupResponse: { messageId: string } | null = null
+        let sendError: string | null = null
+
+        if (gupshupApiKey && gupshupAppName && sourceNumber) {
+          try {
+            gupshupResponse = await sendViaGupshup(gupshupApiKey, gupshupAppName, sourceNumber, `+${cleanPhone}`, message)
+          } catch (err: any) {
+            sendError = err.message
+            console.error(`[RemindersWorker] Gupshup send failed for invoice ${invoiceId}:`, err.message)
+          }
+        } else {
+          console.log(`[RemindersWorker] No Gupshup config for tenant ${tenantId}, simulating send to ${cleanPhone}`)
+        }
+
+        // 5. Log WhatsApp event
+        const eventId = gupshupResponse?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const eventStatus = gupshupResponse ? 'queued' : sendError ? 'failed' : 'sent'
+
+        await supabaseAdmin.from('whatsapp_events').insert({
+          id: eventId,
           tenant_id: tenantId,
-          entity_id: invoiceId,
-          queue_name: 'reminders',
-          attempt: job.attemptsMade,
-          status: 'success',
-          duration_ms: duration,
-          timestamp: new Date().toISOString(),
-          level: 'info',
-          message: `Reminder sent: ${stage}`,
+          invoice_id: invoiceId,
+          customer_id: customer?.id || null,
+          phone: `+${cleanPhone}`,
+          status: eventStatus,
+          message_type: stage,
+          occurred_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          sync_status: eventStatus === 'failed' ? 'failed' : 'pending',
+          error: sendError,
         })
 
-        return result
-      } catch (err: any) {
-        logWorkerError(err as Error, {
-          tenant_id: tenantId,
-          entity_id: invoiceId,
-          queue_name: 'reminders',
-          attempt: job.attemptsMade,
-          duration_ms: Date.now() - startTime,
-          status: 'failed',
-          message: `Failed to send reminder: ${stage}`,
-        })
-        throw err
+        // 6. Update invoice recovery stage
+        const currentStageIndex = STAGE_ORDER.indexOf(stage)
+        const nextStage = currentStageIndex >= 0 && currentStageIndex < STAGE_ORDER.length - 1
+          ? STAGE_ORDER[currentStageIndex + 1]
+          : 't4_final'
+
+        await supabaseAdmin.from('invoices').update({
+          last_whatsapp_status: eventStatus,
+          last_whatsapp_at: new Date().toISOString(),
+          recovery_stage: nextStage,
+          next_recovery_at: nextStage !== stage
+            ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+            : null,
+          sync_status: 'pending',
+        }).eq('id', invoiceId)
+
+        // 7. Emit outbox event
+        if (eventStatus !== 'failed') {
+          await emitRecoveryReminderSent({
+            invoiceId,
+            tenantId,
+            customerId: customer?.id || '',
+            stage,
+            channel: 'whatsapp',
+            messageId: eventId,
+          })
+        }
+
+        if (sendError) {
+          throw new Error(sendError)
+        }
+
+        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone}`)
+        return { sent: true, invoiceId, stage, status: eventStatus, messageId: eventId }
+      })
+
+      if (!result) {
+        return { skipped: true, reason: 'lock_not_acquired' }
       }
+
+      const duration = Date.now() - startTime
+      logWorkerEvent({
+        tenant_id: tenantId,
+        entity_id: invoiceId,
+        queue_name: 'reminders',
+        attempt: job.attemptsMade,
+        status: result.skipped ? 'success' : 'success',
+        duration_ms: duration,
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: `Reminder sent: ${stage}`,
+      })
+
+      return result
     },
     {
       connection,
@@ -65,4 +212,46 @@ export function createRemindersWorker() {
   })
 
   return worker
+}
+
+export function createReminderQueue() {
+  const connection = createRedisConnection()
+  return new Queue<ReminderJobData>('reminders', { connection })
+}
+
+export async function enqueueOverdueReminders(): Promise<number> {
+  const now = new Date().toISOString()
+  let enqueued = 0
+
+  const { data: invoices, error } = await supabaseAdmin
+    .from('invoices')
+    .select('id, tenant_id, recovery_stage, next_recovery_at')
+    .in('status', ['unpaid', 'overdue'])
+    .lte('next_recovery_at', now)
+    .limit(200)
+
+  if (error || !invoices) {
+    console.error('[RemindersWorker] Failed to fetch overdue invoices:', error?.message)
+    return 0
+  }
+
+  const queue = createReminderQueue()
+  for (const inv of invoices) {
+    const stage = inv.recovery_stage || 't1_soft'
+    if (!STAGE_ORDER.includes(stage)) continue
+
+    await queue.add(`reminder:${inv.id}:${stage}`, {
+      invoiceId: inv.id,
+      tenantId: inv.tenant_id,
+      stage,
+    }, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 60000 },
+    })
+    enqueued++
+  }
+
+  await queue.close()
+  console.log(`[RemindersWorker] Enqueued ${enqueued} overdue reminder jobs`)
+  return enqueued
 }

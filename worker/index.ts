@@ -1,6 +1,6 @@
 import http from 'node:http'
 import { createOutboxWorker } from './queues/outbox'
-import { createRemindersWorker } from './queues/reminders'
+import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
 
 function startHealthServer() {
@@ -45,8 +45,21 @@ async function main() {
 
   console.log('[Worker] All workers started')
 
+  // Scan for overdue invoices every 5 minutes and enqueue reminder jobs
+  const enqueueOverdue = async () => {
+    try {
+      const count = await enqueueOverdueReminders()
+      if (count > 0) console.log(`[Worker] Enqueued ${count} overdue reminder jobs`)
+    } catch (err) {
+      console.error('[Worker] Failed to enqueue overdue reminders:', err)
+    }
+  }
+  enqueueOverdue()
+  const overdueInterval = setInterval(enqueueOverdue, 5 * 60 * 1000)
+
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
+    clearInterval(overdueInterval)
     healthServer.close()
     await Promise.all([
       outboxWorker.close(),

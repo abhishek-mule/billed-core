@@ -1,6 +1,7 @@
-import { Worker, Job } from 'bullmq'
+import { Worker, Job, Queue } from 'bullmq'
 import { createRedisConnection } from '../lib/redis'
 import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed } from '../src/lib/billzo/outbox'
+import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 
@@ -141,5 +142,26 @@ async function handleReminderEvent(event: any): Promise<void> {
 }
 
 async function handleOverdueEvent(event: any): Promise<void> {
-  console.log(`[OutboxWorker] Invoice overdue: ${event.entityId}`)
+  const invoiceId = event.entityId
+  const tenantId = event.tenantId
+  if (!invoiceId || !tenantId) return
+
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('recovery_stage')
+    .eq('id', invoiceId)
+    .single()
+
+  const stage = invoice?.recovery_stage || 't1_soft'
+  const connection = createRedisConnection()
+  const queue = new Queue('reminders', { connection })
+  try {
+    await queue.add(`reminder:${invoiceId}:${stage}`, { invoiceId, tenantId, stage }, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 60000 },
+    })
+    console.log(`[OutboxWorker] Enqueued ${stage} reminder for overdue invoice ${invoiceId}`)
+  } finally {
+    await queue.close()
+  }
 }
