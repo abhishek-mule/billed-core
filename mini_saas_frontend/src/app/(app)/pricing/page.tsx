@@ -68,28 +68,16 @@ export default function PricingPage() {
     document.body.appendChild(script)
   }
 
-  const fetchPlans = async () => {
-    try {
-      const response = await fetch("/api/payment/create-subscription")
-      if (!response.ok) throw new Error("Failed to load plans")
-
-      const data = await response.json()
-      setState((prev) => ({
-        ...prev,
-        plans: [
-          { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: [...PLAN_FEATURES.starter] },
-          { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: [...PLAN_FEATURES.pro] },
-          { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: [...PLAN_FEATURES.growth] },
-        ],
-        loading: false,
-      }))
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        error: err instanceof Error ? err.message : "Failed to load plans",
-        loading: false,
-      }))
-    }
+  const fetchPlans = () => {
+    setState((prev) => ({
+      ...prev,
+      plans: [
+        { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: [...PLAN_FEATURES.starter] },
+        { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: [...PLAN_FEATURES.pro] },
+        { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: [...PLAN_FEATURES.growth] },
+      ],
+      loading: false,
+    }))
   }
 
   const handleSelectPlan = async (planId: string) => {
