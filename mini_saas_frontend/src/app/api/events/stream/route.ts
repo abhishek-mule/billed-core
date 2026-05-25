@@ -4,7 +4,11 @@ import { db } from '@/lib/billzo/db'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const tenantId = request.headers.get('x-tenant-id')
+  const tenantId =
+    request.nextUrl.searchParams.get('tenantId') ||
+    request.cookies.get('bz_tenant')?.value ||
+    request.headers.get('x-tenant-id')
+
   if (!tenantId) {
     return new Response('Unauthorized', { status: 401 })
   }

@@ -10,9 +10,14 @@ export interface OcrCorrection {
   rawValue: string
   correctedValue: string
   count: number
+  frequency: number
+  confidenceAtCapture: number
+  acceptedCount: number
+  rejectedCount: number
   rawHash: string
   firstCorrectedAt: string
   lastCorrectedAt: string
+  lastSeenAt: string
 }
 
 export interface AppliedCorrection {
@@ -29,6 +34,9 @@ class CorrectionDB extends Dexie {
   constructor() {
     super('billzo_corrections_v1')
     this.version(1).stores({
+      corrections: 'id, tenantId, vendorName, fieldType, rawHash, [tenantId+vendorName]',
+    })
+    this.version(2).stores({
       corrections: 'id, tenantId, vendorName, fieldType, rawHash, [tenantId+vendorName]',
     })
   }
@@ -61,7 +69,8 @@ export async function learnCorrection(
   vendorName: string,
   fieldType: CorrectionFieldType,
   rawValue: string,
-  correctedValue: string
+  correctedValue: string,
+  confidenceAtCapture = 70
 ): Promise<void> {
   if (!tenantId || !vendorName || rawValue === correctedValue) return
 
@@ -82,7 +91,11 @@ export async function learnCorrection(
     await db.corrections.update(existing.id, {
       correctedValue: corrected,
       count: existing.count + 1,
+      frequency: (existing.frequency || existing.count || 1) + 1,
+      confidenceAtCapture: Math.round(((existing.confidenceAtCapture || 70) + confidenceAtCapture) / 2),
+      acceptedCount: (existing.acceptedCount || existing.count || 1) + 1,
       lastCorrectedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
     })
   } else {
     await db.corrections.add({
@@ -93,9 +106,14 @@ export async function learnCorrection(
       rawValue: raw,
       correctedValue: corrected,
       count: 1,
+      frequency: 1,
+      confidenceAtCapture,
+      acceptedCount: 1,
+      rejectedCount: 0,
       rawHash: rvHash,
       firstCorrectedAt: new Date().toISOString(),
       lastCorrectedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
     })
   }
 }
@@ -112,6 +130,11 @@ export async function getCorrectionsForVendor(
     .toArray()
 }
 
+export async function getCorrectionsForTenant(tenantId: string): Promise<OcrCorrection[]> {
+  if (!tenantId) return []
+  return getDB().corrections.where('tenantId').equals(tenantId).toArray()
+}
+
 export async function applyKnownCorrections(
   data: Record<string, any>,
   vendorName: string,
@@ -124,7 +147,7 @@ export async function applyKnownCorrections(
   const applied: AppliedCorrection[] = []
 
   for (const c of corrections) {
-    if (c.count < 2) continue
+    if ((c.acceptedCount || c.count) < 2) continue
 
     let currentValue: string | undefined
 
@@ -147,7 +170,7 @@ export async function applyKnownCorrections(
             if (item.name?.toLowerCase().trim() === c.rawValue.toLowerCase().trim()) {
               const from = item.name
               item.name = c.correctedValue
-              applied.push({ field: `item_name:${item.name}`, from, to: c.correctedValue, confidence: Math.min(95, 70 + c.count * 5), reason: `Corrected from ${c.count} past fix(es)` })
+              applied.push({ field: `item_name:${item.name}`, from, to: c.correctedValue, confidence: Math.min(95, 65 + (c.acceptedCount || c.count) * 5), reason: `Corrected from ${c.acceptedCount || c.count} past fix(es)` })
             }
           }
         }
@@ -163,7 +186,7 @@ export async function applyKnownCorrections(
       } else {
         result[c.fieldType] = c.correctedValue
       }
-      applied.push({ field: c.fieldType, from, to: c.correctedValue, confidence: Math.min(95, 70 + c.count * 5), reason: `Corrected from ${c.count} past fix(es)` })
+      applied.push({ field: c.fieldType, from, to: c.correctedValue, confidence: Math.min(95, 65 + (c.acceptedCount || c.count) * 5), reason: `Corrected from ${c.acceptedCount || c.count} past fix(es)` })
     }
   }
 
@@ -211,7 +234,8 @@ export async function learnFromInvoiceDiff(
   original: Record<string, any>,
   final: Record<string, any>,
   tenantId: string,
-  vendorName: string
+  vendorName: string,
+  confidenceMap?: Record<string, number>
 ): Promise<void> {
   if (!tenantId || !vendorName) return
 
@@ -223,7 +247,7 @@ export async function learnFromInvoiceDiff(
     if (origVal && finalVal && origVal !== finalVal) {
       const ft = detectFieldType(field, original[field])
       if (ft) {
-        await learnCorrection(tenantId, vendorName, ft, origVal, finalVal)
+        await learnCorrection(tenantId, vendorName, ft, origVal, finalVal, confidenceMap?.[String(field)] ?? 70)
       }
     }
   }
@@ -237,15 +261,15 @@ export async function learnFromInvoiceDiff(
     if (!oi || !fi) continue
 
     if (oi.name && fi.name && oi.name !== fi.name) {
-      await learnCorrection(tenantId, vendorName, 'item_name', oi.name, fi.name)
+      await learnCorrection(tenantId, vendorName, 'item_name', oi.name, fi.name, confidenceMap?.[`item_name:${i}`] ?? 65)
     }
 
     if (oi.quantity !== undefined && fi.quantity !== undefined && oi.quantity !== fi.quantity) {
-      await learnCorrection(tenantId, vendorName, 'item_quantity', String(oi.quantity), String(fi.quantity))
+      await learnCorrection(tenantId, vendorName, 'item_quantity', String(oi.quantity), String(fi.quantity), confidenceMap?.[`item_quantity:${i}`] ?? 65)
     }
 
     if (oi.rate !== undefined && fi.rate !== undefined && oi.rate !== fi.rate) {
-      await learnCorrection(tenantId, vendorName, 'item_rate', String(oi.rate), String(fi.rate))
+      await learnCorrection(tenantId, vendorName, 'item_rate', String(oi.rate), String(fi.rate), confidenceMap?.[`item_rate:${i}`] ?? 65)
     }
   }
 }

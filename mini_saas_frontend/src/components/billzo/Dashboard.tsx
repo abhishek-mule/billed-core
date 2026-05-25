@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, useMemo } from 'react'
 import { AlertTriangle, Bell, CheckCircle2, IndianRupee, PackageMinus, RefreshCcw, RotateCcw, ScanLine, Send, TrendingUp, Wallet, Zap } from 'lucide-react'
-import { applyWhatsAppStatus, createPurchaseFromScan, getBillzoState, markPaid, repeatLastInvoice, sendReminder, type ActionResult } from '@/lib/billzo/actions'
+import { applyWhatsAppStatus, markPaid, repeatLastInvoice, sendReminder } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
 import { Loader } from './Loader'
 
@@ -363,7 +363,7 @@ export function Dashboard() {
           icon={<PackageMinus className="h-5 w-5" />}
           text={`${stats.lowStockCount} low stock`}
           cta="Restock"
-          onClick={() => handleAction(() => createPurchaseFromScan())}
+          onClick={() => router.push('/purchases')}
         />
       </section>
 
@@ -456,7 +456,7 @@ export function Dashboard() {
                 <p className="font-black">{product.name}</p>
                 <p className="text-sm font-bold text-warning">{product.stock} left - min {product.lowStockAt}</p>
               </div>
-              <button className="primary-button" onClick={() => handleAction(() => createPurchaseFromScan())}>
+              <button className="primary-button" onClick={() => router.push('/purchases')}>
                 Restock
               </button>
             </div>

@@ -118,6 +118,11 @@ export async function findCatalogProducts(query: string, tenantId: string): Prom
   }))
 }
 
+export async function listSkuMappingsForTenant(tenantId: string): Promise<SkuMapping[]> {
+  if (!tenantId) return []
+  return getDB().skuMappings.where('tenantId').equals(tenantId).toArray()
+}
+
 export async function batchSuggest(
   items: { name: string; quantity: number; rate: number }[],
   vendorName: string,

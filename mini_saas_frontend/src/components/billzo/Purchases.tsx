@@ -1,12 +1,13 @@
 'use client'
 
 import { PackagePlus, ScanLine } from 'lucide-react'
-import { createPurchaseFromScan } from '@/lib/billzo/actions'
+import { useRouter } from 'next/navigation'
 import { useBillzo } from './useBillzo'
 
 const money = (value: number) => `Rs ${value.toLocaleString('en-IN')}`
 
 export function Purchases() {
+  const router = useRouter()
   const { state } = useBillzo()
   if (!state) return null
 
@@ -17,7 +18,7 @@ export function Purchases() {
         <h1 className="text-2xl font-black">Purchases</h1>
       </header>
 
-      <button className="action-tile bg-foreground text-white" onClick={() => createPurchaseFromScan()}>
+      <button className="action-tile bg-foreground text-white" onClick={() => router.push('/purchases')}>
         <ScanLine className="h-6 w-6" />
         <span>Scan Purchase</span>
       </button>
