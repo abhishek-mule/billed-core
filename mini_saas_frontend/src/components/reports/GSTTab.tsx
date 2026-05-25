@@ -1,6 +1,7 @@
 'use client'
 
-import { Download, FileText, ArrowRight } from 'lucide-react'
+import { useState } from 'react'
+import { Download, FileText, ArrowRight, FileDown } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { GSTReport, PlanType } from '@/lib/billzo/report-engine'
 import { formatINR } from '@/lib/utils'
@@ -10,12 +11,20 @@ import { MetricCard, PaywallTeaser } from './MetricCard'
 
 const money = (n: number) => formatINR(n)
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const CURRENT_MONTH = new Date().getMonth() + 1
+const CURRENT_YEAR = new Date().getFullYear()
+
 interface GSTTabProps {
   report: GSTReport
   plan: PlanType
 }
 
 export function GSTTab({ report, plan }: GSTTabProps) {
+  const [gstrMonth, setGstrMonth] = useState(CURRENT_MONTH)
+  const [gstrYear, setGstrYear] = useState(CURRENT_YEAR)
+  const [downloadingGstr, setDownloadingGstr] = useState(false)
+
   const handleExport = () => {
     const rows = report.hsnBreakdown.map(item => ({
       HSN: item.hsn,
@@ -28,6 +37,33 @@ export function GSTTab({ report, plan }: GSTTabProps) {
       Total: item.total,
     }))
     exportToCSV(rows, 'gst-report')
+  }
+
+  const handleGSTR1Download = async () => {
+    setDownloadingGstr(true)
+    try {
+      const res = await fetch('/api/gstr1/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: gstrMonth, year: gstrYear }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to generate GSTR-1')
+      }
+      const blob = await res.blob()
+      const filename = `GSTR1_${String(gstrMonth).padStart(2, '0')}${gstrYear}.json`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert(e.message || 'Failed to download GSTR-1')
+    } finally {
+      setDownloadingGstr(false)
+    }
   }
 
   const router = useRouter()
@@ -117,6 +153,45 @@ export function GSTTab({ report, plan }: GSTTabProps) {
       )}
 
       <PaywallTeaser plan={plan} />
+
+      <div className="rounded-2xl border bg-white p-5">
+        <h3 className="font-bold">GSTR-1 Export</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Download GSTR-1 JSON for monthly filing</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground">Month</label>
+            <select
+              value={gstrMonth}
+              onChange={(e) => setGstrMonth(Number(e.target.value))}
+              className="mt-1 block rounded-xl border bg-white px-3 py-2 text-sm font-medium"
+            >
+              {MONTHS.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground">Year</label>
+            <select
+              value={gstrYear}
+              onChange={(e) => setGstrYear(Number(e.target.value))}
+              className="mt-1 block rounded-xl border bg-white px-3 py-2 text-sm font-medium"
+            >
+              {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleGSTR1Download}
+            disabled={downloadingGstr}
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
+          >
+            <FileDown className="h-4 w-4" />
+            {downloadingGstr ? 'Downloading...' : 'Download GSTR-1'}
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <button
