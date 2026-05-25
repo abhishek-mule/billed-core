@@ -8,6 +8,7 @@ import {
   ShoppingBag, Users, Package, BarChart3, Settings,
   MoreHorizontal, Menu, LogOut,
 } from 'lucide-react'
+import { Button } from './Button'
 import { cn } from '@/lib/utils'
 import '@/styles/app-shell.css'
 
@@ -94,6 +95,7 @@ function Sidebar({
               href={href}
               style={{ '--i': i } as React.CSSProperties}
               className={cn('nav-item', active && 'nav-item--active')}
+              aria-current={active ? 'page' : undefined}
             >
               <span className="nav-icon"><Icon size={15} strokeWidth={1.8} /></span>
               <span className="nav-label">{label}</span>
@@ -112,6 +114,7 @@ function Sidebar({
               href={href}
               style={{ '--i': i + NAV_WORKSPACE.length } as React.CSSProperties}
               className={cn('nav-item', active && 'nav-item--active')}
+              aria-current={active ? 'page' : undefined}
             >
               <span className="nav-icon"><Icon size={15} strokeWidth={1.8} /></span>
               <span className="nav-label">{label}</span>
@@ -169,6 +172,7 @@ function TopBar({
           <input
             className="search-input"
             placeholder="Search…"
+            aria-label="Search invoices, parties, products"
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
           />
@@ -238,6 +242,7 @@ function MobileDrawer({
                 onClick={onClose}
                 style={{ '--di': i } as React.CSSProperties}
                 className={cn('mobile-nav-item', active && 'mobile-nav-item--active')}
+                aria-current={active ? 'page' : undefined}
               >
                 <span className="nav-icon"><Icon size={16} strokeWidth={1.8} /></span>
                 {label}
@@ -271,6 +276,7 @@ function BottomNav({ pathname }: { pathname: string }) {
               active && 'bottom-item--active',
               primary && 'bottom-item--primary',
             )}
+            aria-current={active ? 'page' : undefined}
           >
             {primary
               ? <span className="bottom-fab"><Icon size={20} strokeWidth={2} /></span>
@@ -405,18 +411,12 @@ export function AppShell({
             <h3 className="text-lg font-bold">Sign out of BillZo?</h3>
             <p className="mt-1 text-sm text-muted-foreground">Your local data will remain on this device. You can sign back in anytime.</p>
             <div className="flex gap-3 mt-5">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 rounded-xl border border-input py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
-              >
+              <Button variant="outline" onClick={() => setShowLogoutConfirm(false)} className="flex-1">
                 Cancel
-              </button>
-              <button
-                onClick={() => { setShowLogoutConfirm(false); doLogout() }}
-                className="flex-1 rounded-xl bg-destructive text-destructive-foreground py-2.5 text-sm font-medium hover:opacity-90 transition-colors"
-              >
+              </Button>
+              <Button variant="danger" onClick={() => { setShowLogoutConfirm(false); doLogout() }} className="flex-1">
                 Sign Out
-              </button>
+              </Button>
             </div>
           </div>
         </div>

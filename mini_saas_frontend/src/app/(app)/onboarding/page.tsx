@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Store, CheckCircle2, Sparkles, ArrowRight } from "lucide-react";
+import { Button } from "@/components/billzo/Button";
 import { autofillFromInput, validateGSTIN, validateUPI } from "@/lib/billzo/autofill";
 import { db, uuid } from "@/lib/billzo/db";
 import { type PlanType } from "@/lib/billzo/plan-limits";
@@ -310,29 +311,27 @@ export default function OnboardingPage() {
                   )}
                 </div>
 
-                <button
+                <Button
+                  variant="outline"
                   onClick={handleAutofill}
                   disabled={!upiId && !gstin || autofilling}
-                  className="w-full px-4 py-2 text-sm text-primary hover:bg-gray-50 rounded-lg border border-border flex items-center justify-center gap-2 disabled:opacity-50"
+                  loading={autofilling}
+                  className="w-full"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {autofilling ? "Auto-filling..." : "Auto-fill from UPI/GSTIN"}
-                </button>
+                  Auto-fill from UPI/GSTIN
+                </Button>
 
-                <button
-                  className="mt-7 w-full px-4 py-3 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                <Button
+                  className="mt-7 w-full"
                   onClick={handleStart}
                   disabled={!shop.trim() || loading === "creating"}
+                  loading={loading === "creating"}
+                  size="lg"
                 >
-                  {loading === "creating" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      Start Billing
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
+                  Start Billing
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ) : (

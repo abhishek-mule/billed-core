@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { TrendingUp, Clock, FileText, DollarSign, Plus } from "lucide-react"
+import { Button } from "@/components/billzo/Button"
 import { DateRangePicker } from "@/components/reports/DateRangePicker"
 import { useReportsData } from "@/components/reports/useReportsData"
 import { RecoveryTab } from "@/components/reports/RecoveryTab"
@@ -31,13 +32,10 @@ const EmptyState = ({ tab }: { tab: Tab }) => {
       </div>
       <h3 className="mt-6 text-xl font-black text-foreground">{title}</h3>
       <p className="mx-auto mt-2 max-w-xs text-muted-foreground">{desc}</p>
-      <button
-        onClick={() => router.push('/pos')}
-        className="mx-auto mt-6 flex items-center gap-2 rounded-xl bg-primary px-8 py-4 text-sm font-black text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:opacity-90 active:scale-95"
-      >
+      <Button onClick={() => router.push('/pos')} size="lg" className="mx-auto mt-6 shadow-lg shadow-primary/20">
         <Plus className="h-4 w-4" />
         {action}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -82,7 +80,7 @@ export default function ReportsPage() {
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="text-center">
           <p className="font-medium text-destructive">{error}</p>
-          <button onClick={() => window.location.reload()} className="mt-3 rounded-xl bg-destructive/10 px-4 py-2 text-sm font-semibold text-destructive">Retry</button>
+          <Button variant="danger" onClick={() => window.location.reload()} className="mt-3">Retry</Button>
         </div>
       </div>
     )
@@ -114,11 +112,12 @@ export default function ReportsPage() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
               tab === t.id
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
+            {...(tab === t.id ? { 'aria-current': 'true' as const } : {})}
           >
             {t.icon}
             {t.label}

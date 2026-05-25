@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Check, Sparkles } from "lucide-react"
+import { Button } from "@/components/billzo/Button"
 import type { PlanType } from "@/lib/billzo/plan-limits"
 
 interface PlanInfo {
@@ -187,12 +188,9 @@ export default function PricingPage() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
           <p className="text-destructive">{state.error}</p>
-          <button
-            onClick={fetchPlans}
-            className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground"
-          >
+          <Button onClick={fetchPlans} className="mt-4">
             Try Again
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -294,17 +292,15 @@ function PlanCard({
         ))}
       </ul>
 
-      <button
-        onClick={onSelect}
-        disabled={processing}
-        className={`mt-6 w-full rounded-lg py-3 font-medium transition-colors ${
-          isFree
-            ? "border border-border hover:bg-gray-50"
-            : popular
-            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-            : "bg-black text-white hover:bg-gray-800"
-        } disabled:opacity-50`}
-      >
+        <button
+          onClick={onSelect}
+          disabled={processing}
+          className={`mt-6 w-full rounded-xl py-3 font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
+            isFree
+              ? "border-2 border-border bg-transparent text-foreground hover:bg-secondary"
+              : "bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30"
+          }`}
+        >
         {processing && selected ? (
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
         ) : isFree ? (

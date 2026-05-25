@@ -42,7 +42,9 @@
     font-feature-settings: "tnum";
   }
 
-  button, a { @apply transition active:scale-[0.98]; }
+  button, a { @apply transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2; }
+
+  [role="button"] { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2; }
 }
 
 @layer components {

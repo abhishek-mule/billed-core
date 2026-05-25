@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Phone, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Button } from '@/components/billzo/Button'
 import { normalizePhone, isValidPhone } from '@/lib/billzo/useContactImport'
 
 interface FormData {
@@ -149,7 +150,7 @@ export default function AddCustomerPage() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-sm font-semibold">Phone *</label>
-              <button type="button" onClick={pickContact} className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700">
+              <button type="button" onClick={pickContact} className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80">
                 <Phone className="h-3 w-3" />
                 Pick from Phonebook
               </button>
@@ -229,13 +230,12 @@ export default function AddCustomerPage() {
         </div>
 
         <div className="flex gap-3">
-          <button type="button" onClick={() => router.push('/parties')} className="flex-1 h-12 rounded-xl border font-medium">
+          <Button type="button" variant="outline" onClick={() => router.push('/parties')} className="flex-1">
             Cancel
-          </button>
-          <button type="submit" disabled={submitting || success} className="flex-1 h-12 rounded-xl bg-indigo-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2">
-            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          </Button>
+          <Button type="submit" loading={submitting} disabled={submitting || success} className="flex-1">
             {submitting ? 'Creating...' : 'Create Customer'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
