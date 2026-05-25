@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBillzoState } from '@/lib/billzo/actions'
 import { scheduleBackgroundSync } from '@/lib/billzo/sync'
+import { getTenantId } from '@/lib/billzo/tenant'
 
 export type BillzoState = NonNullable<Awaited<ReturnType<typeof getBillzoState>>>
 
@@ -64,7 +65,10 @@ export function useBillzo(): UseBillzoResult {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const es = new EventSource('/api/events/stream')
+    const tenantId = getTenantId()
+    if (!tenantId) return
+
+    const es = new EventSource(`/api/events/stream?tenantId=${encodeURIComponent(tenantId)}`)
     eventSourceRef.current = es
 
     es.addEventListener('message', (event) => {
@@ -81,13 +85,7 @@ export function useBillzo(): UseBillzoResult {
     })
 
     es.onerror = () => {
-      console.warn('[SSE] Connection lost, reconnecting...')
-      es.close()
-      setTimeout(() => {
-        if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-          // browser will auto-reconnect
-        }
-      }, 3000)
+      console.warn('[SSE] Connection lost, browser will auto-reconnect...')
     }
 
     return () => {

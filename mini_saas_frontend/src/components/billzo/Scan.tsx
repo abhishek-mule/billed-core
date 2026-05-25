@@ -13,6 +13,8 @@ import { applyKnownCorrections, learnFromInvoiceDiff } from '@/lib/billzo/correc
 import type { AppliedCorrection } from '@/lib/billzo/correction-memory'
 import { batchSuggest, recordSkuMapping, findCatalogProducts } from '@/lib/billzo/product-matcher'
 import type { ProductMatch } from '@/lib/billzo/product-matcher'
+import { notifyChanged } from '@/lib/billzo/db'
+import { scheduleBackgroundSync } from '@/lib/billzo/sync'
 
 interface LineItem {
   name: string
@@ -529,6 +531,8 @@ export function Scan() {
         }
       )
 
+      notifyChanged()
+      scheduleBackgroundSync()
       router.push('/purchases')
     } catch (err) {
       console.error('[Scan] Save purchase failed:', err)
@@ -611,6 +615,8 @@ export function Scan() {
         }
       )
 
+      notifyChanged()
+      scheduleBackgroundSync()
       router.push('/invoices')
     } catch (err) {
       console.error('[Scan] Save invoice failed:', err)
