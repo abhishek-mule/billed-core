@@ -63,6 +63,13 @@ export default function PartiesPage() {
   };
 
   const filtered = customers.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+  const PAGE_SIZE = 25;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const visibleParties = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q]);
+
   const totalPending = customers.reduce((s, p) => s + (p.pending || 0), 0);
 
   const sendReminder = async (customer: any) => {
@@ -157,7 +164,7 @@ export default function PartiesPage() {
         />
       ) : (
         <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-          {filtered.map((p) => (
+          {visibleParties.map((p) => (
             <div key={p.id} className="p-4 flex items-center gap-3">
               <button
                 onClick={() => router.push(`/parties/${p.id}`)}
@@ -204,6 +211,13 @@ export default function PartiesPage() {
               )}
             </div>
           ))}
+          {hasMore && (
+            <div className="p-4 text-center border-t border-border">
+              <Button variant="ghost" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+                Show more ({filtered.length - visibleCount} remaining)
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

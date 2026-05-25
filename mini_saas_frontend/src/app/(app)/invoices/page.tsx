@@ -54,6 +54,12 @@ export default function InvoicesPage() {
     const matchQ = !q || i.customerName?.toLowerCase().includes(q.toLowerCase()) || i.id?.toLowerCase().includes(q.toLowerCase());
     return matchTab && matchQ;
   });
+  const PAGE_SIZE = 25;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const visibleInvoices = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q, tab]);
 
   const failedCount = invoices.filter((i) => i.syncStatus === "failed").length;
 
@@ -161,7 +167,7 @@ export default function InvoicesPage() {
           <ul className="divide-y divide-border">
             {filtered.length === 0 ? (
               <li className="p-12 text-center text-sm text-muted-foreground">No invoices match.</li>
-            ) : filtered.map((inv) => (
+            ) : visibleInvoices.map((inv) => (
               <li
                 key={inv.id}
                 className={`hover:bg-muted/40 transition-colors ${inv.syncStatus === "failed" ? "bg-red-50" : ""}`}
@@ -203,6 +209,13 @@ export default function InvoicesPage() {
                 </Link>
               </li>
             ))}
+            {hasMore && (
+              <li className="p-4 text-center border-t border-border">
+                <Button variant="ghost" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+                  Show more ({filtered.length - visibleCount} remaining)
+                </Button>
+              </li>
+            )}
           </ul>
         </div>
       )}

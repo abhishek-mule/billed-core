@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, AlertTriangle, Package, Loader2, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
@@ -36,6 +36,13 @@ export default function ProductsPage() {
   const loadError = productsError;
 
   const filtered = products.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
+  const PAGE_SIZE = 25;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const visibleProducts = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q]);
+
   const lowStock = products.filter((p) => (p.stock || 0) < (p.lowStockAt || 20)).length;
   const stockValue = products.reduce((s, p) => s + (p.salePrice || 0) * (p.stock || 0), 0);
 
@@ -139,7 +146,7 @@ export default function ProductsPage() {
             <span>Name</span><span>HSN</span><span>GST</span><span className="text-right">Price</span><span className="text-right">Stock</span>
           </div>
           <ul className="divide-y divide-border">
-            {filtered.map((p) => (
+            {visibleProducts.map((p) => (
               <li
                 key={p.id}
                 onClick={() => router.push(`/products/${p.id}`)}
@@ -164,6 +171,13 @@ export default function ProductsPage() {
                 </div>
               </li>
             ))}
+            {hasMore && (
+              <li className="p-4 text-center border-t border-border">
+                <Button variant="ghost" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+                  Show more ({filtered.length - visibleCount} remaining)
+                </Button>
+              </li>
+            )}
           </ul>
         </div>
       )}
