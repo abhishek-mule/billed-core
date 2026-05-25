@@ -9,6 +9,8 @@ import { extractTextFromImage } from '@/lib/billzo/ocr'
 import { preprocessImage, type PreprocessMetadata } from '@/lib/billzo/preprocess'
 import { formatINR } from '@/lib/utils'
 import { getCookie } from '@/lib/cookies'
+import { applyKnownCorrections, learnFromInvoiceDiff } from '@/lib/billzo/correction-memory'
+import type { AppliedCorrection } from '@/lib/billzo/correction-memory'
 
 interface LineItem {
   name: string
@@ -55,6 +57,8 @@ export function Scan() {
   const [enrichedProduct, setEnrichedProduct] = useState<EnrichedProduct | null>(null)
   const [enhanceEnabled, setEnhanceEnabled] = useState(true)
   const [preprocessMeta, setPreprocessMeta] = useState<PreprocessMetadata | null>(null)
+  const [originalResult, setOriginalResult] = useState<ExtractedData | null>(null)
+  const [autoCorrections, setAutoCorrections] = useState<AppliedCorrection[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const runPreprocess = useCallback(async (file: File): Promise<Blob | null> => {
@@ -135,7 +139,58 @@ export function Scan() {
       }
 
       const data = await response.json()
-      setResult({ ...data.data, items: (data.data.items || []).map((item: any) => ({ ...item })) })
+      const extracted: ExtractedData = { ...data.data, items: (data.data.items || []).map((item: any) => ({ ...item })) }
+      setOriginalResult(JSON.parse(JSON.stringify(extracted)))
+      setAutoCorrections([])
+
+      const tenantId = getCookie('bz_tenant') || ''
+      const vendorName = extracted.supplier || ''
+      if (tenantId && vendorName) {
+        try {
+          setProcessingStage('Checking known corrections...')
+          const vendorCorrections = await (await import('@/lib/billzo/correction-memory')).getCorrectionsForVendor(tenantId, vendorName)
+
+          if (vendorCorrections.length > 0) {
+            const acRes = await fetch('/api/ai/auto-correct', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                rawText: data.data.raw_text || '',
+                extractedData: extracted,
+                vendorName,
+                knownCorrections: vendorCorrections.map(c => ({
+                  fieldType: c.fieldType,
+                  rawValue: c.rawValue,
+                  correctedValue: c.correctedValue,
+                  count: c.count,
+                })),
+                tenantId,
+              }),
+            })
+            if (acRes.ok) {
+              const acData = await acRes.json()
+              if (acData.suggestions?.length > 0) {
+                setAutoCorrections(acData.suggestions)
+                for (const s of acData.suggestions) {
+                  if (s.field === 'total') extracted.total = Number(s.to)
+                  else if (s.field === 'supplier') extracted.supplier = s.to
+                  else if (s.field === 'invoice_number') extracted.invoice_number = s.to
+                  else if (s.field === 'date') extracted.date = s.to
+                  else if (s.field.startsWith('item_name:') && extracted.items) {
+                    for (const item of extracted.items) {
+                      if (item.name?.toLowerCase().trim() === s.from.toLowerCase().trim()) {
+                        item.name = s.to
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch { /* auto-correct is non-blocking */ }
+      }
+
+      setResult(extracted)
       console.log('[Scan] Extracted:', data.data)
     } catch (err: any) {
       console.error('[Scan] Error:', err)
@@ -246,6 +301,12 @@ export function Scan() {
     const tenantId = getCookie('bz_tenant') || ''
     if (!tenantId) return
 
+    if (originalResult && result.supplier) {
+      try {
+        await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier)
+      } catch { /* non-blocking */ }
+    }
+
     await db().purchases.add({
       id: `local-${Date.now()}`,
       tenantId,
@@ -268,6 +329,12 @@ export function Scan() {
     const { db } = await import('@/lib/billzo/db')
     const tenantId = getCookie('bz_tenant') || ''
     if (!tenantId) return
+
+    if (originalResult && result.supplier) {
+      try {
+        await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier)
+      } catch { /* non-blocking */ }
+    }
 
     await db().invoices.add({
       id: `local-${Date.now()}`,
@@ -439,6 +506,11 @@ export function Scan() {
               {preprocessMeta && (
                 <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700">
                   ✦ {preprocessMeta.elapsedMs}ms enhance
+                </span>
+              )}
+              {autoCorrections.length > 0 && (
+                <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700">
+                  ✓ {autoCorrections.length} auto-corrected
                 </span>
               )}
             </div>
