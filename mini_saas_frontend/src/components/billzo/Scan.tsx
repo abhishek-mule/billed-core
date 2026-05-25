@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Barcode, Camera, FileImage, Receipt, Zap, Loader2, CheckCircle, X, Plus, Edit3, RefreshCw, Check } from 'lucide-react'
+import { useState, useRef, useCallback } from 'react'
+import { Barcode, Camera, FileImage, Receipt, Zap, Loader2, CheckCircle, X, Plus, Edit3, RefreshCw, Check, Sparkles } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { BarcodeScanner } from './BarcodeScanner'
 import { lookupBarcode, type BarcodeLookupResult } from '@/lib/billzo/barcode-lookup'
 import { extractTextFromImage } from '@/lib/billzo/ocr'
+import { preprocessImage, type PreprocessMetadata } from '@/lib/billzo/preprocess'
 import { formatINR } from '@/lib/utils'
 import { getCookie } from '@/lib/cookies'
 
@@ -52,18 +53,63 @@ export function Scan() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeResult, setBarcodeResult] = useState<BarcodeLookupResult | null>(null)
   const [enrichedProduct, setEnrichedProduct] = useState<EnrichedProduct | null>(null)
+  const [enhanceEnabled, setEnhanceEnabled] = useState(true)
+  const [preprocessMeta, setPreprocessMeta] = useState<PreprocessMetadata | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const runPreprocess = useCallback(async (file: File): Promise<Blob | null> => {
+    if (!enhanceEnabled) return null
+
+    setProcessingStage('Enhancing image for better OCR...')
+    setPreprocessMeta(null)
+
+    try {
+      const worker = new Worker(new URL('@/lib/billzo/preprocess.worker.ts', import.meta.url))
+      const result: { type: string; blob?: Blob; metadata?: PreprocessMetadata; error?: string } =
+        await new Promise((resolve, reject) => {
+          worker.onmessage = (e) => resolve(e.data)
+          worker.onerror = (e) => { worker.terminate(); reject(e) }
+          worker.postMessage(file)
+          setTimeout(() => { worker.terminate(); reject(new Error('Worker timeout')) }, 15000)
+        })
+
+      worker.terminate()
+
+      if (result.type === 'success' && result.blob) {
+        if (result.metadata) setPreprocessMeta(result.metadata)
+        return result.blob
+      }
+      throw new Error(result.error || 'Worker returned error')
+    } catch {
+      try {
+        const ppResult = await preprocessImage(file)
+        setPreprocessMeta(ppResult.metadata)
+        return ppResult.blob
+      } catch {
+        return null
+      }
+    }
+  }, [enhanceEnabled])
 
   const processUpload = async (file?: File) => {
     if (!file) return
     setProcessing(true)
     setError('')
     setResult(null)
-    setProcessingStage('Initializing OCR...')
+    setPreprocessMeta(null)
+
+    let imageTarget: Blob | File = file
 
     try {
-      setProcessingStage('Extracting text from image (free, no server call)...')
-      const ocrResult = await extractTextFromImage(file)
+      const processed = await runPreprocess(file)
+      if (processed) {
+        imageTarget = processed
+        setProcessingStage('Extracting text from image (free, no server call)...')
+      } else {
+        setProcessingStage('Extracting text from image (free, no server call)...')
+      }
+
+      const ocrResult = await extractTextFromImage(imageTarget)
       console.log('[Scan] Tesseract raw text:', ocrResult.rawText.slice(0, 200))
 
       if (ocrResult.rawText.trim().length < 20) {
@@ -309,6 +355,17 @@ export function Scan() {
               />
             </label>
 
+            <label className="flex items-center justify-center gap-2 text-xs text-white/60 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enhanceEnabled}
+                onChange={(e) => setEnhanceEnabled(e.target.checked)}
+                className="accent-white"
+              />
+              <Sparkles className="h-3 w-3" />
+              Enhance image (auto-crop, sharpen, deskew)
+            </label>
+
             {error && (
               <p className="text-red-400 text-sm">{error}</p>
             )}
@@ -377,6 +434,11 @@ export function Scan() {
               {result.confidence > 0 && (
                 <span className={`text-xs px-2 py-1 rounded-full ${result.confidence > 70 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                   {Math.round(result.confidence)}% AI confidence
+                </span>
+              )}
+              {preprocessMeta && (
+                <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700">
+                  ✦ {preprocessMeta.elapsedMs}ms enhance
                 </span>
               )}
             </div>
@@ -487,9 +549,10 @@ export function Scan() {
         <p className="section-label">How it works</p>
         <ul className="mt-2 text-sm text-muted-foreground space-y-1">
           <li>1. Click "Scan with Camera" or upload an image</li>
-          <li>2. Tesseract.js extracts text locally (free, offline)</li>
-          <li>3. Gemini Flash parses text into structured data</li>
-          <li>4. Edit extracted items if needed, then save</li>
+          <li>2. Image enhancement: auto-crop, deskew, sharpen (on-device)</li>
+          <li>3. Tesseract.js extracts text locally (free, offline)</li>
+          <li>4. Gemini Flash parses text into structured data</li>
+          <li>5. Edit extracted items if needed, then save</li>
         </ul>
       </div>
     </div>
