@@ -11,6 +11,8 @@ import { formatINR } from '@/lib/utils'
 import { getCookie } from '@/lib/cookies'
 import { applyKnownCorrections, learnFromInvoiceDiff } from '@/lib/billzo/correction-memory'
 import type { AppliedCorrection } from '@/lib/billzo/correction-memory'
+import { batchSuggest, recordSkuMapping, findCatalogProducts } from '@/lib/billzo/product-matcher'
+import type { ProductMatch } from '@/lib/billzo/product-matcher'
 
 interface LineItem {
   name: string
@@ -59,6 +61,7 @@ export function Scan() {
   const [preprocessMeta, setPreprocessMeta] = useState<PreprocessMetadata | null>(null)
   const [originalResult, setOriginalResult] = useState<ExtractedData | null>(null)
   const [autoCorrections, setAutoCorrections] = useState<AppliedCorrection[]>([])
+  const [productMatches, setProductMatches] = useState<Map<string, ProductMatch>>(new Map())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const runPreprocess = useCallback(async (file: File): Promise<Blob | null> => {
@@ -188,6 +191,42 @@ export function Scan() {
             }
           }
         } catch { /* auto-correct is non-blocking */ }
+      }
+
+      if (extracted.items?.length > 0 && tenantId && vendorName) {
+        try {
+          setProcessingStage('Matching items to catalog...')
+          const localMatches = await batchSuggest(extracted.items, vendorName, tenantId)
+          const unmatched = extracted.items.filter(i => !localMatches.has(i.name) || (localMatches.get(i.name)?.confidence ?? 0) < 60)
+          const catalogProducts = await findCatalogProducts('', tenantId)
+
+          if (unmatched.length > 0 && catalogProducts.length > 0) {
+            const pmRes = await fetch('/api/ai/product-match', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                items: unmatched.map(i => ({ name: i.name, quantity: i.quantity, rate: i.rate })),
+                vendorName,
+                catalog: catalogProducts.slice(0, 50),
+              }),
+            })
+            if (pmRes.ok) {
+              const pmData = await pmRes.json()
+              if (pmData.matches) {
+                for (const m of pmData.matches) {
+                  localMatches.set(m.ocrName, {
+                    ocrName: m.ocrName,
+                    matchedProduct: m.matchedProductId ? { id: m.matchedProductId, name: m.matchedProductName || '', salePrice: 0 } : null,
+                    confidence: m.confidence,
+                    suggestedName: m.suggestedName,
+                  })
+                }
+              }
+            }
+          }
+
+          setProductMatches(localMatches)
+        } catch { /* product matching is non-blocking */ }
       }
 
       setResult(extracted)
@@ -548,14 +587,25 @@ export function Scan() {
                   <Plus className="h-3 w-3" /> Add item
                 </button>
               </div>
-              {result.items.map((item, i) => (
+              {result.items.map((item, i) => {
+                const pm = productMatches.get(item.name)
+                return (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs border rounded-lg p-2">
-                  <input
-                    className="col-span-5 bg-transparent outline-none font-medium truncate"
-                    value={item.name}
-                    onChange={(e) => updateLineItem(i, 'name', e.target.value)}
-                    placeholder="Item name"
-                  />
+                  <div className="col-span-5 flex items-center gap-1 min-w-0">
+                    <input
+                      className="flex-1 bg-transparent outline-none font-medium truncate min-w-0"
+                      value={item.name}
+                      onChange={(e) => updateLineItem(i, 'name', e.target.value)}
+                      placeholder="Item name"
+                    />
+                    {pm && pm.confidence >= 60 && pm.matchedProduct && (
+                      <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        pm.confidence >= 85 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {Math.round(pm.confidence)}%
+                      </span>
+                    )}
+                  </div>
                   <input
                     className="col-span-2 bg-transparent outline-none text-right text-muted-foreground"
                     type="number"
@@ -575,7 +625,8 @@ export function Scan() {
                     <X className="h-3 w-3" />
                   </button>
                 </div>
-              ))}
+              )
+            })}
             </div>
           )}
 
