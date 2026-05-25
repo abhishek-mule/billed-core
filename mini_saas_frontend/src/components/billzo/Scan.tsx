@@ -62,6 +62,7 @@ export function Scan() {
   const [autoCorrections, setAutoCorrections] = useState<AppliedCorrection[]>([])
   const [usedFullPipeline, setUsedFullPipeline] = useState(false)
   const [productMatches, setProductMatches] = useState<Map<string, ProductMatch>>(new Map())
+  const [rawOcrText, setRawOcrText] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const runPreprocess = useCallback(async (file: File, mode: 'light' | 'full'): Promise<Blob | null> => {
@@ -104,6 +105,7 @@ export function Scan() {
     setResult(null)
     setPreprocessMeta(null)
     setUsedFullPipeline(false)
+    setRawOcrText(null)
 
     try {
       const lightProcessed = await runPreprocess(file, 'light')
@@ -141,6 +143,8 @@ export function Scan() {
           }
         }
       }
+
+      setRawOcrText(finalOcr.rawText)
 
       if (finalOcr.rawText.trim().length < 20) {
         setError('Could not extract enough text. Please try a clearer image.')
@@ -267,6 +271,43 @@ export function Scan() {
     }
   }
 
+  const handleRetryOcr = async () => {
+    if (!rawOcrText) return
+    setProcessing(true)
+    setError('')
+    setResult(null)
+
+    try {
+      setProcessingStage('Re-sending to Gemini AI...')
+      const response = await fetch('/api/ocr/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawText: rawOcrText,
+          tenantId: getCookie('bz_tenant') || undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error || 'Extraction failed')
+      }
+
+      const data = await response.json()
+      const extracted: ExtractedData = {
+        ...data.data,
+        items: (data.data.items || []).map((item: any) => ({ ...item })),
+      }
+      setOriginalResult(JSON.parse(JSON.stringify(extracted)))
+      setResult(extracted)
+    } catch (err: any) {
+      setError(err.message || 'Retry failed. Please upload the image again.')
+    } finally {
+      setProcessing(false)
+      setProcessingStage('')
+    }
+  }
+
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
     if (!result) return
     const items = [...result.items]
@@ -364,25 +405,100 @@ export function Scan() {
     if (!tenantId) return
 
     if (originalResult && result.supplier) {
-      try {
-        await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier)
-      } catch { /* non-blocking */ }
+      try { await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier) } catch {}
     }
 
-    await db().purchases.add({
-      id: `local-${Date.now()}`,
-      tenantId,
-      supplier: result.supplier || 'Unknown Supplier',
-      amount: result.total || result.subtotal || 0,
-      gstin: '',
-      source: 'scan',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      syncStatus: 'pending',
-      version: 1,
-    } as any)
+    const purchaseId = `local-${Date.now()}`
+    const current = new Date().toISOString()
 
-    router.push('/purchases')
+    try {
+      await db().transaction(
+        'rw',
+        [db().purchases, db().invoiceItems, db().products, db().inventoryMovements, db().queue],
+        async () => {
+          await db().purchases.add({
+            id: purchaseId,
+            tenantId,
+            supplier: result.supplier || 'Unknown Supplier',
+            amount: result.total || result.subtotal || 0,
+            gstin: '',
+            source: 'scan',
+            createdAt: current,
+            updatedAt: current,
+            syncStatus: 'pending',
+            version: 1,
+          })
+
+          for (const item of result.items) {
+            const pm = productMatches.get(item.name)
+            const productId = pm?.matchedProduct?.id
+
+            await db().invoiceItems.add({
+              id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              tenantId,
+              invoiceId: purchaseId,
+              productId,
+              name: item.name,
+              qty: item.quantity,
+              price: item.rate,
+              gstRate: 0,
+              lineTotal: item.amount,
+              createdAt: current,
+              updatedAt: current,
+            })
+
+            if (productId) {
+              const product = await db().products.get(productId)
+              if (product) {
+                const stockAfter = (product.stock || 0) + item.quantity
+                await db().products.update(productId, { stock: stockAfter, updatedAt: current })
+                await db().inventoryMovements.add({
+                  id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  tenantId,
+                  productId,
+                  sourceType: 'purchase',
+                  sourceId: purchaseId,
+                  qtyDelta: item.quantity,
+                  stockAfter,
+                  createdAt: current,
+                })
+              }
+            }
+          }
+
+          await db().queue.put({
+            id: `queue-${Date.now()}`,
+            tenantId,
+            entity: 'purchase',
+            entityId: purchaseId,
+            action: 'upsert',
+            payload: {
+              id: purchaseId,
+              tenantId,
+              supplier: result.supplier || 'Unknown Supplier',
+              amount: result.total || result.subtotal || 0,
+              source: 'scan',
+              createdAt: current,
+              updatedAt: current,
+              syncStatus: 'pending',
+              version: 1,
+            },
+            createdAt: current,
+            updatedAt: current,
+            attempts: 0,
+            nextAttemptAt: current,
+            status: 'pending',
+            idempotencyKey: `${tenantId}:purchase:${purchaseId}:upsert`,
+            conflictPolicy: 'latest_write_wins',
+          })
+        }
+      )
+
+      router.push('/purchases')
+    } catch (err) {
+      console.error('[Scan] Save purchase failed:', err)
+      setError('Failed to save purchase. Please try again.')
+    }
   }
 
   const saveAsInvoice = async () => {
@@ -393,33 +509,78 @@ export function Scan() {
     if (!tenantId) return
 
     if (originalResult && result.supplier) {
-      try {
-        await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier)
-      } catch { /* non-blocking */ }
+      try { await learnFromInvoiceDiff(originalResult, result, tenantId, result.supplier) } catch {}
     }
 
-    await db().invoices.add({
-      id: `local-${Date.now()}`,
-      tenantId,
-      customerId: '',
-      customerName: result.supplier || 'Unknown Customer',
-      customerPhone: '',
-      total: result.total || result.subtotal || 0,
-      paidAmount: 0,
-      status: 'unpaid',
-      dueAt: result.date || new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      syncStatus: 'pending',
-      recoveryStage: 't0_soft',
-      nextRecoveryAt: new Date().toISOString(),
-      lastWhatsAppStatus: 'queued',
-      reminderCount: 0,
-      pdfUrl: '',
-      version: 1,
-    } as any)
+    const invoiceId = `local-${Date.now()}`
+    const current = new Date().toISOString()
 
-    router.push('/invoices')
+    try {
+      await db().transaction(
+        'rw',
+        [db().invoices, db().invoiceItems, db().queue],
+        async () => {
+          await db().invoices.add({
+            id: invoiceId,
+            tenantId,
+            customerId: '',
+            customerName: '',
+            customerPhone: '',
+            total: result.total || result.subtotal || 0,
+            paidAmount: 0,
+            status: 'unpaid',
+            invoiceNumber: result.invoice_number || '',
+            dueAt: result.date || new Date(Date.now() + 7 * 86400000).toISOString(),
+            createdAt: current,
+            updatedAt: current,
+            syncStatus: 'pending',
+            recoveryStage: 't0_soft',
+            nextRecoveryAt: current,
+            lastWhatsAppStatus: 'queued',
+            reminderCount: 0,
+            pdfUrl: '',
+            version: 1,
+          })
+
+          for (const item of result.items) {
+            await db().invoiceItems.add({
+              id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              tenantId,
+              invoiceId,
+              productId: undefined,
+              name: item.name,
+              qty: item.quantity,
+              price: item.rate,
+              gstRate: 0,
+              lineTotal: item.amount,
+              createdAt: current,
+              updatedAt: current,
+            })
+          }
+
+          await db().queue.put({
+            id: `queue-${Date.now()}`,
+            tenantId,
+            entity: 'invoice',
+            entityId: invoiceId,
+            action: 'upsert',
+            payload: { id: invoiceId, tenantId, total: result.total || result.subtotal || 0 },
+            createdAt: current,
+            updatedAt: current,
+            attempts: 0,
+            nextAttemptAt: current,
+            status: 'pending',
+            idempotencyKey: `${tenantId}:invoice:${invoiceId}:upsert`,
+            conflictPolicy: 'latest_write_wins',
+          })
+        }
+      )
+
+      router.push('/invoices')
+    } catch (err) {
+      console.error('[Scan] Save invoice failed:', err)
+      setError('Failed to save invoice. Please try again.')
+    }
   }
 
   const switchToInvoiceMode = () => {
@@ -485,7 +646,17 @@ export function Scan() {
             </label>
 
             {error && (
-              <p className="text-red-400 text-sm">{error}</p>
+              <div className="space-y-2">
+                <p className="text-red-400 text-sm">{error}</p>
+                {rawOcrText && rawOcrText.trim().length >= 20 && !processing && (
+                  <button
+                    onClick={handleRetryOcr}
+                    className="mx-auto flex items-center justify-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-xs font-medium text-white hover:bg-white/10"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Retry Extraction
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </section>

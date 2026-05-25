@@ -42,6 +42,12 @@ export interface OCRResult {
 export async function extractTextFromImage(imageData: File | Blob | string): Promise<OCRResult> {
   const start = Date.now()
 
+  if (!isWorkerReady()) {
+    workerEnded = true
+    worker = null
+    workerPromise = null
+  }
+
   const w = await getWorker()
   const result = await w.recognize(imageData)
 

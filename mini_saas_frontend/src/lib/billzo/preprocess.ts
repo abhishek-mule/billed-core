@@ -30,8 +30,17 @@ function createCanvas(width: number, height: number): { canvas: HTMLCanvasElemen
   return { canvas, ctx }
 }
 
+const MIN_IMAGE_DIMENSION = 200
+
+export function validateImageSize(width: number, height: number): void {
+  if (width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION) {
+    throw new Error(`Image too small (${width}x${height}). Minimum ${MIN_IMAGE_DIMENSION}x${MIN_IMAGE_DIMENSION} pixels required.`)
+  }
+}
+
 export async function decodeImage(file: File): Promise<ImageData> {
   const bitmap = await createImageBitmap(file)
+  validateImageSize(bitmap.width, bitmap.height)
   const { canvas, ctx } = createCanvas(bitmap.width, bitmap.height)
   ctx.drawImage(bitmap, 0, 0)
   const data = ctx.getImageData(0, 0, bitmap.width, bitmap.height)
