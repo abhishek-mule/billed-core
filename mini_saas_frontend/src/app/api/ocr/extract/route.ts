@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/billzo/db'
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
 
@@ -25,7 +24,13 @@ interface ExtractedData {
 }
 
 function buildInvoicePrompt(rawText: string): string {
-  return `You are an expert Indian invoice parser. Extract structured billing data from this invoice/receipt text.
+  return `You are an expert Indian invoice parser. Extract structured billing data from this invoice/receipt.
+
+You have TWO inputs:
+1. The invoice image (attached)
+2. OCR text extracted from the image (below) — this may contain errors
+
+Use the IMAGE as your primary source. Use the OCR text only as a fallback hint.
 
 Return ONLY a valid JSON object with this exact schema:
 {
@@ -41,34 +46,43 @@ Return ONLY a valid JSON object with this exact schema:
 }
 
 Rules:
-- If text is unclear, guess intelligently and lower confidence score
+- Read item names, quantities, rates, and amounts DIRECTLY from the image
 - GST is almost always 18% in India, calculate if not explicit
 - Item names should be in original text form, in English
 - Quantities and rates should be numbers, not strings
 - Ignore transport/delivery charges unless clearly line items
 - If total is missing, sum all item amounts + tax
-- Date formats to parse: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, or written dates
-- If supplier name is in letterhead/logo area, still extract it
+- Date formats: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, or written dates
 - "Subtotal" or "Grand Total" or "Amount Payable" are the key fields to find
 
-Invoice text:
+OCR text (may contain errors — use image as primary source):
 ---
 ${rawText.slice(0, 4000)}
 ---`
 }
 
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string, imageBase64?: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY
 
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY not configured')
   }
 
+  const parts: any[] = [{ text: prompt }]
+  if (imageBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: 'image/jpeg',
+        data: imageBase64,
+      },
+    })
+  }
+
   const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 800,
@@ -110,7 +124,7 @@ function parseGeminiResponse(text: string): Partial<ExtractedData> {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { rawText, imageBase64, tenantId } = body
+    const { rawText, imageBase64 } = body
 
     if (!rawText || rawText.trim().length < 10) {
       return NextResponse.json(
@@ -119,7 +133,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const geminiResponse = await callGemini(buildInvoicePrompt(rawText))
+    const geminiResponse = await callGemini(buildInvoicePrompt(rawText), imageBase64)
     const extracted = parseGeminiResponse(geminiResponse)
 
     const result: ExtractedData = {
@@ -132,18 +146,6 @@ export async function POST(request: NextRequest) {
       total: extracted.total,
       confidence: extracted.confidence || 60,
       raw_text: rawText,
-    }
-
-    if (tenantId && result.supplier) {
-      const existingSupplier = await db().purchases
-        .where('tenantId')
-        .equals(tenantId)
-        .filter((p) => p.supplier?.toLowerCase() === result.supplier!.toLowerCase())
-        .first()
-
-      if (existingSupplier) {
-        result.supplier = existingSupplier.supplier
-      }
     }
 
     return NextResponse.json({ success: true, data: result })

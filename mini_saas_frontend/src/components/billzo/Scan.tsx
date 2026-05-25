@@ -47,6 +47,18 @@ interface EnrichedProduct {
 
 const FALLBACK_OCR_URL = process.env.NEXT_PUBLIC_OCR_API_URL
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64 = reader.result as string
+      resolve(base64.split(',')[1])
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 export function Scan() {
   const router = useRouter()
   const [mode, setMode] = useState<'bill' | 'barcode'>('bill')
@@ -110,6 +122,7 @@ export function Scan() {
     try {
       const lightProcessed = await runPreprocess(file, 'light')
       const lightBlob = lightProcessed || file
+      let finalBlob: Blob | null = lightBlob
 
       setProcessingStage('Extracting text from image...')
       let finalOcr = await extractTextFromImage(lightBlob)
@@ -139,6 +152,7 @@ export function Scan() {
 
           if (!fullWeak || fullOcr.rawText.trim().length > finalOcr.rawText.trim().length + 20) {
             finalOcr = fullOcr
+            finalBlob = fullProcessed
             setUsedFullPipeline(true)
           }
         }
@@ -153,12 +167,18 @@ export function Scan() {
       }
 
       setProcessingStage('Sending to Gemini AI for structured extraction...')
+
+      let imageBase64: string | undefined
+      if (finalBlob) {
+        imageBase64 = await blobToBase64(finalBlob)
+      }
+
       const response = await fetch('/api/ocr/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText: finalOcr.rawText,
-          imageBase64: undefined,
+          imageBase64,
           tenantId: getCookie('bz_tenant') || undefined,
         }),
       })
@@ -175,6 +195,21 @@ export function Scan() {
 
       const tenantId = getCookie('bz_tenant') || ''
       const vendorName = extracted.supplier || ''
+
+      if (tenantId && extracted.supplier) {
+        try {
+          const { db } = await import('@/lib/billzo/db')
+          const existing = await db().purchases
+            .where('tenantId')
+            .equals(tenantId)
+            .filter((p) => p.supplier?.toLowerCase() === extracted.supplier!.toLowerCase())
+            .first()
+          if (existing) {
+            extracted.supplier = existing.supplier
+          }
+        } catch {}
+      }
+
       if (tenantId && vendorName) {
         try {
           setProcessingStage('Checking known corrections...')
@@ -648,14 +683,28 @@ export function Scan() {
             {error && (
               <div className="space-y-2">
                 <p className="text-red-400 text-sm">{error}</p>
-                {rawOcrText && rawOcrText.trim().length >= 20 && !processing && (
-                  <button
-                    onClick={handleRetryOcr}
-                    className="mx-auto flex items-center justify-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-xs font-medium text-white hover:bg-white/10"
-                  >
-                    <RefreshCw className="h-3 w-3" /> Retry Extraction
-                  </button>
-                )}
+                <div className="flex items-center justify-center gap-2">
+                  {rawOcrText && rawOcrText.trim().length >= 20 && !processing && (
+                    <button
+                      onClick={handleRetryOcr}
+                      className="flex items-center justify-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-xs font-medium text-white hover:bg-white/10"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Retry Extraction
+                    </button>
+                  )}
+                  {!processing && (
+                    <button
+                      onClick={() => {
+                        setError('')
+                        setResult({ items: [], confidence: 0 })
+                        setOriginalResult({ items: [], confidence: 0 })
+                      }}
+                      className="flex items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-xs font-medium text-white hover:bg-white/20"
+                    >
+                      <Edit3 className="h-3 w-3" /> Manual Entry
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
