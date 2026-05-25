@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { Barcode, Camera, FileImage, Receipt, Zap, Loader2, CheckCircle, X, Plus, Edit3, RefreshCw, Check, Sparkles } from 'lucide-react'
+import { Barcode, Camera, FileImage, Receipt, Zap, Loader2, CheckCircle, X, Plus, Edit3, RefreshCw, Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { BarcodeScanner } from './BarcodeScanner'
 import { lookupBarcode, type BarcodeLookupResult } from '@/lib/billzo/barcode-lookup'
 import { extractTextFromImage } from '@/lib/billzo/ocr'
-import { preprocessImage, type PreprocessMetadata } from '@/lib/billzo/preprocess'
+import { preprocessLight, preprocessFull, type PreprocessMetadata } from '@/lib/billzo/preprocess'
 import { formatINR } from '@/lib/utils'
 import { getCookie } from '@/lib/cookies'
 import { applyKnownCorrections, learnFromInvoiceDiff } from '@/lib/billzo/correction-memory'
@@ -57,17 +57,15 @@ export function Scan() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeResult, setBarcodeResult] = useState<BarcodeLookupResult | null>(null)
   const [enrichedProduct, setEnrichedProduct] = useState<EnrichedProduct | null>(null)
-  const [enhanceEnabled, setEnhanceEnabled] = useState(true)
   const [preprocessMeta, setPreprocessMeta] = useState<PreprocessMetadata | null>(null)
   const [originalResult, setOriginalResult] = useState<ExtractedData | null>(null)
   const [autoCorrections, setAutoCorrections] = useState<AppliedCorrection[]>([])
+  const [usedFullPipeline, setUsedFullPipeline] = useState(false)
   const [productMatches, setProductMatches] = useState<Map<string, ProductMatch>>(new Map())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const runPreprocess = useCallback(async (file: File): Promise<Blob | null> => {
-    if (!enhanceEnabled) return null
-
-    setProcessingStage('Enhancing image for better OCR...')
+  const runPreprocess = useCallback(async (file: File, mode: 'light' | 'full'): Promise<Blob | null> => {
+    setProcessingStage(mode === 'light' ? 'Enhancing image for better OCR...' : 'Trying aggressive enhancement...')
     setPreprocessMeta(null)
 
     try {
@@ -76,7 +74,7 @@ export function Scan() {
         await new Promise((resolve, reject) => {
           worker.onmessage = (e) => resolve(e.data)
           worker.onerror = (e) => { worker.terminate(); reject(e) }
-          worker.postMessage(file)
+          worker.postMessage({ file, mode })
           setTimeout(() => { worker.terminate(); reject(new Error('Worker timeout')) }, 15000)
         })
 
@@ -89,14 +87,15 @@ export function Scan() {
       throw new Error(result.error || 'Worker returned error')
     } catch {
       try {
-        const ppResult = await preprocessImage(file)
+        const fn = mode === 'full' ? preprocessFull : preprocessLight
+        const ppResult = await fn(file)
         setPreprocessMeta(ppResult.metadata)
         return ppResult.blob
       } catch {
         return null
       }
     }
-  }, [enhanceEnabled])
+  }, [])
 
   const processUpload = async (file?: File) => {
     if (!file) return
@@ -104,22 +103,46 @@ export function Scan() {
     setError('')
     setResult(null)
     setPreprocessMeta(null)
-
-    let imageTarget: Blob | File = file
+    setUsedFullPipeline(false)
 
     try {
-      const processed = await runPreprocess(file)
-      if (processed) {
-        imageTarget = processed
-        setProcessingStage('Extracting text from image (free, no server call)...')
-      } else {
-        setProcessingStage('Extracting text from image (free, no server call)...')
+      const lightProcessed = await runPreprocess(file, 'light')
+      const lightBlob = lightProcessed || file
+
+      setProcessingStage('Extracting text from image...')
+      let finalOcr = await extractTextFromImage(lightBlob)
+      console.log('[Scan] Light OCR text:', finalOcr.rawText.slice(0, 200))
+
+      const lines = finalOcr.rawText.split('\n').filter(l => l.trim().length > 0)
+      const numericChars = (finalOcr.rawText.match(/\d/g) || []).length
+      const numericRatio = numericChars / (finalOcr.rawText.length || 1)
+      const weakResult =
+        finalOcr.confidence < 50 ||
+        finalOcr.rawText.trim().length < 100 ||
+        lines.length < 5 ||
+        numericRatio < 0.05
+
+      if (weakResult) {
+        console.log('[Scan] Light OCR weak, escalating to full pipeline')
+        const fullProcessed = await runPreprocess(file, 'full')
+        if (fullProcessed) {
+          setProcessingStage('Re-extracting text from enhanced image...')
+          const fullOcr = await extractTextFromImage(fullProcessed)
+          console.log('[Scan] Full OCR text:', fullOcr.rawText.slice(0, 200))
+
+          const fullLines = fullOcr.rawText.split('\n').filter(l => l.trim().length > 0)
+          const fullNumeric = (fullOcr.rawText.match(/\d/g) || []).length
+          const fullRatio = fullNumeric / (fullOcr.rawText.length || 1)
+          const fullWeak = fullOcr.confidence < 50 || fullOcr.rawText.trim().length < 100 || fullLines.length < 5 || fullRatio < 0.05
+
+          if (!fullWeak || fullOcr.rawText.trim().length > finalOcr.rawText.trim().length + 20) {
+            finalOcr = fullOcr
+            setUsedFullPipeline(true)
+          }
+        }
       }
 
-      const ocrResult = await extractTextFromImage(imageTarget)
-      console.log('[Scan] Tesseract raw text:', ocrResult.rawText.slice(0, 200))
-
-      if (ocrResult.rawText.trim().length < 20) {
+      if (finalOcr.rawText.trim().length < 20) {
         setError('Could not extract enough text. Please try a clearer image.')
         setProcessing(false)
         return
@@ -130,7 +153,7 @@ export function Scan() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rawText: ocrResult.rawText,
+          rawText: finalOcr.rawText,
           imageBase64: undefined,
           tenantId: getCookie('bz_tenant') || undefined,
         }),
@@ -461,17 +484,6 @@ export function Scan() {
               />
             </label>
 
-            <label className="flex items-center justify-center gap-2 text-xs text-white/60 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={enhanceEnabled}
-                onChange={(e) => setEnhanceEnabled(e.target.checked)}
-                className="accent-white"
-              />
-              <Sparkles className="h-3 w-3" />
-              Enhance image (auto-crop, sharpen, deskew)
-            </label>
-
             {error && (
               <p className="text-red-400 text-sm">{error}</p>
             )}
@@ -542,9 +554,9 @@ export function Scan() {
                   {Math.round(result.confidence)}% AI confidence
                 </span>
               )}
-              {preprocessMeta && (
-                <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700">
-                  ✦ {preprocessMeta.elapsedMs}ms enhance
+              {usedFullPipeline && (
+                <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700">
+                  ✦ Optimized difficult receipt
                 </span>
               )}
               {autoCorrections.length > 0 && (
@@ -672,7 +684,7 @@ export function Scan() {
         <p className="section-label">How it works</p>
         <ul className="mt-2 text-sm text-muted-foreground space-y-1">
           <li>1. Click "Scan with Camera" or upload an image</li>
-          <li>2. Image enhancement: auto-crop, deskew, sharpen (on-device)</li>
+          <li>2. Smart enhancement: auto-crops, fixes contrast, escalates for difficult receipts</li>
           <li>3. Tesseract.js extracts text locally (free, offline)</li>
           <li>4. Gemini Flash parses text into structured data</li>
           <li>5. Edit extracted items if needed, then save</li>

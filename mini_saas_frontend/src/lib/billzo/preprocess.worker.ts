@@ -1,9 +1,10 @@
-import { preprocessImage } from './preprocess'
+import { preprocessLight, preprocessFull } from './preprocess'
 
-self.onmessage = async (e: MessageEvent<File>) => {
+self.onmessage = async (e: MessageEvent<{ file: File; mode?: 'light' | 'full' }>) => {
   try {
-    const file = e.data
-    const result = await preprocessImage(file)
+    const { file, mode = 'light' } = e.data
+    const fn = mode === 'full' ? preprocessFull : preprocessLight
+    const result = await fn(file)
     self.postMessage({
       type: 'success',
       blob: result.blob,

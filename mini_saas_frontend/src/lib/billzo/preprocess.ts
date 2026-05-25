@@ -1,3 +1,5 @@
+export type PreprocessMode = 'light' | 'full'
+
 export interface PreprocessMetadata {
   originalWidth: number
   originalHeight: number
@@ -7,6 +9,7 @@ export interface PreprocessMetadata {
   threshold: number
   deskewAngle: number
   elapsedMs: number
+  mode: PreprocessMode
 }
 
 export interface PreprocessResult {
@@ -312,7 +315,43 @@ export async function encodeToBlob(data: ImageData, format = 'image/jpeg', quali
   })
 }
 
-export async function preprocessImage(file: File): Promise<PreprocessResult> {
+export async function preprocessLight(file: File): Promise<PreprocessResult> {
+  const start = Date.now()
+
+  let imageData = await decodeImage(file)
+  const originalWidth = imageData.width
+  const originalHeight = imageData.height
+
+  imageData = resizeImage(imageData, 1600)
+  const resizedWidth = imageData.width
+  const resizedHeight = imageData.height
+
+  const croppedData = autoCropBoundary(imageData)
+  const cropped = croppedData.width !== imageData.width || croppedData.height !== imageData.height
+  imageData = croppedData
+
+  imageData = toGrayscale(imageData)
+  imageData = normalizeContrast(imageData)
+
+  const blob = await encodeToBlob(imageData)
+
+  return {
+    blob,
+    metadata: {
+      originalWidth,
+      originalHeight,
+      resizedWidth,
+      resizedHeight,
+      cropped,
+      threshold: 0,
+      deskewAngle: 0,
+      elapsedMs: Date.now() - start,
+      mode: 'light',
+    },
+  }
+}
+
+export async function preprocessFull(file: File): Promise<PreprocessResult> {
   const start = Date.now()
 
   let imageData = await decodeImage(file)
@@ -351,6 +390,9 @@ export async function preprocessImage(file: File): Promise<PreprocessResult> {
       threshold,
       deskewAngle,
       elapsedMs: Date.now() - start,
+      mode: 'full',
     },
   }
 }
+
+export const preprocessImage = preprocessFull
