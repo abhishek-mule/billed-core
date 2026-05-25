@@ -13,19 +13,32 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get('x-razorpay-signature')
 
-    if (signature && webhookSecret) {
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(body)
-        .digest('hex')
-
-      if (!timingSafeEqual(signature, expectedSignature)) {
-        console.error('[Webhook] Invalid signature')
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-      }
+    if (!webhookSecret) {
+      console.error('[Webhook] Missing RAZORPAY_WEBHOOK_SECRET')
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 })
     }
 
-    const event = JSON.parse(body)
+    if (!signature) {
+      console.error('[Webhook] Missing signature header')
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(body)
+      .digest('hex')
+
+    if (!timingSafeEqual(signature, expectedSignature)) {
+      console.error('[Webhook] Invalid signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    let event: any
+    try {
+      event = JSON.parse(body)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
+    }
     console.log(`[Webhook] Received event: ${event.event}`)
 
     switch (event.event) {

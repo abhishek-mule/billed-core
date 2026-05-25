@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { supabase } from '@/lib/billzo/supabase'
 import type { Product } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(): string | null {
-  const cookieStore = cookies()
-  return cookieStore.get('bz_tenant')?.value || null
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (!supabase) {

@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { db } from '@/lib/billzo/db'
 import { normalizePhoneE164 } from '@/lib/billzo/auth-utils'
 import type { Customer, CustomerImportRow, BulkImportResult } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
-
-function getTenantId(request: NextRequest): string | null {
-  const cookieStore = cookies()
-  return cookieStore.get('bz_tenant')?.value || null
-}
 
 function normalizePhone(phone: string): string | null {
   if (!phone) return null
@@ -33,7 +28,7 @@ function validateRow(row: CustomerImportRow): { valid: boolean; reason?: string 
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
@@ -122,7 +117,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const customers = await db().customers.where('tenantId').equals(tenantId).toArray()

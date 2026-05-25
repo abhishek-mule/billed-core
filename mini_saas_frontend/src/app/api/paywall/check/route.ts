@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/billzo/db'
 import { getLimits, checkLimit, isPaywallBlocked, type PlanType } from '@/lib/billzo/plan-limits'
+import { getVerifiedTenantIdFromRequest, getVerifiedUserIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = request.headers.get('x-tenant-id')
-    const userId = request.headers.get('x-user-id')
+    const tenantId = getVerifiedTenantIdFromRequest(request)
+    const userId = getVerifiedUserIdFromRequest(request)
 
     if (!tenantId && !userId) {
       return NextResponse.json(
@@ -73,14 +74,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     const body = await request.json()
-    const { tenantId, action } = body
+    const { action } = body
 
     if (!tenantId) {
-      return NextResponse.json(
-        { error: 'Tenant ID required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     if (!['invoice', 'reminder'].includes(action)) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production'
+const JWT_SECRET = process.env.JWT_SECRET || require('crypto').randomBytes(32).toString('hex')
 
 function assertSecret() {
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
@@ -238,6 +238,33 @@ export function getRefreshFromRequest(request: NextRequest): string | null {
 
 export function getTenantFromRequest(request: NextRequest): string | null {
   return request.cookies.get('bz_tenant')?.value || null
+}
+
+export function getAuthPayloadFromRequest(request: NextRequest): {
+  sessionId: string
+  userId: string
+  tenantId?: string
+  phone?: string
+  email?: string
+} | null {
+  const token = getTokenFromRequest(request)
+  if (!token) return null
+  return verifyAccessToken(token)
+}
+
+export function getVerifiedTenantIdFromRequest(request: NextRequest): string | null {
+  const payload = getAuthPayloadFromRequest(request)
+  if (!payload) return null
+
+  const cookieTenantId = getTenantFromRequest(request)
+  if (payload.tenantId && cookieTenantId && payload.tenantId !== cookieTenantId) return null
+  return payload.tenantId || cookieTenantId || null
+}
+
+export function getVerifiedUserIdFromRequest(request: NextRequest): string | null {
+  const payload = getAuthPayloadFromRequest(request)
+  if (!payload) return null
+  return payload.userId || null
 }
 
 export { ACCESS_COOKIE, REFRESH_COOKIE }

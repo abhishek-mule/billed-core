@@ -1,30 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { getVerifiedTenantIdFromRequest, getVerifiedUserIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { db } from '@/lib/billzo/db'
 import { normalizePhoneE164 } from '@/lib/billzo/auth-utils'
 import type { Customer } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(request: NextRequest): string | null {
-  const cookieStore = cookies()
-  return cookieStore.get('bz_tenant')?.value || null
-}
-
-function getUserId(request: NextRequest): string | null {
-  const cookieStore = cookies()
-  const token = cookieStore.get('bz_access')?.value
-  if (!token) return null
-  try {
-    return JSON.parse(atob(token.split('.')[1])).userId || null
-  } catch {
-    return null
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
@@ -58,8 +42,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
-    const userId = getUserId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
+    const userId = getVerifiedUserIdFromRequest(request)
     if (!tenantId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
@@ -110,7 +94,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
@@ -150,7 +134,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const tenantId = getTenantId(request)
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)

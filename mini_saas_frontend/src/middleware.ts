@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, getRefreshFromRequest, getTenantFromRequest, verifyAccessTokenEdge, verifyRefreshTokenEdge } from '@/lib/billzo/auth-jwt'
 
+const DEBUG = process.env.BILLZO_MW_DEBUG === '1'
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const accessToken = getTokenFromRequest(request)
   const refreshToken = getRefreshFromRequest(request)
   const tenantId = getTenantFromRequest(request)
 
-  console.log(`[Middleware] Path: ${pathname}, hasAccessToken: ${!!accessToken}, hasRefreshToken: ${!!refreshToken}, hasTenantCookie: ${!!tenantId}`)
+  if (DEBUG) {
+    console.log(`[Middleware] Path: ${pathname}, hasAccessToken: ${!!accessToken}, hasRefreshToken: ${!!refreshToken}, hasTenantCookie: ${!!tenantId}`)
+  }
 
   let userId: string | null = null
   let resolvedTenantId: string | null = null
 
   if (accessToken) {
     const payload = await verifyAccessTokenEdge(accessToken)
-    console.log(`[Middleware] verifyAccessToken result: ${payload ? `userId=${payload.userId}` : 'INVALID'}`)
+    if (DEBUG) {
+      console.log(`[Middleware] verifyAccessToken result: ${payload ? `userId=${payload.userId}` : 'INVALID'}`)
+    }
     if (payload) {
       userId = payload.userId
       resolvedTenantId = payload.tenantId || tenantId
@@ -42,30 +48,32 @@ function applyRoutingRules(response: NextResponse, pathname: string, hasAuth: bo
   const isOnboardingRoute = pathname.startsWith('/onboarding')
   const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/invoices') || pathname.startsWith('/parties') || pathname.startsWith('/settings') || pathname.startsWith('/reports') || pathname.startsWith('/pos') || pathname.startsWith('/scan') || pathname.startsWith('/pricing')
 
-  console.log(`[Middleware] Routing: path=${pathname}, hasAuth=${hasAuth}, hasTenant=${hasTenant}, isAuth=${isAuthRoute}, isAuthResolver=${isAuthResolverRoute}, isOnboarding=${isOnboardingRoute}, isApp=${isAppRoute}`)
+  if (DEBUG) {
+    console.log(`[Middleware] Routing: path=${pathname}, hasAuth=${hasAuth}, hasTenant=${hasTenant}, isAuth=${isAuthRoute}, isAuthResolver=${isAuthResolverRoute}, isOnboarding=${isOnboardingRoute}, isApp=${isAppRoute}`)
+  }
 
   if (!hasAuth && isAppRoute) {
-    console.log(`[Middleware] Redirecting to /auth (no auth, app route)`)
+    if (DEBUG) console.log(`[Middleware] Redirecting to /auth (no auth, app route)`)
     return NextResponse.redirect(new URL('/auth', requestUrl))
   }
 
   if (hasAuth && isAuthRoute && !isAuthResolverRoute) {
     const destination = hasTenant ? '/dashboard' : '/onboarding'
-    console.log(`[Middleware] Redirecting to ${destination} (auth, auth route)`)
+    if (DEBUG) console.log(`[Middleware] Redirecting to ${destination} (auth, auth route)`)
     return NextResponse.redirect(new URL(destination, requestUrl))
   }
 
   if (hasAuth && !hasTenant && !isOnboardingRoute && !isAuthResolverRoute && pathname !== '/') {
-    console.log(`[Middleware] Redirecting to /onboarding (auth, no tenant)`)
+    if (DEBUG) console.log(`[Middleware] Redirecting to /onboarding (auth, no tenant)`)
     return NextResponse.redirect(new URL('/onboarding', requestUrl))
   }
 
   if (hasAuth && hasTenant && isOnboardingRoute) {
-    console.log(`[Middleware] Redirecting to /dashboard (auth, has tenant, onboarding)`)
+    if (DEBUG) console.log(`[Middleware] Redirecting to /dashboard (auth, has tenant, onboarding)`)
     return NextResponse.redirect(new URL('/dashboard', requestUrl))
   }
 
-  console.log(`[Middleware] Allowing request`)
+  if (DEBUG) console.log(`[Middleware] Allowing request`)
   return response
 }
 

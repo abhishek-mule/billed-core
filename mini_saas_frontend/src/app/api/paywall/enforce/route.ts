@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { db } from '@/lib/billzo/db'
 import { isPaywallBlocked } from '@/lib/billzo/plan-limits'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(): string | null {
-  return cookies().get('bz_tenant')?.value || null
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const tenant = await db().tenants.get(tenantId)
@@ -49,7 +45,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()

@@ -49,11 +49,18 @@ else:
 
 app = FastAPI(title="BillZo OCR API", version="2.0.0")
 
-# CORS middleware
+allowed_origins_env = os.getenv("OCR_ALLOWED_ORIGINS", "")
+allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+if not allowed_origins:
+    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+allow_credentials = os.getenv("OCR_CORS_ALLOW_CREDENTIALS", "false").lower() == "true"
+if "*" in allowed_origins:
+    allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -86,7 +93,7 @@ def extract_amount(text: str) -> Optional[float]:
         if match:
             try:
                 return float(match.group(1).replace(',', ''))
-            except:
+            except Exception:
                 pass
     return None
 

@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { supabase } from '@/lib/billzo/supabase'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
-
-function getTenantId(): string | null {
-  return cookies().get('bz_tenant')?.value || null
-}
 
 function interpolate(text: string, vars: Record<string, string | number>): string {
   return text.replace(/\{\{(\d+)\}\}/g, (_, n) => String(vars[n] ?? ''))
@@ -46,7 +42,7 @@ async function sendViaGupshup(config: TenantWhatsAppConfig, to: string, message:
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (!supabase) {
@@ -80,6 +76,7 @@ export async function POST(request: NextRequest) {
         .from('customers')
         .select('*')
         .eq('id', customerId)
+        .eq('tenant_id', tenantId)
         .single()
 
       if (customerError || !customer) {
@@ -97,6 +94,7 @@ export async function POST(request: NextRequest) {
           .from('customers')
           .update({ opt_in: true, opt_in_at: new Date().toISOString() })
           .eq('id', customerId)
+          .eq('tenant_id', tenantId)
       }
     }
 
@@ -170,6 +168,7 @@ export async function POST(request: NextRequest) {
           sync_status: 'pending',
         })
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
     }
 
     return NextResponse.json({
