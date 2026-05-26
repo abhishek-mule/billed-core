@@ -4,6 +4,7 @@ import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFai
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
+import { startBaileysSocket, disconnectBaileys } from '../lib/baileys-socket'
 
 export function createOutboxWorker() {
   const connection = createRedisConnection()
@@ -116,6 +117,14 @@ async function processOutboxEvent(event: any): Promise<void> {
       await handleOverdueEvent(event)
       break
 
+    case 'whatsapp.pair.requested':
+      await handleWhatsAppPairRequested(event)
+      break
+
+    case 'whatsapp.unpaired':
+      await handleWhatsAppUnpaired(event)
+      break
+
     default:
       console.log(`[OutboxWorker] Unhandled event type: ${event.type}`)
   }
@@ -139,6 +148,22 @@ async function handlePaymentEvent(event: any): Promise<void> {
 
 async function handleReminderEvent(event: any): Promise<void> {
   console.log(`[OutboxWorker] Reminder sent: ${event.entityId}`)
+}
+
+async function handleWhatsAppPairRequested(event: any): Promise<void> {
+  const tenantId = event.tenantId
+  if (!tenantId) return
+
+  console.log(`[OutboxWorker] Starting Baileys pairing for tenant ${tenantId}`)
+  await startBaileysSocket(tenantId)
+}
+
+async function handleWhatsAppUnpaired(event: any): Promise<void> {
+  const tenantId = event.tenantId
+  if (!tenantId) return
+
+  console.log(`[OutboxWorker] Disconnecting Baileys for tenant ${tenantId}`)
+  await disconnectBaileys(tenantId)
 }
 
 async function handleOverdueEvent(event: any): Promise<void> {

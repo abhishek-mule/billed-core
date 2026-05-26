@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, MessageCircle, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
-import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
+import { ArrowLeft, MessageCircle, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, Smartphone, Wifi, WifiOff, QrCode } from 'lucide-react'
+import type { TenantWhatsAppConfig, WhatsAppProvider } from '@/lib/billzo/types'
 
 const DEFAULT_CONFIG: TenantWhatsAppConfig = {
   autoSend: false,
@@ -74,6 +74,76 @@ export default function WhatsAppSettingsPage() {
 
   const set = <K extends keyof TenantWhatsAppConfig>(key: K, value: TenantWhatsAppConfig[K]) => {
     setConfig(c => ({ ...c, [key]: value }))
+  }
+
+  const [pairStatus, setPairStatus] = useState<'idle' | 'requested' | 'awaiting_scan' | 'connected' | 'failed'>('idle')
+  const [pairQr, setPairQr] = useState<string | null>(null)
+  const [pairPollInterval, setPairPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
+
+  const getTenantId = () => {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(new RegExp('(^| )bz_tenant=([^;]+)'))
+    return match ? match[2] : null
+  }
+
+  const startPairing = async () => {
+    const tenantId = getTenantId()
+    if (!tenantId) return
+
+    setPairStatus('requested')
+    await fetch('/api/whatsapp/pair', { method: 'POST', credentials: 'include' })
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/whatsapp/pair?tenantId=${tenantId}`, { credentials: 'include' })
+        const data = await res.json()
+        if (data.status === 'connected') {
+          setPairStatus('connected')
+          setPairQr(null)
+          if (poll) clearInterval(poll)
+        } else if (data.status === 'awaiting_scan' && data.qr) {
+          setPairStatus('awaiting_scan')
+          setPairQr(data.qr)
+          set('whatsappProvider', 'baileys')
+        }
+      } catch {}
+    }, 2000)
+
+    setPairPollInterval(poll)
+  }
+
+  const disconnectBaileys = async () => {
+    await fetch('/api/whatsapp/pair', { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+    setPairStatus('idle')
+    setPairQr(null)
+    if (pairPollInterval) {
+      clearInterval(pairPollInterval)
+      setPairPollInterval(null)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pairPollInterval) clearInterval(pairPollInterval)
+    }
+  }, [pairPollInterval])
+
+  useEffect(() => {
+    const tenantId = getTenantId()
+    if (!tenantId) return
+    fetch(`/api/whatsapp/pair?tenantId=${tenantId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === 'connected') setPairStatus('connected')
+      })
+      .catch(() => {})
+  }, [])
+
+  const setProvider = (provider: WhatsAppProvider) => {
+    set('whatsappProvider', provider)
+    if (provider === 'gupshup') {
+      disconnectBaileys()
+    }
   }
 
   if (loading) {
@@ -163,6 +233,84 @@ export default function WhatsAppSettingsPage() {
             />
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-5 shadow-sm space-y-5">
+        <div className="flex items-center gap-2 pb-3 border-b">
+          <Smartphone className="h-5 w-5 text-green-600" />
+          <h2 className="font-bold text-lg">WhatsApp Provider</h2>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setProvider('gupshup')}
+            className={`rounded-xl border-2 p-4 text-left transition-colors ${
+              (config.whatsappProvider || 'gupshup') === 'gupshup'
+                ? 'border-green-500 bg-green-50'
+                : 'border-input hover:border-green-300'
+            }`}
+          >
+            <div className="text-sm font-bold">Gupshup</div>
+            <div className="text-xs text-muted-foreground mt-1">Reliable for transactional & onboarding</div>
+          </button>
+          <button
+            onClick={() => setProvider('baileys')}
+            className={`rounded-xl border-2 p-4 text-left transition-colors ${
+              config.whatsappProvider === 'baileys'
+                ? 'border-green-500 bg-green-50'
+                : 'border-input hover:border-green-300'
+            }`}
+          >
+            <div className="text-sm font-bold">Baileys</div>
+            <div className="text-xs text-muted-foreground mt-1">Merchant-owned WhatsApp. Free sending</div>
+          </button>
+        </div>
+
+        {config.whatsappProvider === 'baileys' && (
+          <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {pairStatus === 'connected' ? (
+                  <Wifi className="h-4 w-4 text-green-600" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-amber-600" />
+                )}
+                <span className="text-sm font-semibold">
+                  {pairStatus === 'connected' ? 'WhatsApp Connected' : 'Not Connected'}
+                </span>
+              </div>
+              {pairStatus === 'connected' ? (
+                <button onClick={disconnectBaileys} className="text-xs text-red-600 hover:underline">
+                  Disconnect
+                </button>
+              ) : pairStatus === 'awaiting_scan' ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : (
+                <button
+                  onClick={startPairing}
+                  disabled={pairStatus === 'requested'}
+                  className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {pairStatus === 'requested' ? 'Connecting...' : 'Link WhatsApp'}
+                </button>
+              )}
+            </div>
+
+            {pairStatus === 'awaiting_scan' && pairQr && (
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <QrCode className="h-8 w-8 text-green-600" />
+                <p className="text-xs text-center text-muted-foreground max-w-xs">
+                  Open WhatsApp on your phone → Menu → Linked Devices → Link a Device → Scan this QR
+                </p>
+                <div className="rounded-xl border bg-white p-2">
+                  <div className="h-48 w-48 bg-slate-100 rounded-lg flex items-center justify-center text-xs text-muted-foreground">
+                    <code className="break-all px-2 text-[8px] leading-tight">{pairQr.slice(0, 200)}</code>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border bg-white p-5 shadow-sm space-y-5">

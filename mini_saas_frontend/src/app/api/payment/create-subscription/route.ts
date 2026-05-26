@@ -37,14 +37,7 @@ export async function POST(request: NextRequest) {
     const amount = plan === 'growth' ? GROWTH_PRICE : PRO_PRICE
 
     if (!razorpay) {
-      return NextResponse.json({
-        mock: true,
-        orderId: `order_demo_${Date.now()}`,
-        amount,
-        plan,
-        keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        message: 'Razorpay not configured - demo mode',
-      })
+      return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 })
     }
 
     const receipt = `billzo_${tenantId.slice(-8)}_${Date.now()}`

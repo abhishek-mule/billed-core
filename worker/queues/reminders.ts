@@ -4,6 +4,8 @@ import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { emitRecoveryReminderSent } from '../src/lib/billzo/events'
+import { sendWhatsAppMessage, getEffectiveProvider, type WhatsAppProvider } from '../lib/whatsapp-router'
+import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
 
 const STAGE_ORDER = ['t1_soft', 't2_firm', 't3_urgent', 't4_final']
 const STAGE_LABELS: Record<string, string> = {
@@ -13,10 +15,10 @@ const STAGE_LABELS: Record<string, string> = {
   t4_final: 'final notice',
 }
 
-function buildMessage(stage: string, customerName: string, amount: number, businessName: string): string {
+function buildMessage(stage: string, customerName: string, amount: number, businessName: string, upiId?: string): string {
   const stageLabel = STAGE_LABELS[stage] || 'reminder'
   const amountText = `₹${amount.toLocaleString('en-IN')}`
-  return [
+  const lines = [
     `Dear ${customerName},`,
     '',
     `This is a ${stageLabel} regarding your pending amount of ${amountText}.`,
@@ -24,37 +26,15 @@ function buildMessage(stage: string, customerName: string, amount: number, busin
       ? 'Please arrange payment immediately to avoid any further escalation.'
       : 'Please clear the dues at your earliest convenience.',
     '',
-    `Regards,\n${businessName}`,
-  ].join('\n')
-}
+  ]
 
-async function sendViaGupshup(
-  apiKey: string,
-  appName: string,
-  source: string,
-  destination: string,
-  message: string,
-): Promise<{ messageId: string }> {
-  const payload = new URLSearchParams({
-    api_key: apiKey,
-    app_name: appName,
-    channel: 'whatsapp',
-    source: source,
-    destination: destination.replace(/\D/g, '').replace(/^91/, ''),
-    message: message,
-  })
-
-  const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: payload.toString(),
-  })
-
-  const data = await res.json() as any
-  if (!res.ok && data.status !== 'queued') {
-    throw new Error(data.error || `Gupshup error: ${res.status}`)
+  if (upiId) {
+    lines.push(`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent(businessName)}`)
+    lines.push('')
   }
-  return { messageId: data.messageId || `wa_${Date.now()}` }
+
+  lines.push(`Regards,\n${businessName}`)
+  return lines.join('\n')
 }
 
 interface ReminderJobData {
@@ -76,10 +56,9 @@ export function createRemindersWorker() {
       const result = await withLock(lockKey, 60000, async () => {
         console.log(`[RemindersWorker] Sending ${stage} reminder for invoice ${invoiceId}`)
 
-        // 1. Fetch invoice + customer + tenant data from Supabase
         const [invoiceResult, tenantResult] = await Promise.all([
           supabaseAdmin.from('invoices').select('*, customers!inner(*)').eq('id', invoiceId).single(),
-          supabaseAdmin.from('tenants').select('name, whatsapp_config').eq('id', tenantId).single(),
+          supabaseAdmin.from('tenants').select('name, upi_id, whatsapp_config').eq('id', tenantId).single(),
         ])
 
         if (invoiceResult.error || !invoiceResult.data) {
@@ -94,39 +73,37 @@ export function createRemindersWorker() {
         const tenant = tenantResult.data
         const config = (tenant.whatsapp_config || {}) as Record<string, any>
 
-        // 2. Determine customer phone number
         const phoneNumber = customer?.whatsapp_number || customer?.phone
         if (!phoneNumber) {
           console.log(`[RemindersWorker] No phone for customer ${customer?.id}, skipping`)
           return { skipped: true, reason: 'no_phone', invoiceId, stage }
         }
+
         const cleanPhone = phoneNumber.replace(/\D/g, '')
+        const upiId = tenant.upi_id || config.upiId
+        const message = buildMessage(stage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo', upiId)
 
-        // 3. Build message text
-        const message = buildMessage(stage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo')
+        const effectiveProvider: WhatsAppProvider = config.whatsappProvider === 'baileys' ? 'baileys' : 'gupshup'
 
-        // 4. Send via Gupshup
-        const gupshupApiKey = config.gupshupApiKey
-        const gupshupAppName = config.gupshupAppName
-        const sourceNumber = config.sourceNumber
-
-        let gupshupResponse: { messageId: string } | null = null
-        let sendError: string | null = null
-
-        if (gupshupApiKey && gupshupAppName && sourceNumber) {
-          try {
-            gupshupResponse = await sendViaGupshup(gupshupApiKey, gupshupAppName, sourceNumber, `+${cleanPhone}`, message)
-          } catch (err: any) {
-            sendError = err.message
-            console.error(`[RemindersWorker] Gupshup send failed for invoice ${invoiceId}:`, err.message)
-          }
-        } else {
-          console.log(`[RemindersWorker] No Gupshup config for tenant ${tenantId}, simulating send to ${cleanPhone}`)
+        if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
+          console.log(`[RemindersWorker] Starting Baileys socket for tenant ${tenantId}`)
+          startBaileysSocket(tenantId).catch((err) =>
+            console.error(`[RemindersWorker] Failed to start Baileys for ${tenantId}:`, err)
+          )
         }
 
-        // 5. Log WhatsApp event
-        const eventId = gupshupResponse?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        const eventStatus = gupshupResponse ? 'queued' : sendError ? 'failed' : 'sent'
+        let sendResult: { messageId: string; provider: WhatsAppProvider } | null = null
+        let sendError: string | null = null
+
+        try {
+          sendResult = await sendWhatsAppMessage(tenantId, cleanPhone, message)
+        } catch (err: any) {
+          sendError = err.message
+          console.error(`[RemindersWorker] Send failed for invoice ${invoiceId}:`, err.message)
+        }
+
+        const eventId = sendResult?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const eventStatus = sendResult ? 'queued' : sendError ? 'failed' : 'sent'
 
         await supabaseAdmin.from('whatsapp_events').insert({
           id: eventId,
@@ -139,10 +116,10 @@ export function createRemindersWorker() {
           occurred_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           sync_status: eventStatus === 'failed' ? 'failed' : 'pending',
+          provider: sendResult?.provider || effectiveProvider,
           error: sendError,
         })
 
-        // 6. Update invoice recovery stage
         const currentStageIndex = STAGE_ORDER.indexOf(stage)
         const nextStage = currentStageIndex >= 0 && currentStageIndex < STAGE_ORDER.length - 1
           ? STAGE_ORDER[currentStageIndex + 1]
@@ -158,7 +135,6 @@ export function createRemindersWorker() {
           sync_status: 'pending',
         }).eq('id', invoiceId)
 
-        // 7. Emit outbox event
         if (eventStatus !== 'failed') {
           await emitRecoveryReminderSent({
             invoiceId,
@@ -174,8 +150,8 @@ export function createRemindersWorker() {
           throw new Error(sendError)
         }
 
-        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone}`)
-        return { sent: true, invoiceId, stage, status: eventStatus, messageId: eventId }
+        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone} via ${sendResult?.provider || effectiveProvider}`)
+        return { sent: true, invoiceId, stage, status: eventStatus, messageId: eventId, provider: sendResult?.provider }
       })
 
       if (!result) {
@@ -188,7 +164,7 @@ export function createRemindersWorker() {
         entity_id: invoiceId,
         queue_name: 'reminders',
         attempt: job.attemptsMade,
-        status: result.skipped ? 'success' : 'success',
+        status: 'success',
         duration_ms: duration,
         timestamp: new Date().toISOString(),
         level: 'info',

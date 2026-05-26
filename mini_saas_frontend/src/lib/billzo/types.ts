@@ -4,10 +4,13 @@ export type RecoveryStage = 't0_soft' | 't24_nudge' | 't72_strong' | 't5_warning
 export type WhatsAppStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'
 export type ConflictPolicy = 'latest_write_wins' | 'server_authority'
 
+export type WhatsAppProvider = 'gupshup' | 'baileys'
+
 export type TenantWhatsAppConfig = {
   gupshupApiKey?: string
   gupshupAppName?: string
   sourceNumber?: string
+  whatsappProvider?: WhatsAppProvider
   autoSend: boolean
   paymentLinkEnabled: boolean
   paymentLinkExpiry: number

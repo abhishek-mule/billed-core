@@ -50,6 +50,11 @@ export const EventType = {
   SYNC_FAILED: 'sync.failed',
   SYNC_CONFLICT: 'sync.conflict',
 
+  // WhatsApp
+  WHATSAPP_PAIR_REQUESTED: 'whatsapp.pair.requested',
+  WHATSAPP_PAIRED: 'whatsapp.paired',
+  WHATSAPP_UNPAIRED: 'whatsapp.unpaired',
+
   // Analytics
   ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
 

@@ -2,6 +2,8 @@ import http from 'node:http'
 import { createOutboxWorker } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
+import { supabaseAdmin } from './src/lib/billzo/supabase-admin'
+import { startBaileysSocket } from './lib/baileys-socket'
 
 function startHealthServer() {
   const port = parseInt(process.env.PORT || '10000', 10)
@@ -44,6 +46,21 @@ async function main() {
   const reconciliationWorker = createReconciliationWorker()
 
   console.log('[Worker] All workers started')
+
+  // Start Baileys sockets for tenants with Baileys WhatsApp provider
+  supabaseAdmin.from('tenants').select('id, whatsapp_config').then(({ data: tenants }) => {
+    if (tenants) {
+      for (const t of tenants) {
+        const cfg = (t.whatsapp_config || {}) as Record<string, any>
+        if (cfg.whatsappProvider === 'baileys') {
+          console.log(`[Worker] Starting Baileys socket for tenant ${t.id}`)
+          startBaileysSocket(t.id).catch((err) =>
+            console.error(`[Worker] Failed to start Baileys for ${t.id}:`, err)
+          )
+        }
+      }
+    }
+  })
 
   // Scan for overdue invoices every 5 minutes and enqueue reminder jobs
   const enqueueOverdue = async () => {

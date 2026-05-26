@@ -32,14 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!razorpay) {
-      return NextResponse.json({
-        mock: true,
-        order_id: `order_demo_${Date.now()}`,
-        amount: Math.round(amount * 100),
-        currency: 'INR',
-        key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        message: 'Razorpay not configured - demo mode',
-      })
+      return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 })
     }
 
     const amountInPaise = Math.round(amount * 100)

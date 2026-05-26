@@ -50,6 +50,11 @@ export const EventType = {
   SYNC_FAILED: 'sync.failed',
   SYNC_CONFLICT: 'sync.conflict',
 
+  // WhatsApp
+  WHATSAPP_PAIR_REQUESTED: 'whatsapp.pair.requested',
+  WHATSAPP_PAIRED: 'whatsapp.paired',
+  WHATSAPP_UNPAIRED: 'whatsapp.unpaired',
+
   // Analytics
   ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
 
@@ -285,6 +290,26 @@ function logStructuredEvent(entry: Omit<StructuredLogEntry, 'timestamp' | 'level
   }
 
   console.log(JSON.stringify(logEntry))
+}
+
+/**
+ * Emit a WhatsApp pair request event.
+ */
+export async function emitWhatsAppPairRequested(params: {
+  tenantId: string
+  causationId?: string | null
+}): Promise<string> {
+  return emitEvent({
+    type: EventType.WHATSAPP_PAIR_REQUESTED,
+    tenantId: params.tenantId,
+    entityId: null,
+    payload: {},
+    causationId: params.causationId || null,
+    correlationId: `pair:${params.tenantId}:${Date.now()}`,
+    producer: 'api',
+    idempotencyKey: `whatsapp:pair:${params.tenantId}:${new Date().toISOString().slice(0, 10)}`,
+    retentionDays: 7,
+  })
 }
 
 export function logStructuredError(error: Error, context: Record<string, unknown>) {

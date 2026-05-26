@@ -115,18 +115,7 @@ export default function PricingPage() {
         throw new Error(data.error)
       }
 
-      if (data.mock || data.subscriptionId?.startsWith('sub_demo_')) {
-        setTimeout(() => {
-          
-          if (tenantId) {
-            import("@/lib/billzo/db").then(({ db }) => {
-              db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
-            })
-          }
-          router.push("/dashboard")
-        }, 2000)
-        return
-      }
+
 
       const rzpOptions: Record<string, unknown> = {
         key: data.keyId,
