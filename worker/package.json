@@ -5,6 +5,9 @@
   "description": "BillZo background worker service for recovery automation",
   "main": "dist/index.js",
   "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
