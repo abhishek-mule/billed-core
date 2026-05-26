@@ -7,9 +7,6 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mini_saas_frontend
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -19,16 +16,13 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: mini_saas_frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm --filter mini_saas_frontend typecheck
+      - run: pnpm --filter mini_saas_frontend test
 
   worker:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -38,7 +32,8 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          cache-dependency-path: worker/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-
+      - run: pnpm --filter @billzo/shared build
+      - run: pnpm --filter billzo-worker build
+      - run: pnpm --filter billzo-worker test
