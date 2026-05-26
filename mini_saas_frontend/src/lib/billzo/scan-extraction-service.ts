@@ -47,43 +47,34 @@ function extractInvoiceNumber(lines: string[]) {
 }
 
 function extractSupplier(lines: string[]) {
-  return lines
-    .slice(0, 6)
-    .filter((line) => /[a-z]/i.test(line))
-    .sort((a, b) => b.replace(/[^a-z]/gi, '').length - a.replace(/[^a-z]/gi, '').length)[0]
-}
-
-function buildGeometry(lines: string[]): GeometryEvidence[] {
-  const totalStart = Math.max(0, Math.floor(lines.length * 0.65))
-  const headerEnd = Math.min(lines.length - 1, Math.max(2, Math.floor(lines.length * 0.2)))
-  const tableEnd = Math.max(headerEnd + 1, Math.floor(lines.length * 0.65))
-
-  return [
-    { zone: 'header', startLine: 0, endLine: headerEnd, confidence: 72, reason: 'Top section contains merchant metadata' },
-    { zone: 'table', startLine: headerEnd + 1, endLine: tableEnd, confidence: 68, reason: 'Middle section resembles item rows' },
-    { zone: 'totals', startLine: totalStart, endLine: lines.length - 1, confidence: 80, reason: 'Bottom section contains amount-heavy lines' },
-  ]
+  return lines[0] || undefined
 }
 
 function extractTotals(lines: string[]) {
-  const bottom = lines.slice(Math.max(0, lines.length - 12))
-  let total: number | undefined
   let subtotal: number | undefined
   let tax: number | undefined
+  let total: number | undefined
+  let totalCandidates: Array<{ value: number; line: string }> = []
 
-  for (const line of bottom) {
+  for (const line of lines) {
+    const raw = line.toLowerCase()
     const amount = parseAmount(line)
-    if (!amount) continue
-    const normalized = line.toLowerCase()
-    if ((normalized.includes('grand total') || normalized.includes('amount payable') || normalized.startsWith('total')) && total === undefined) {
-      total = amount
-    } else if ((normalized.includes('sub total') || normalized.includes('subtotal')) && subtotal === undefined) {
+    if (amount === undefined) continue
+
+    if (raw.includes('total') || raw.includes('grand total') || raw.includes('net amount') || /^total\b/.test(raw)) {
+      totalCandidates.push({ value: amount, line })
+    } else if (raw.includes('sub total') || raw.includes('subtotal')) {
       subtotal = amount
-    } else if ((normalized.includes('gst') || normalized.includes('tax') || normalized.includes('cgst') || normalized.includes('sgst')) && tax === undefined) {
-      tax = amount
-    } else if (total === undefined) {
-      total = amount
+    } else if (raw.includes('gst') || raw.includes('tax') || raw.includes('cgst') || raw.includes('sgst') || raw.includes('igst')) {
+      tax = (tax || 0) + amount
     }
+  }
+
+  if (totalCandidates.length > 0) {
+    total = totalCandidates[totalCandidates.length - 1].value
+  }
+  if (total === undefined && subtotal !== undefined) {
+    total = subtotal + (tax || 0)
   }
 
   return { subtotal, tax, total }
@@ -91,39 +82,48 @@ function extractTotals(lines: string[]) {
 
 function extractItems(lines: string[]): ExtractionPassBundle['productPass']['items'] {
   const items: ExtractionPassBundle['productPass']['items'] = []
-  const skipped = ['total', 'subtotal', 'gst', 'tax', 'cgst', 'sgst', 'invoice', 'bill no', 'phone']
 
   for (const line of lines) {
-    const normalized = line.toLowerCase()
-    if (skipped.some((token) => normalized.includes(token))) continue
-    if (!/[a-z]/i.test(line) || !/\d/.test(line)) continue
+    if (items.length >= 20) break
+
+    const raw = line.toLowerCase()
+    if (
+      raw.includes('total') ||
+      raw.includes('gst') ||
+      raw.includes('tax') ||
+      raw.includes('sub total') ||
+      raw.includes('subtotal') ||
+      raw.includes('change') ||
+      raw.includes('cash') ||
+      raw.includes('round') ||
+      raw.includes('invoice') ||
+      raw.includes('bill') ||
+      raw.includes('date') ||
+      raw.includes('gstin') ||
+      raw.includes('supplier') ||
+      raw.includes('address') ||
+      raw.includes('phone')
+    ) continue
 
     const amount = parseAmount(line)
     if (!amount || amount <= 0) continue
 
-    const parts = line.split(/\s{2,}|\t+/).filter(Boolean)
-    const name = parts[0]?.replace(/\s+\d.*$/, '').trim()
+    const name = line.replace(/\s+\d[\d,]*\.?\d{0,2}\s*$/, '').trim()
     if (!name || name.length < 3) continue
-
-    const qtyMatch = line.match(/\b(\d+(?:\.\d+)?)\s*(pcs|pc|kg|g|ltr|l|ml|box|pkt|pack)?\b/i)
-    const quantity = Number(qtyMatch?.[1] || 1)
-    const unit = qtyMatch?.[2]?.toLowerCase()
-    const rate = quantity > 0 ? Math.max(0, Math.round((amount / quantity) * 100) / 100) : amount
 
     items.push({
       name,
-      quantity,
-      unit,
-      rate,
+      quantity: 1,
+      rate: amount,
       amount,
-      confidence: name.length > 6 ? 74 : 62,
+      confidence: 68,
       evidence: [
-        { field: `item:${name}`, pass: 'product_pass', confidence: name.length > 6 ? 74 : 62, reason: 'Parsed from amount-bearing receipt row', zone: 'table' },
+        { field: `item:${name}`, pass: 'product_pass', confidence: 68, reason: 'Parsed from receipt row', zone: 'table' },
       ],
     })
   }
 
-  return items.slice(0, 20)
+  return items
 }
 
 async function callGemini(imageBase64: string | undefined, rawText: string) {
@@ -166,6 +166,36 @@ ${rawText.slice(0, 4000)}`
   }
 }
 
+function buildGeometry(lines: string[]) {
+  const totalIdx = lines.findIndex((line) => {
+    const raw = line.toLowerCase()
+    return raw.includes('total') || raw.includes('grand total') || raw.includes('net amount')
+  })
+
+  const evidence: GeometryEvidence[] = []
+  if (totalIdx >= 0) {
+    const totalLine = totalIdx + 1
+    evidence.push({ zone: 'totals', startLine: totalLine, endLine: totalLine, confidence: 85, reason: `Total found at row ${totalLine}` })
+    evidence.push({ zone: 'header', startLine: 1, endLine: 3, confidence: 90, reason: 'First rows detected as header' })
+    evidence.push({ zone: 'table', startLine: 4, endLine: Math.max(4, totalLine - 1), confidence: 75, reason: `Rows before total (${totalLine - 1}) detected as table` })
+  } else {
+    evidence.push({ zone: 'table', startLine: 1, endLine: lines.length, confidence: 60, reason: 'Flat structure — no totals row found' })
+  }
+
+  return evidence
+}
+
+function preferString(primary: string | undefined, fallback: unknown) {
+  const normalized = String(fallback || '').trim()
+  return primary || normalized || undefined
+}
+
+function preferNumber(primary: number | undefined, fallback: unknown) {
+  if (primary !== undefined) return primary
+  const parsed = Number(fallback || 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
 export async function runExtractionPasses(input: ScanSessionPayload): Promise<ExtractionPassBundle> {
   const rawText = input.rawText || ''
   const lines = cleanLines(rawText)
@@ -205,8 +235,8 @@ export async function runExtractionPasses(input: ScanSessionPayload): Promise<Ex
 
   return {
     barcodePass: {
-      barcodes: input.barcodeCandidates || [],
-      confidence: input.barcodeCandidates?.length ? 92 : 0,
+      barcodes: [],
+      confidence: 0,
     },
     geometryPass: {
       totalsZoneFound: geometry.some((item) => item.zone === 'totals'),
@@ -215,9 +245,9 @@ export async function runExtractionPasses(input: ScanSessionPayload): Promise<Ex
       evidence: geometry,
     },
     layoutPass: {
-      headerLines: lines.slice(0, Math.max(3, Math.floor(lines.length * 0.2))),
-      tableLines: lines.slice(Math.max(3, Math.floor(lines.length * 0.2)), Math.max(4, Math.floor(lines.length * 0.65))),
-      totalLines: lines.slice(Math.max(0, Math.floor(lines.length * 0.65))),
+      headerLines: lines.slice(0, 3),
+      tableLines: [],
+      totalLines: [],
     },
     numericPass: {
       supplier,
@@ -249,14 +279,4 @@ export function buildTotalsPayload(bundle: ExtractionPassBundle) {
     tax: bundle.numericPass.tax,
     total: bundle.numericPass.total,
   }
-}
-function preferString(primary: string | undefined, fallback: unknown) {
-  const normalized = String(fallback || '').trim()
-  return primary || normalized || undefined
-}
-
-function preferNumber(primary: number | undefined, fallback: unknown) {
-  if (primary !== undefined) return primary
-  const parsed = Number(fallback || 0)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }

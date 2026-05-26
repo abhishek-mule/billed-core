@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createScanJob, getScanJob, pushScanEvent } from '@/lib/billzo/scan-job-store'
 import { validateCapture } from '@/lib/billzo/scan-capture-service'
-import { detectInvoiceType } from '@/lib/billzo/scan-classifier-service'
-import { buildPreprocessSummary, selectPreprocessRecipe } from '@/lib/billzo/scan-preprocess-service'
+import { buildPreprocessSummary } from '@/lib/billzo/scan-preprocess-service'
 import { buildFastHeaderPayload, buildTotalsPayload, runExtractionPasses } from '@/lib/billzo/scan-extraction-service'
 import { reconstructCommerce } from '@/lib/billzo/scan-reconstruction-service'
 import { projectReview } from '@/lib/billzo/scan-review-service'
@@ -27,9 +26,8 @@ async function processScanJob(scanJobId: string) {
     }
 
     const input = latestJob?.input || job.input
-    const receiptType = detectInvoiceType(input, assessment)
-    const recipe = selectPreprocessRecipe(receiptType, assessment)
-    const preprocess = buildPreprocessSummary(recipe, assessment, input.preprocessMetadata)
+    const receiptType = 'generic'
+    const preprocess = buildPreprocessSummary('default_receipt', assessment, input.preprocessMetadata)
     const passes = await runExtractionPasses(input)
 
     pushScanEvent(scanJobId, 'fast_header_extraction', 'partial', {

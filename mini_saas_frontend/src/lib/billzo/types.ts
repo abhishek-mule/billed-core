@@ -1,29 +1,38 @@
-export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'conflict' | 'dead_letter'
-export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue'
-export type RecoveryStage = 't0_soft' | 't24_nudge' | 't72_strong' | 't5_warning'
-export type WhatsAppStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'
-export type ConflictPolicy = 'latest_write_wins' | 'server_authority'
+import type {
+  SyncStatus as SharedSyncStatus,
+  InvoiceStatus as SharedInvoiceStatus,
+  WhatsAppStatus as SharedWhatsAppStatus,
+  WhatsAppProvider as SharedWhatsAppProvider,
+  TenantWhatsAppConfig as SharedTenantWhatsAppConfig,
+  ReminderStage as SharedReminderStage,
+} from '@billzo/shared'
+import {
+  normalizeStage,
+  getNextStage,
+  REMINDER_STAGES,
+  STAGE_LABELS,
+  RECOVERY_STATES,
+  RECOVERY_ENGAGEMENT_STATES,
+} from '@billzo/shared'
 
-export type WhatsAppProvider = 'gupshup' | 'baileys'
+export type SyncStatus = SharedSyncStatus
+export type InvoiceStatus = SharedInvoiceStatus
+export type RecoveryStage = SharedReminderStage
+export type WhatsAppStatus = SharedWhatsAppStatus
+export type WhatsAppProvider = SharedWhatsAppProvider
+export type TenantWhatsAppConfig = SharedTenantWhatsAppConfig
+export type ReminderStage = SharedReminderStage
 
-export type TenantWhatsAppConfig = {
-  gupshupApiKey?: string
-  gupshupAppName?: string
-  sourceNumber?: string
-  whatsappProvider?: WhatsAppProvider
-  autoSend: boolean
-  paymentLinkEnabled: boolean
-  paymentLinkExpiry: number
-  optInMessage?: string
-  templateNames: {
-    invoice?: string
-    reminderGentle?: string
-    reminderFirm?: string
-    receipt?: string
-    udharGentle?: string
-    udharFirm?: string
-  }
+export {
+  normalizeStage,
+  getNextStage,
+  REMINDER_STAGES,
+  STAGE_LABELS,
+  RECOVERY_STATES,
+  RECOVERY_ENGAGEMENT_STATES,
 }
+
+export type ConflictPolicy = 'latest_write_wins' | 'server_authority'
 
 export type BankDetails = {
   bankName?: string
@@ -201,13 +210,24 @@ export type WhatsAppEvent = {
   invoiceId?: string
   customerId?: string
   phone?: string
+  direction?: 'outbound' | 'inbound'
   messageType?: string
   failureReason?: string
   error?: string
   recoveryAttemptId?: string
   providerMessageId?: string
+  correlationId?: string
+  template?: string
+  recoveryStage?: string
+  metadata?: Record<string, unknown>
   status: WhatsAppStatus
   syncStatus?: SyncStatus
+  serverAckAt?: string
+  deliveredAt?: string
+  readAt?: string
+  clickedAt?: string
+  rateLimitedAt?: string
+  timeToClickSeconds?: number
   occurredAt: string
   createdAt: string
 }

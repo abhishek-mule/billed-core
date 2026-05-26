@@ -2,7 +2,11 @@
   "name": "billzo",
   "private": true,
   "scripts": {
-    "build": "cd worker && pnpm install && pnpm run build",
-    "start": "cd worker && pnpm start"
+    "build": "pnpm -r build",
+    "start": "pnpm --filter billzo-worker start",
+    "build:shared": "pnpm --filter @billzo/shared build",
+    "build:worker": "pnpm --filter billzo-worker build",
+    "build:frontend": "pnpm --filter mini_saas_frontend build",
+    "typecheck:frontend": "pnpm --filter mini_saas_frontend typecheck"
   }
 }

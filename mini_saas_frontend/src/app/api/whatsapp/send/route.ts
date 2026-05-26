@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { supabase } from '@/lib/billzo/supabase'
+import { generateBillzoMessageId, generateEventSequence, computeTransportHash } from '@billzo/shared'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
@@ -40,6 +41,10 @@ async function sendViaGupshup(config: TenantWhatsAppConfig, to: string, message:
   return data
 }
 
+function generateConversationId(invoiceId?: string | null, phone?: string): string {
+  return invoiceId || `conv_${phone?.replace(/\D/g, '') || 'unknown'}`
+}
+
 export async function POST(request: NextRequest) {
   try {
     const tenantId = getVerifiedTenantIdFromRequest(request)
@@ -50,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { customerId, templateKey, vars, message, personalNote, invoiceId, sendWhatsAppDirect } = body as {
+    const { customerId, templateKey, vars, message, personalNote, invoiceId, sendWhatsAppDirect, clientCorrelationId } = body as {
       customerId?: string
       templateKey?: string
       vars?: Record<string, string | number>
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
       personalNote?: string
       invoiceId?: string
       sendWhatsAppDirect?: boolean
+      clientCorrelationId?: string
     }
 
     const { data: tenant } = await supabase
@@ -121,49 +127,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Recipient not found' }, { status: 400 })
     }
 
+    // Generate canonical identity — router authority via shared function
+    const billzoMessageId = clientCorrelationId?.startsWith('cc_')
+      ? `bmsg_${clientCorrelationId.slice(3)}_${generateBillzoMessageId().slice(5)}`
+      : generateBillzoMessageId()
+    const eventSequence = Number(generateEventSequence())
+    const conversationId = generateConversationId(invoiceId, toNumber)
+    const transportHash = computeTransportHash({
+      phone: toNumber,
+      message: finalMessage,
+      invoiceId,
+      amount: 0,
+    })
+
     let gupshupResponse: any = null
+    let sendError: string | null = null
     if (config.gupshupApiKey && config.gupshupAppName && config.sourceNumber) {
       try {
         gupshupResponse = await sendViaGupshup(config, `+${toNumber}`, finalMessage)
       } catch (sendErr: any) {
         console.error('[WhatsAppSend] Gupshup send failed:', sendErr)
-        await supabase.from('whatsapp_events').insert({
-          tenant_id: tenantId,
-          invoice_id: invoiceId || null,
-          customer_id: customerId || null,
-          phone: `+${toNumber}`,
-          status: 'failed',
-          message_type: templateKey || 'text',
-          occurred_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          sync_status: 'failed',
-          error: sendErr.message,
-        })
-        return NextResponse.json({ error: sendErr.message }, { status: 502 })
+        sendError = sendErr.message
       }
     } else {
       console.log('[WhatsAppSend] No Gupshup config — simulating send:', { to: toNumber, message: finalMessage })
     }
 
-    const eventId = gupshupResponse?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const eventStatus = sendError ? 'failed' : gupshupResponse ? 'queued' : 'sent'
+
     await supabase.from('whatsapp_events').insert({
-      id: eventId,
+      id: crypto.randomUUID(),
+      billzo_message_id: billzoMessageId,
+      conversation_id: conversationId,
+      event_sequence: eventSequence,
+      transport_message_hash: transportHash,
+      message_origin: 'manual',
+      attempt_number: 1,
       tenant_id: tenantId,
       invoice_id: invoiceId || null,
       customer_id: customerId || null,
       phone: `+${toNumber}`,
-      status: gupshupResponse ? 'queued' : 'sent',
+      status: eventStatus,
       message_type: templateKey || 'text',
+      direction: 'outbound',
+      event_layer: 'transport',
+      provider_message_id: gupshupResponse?.messageId || billzoMessageId,
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
-      sync_status: gupshupResponse ? 'pending' : 'synced',
+      sync_status: sendError ? 'failed' : gupshupResponse ? 'pending' : 'synced',
+      error: sendError,
     })
 
     if (invoiceId) {
       await supabase
         .from('invoices')
         .update({
-          last_whatsapp_status: gupshupResponse ? 'queued' : 'sent',
+          last_whatsapp_status: eventStatus,
           last_whatsapp_at: new Date().toISOString(),
           sync_status: 'pending',
         })
@@ -171,9 +190,14 @@ export async function POST(request: NextRequest) {
         .eq('tenant_id', tenantId)
     }
 
+    if (sendError) {
+      return NextResponse.json({ error: sendError }, { status: 502 })
+    }
+
     return NextResponse.json({
       success: true,
-      event: { id: eventId, status: gupshupResponse ? 'queued' : 'sent' },
+      billzoMessageId,
+      event: { id: billzoMessageId, status: eventStatus },
       message: finalMessage,
       simulated: !gupshupResponse,
     })

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/billzo/db'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { emitWhatsAppStatusUpdated } from '@/lib/billzo/events'
+import { generateEventSequence } from '@billzo/shared'
 import type { WhatsAppStatus } from '@/lib/billzo/types'
+
+export const dynamic = 'force-dynamic'
 
 function parseGupshupStatus(status: string): WhatsAppStatus {
   switch (status?.toLowerCase()) {
@@ -15,36 +19,97 @@ function parseGupshupStatus(status: string): WhatsAppStatus {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('[WhatsAppWebhook] Received:', JSON.stringify(body))
-
     const { phone, status: rawStatus, messageId, error, id } = body
-    const eventId = messageId || id
+    const providerMessageId = messageId || id
 
-    if (!eventId && !phone) {
+    if (!providerMessageId) {
       return NextResponse.json({ status: 'ok' })
     }
 
     const parsedStatus = parseGupshupStatus(rawStatus || '')
+    const now = new Date().toISOString()
 
-    const events = await db().whatsappEvents
-      .where('id').equals(eventId || '')
-      .toArray()
+    // Find the canonical billzo_message_id for this message
+    const { data: existing } = await supabaseAdmin
+      .from('whatsapp_events')
+      .select('billzo_message_id, invoice_id, tenant_id')
+      .or(`provider_message_id.eq.${providerMessageId},id.eq.${providerMessageId}`)
+      .limit(1)
 
-    if (events.length > 0) {
-      const event = events[0]
-      const updatedStatus = parsedStatus === 'read' ? 'read' : parsedStatus
-      await db().whatsappEvents.update(event.id, { status: updatedStatus })
+    if (!existing || existing.length === 0) {
+      console.log('[WhatsAppWebhook] No existing event found, storing as new message')
+      // Store a new message row with the webhook status
+      const billzoMessageId = `webhook_${providerMessageId}`
+      const { data: newEvent } = await supabaseAdmin
+        .from('whatsapp_events')
+        .insert({
+          id: crypto.randomUUID(),
+          billzo_message_id: billzoMessageId,
+          event_sequence: Number(generateEventSequence()),
+          status: parsedStatus,
+          occurred_at: now,
+          created_at: now,
+          provider_message_id: providerMessageId,
+          provider: 'gupshup',
+          direction: 'inbound',
+          event_layer: 'transport',
+          sync_status: 'synced',
+          error: error || null,
+        })
+        .select('id, invoice_id, tenant_id')
+        .single()
 
-      if (event.invoiceId) {
-        await db().invoices.update(event.invoiceId, {
-          lastWhatsAppStatus: updatedStatus,
-          syncStatus: 'synced',
+      if (newEvent) {
+        await emitWhatsAppStatusUpdated({
+          eventId: newEvent.id,
+          billzoMessageId,
+          invoiceId: newEvent.invoice_id,
+          tenantId: newEvent.tenant_id,
+          status: parsedStatus,
+          provider: 'gupshup',
+          providerMessageId,
+          timestamp: now,
         })
       }
+
+      return NextResponse.json({ status: 'ok' })
     }
 
-    if (parsedStatus === 'failed' && eventId) {
-      console.warn(`[WhatsAppWebhook] Message failed: ${eventId} — ${error || 'unknown error'}`)
+    const { billzo_message_id, invoice_id, tenant_id } = existing[0]
+
+    // Insert a new event row (append-only)
+    const { data: newEvent } = await supabaseAdmin
+      .from('whatsapp_events')
+      .insert({
+        id: crypto.randomUUID(),
+        billzo_message_id,
+        event_sequence: Number(generateEventSequence()),
+        status: parsedStatus,
+        occurred_at: now,
+        created_at: now,
+        invoice_id,
+        tenant_id,
+        provider: 'gupshup',
+        provider_message_id: providerMessageId,
+        direction: 'outbound',
+        event_layer: 'transport',
+        sync_status: 'synced',
+        error: error || null,
+      })
+      .select('id')
+      .single()
+
+    if (newEvent) {
+      await emitWhatsAppStatusUpdated({
+        eventId: newEvent.id,
+        billzoMessageId: billzo_message_id,
+        invoiceId: invoice_id,
+        tenantId: tenant_id,
+        status: parsedStatus,
+        provider: 'gupshup',
+        providerMessageId,
+        timestamp: now,
+      })
     }
 
     return NextResponse.json({ status: 'ok' })
@@ -54,6 +119,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   return NextResponse.json({ status: 'Webhook active' })
 }

@@ -12,7 +12,6 @@ import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
 import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
 import { EmptyState } from '@/components/billzo/EmptyState';
 import { handlePOSInvoice } from "@/lib/billzo/actions";
-import { lookupBarcode, normalizeBarcode } from "@/lib/billzo/barcode-lookup";
 import { retryProductSync } from "@/lib/billzo/products-service";
 import { useSyncHealth } from "@/lib/billzo/sync-health";
 import { useLiveQueryState } from "@/lib/billzo/use-live-query";
@@ -480,31 +479,13 @@ export default function POSPage() {
           onClose={() => setShowScanner(false)} 
           onScan={async (code) => {
             setShowScanner(false);
-            const barcode = normalizeBarcode(code);
-            const product = products.find(p => normalizeBarcode(p.barcode || '') === barcode);
+            const barcode = code.trim();
+            const product = products.find(p => (p.barcode || '').trim() === barcode);
             if (product) {
               addToCart(product);
               setQuery("");
             } else {
-              const tenantId = getCookie('bz_tenant')
-              setLookingUpBarcode(true)
-              const pendingToast = toast.loading("Looking up barcode...")
-              const result = await lookupBarcode(barcode, { tenantId })
-              toast.dismiss(pendingToast)
-              setLookingUpBarcode(false)
-
-              const params = new URLSearchParams({ barcode: result.barcode })
-              if (result.name) params.set('name', result.name)
-              if (result.brand) params.set('brand', result.brand)
-              if (result.source) params.set('source', result.source)
-
-              toast[result.name ? 'success' : 'error'](result.name ? "Product details found" : "Product not found", {
-                description: result.name || `Barcode: ${result.barcode}`,
-                action: {
-                  label: result.name ? "Review" : "Add New",
-                  onClick: () => router.push(`/products/add?${params.toString()}`)
-                }
-              });
+              router.push(`/products/add?barcode=${encodeURIComponent(barcode)}`);
             }
           }} 
         />

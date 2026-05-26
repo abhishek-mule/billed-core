@@ -6,6 +6,10 @@ import {
 import { Boom } from '@hapi/boom'
 import { getBaileysAuthState, saveBaileysAuthState, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
 import { storeQrCode, clearQrCode } from '../stores/baileys-qr'
+import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
+import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
+import { generateEventSequence } from '@billzo/shared'
+import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
 
 interface SocketEntry {
@@ -30,11 +34,25 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
     return
   }
 
-  const loaded = await getBaileysAuthState(tenantId)
-  const authState = loaded || { creds: {} as any, keys: {} as any }
+  // Distributed lock — prevents multiple workers starting sockets for the same tenant
+  const hasLock = await acquireSocketLock(tenantId)
+  if (!hasLock) {
+    console.log(`[Baileys] Socket lock held by another worker for tenant ${tenantId}, skipping`)
+    return
+  }
+
+  let authState: any
+  try {
+    const loaded = await getBaileysAuthState(tenantId)
+    authState = loaded || { creds: {} as any, keys: {} as any }
+  } catch (err) {
+    console.error(`[Baileys] Failed to load auth for tenant ${tenantId}, releasing lock:`, err)
+    await releaseSocketLock(tenantId)
+    return
+  }
 
   const sock = makeWASocket({
-    auth: authState as any,
+    auth: authState,
     printQRInTerminal: true,
     logger: getLogger(),
     browser: ['BillZo', 'Chrome', '4.0.0'],
@@ -42,6 +60,9 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
 
   const entry: SocketEntry = { socket: sock, connected: false, tenantId }
   sockets.set(tenantId, entry)
+
+  // Start auto-renewal of the lock
+  startLockRenewal(tenantId)
 
   sock.ev.on('creds.update', async () => {
     await saveBaileysAuthState(tenantId, { creds: authState.creds, keys: authState.keys })
@@ -67,6 +88,7 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
 
     if (connection === 'close') {
       entry.connected = false
+      await releaseSocketLock(tenantId)
       const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
       console.log(`[Baileys] Disconnected for tenant ${tenantId}, reconnecting: ${shouldReconnect}`)
 
@@ -87,6 +109,83 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
     for (const msg of m.messages) {
       if (msg.key.fromMe) continue
       console.log(`[Baileys] Inbound message for tenant ${tenantId}:`, msg.key.id)
+    }
+  })
+
+  sock.ev.on('messages.update', async (updates) => {
+    for (const { key, update } of updates) {
+      if (!key.fromMe) continue
+      const msgId = key.id
+      if (!msgId) continue
+
+      const status = update.status as number | undefined
+      let ourStatus: string | null = null
+      const now = new Date().toISOString()
+
+      if (status === 2) {
+        ourStatus = 'server_ack'
+      } else if (status === 3) {
+        ourStatus = 'delivered'
+      } else if (status === 4) {
+        ourStatus = 'read'
+      } else if (status === 0) {
+        ourStatus = 'failed'
+      }
+
+      if (!ourStatus) continue
+
+      try {
+        // Find the canonical billzo_message_id for this message
+        const { data: existing } = await supabaseAdmin
+          .from('whatsapp_events')
+          .select('billzo_message_id, invoice_id, tenant_id')
+          .or(`provider_message_id.eq.${msgId},billzo_message_id.eq.${msgId}`)
+          .limit(1)
+
+        if (!existing || existing.length === 0) {
+          console.log(`[Baileys] No existing event found for ${msgId}, skipping`)
+          continue
+        }
+
+        const { billzo_message_id, invoice_id, tenant_id } = existing[0]
+        const eventSequence = Number(generateEventSequence())
+
+        // INSERT a new event row (append-only)
+        const { data: newEvent } = await supabaseAdmin
+          .from('whatsapp_events')
+          .insert({
+            id: crypto.randomUUID(),
+            billzo_message_id,
+            event_sequence: eventSequence,
+            status: ourStatus,
+            occurred_at: now,
+            created_at: now,
+            invoice_id,
+            tenant_id,
+            provider: 'baileys',
+            provider_message_id: msgId,
+            direction: 'outbound',
+            event_layer: 'transport',
+            sync_status: 'synced',
+          })
+          .select('id')
+          .single()
+
+        if (newEvent) {
+          await emitWhatsAppStatusUpdated({
+            eventId: newEvent.id,
+            billzoMessageId: billzo_message_id,
+            invoiceId: invoice_id,
+            tenantId: tenant_id,
+            status: ourStatus,
+            provider: 'baileys',
+            providerMessageId: msgId,
+            timestamp: now,
+          })
+        }
+      } catch (err) {
+        console.error(`[Baileys] Failed to insert delivery status for ${msgId}:`, err)
+      }
     }
   })
 }

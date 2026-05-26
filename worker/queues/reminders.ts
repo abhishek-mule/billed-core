@@ -3,38 +3,101 @@ import { createRedisConnection } from '../lib/redis'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
-import { emitRecoveryReminderSent } from '../src/lib/billzo/events'
-import { sendWhatsAppMessage, getEffectiveProvider, type WhatsAppProvider } from '../lib/whatsapp-router'
+import { EventType } from '@billzo/shared'
+import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
+import { generateCorrelationId } from '../src/lib/billzo/idempotency'
+import { sendWhatsAppMessage, getEffectiveProvider } from '../lib/whatsapp-router'
 import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
+import { signUpiToken } from '../lib/crypto'
+import {
+  REMINDER_STAGES,
+  STAGE_LABELS,
+  normalizeStage,
+  getNextStage,
+  type ReminderStage,
+  type WhatsAppProvider,
+} from '@billzo/shared'
 
-const STAGE_ORDER = ['t1_soft', 't2_firm', 't3_urgent', 't4_final']
-const STAGE_LABELS: Record<string, string> = {
-  t1_soft: 'friendly reminder',
-  t2_firm: 'payment follow-up',
-  t3_urgent: 'urgent reminder',
-  t4_final: 'final notice',
-}
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
-function buildMessage(stage: string, customerName: string, amount: number, businessName: string, upiId?: string): string {
-  const stageLabel = STAGE_LABELS[stage] || 'reminder'
+function buildMessage(stage: ReminderStage, customerName: string, amount: number, businessName: string, upiId?: string, tenantId?: string, invoiceId?: string): string {
+  const stageLabel = STAGE_LABELS[stage]
   const amountText = `₹${amount.toLocaleString('en-IN')}`
   const lines = [
     `Dear ${customerName},`,
     '',
     `This is a ${stageLabel} regarding your pending amount of ${amountText}.`,
-    stage === 't4_final'
+    stage === 't5_warning'
       ? 'Please arrange payment immediately to avoid any further escalation.'
       : 'Please clear the dues at your earliest convenience.',
     '',
   ]
 
-  if (upiId) {
+  if (upiId && tenantId && invoiceId) {
+    const token = signUpiToken({
+      invoiceId,
+      tenantId,
+      amount,
+      upiId,
+      exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    })
+    lines.push(`Pay here: ${appUrl}/pay/r/${token}`)
+    lines.push('')
+  } else if (upiId) {
     lines.push(`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent(businessName)}`)
     lines.push('')
   }
 
   lines.push(`Regards,\n${businessName}`)
   return lines.join('\n')
+}
+
+const BAILEYS_HOURLY_LIMIT = 50
+const GUPSHUP_HOURLY_LIMIT = 100
+const BAILEYS_DAILY_WARMUP = 10
+const WARMUP_DAYS = 3
+
+async function checkRateLimit(tenantId: string, provider: WhatsAppProvider): Promise<boolean> {
+  try {
+    const redis = createRedisConnection()
+    const hourKey = `rate:${tenantId}:${new Date().toISOString().slice(0, 13).replace(/[^0-9]/g, '')}`
+    const count = await redis.incr(hourKey)
+    if (count === 1) await redis.expire(hourKey, 3700)
+
+    if (provider === 'baileys') {
+      const warmupKey = `warmup:${tenantId}`
+      const warmupStart = await redis.get(warmupKey)
+      if (warmupStart) {
+        const daysSinceWarmup = (Date.now() - parseInt(warmupStart)) / (24 * 60 * 60 * 1000)
+        if (daysSinceWarmup < WARMUP_DAYS) {
+          const dailyKey = `rate:daily:${tenantId}:${new Date().toISOString().slice(0, 10)}`
+          const dailyCount = await redis.incr(dailyKey)
+          if (dailyCount === 1) await redis.expire(dailyKey, 90000)
+          if (dailyCount > BAILEYS_DAILY_WARMUP) {
+            redis.disconnect()
+            return false
+          }
+        }
+      } else {
+        await redis.set(warmupKey, Date.now().toString(), 'EX', 7 * 24 * 3600)
+      }
+
+      if (count > BAILEYS_HOURLY_LIMIT) {
+        redis.disconnect()
+        return false
+      }
+    } else {
+      if (count > GUPSHUP_HOURLY_LIMIT) {
+        redis.disconnect()
+        return false
+      }
+    }
+
+    redis.disconnect()
+    return true
+  } catch {
+    return true
+  }
 }
 
 interface ReminderJobData {
@@ -81,9 +144,23 @@ export function createRemindersWorker() {
 
         const cleanPhone = phoneNumber.replace(/\D/g, '')
         const upiId = tenant.upi_id || config.upiId
-        const message = buildMessage(stage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo', upiId)
-
         const effectiveProvider: WhatsAppProvider = config.whatsappProvider === 'baileys' ? 'baileys' : 'gupshup'
+
+        // Rate limit check
+        const withinLimit = await checkRateLimit(tenantId, effectiveProvider)
+        if (!withinLimit) {
+          console.log(`[RemindersWorker] Rate limit hit for tenant ${tenantId}, requeueing ${stage} for ${invoiceId}`)
+          const queue = new Queue<ReminderJobData>('reminders', { connection })
+          await queue.add(`reminder:${invoiceId}:${stage}`, { invoiceId, tenantId, stage }, {
+            delay: 60000 + Math.floor(Math.random() * 120000),
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 120000 },
+          })
+          await queue.close()
+          return { skipped: true, reason: 'rate_limited', invoiceId, stage }
+        }
+
+        const message = buildMessage(stage as ReminderStage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo', upiId, tenantId, invoiceId)
 
         if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
           console.log(`[RemindersWorker] Starting Baileys socket for tenant ${tenantId}`)
@@ -92,38 +169,50 @@ export function createRemindersWorker() {
           )
         }
 
-        let sendResult: { messageId: string; provider: WhatsAppProvider } | null = null
-        let sendError: string | null = null
+        const sendResult = await sendWhatsAppMessage(tenantId, cleanPhone, message, {
+          invoiceId,
+          customerId: customer?.id || undefined,
+          reminderStage: stage,
+          attemptNumber: 1,
+          amount: invoice.total || 0,
+        })
 
-        try {
-          sendResult = await sendWhatsAppMessage(tenantId, cleanPhone, message)
-        } catch (err: any) {
-          sendError = err.message
-          console.error(`[RemindersWorker] Send failed for invoice ${invoiceId}:`, err.message)
+        if (sendResult.error) {
+          console.error(`[RemindersWorker] Send failed for invoice ${invoiceId}:`, sendResult.error)
         }
 
-        const eventId = sendResult?.messageId || `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-        const eventStatus = sendResult ? 'queued' : sendError ? 'failed' : 'sent'
+        const { identity } = sendResult
+        const eventStatus = sendResult.error ? 'failed' : 'queued'
 
         await supabaseAdmin.from('whatsapp_events').insert({
-          id: eventId,
+          id: identity.billzoMessageId,
+          billzo_message_id: identity.billzoMessageId,
+          conversation_id: identity.conversationId,
+          message_origin: identity.messageOrigin,
+          event_sequence: Number(identity.eventSequence),
+          transport_message_hash: identity.transportMessageHash,
+          parent_billzo_message_id: identity.parentBillzoMessageId,
+          attempt_number: identity.attemptNumber,
+          reminder_stage: identity.reminderStage,
           tenant_id: tenantId,
           invoice_id: invoiceId,
           customer_id: customer?.id || null,
           phone: `+${cleanPhone}`,
           status: eventStatus,
           message_type: stage,
+          direction: 'outbound',
+          event_layer: 'transport',
+          provider_message_id: sendResult.messageId,
+          template: stage,
+          recovery_stage: stage,
           occurred_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           sync_status: eventStatus === 'failed' ? 'failed' : 'pending',
-          provider: sendResult?.provider || effectiveProvider,
-          error: sendError,
+          provider: sendResult.provider,
+          error: sendResult.error || null,
         })
 
-        const currentStageIndex = STAGE_ORDER.indexOf(stage)
-        const nextStage = currentStageIndex >= 0 && currentStageIndex < STAGE_ORDER.length - 1
-          ? STAGE_ORDER[currentStageIndex + 1]
-          : 't4_final'
+        const nextStage = getNextStage(stage as ReminderStage)
 
         await supabaseAdmin.from('invoices').update({
           last_whatsapp_status: eventStatus,
@@ -142,16 +231,72 @@ export function createRemindersWorker() {
             customerId: customer?.id || '',
             stage,
             channel: 'whatsapp',
-            messageId: eventId,
+            messageId: identity.billzoMessageId,
           })
         }
 
-        if (sendError) {
-          throw new Error(sendError)
+        // Escalation detection: after 3 ignored reminders with high amount
+        if (eventStatus !== 'failed') {
+          const { data: recentEvents } = await supabaseAdmin
+            .from('whatsapp_events')
+            .select('status, created_at')
+            .eq('invoice_id', invoiceId)
+            .eq('tenant_id', tenantId)
+            .eq('direction', 'outbound')
+            .order('created_at', { ascending: false })
+            .limit(5)
+
+          if (recentEvents && recentEvents.length >= 3) {
+            const allIgnored = recentEvents.slice(0, 3).every((e: any) =>
+              e.status === 'sent' || e.status === 'queued'
+            )
+
+            if (allIgnored) {
+              const { data: avgInvoice } = await supabaseAdmin
+                .from('invoices')
+                .select('total')
+                .eq('tenant_id', tenantId)
+                .order('created_at', { ascending: false })
+                .limit(20)
+
+              const invoices = avgInvoice || []
+              const avgAmount = invoices.length > 0
+                ? invoices.reduce((sum: number, i: any) => sum + (i.total || 0), 0) / invoices.length
+                : 1
+              const amountRatio = (invoice.total || 0) / Math.max(avgAmount, 1)
+
+              const { data: customerRisk } = await supabaseAdmin
+                .from('customers')
+                .select('risk_score')
+                .eq('id', customer?.id)
+                .single()
+
+              const riskScore = (customerRisk as any)?.risk_score || 0.5
+
+              if (amountRatio > 2.5 && riskScore > 0.6) {
+                console.log(`[RemindersWorker] Escalation suggested for invoice ${invoiceId}`)
+                await emitEvent({
+                  type: EventType.RECOVERY_ESCALATION_SUGGESTED,
+                  tenantId,
+                  entityId: invoiceId,
+                  payload: { amount: invoice.total, customerName: customer?.name },
+                  causationId: null,
+                  correlationId: generateCorrelationId(invoiceId),
+                  producer: 'worker',
+                  idempotencyKey: `escalation:${invoiceId}:${new Date().toISOString().slice(0, 10)}`,
+                  retentionDays: 90,
+                })
+              }
+            }
+          }
         }
 
-        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone} via ${sendResult?.provider || effectiveProvider}`)
-        return { sent: true, invoiceId, stage, status: eventStatus, messageId: eventId, provider: sendResult?.provider }
+        if (sendResult.error) {
+          throw new Error(sendResult.error)
+        }
+
+        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone} via ${sendResult.provider}`)
+        return { sent: true, invoiceId, stage, status: eventStatus, messageId: identity.billzoMessageId, provider: sendResult.provider }
       })
 
       if (!result) {
@@ -213,8 +358,8 @@ export async function enqueueOverdueReminders(): Promise<number> {
 
   const queue = createReminderQueue()
   for (const inv of invoices) {
-    const stage = inv.recovery_stage || 't1_soft'
-    if (!STAGE_ORDER.includes(stage)) continue
+    const stage = normalizeStage(inv.recovery_stage)
+    if (!REMINDER_STAGES.includes(stage)) continue
 
     await queue.add(`reminder:${inv.id}:${stage}`, {
       invoiceId: inv.id,
@@ -223,6 +368,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
     }, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 60000 },
+      delay: Math.floor(Math.random() * 30000) + 5000,
     })
     enqueued++
   }

@@ -1,92 +1,6 @@
 import { writeOutboxEvent, type OutboxWriteOptions } from './outbox'
 import { generateCorrelationId } from './idempotency'
-
-// ============================================================
-// EVENT TAXONOMY — Business-significant events only
-// ============================================================
-
-export const EventType = {
-  // Billing
-  INVOICE_CREATED: 'invoice.created',
-  INVOICE_UPDATED: 'invoice.updated',
-  INVOICE_PAID: 'invoice.paid',
-  INVOICE_OVERDUE: 'invoice.overdue',
-  INVOICE_DELETED: 'invoice.deleted',
-
-  // Payments
-  PAYMENT_CREATED: 'payment.created',
-  PAYMENT_FAILED: 'payment.failed',
-  PAYMENT_COMPLETED: 'payment.completed',
-  PAYMENT_LINK_GENERATED: 'payment.link.generated',
-  PAYMENT_RECONCILED: 'payment.reconciled',
-
-  // Recovery
-  RECOVERY_STARTED: 'recovery.started',
-  RECOVERY_REMINDER_SENT: 'recovery.reminder.sent',
-  RECOVERY_REMINDER_DELIVERED: 'recovery.reminder.delivered',
-  RECOVERY_REMINDER_FAILED: 'recovery.reminder.failed',
-  RECOVERY_COMPLETED: 'recovery.completed',
-  RECOVERY_ESCALATED: 'recovery.escalated',
-  RECOVERY_ATTRIBUTED: 'recovery.attributed',
-
-  // Inventory
-  INVENTORY_LOW: 'inventory.low',
-  INVENTORY_OUT: 'inventory.out',
-  INVENTORY_ADJUSTED: 'inventory.adjusted',
-
-  // Customers
-  CUSTOMER_CREATED: 'customer.created',
-  CUSTOMER_UPDATED: 'customer.updated',
-  CUSTOMER_OPT_IN: 'customer.opt_in',
-
-  // Messaging
-  WHATSAPP_SENT: 'whatsapp.sent',
-  WHATSAPP_DELIVERED: 'whatsapp.delivered',
-  WHATSAPP_FAILED: 'whatsapp.failed',
-  WHATSAPP_INBOUND: 'whatsapp.inbound',
-
-  // Sync
-  SYNC_COMPLETED: 'sync.completed',
-  SYNC_FAILED: 'sync.failed',
-  SYNC_CONFLICT: 'sync.conflict',
-
-  // WhatsApp
-  WHATSAPP_PAIR_REQUESTED: 'whatsapp.pair.requested',
-  WHATSAPP_PAIRED: 'whatsapp.paired',
-  WHATSAPP_UNPAIRED: 'whatsapp.unpaired',
-
-  // Analytics
-  ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
-
-  // Experiments
-  EXPERIMENT_ASSIGNED: 'experiment.assigned',
-  EXPERIMENT_COMPLETED: 'experiment.completed',
-} as const
-
-export type EventType = (typeof EventType)[keyof typeof EventType]
-
-// ============================================================
-// EVENT PRODUCERS — Where events originate
-// ============================================================
-
-export type EventProducer = 'api' | 'worker' | 'webhook' | 'cron' | 'client'
-
-// ============================================================
-// EVENT INTERFACE
-// ============================================================
-
-export interface BillzoEvent {
-  type: EventType
-  version: number
-  tenantId: string
-  entityId: string | null
-  payload: Record<string, unknown>
-  causationId: string | null
-  correlationId: string
-  producer: EventProducer
-  idempotencyKey: string | null
-  retentionDays: number
-}
+import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
 
 // ============================================================
 // EVENT EMISSION
@@ -290,6 +204,63 @@ function logStructuredEvent(entry: Omit<StructuredLogEntry, 'timestamp' | 'level
   }
 
   console.log(JSON.stringify(logEntry))
+}
+
+/**
+ * Emit a WhatsApp status updated event (from webhook or delivery receipt).
+ */
+export async function emitWhatsAppStatusUpdated(params: {
+  eventId: string
+  billzoMessageId: string | null
+  invoiceId: string | null
+  tenantId: string
+  status: string
+  provider: string
+  providerMessageId: string | null
+  timestamp: string
+  causationId?: string | null
+}): Promise<string> {
+  const correlationId = generateCorrelationId(params.invoiceId || params.tenantId)
+
+  return emitEvent({
+    type: EventType.WHATSAPP_STATUS_UPDATED,
+    tenantId: params.tenantId,
+    entityId: params.invoiceId,
+    payload: {
+      eventId: params.eventId,
+      billzoMessageId: params.billzoMessageId,
+      status: params.status,
+      provider: params.provider,
+      providerMessageId: params.providerMessageId,
+      timestamp: params.timestamp,
+    },
+    causationId: params.causationId || null,
+    correlationId,
+    producer: 'webhook',
+    idempotencyKey: `whatsapp:status:${params.eventId}:${params.status}`,
+    retentionDays: 90,
+  })
+}
+
+/**
+ * Emit a WhatsApp circuit open event.
+ */
+export async function emitWhatsAppCircuitOpen(params: {
+  tenantId: string
+  failures: number
+  causationId?: string | null
+}): Promise<string> {
+  return emitEvent({
+    type: EventType.WHATSAPP_CIRCUIT_OPEN,
+    tenantId: params.tenantId,
+    entityId: null,
+    payload: { failures: params.failures },
+    causationId: params.causationId || null,
+    correlationId: `circuit:${params.tenantId}:${Date.now()}`,
+    producer: 'worker',
+    idempotencyKey: `whatsapp:circuit:${params.tenantId}:${new Date().toISOString().slice(0, 10)}`,
+    retentionDays: 30,
+  })
 }
 
 export function logStructuredError(error: Error, context: Record<string, unknown>) {

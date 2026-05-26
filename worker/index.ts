@@ -4,6 +4,7 @@ import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminde
 import { createReconciliationWorker } from './queues/reconciliation'
 import { supabaseAdmin } from './src/lib/billzo/supabase-admin'
 import { startBaileysSocket } from './lib/baileys-socket'
+import { sendPushNotification } from './src/lib/billzo/notifications'
 
 function startHealthServer() {
   const port = parseInt(process.env.PORT || '10000', 10)
@@ -74,9 +75,70 @@ async function main() {
   enqueueOverdue()
   const overdueInterval = setInterval(enqueueOverdue, 5 * 60 * 1000)
 
+  // Compute merchant reputation daily
+  const computeReputation = async () => {
+    try {
+      const { data: tenants } = await supabaseAdmin.from('tenants').select('id').limit(500)
+      if (!tenants) return
+
+      for (const t of tenants) {
+        try {
+          const { data: events } = await supabaseAdmin
+            .from('whatsapp_events')
+            .select('status')
+            .eq('tenant_id', t.id)
+            .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+
+          if (!events || events.length === 0) continue
+
+          const total = events.length
+          const delivered = events.filter((e: any) => e.status === 'delivered' || e.status === 'read').length
+          const failed = events.filter((e: any) => e.status === 'failed').length
+          const replied = events.filter((e: any) => e.status === 'read' || e.status === 'clicked_upi').length
+
+          const replyRate = total > 0 ? replied / total : 0
+          const failureRate = total > 0 ? failed / total : 0
+          const deliveryRate = total > 0 ? delivered / total : 0
+          const volumeScore = Math.min(total / 500, 1)
+
+          const reputation =
+            replyRate * 0.30 +
+            deliveryRate * 0.25 +
+            (1 - failureRate) * 0.25 +
+            (1 - volumeScore) * 0.20
+
+          await supabaseAdmin
+            .from('tenants')
+            .update({ whatsapp_reputation: Math.round(reputation * 100) / 100 })
+            .eq('id', t.id)
+
+          if (reputation < 0.1) {
+            console.log(`[Worker] Reputation critical for tenant ${t.id}, pausing sends`)
+            await sendPushNotification({
+              tenantId: t.id,
+              title: 'WhatsApp Reputation Critical',
+              body: 'Your WhatsApp sending has been paused due to delivery quality issues. Contact support.',
+              type: 'reputation_alert',
+              url: '/settings/whatsapp',
+            }).catch(() => {})
+          }
+        } catch (err) {
+          console.error(`[Worker] Reputation computation failed for tenant ${t.id}:`, err)
+        }
+      }
+      console.log('[Worker] Reputation computation completed')
+    } catch (err) {
+      console.error('[Worker] Reputation computation error:', err)
+    }
+  }
+
+  computeReputation()
+  const reputationInterval = setInterval(computeReputation, 60 * 60 * 1000)
+
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
+    clearInterval(reputationInterval)
     healthServer.close()
     await Promise.all([
       outboxWorker.close(),

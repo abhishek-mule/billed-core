@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Barcode, Camera, Check, Edit3, FileImage, Loader2, Plus, Receipt, RefreshCw, X, Zap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { BarcodeScanner } from './BarcodeScanner'
-import { lookupBarcode, type BarcodeLookupResult } from '@/lib/billzo/barcode-lookup'
 import { extractTextFromImage } from '@/lib/billzo/ocr'
 import { preprocessFull, preprocessLight, type PreprocessMetadata } from '@/lib/billzo/preprocess'
 import { formatINR } from '@/lib/utils'
@@ -73,7 +72,7 @@ export function Scan() {
   const [stageLabel, setStageLabel] = useState('')
   const [error, setError] = useState('')
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
-  const [barcodeResult, setBarcodeResult] = useState<BarcodeLookupResult | null>(null)
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null)
   const [enrichedProduct, setEnrichedProduct] = useState<EnrichedProduct | null>(null)
   const [preprocessMeta, setPreprocessMeta] = useState<PreprocessMetadata | null>(null)
   const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null)
@@ -532,13 +531,11 @@ export function Scan() {
     setShowBarcodeScanner(false)
     setProcessing(true)
     setError('')
-    setBarcodeResult(null)
+    setScannedBarcode(code)
     setEnrichedProduct(null)
 
     try {
       const tenantId = getCookie('bz_tenant') || undefined
-      const lookup = await lookupBarcode(code, { tenantId })
-      setBarcodeResult(lookup)
 
       const response = await fetch('/api/ocr/enrich', {
         method: 'POST',
@@ -564,9 +561,7 @@ export function Scan() {
 
   const addBarcodeProduct = () => {
     const params = new URLSearchParams()
-    params.set('barcode', barcodeResult?.barcode || '')
-    if (barcodeResult?.name) params.set('name', barcodeResult.name)
-    if (barcodeResult?.brand) params.set('brand', barcodeResult.brand)
+    params.set('barcode', scannedBarcode || '')
     if (enrichedProduct) {
       params.set('category', enrichedProduct.category || '')
       params.set('gstRate', String(enrichedProduct.gstRate))
@@ -695,19 +690,12 @@ export function Scan() {
         </div>
       )}
 
-      {barcodeResult && (
+      {scannedBarcode && enrichedProduct && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <p className="section-label">Barcode Lookup</p>
-            <span className={`rounded-full px-2 py-1 text-xs ${barcodeResult.confidence > 0.8 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-              {Math.round(barcodeResult.confidence * 100)}% confidence
-            </span>
-          </div>
-
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="mt-1 font-bold">{barcodeResult.name || 'Unknown product'}</h3>
-              <p className="text-xs text-muted-foreground">{barcodeResult.barcode} · {barcodeResult.source}</p>
+              <h3 className="mt-1 font-bold">{enrichedProduct.name || 'Unknown product'}</h3>
+              <p className="text-xs text-muted-foreground">{scannedBarcode}</p>
               {enrichedProduct && (
                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                   {enrichedProduct.brand && <p>Brand: {enrichedProduct.brand}</p>}

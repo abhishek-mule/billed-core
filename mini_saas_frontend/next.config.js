@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ['@billzo/shared'],
   images: {
     unoptimized: true,
     remotePatterns: [{ protocol: 'https', hostname: 'api.dicebear.com' }],

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/billzo/db'
+import { createRedisSubscriber } from '@/lib/billzo/redis'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,23 @@ export async function GET(request: NextRequest) {
       }
 
       sendEvent('connected', { timestamp: Date.now() })
+
+      let redisSub: Awaited<ReturnType<typeof createRedisSubscriber>> | null = null
+
+      try {
+        redisSub = createRedisSubscriber()
+        await redisSub.subscribe(`events:${tenantId}`)
+        redisSub.on('message', (_channel, message) => {
+          try {
+            const parsed = JSON.parse(message)
+            sendEvent(parsed.type, parsed.data)
+          } catch {
+            // ignore malformed messages
+          }
+        })
+      } catch {
+        console.warn('[SSE] Redis pub/sub unavailable, falling back to Dexie hooks only')
+      }
 
       const database = db()
 
@@ -74,9 +92,17 @@ export async function GET(request: NextRequest) {
         controller.enqueue(encoder.encode(': heartbeat\n\n'))
       }, 30000)
 
-      request.signal.addEventListener('abort', () => {
+      request.signal.addEventListener('abort', async () => {
         isClosed = true
         clearInterval(heartbeat)
+        if (redisSub) {
+          try {
+            await redisSub.unsubscribe(`events:${tenantId}`)
+            redisSub.disconnect()
+          } catch {
+            // ignore cleanup errors
+          }
+        }
         controller.close()
       })
     },
