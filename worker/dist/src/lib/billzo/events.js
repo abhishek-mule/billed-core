@@ -1,61 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EventType = void 0;
 exports.emitEvent = emitEvent;
 exports.emitPaymentCompleted = emitPaymentCompleted;
 exports.emitRecoveryReminderSent = emitRecoveryReminderSent;
 exports.emitRecoveryCompleted = emitRecoveryCompleted;
 exports.emitPaymentReconciled = emitPaymentReconciled;
+exports.emitWhatsAppPairRequested = emitWhatsAppPairRequested;
+exports.emitWhatsAppStatusUpdated = emitWhatsAppStatusUpdated;
+exports.emitWhatsAppCircuitOpen = emitWhatsAppCircuitOpen;
 exports.logStructuredError = logStructuredError;
 const outbox_1 = require("./outbox");
 const idempotency_1 = require("./idempotency");
-// ============================================================
-// EVENT TAXONOMY — Business-significant events only
-// ============================================================
-exports.EventType = {
-    // Billing
-    INVOICE_CREATED: 'invoice.created',
-    INVOICE_UPDATED: 'invoice.updated',
-    INVOICE_PAID: 'invoice.paid',
-    INVOICE_OVERDUE: 'invoice.overdue',
-    INVOICE_DELETED: 'invoice.deleted',
-    // Payments
-    PAYMENT_CREATED: 'payment.created',
-    PAYMENT_FAILED: 'payment.failed',
-    PAYMENT_COMPLETED: 'payment.completed',
-    PAYMENT_LINK_GENERATED: 'payment.link.generated',
-    PAYMENT_RECONCILED: 'payment.reconciled',
-    // Recovery
-    RECOVERY_STARTED: 'recovery.started',
-    RECOVERY_REMINDER_SENT: 'recovery.reminder.sent',
-    RECOVERY_REMINDER_DELIVERED: 'recovery.reminder.delivered',
-    RECOVERY_REMINDER_FAILED: 'recovery.reminder.failed',
-    RECOVERY_COMPLETED: 'recovery.completed',
-    RECOVERY_ESCALATED: 'recovery.escalated',
-    RECOVERY_ATTRIBUTED: 'recovery.attributed',
-    // Inventory
-    INVENTORY_LOW: 'inventory.low',
-    INVENTORY_OUT: 'inventory.out',
-    INVENTORY_ADJUSTED: 'inventory.adjusted',
-    // Customers
-    CUSTOMER_CREATED: 'customer.created',
-    CUSTOMER_UPDATED: 'customer.updated',
-    CUSTOMER_OPT_IN: 'customer.opt_in',
-    // Messaging
-    WHATSAPP_SENT: 'whatsapp.sent',
-    WHATSAPP_DELIVERED: 'whatsapp.delivered',
-    WHATSAPP_FAILED: 'whatsapp.failed',
-    WHATSAPP_INBOUND: 'whatsapp.inbound',
-    // Sync
-    SYNC_COMPLETED: 'sync.completed',
-    SYNC_FAILED: 'sync.failed',
-    SYNC_CONFLICT: 'sync.conflict',
-    // Analytics
-    ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
-    // Experiments
-    EXPERIMENT_ASSIGNED: 'experiment.assigned',
-    EXPERIMENT_COMPLETED: 'experiment.completed',
-};
+const shared_1 = require("@billzo/shared");
 // ============================================================
 // EVENT EMISSION
 // ============================================================
@@ -103,7 +59,7 @@ async function emitEvent(event) {
 async function emitPaymentCompleted(params) {
     const correlationId = (0, idempotency_1.generateCorrelationId)(params.invoiceId);
     return emitEvent({
-        type: exports.EventType.PAYMENT_COMPLETED,
+        type: shared_1.EventType.PAYMENT_COMPLETED,
         tenantId: params.tenantId,
         entityId: params.invoiceId,
         payload: {
@@ -128,7 +84,7 @@ async function emitPaymentCompleted(params) {
 async function emitRecoveryReminderSent(params) {
     const correlationId = (0, idempotency_1.generateCorrelationId)(params.invoiceId);
     return emitEvent({
-        type: exports.EventType.RECOVERY_REMINDER_SENT,
+        type: shared_1.EventType.RECOVERY_REMINDER_SENT,
         tenantId: params.tenantId,
         entityId: params.invoiceId,
         payload: {
@@ -150,7 +106,7 @@ async function emitRecoveryReminderSent(params) {
 async function emitRecoveryCompleted(params) {
     const correlationId = (0, idempotency_1.generateCorrelationId)(params.invoiceId);
     return emitEvent({
-        type: exports.EventType.RECOVERY_COMPLETED,
+        type: shared_1.EventType.RECOVERY_COMPLETED,
         tenantId: params.tenantId,
         entityId: params.invoiceId,
         payload: {
@@ -172,7 +128,7 @@ async function emitRecoveryCompleted(params) {
 async function emitPaymentReconciled(params) {
     const correlationId = (0, idempotency_1.generateCorrelationId)(params.invoiceId);
     return emitEvent({
-        type: exports.EventType.PAYMENT_RECONCILED,
+        type: shared_1.EventType.PAYMENT_RECONCILED,
         tenantId: params.tenantId,
         entityId: params.invoiceId,
         payload: {
@@ -195,6 +151,62 @@ function logStructuredEvent(entry) {
         level: 'info',
     };
     console.log(JSON.stringify(logEntry));
+}
+/**
+ * Emit a WhatsApp pair request event.
+ */
+async function emitWhatsAppPairRequested(params) {
+    return emitEvent({
+        type: shared_1.EventType.WHATSAPP_PAIR_REQUESTED,
+        tenantId: params.tenantId,
+        entityId: null,
+        payload: {},
+        causationId: params.causationId || null,
+        correlationId: `pair:${params.tenantId}:${Date.now()}`,
+        producer: 'api',
+        idempotencyKey: `whatsapp:pair:${params.tenantId}:${new Date().toISOString().slice(0, 10)}`,
+        retentionDays: 7,
+    });
+}
+/**
+ * Emit a WhatsApp status updated event (from webhook or delivery receipt).
+ */
+async function emitWhatsAppStatusUpdated(params) {
+    const correlationId = (0, idempotency_1.generateCorrelationId)(params.invoiceId || params.tenantId);
+    return emitEvent({
+        type: shared_1.EventType.WHATSAPP_STATUS_UPDATED,
+        tenantId: params.tenantId,
+        entityId: params.invoiceId,
+        payload: {
+            eventId: params.eventId,
+            billzoMessageId: params.billzoMessageId,
+            status: params.status,
+            provider: params.provider,
+            providerMessageId: params.providerMessageId,
+            timestamp: params.timestamp,
+        },
+        causationId: params.causationId || null,
+        correlationId,
+        producer: 'webhook',
+        idempotencyKey: `whatsapp:status:${params.eventId}:${params.status}`,
+        retentionDays: 90,
+    });
+}
+/**
+ * Emit a WhatsApp circuit open event.
+ */
+async function emitWhatsAppCircuitOpen(params) {
+    return emitEvent({
+        type: shared_1.EventType.WHATSAPP_CIRCUIT_OPEN,
+        tenantId: params.tenantId,
+        entityId: null,
+        payload: { failures: params.failures },
+        causationId: params.causationId || null,
+        correlationId: `circuit:${params.tenantId}:${Date.now()}`,
+        producer: 'worker',
+        idempotencyKey: `whatsapp:circuit:${params.tenantId}:${new Date().toISOString().slice(0, 10)}`,
+        retentionDays: 30,
+    });
 }
 function logStructuredError(error, context) {
     const logEntry = {
