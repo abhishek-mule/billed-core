@@ -6,9 +6,7 @@ import {
 import { Boom } from '@hapi/boom'
 import { getBaileysAuthState, saveBaileysAuthState, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
 import { storeQrCode, clearQrCode } from '../stores/baileys-qr'
-import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
-import { generateEventSequence } from '@billzo/shared'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
 
@@ -135,56 +133,18 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       if (!ourStatus) continue
 
       try {
-        // Find the canonical billzo_message_id for this message
-        const { data: existing } = await supabaseAdmin
-          .from('whatsapp_events')
-          .select('billzo_message_id, invoice_id, tenant_id')
-          .or(`provider_message_id.eq.${msgId},billzo_message_id.eq.${msgId}`)
-          .limit(1)
-
-        if (!existing || existing.length === 0) {
-          console.log(`[Baileys] No existing event found for ${msgId}, skipping`)
-          continue
-        }
-
-        const { billzo_message_id, invoice_id, tenant_id } = existing[0]
-        const eventSequence = Number(generateEventSequence())
-
-        // INSERT a new event row (append-only)
-        const { data: newEvent } = await supabaseAdmin
-          .from('whatsapp_events')
-          .insert({
-            id: crypto.randomUUID(),
-            billzo_message_id,
-            event_sequence: eventSequence,
-            status: ourStatus,
-            occurred_at: now,
-            created_at: now,
-            invoice_id,
-            tenant_id,
-            provider: 'baileys',
-            provider_message_id: msgId,
-            direction: 'outbound',
-            event_layer: 'transport',
-            sync_status: 'synced',
-          })
-          .select('id')
-          .single()
-
-        if (newEvent) {
-          await emitWhatsAppStatusUpdated({
-            eventId: newEvent.id,
-            billzoMessageId: billzo_message_id,
-            invoiceId: invoice_id,
-            tenantId: tenant_id,
-            status: ourStatus,
-            provider: 'baileys',
-            providerMessageId: msgId,
-            timestamp: now,
-          })
-        }
+        // Emit status update event via outbox (transport projector will record to whatsapp_events)
+        await emitWhatsAppStatusUpdated({
+          billzoMessageId: null,
+          invoiceId: null,
+          tenantId,
+          status: ourStatus,
+          provider: 'baileys',
+          providerMessageId: msgId,
+          timestamp: now,
+        })
       } catch (err) {
-        console.error(`[Baileys] Failed to insert delivery status for ${msgId}:`, err)
+        console.error(`[Baileys] Failed to emit status update for ${msgId}:`, err)
       }
     }
   })

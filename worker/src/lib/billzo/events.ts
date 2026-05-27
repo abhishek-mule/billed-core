@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { writeOutboxEvent, type OutboxWriteOptions } from './outbox'
 import { generateCorrelationId } from './idempotency'
 import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
@@ -230,9 +231,8 @@ export async function emitWhatsAppPairRequested(params: {
  * Emit a WhatsApp status updated event (from webhook or delivery receipt).
  */
 export async function emitWhatsAppStatusUpdated(params: {
-  eventId: string
-  billzoMessageId: string | null
-  invoiceId: string | null
+  billzoMessageId?: string | null
+  invoiceId?: string | null
   tenantId: string
   status: string
   provider: string
@@ -240,15 +240,16 @@ export async function emitWhatsAppStatusUpdated(params: {
   timestamp: string
   causationId?: string | null
 }): Promise<string> {
+  const eventId = crypto.randomUUID()
   const correlationId = generateCorrelationId(params.invoiceId || params.tenantId)
 
   return emitEvent({
     type: EventType.WHATSAPP_STATUS_UPDATED,
     tenantId: params.tenantId,
-    entityId: params.invoiceId,
+    entityId: params.invoiceId || null,
     payload: {
-      eventId: params.eventId,
-      billzoMessageId: params.billzoMessageId,
+      eventId,
+      billzoMessageId: params.billzoMessageId || null,
       status: params.status,
       provider: params.provider,
       providerMessageId: params.providerMessageId,
@@ -257,7 +258,7 @@ export async function emitWhatsAppStatusUpdated(params: {
     causationId: params.causationId || null,
     correlationId,
     producer: 'webhook',
-    idempotencyKey: `whatsapp:status:${params.eventId}:${params.status}`,
+    idempotencyKey: `whatsapp:status:${eventId}`,
     retentionDays: 90,
   })
 }

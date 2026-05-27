@@ -1,17 +1,45 @@
 import http from 'node:http'
+import { Queue } from 'bullmq'
 import { createOutboxWorker } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
 import { supabaseAdmin } from './src/lib/billzo/supabase-admin'
 import { startBaileysSocket } from './lib/baileys-socket'
 import { sendPushNotification } from './src/lib/billzo/notifications'
+import { createRedisConnection } from './lib/redis'
+import { logWorkerEvent, logWorkerError } from './lib/logging'
+
+async function getQueueHealth() {
+  const connection = createRedisConnection()
+  try {
+    const [outboxCounts, reminderCounts, reconCounts] = await Promise.all([
+      new Queue('outbox', { connection }).getJobCounts().catch(() => ({})),
+      new Queue('reminders', { connection }).getJobCounts().catch(() => ({})),
+      new Queue('reconciliation', { connection }).getJobCounts().catch(() => ({})),
+    ])
+    return { outbox: outboxCounts, reminders: reminderCounts, reconciliation: reconCounts }
+  } finally {
+    connection.disconnect()
+  }
+}
 
 function startHealthServer() {
   const port = parseInt(process.env.PORT || '10000', 10)
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     if (req.url === '/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ status: 'ok' }))
+      try {
+        const queueHealth = await getQueueHealth()
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({
+          status: 'ok',
+          queues: queueHealth,
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+        }))
+      } catch {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ status: 'ok' }))
+      }
     } else {
       res.writeHead(200)
       res.end('BillZo Worker')
@@ -24,21 +52,19 @@ function startHealthServer() {
 }
 
 async function main() {
-  console.log('[Worker] Starting BillZo worker service...')
+  logWorkerEvent({ message: 'Starting BillZo worker service...', level: 'info', timestamp: new Date().toISOString() })
 
   if (!process.env.UPSTASH_REDIS_URL) {
-    console.error('[Worker] Missing UPSTASH_REDIS_URL')
-    console.error('[Worker] Format: rediss://default:TOKEN@HOST:PORT')
+    logWorkerError(new Error('Missing UPSTASH_REDIS_URL'), { hint: 'Format: rediss://default:TOKEN@HOST:PORT' })
     process.exit(1)
   }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[Worker] Missing SUPABASE_SERVICE_ROLE_KEY')
+    logWorkerError(new Error('Missing SUPABASE_SERVICE_ROLE_KEY'))
     process.exit(1)
   }
 
-  console.log('[Worker] Redis:', process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...')
-  console.log('[Worker] Supabase:', process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set')
+  logWorkerEvent({ message: 'Worker config loaded', level: 'info', timestamp: new Date().toISOString(), metadata: { redis: process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...', supabase: process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set' } })
 
   const healthServer = startHealthServer()
 
@@ -46,7 +72,7 @@ async function main() {
   const remindersWorker = createRemindersWorker()
   const reconciliationWorker = createReconciliationWorker()
 
-  console.log('[Worker] All workers started')
+  logWorkerEvent({ message: 'All workers started', level: 'info', timestamp: new Date().toISOString() })
 
   // Start Baileys sockets for tenants with Baileys WhatsApp provider
   supabaseAdmin.from('tenants').select('id, whatsapp_config').then(({ data: tenants }) => {
@@ -113,7 +139,7 @@ async function main() {
             .eq('id', t.id)
 
           if (reputation < 0.1) {
-            console.log(`[Worker] Reputation critical for tenant ${t.id}, pausing sends`)
+            logWorkerEvent({ message: `Reputation critical for tenant ${t.id}, pausing sends`, level: 'warn', timestamp: new Date().toISOString(), tenant_id: t.id })
             await sendPushNotification({
               tenantId: t.id,
               title: 'WhatsApp Reputation Critical',
@@ -123,12 +149,12 @@ async function main() {
             }).catch(() => {})
           }
         } catch (err) {
-          console.error(`[Worker] Reputation computation failed for tenant ${t.id}:`, err)
+          logWorkerError(err instanceof Error ? err : new Error(String(err)), { tenant_id: t.id, context: 'reputation_computation' })
         }
       }
-      console.log('[Worker] Reputation computation completed')
+      logWorkerEvent({ message: 'Reputation computation completed', level: 'info', timestamp: new Date().toISOString() })
     } catch (err) {
-      console.error('[Worker] Reputation computation error:', err)
+      logWorkerError(err instanceof Error ? err : new Error(String(err)), { context: 'reputation_computation_top_level' })
     }
   }
 

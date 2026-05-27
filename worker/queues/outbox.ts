@@ -10,7 +10,7 @@ import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
 import { interpretProjectionDelta } from '../src/lib/billzo/observation-interpreter'
 import { materializeObservation } from '../src/lib/billzo/behavioral-materializer'
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
-import { EventType } from '@billzo/shared'
+import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
@@ -434,74 +434,98 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
 
   if (!tenantId || !status) return null
 
-  // Fetch customerId for projection delta
-  let customerId: string | undefined
-  if (invoiceId) {
-    const { data: invoice } = await supabaseAdmin
-      .from('invoices')
-      .select('customer_id')
-      .eq('id', invoiceId)
+  // Resolve billzo_message_id from provider_message_id if not provided directly
+  let resolvedBillzoMessageId = billzoMessageId
+  if (!resolvedBillzoMessageId && providerMessageId) {
+    const { data: existing } = await supabaseAdmin
+      .from('whatsapp_events')
+      .select('billzo_message_id')
+      .or(`provider_message_id.eq.${providerMessageId},billzo_message_id.eq.${providerMessageId}`)
+      .limit(1)
       .maybeSingle()
-    customerId = invoice?.customer_id
+    resolvedBillzoMessageId = existing?.billzo_message_id || null
   }
 
-  if (billzoMessageId) {
-    // Read latest event state from the append-only stream
+  // Record the status event in the append-only stream (this IS the transport domain's mutation authority)
+  let eventId: string | null = null
+  if (resolvedBillzoMessageId) {
     const { data: latest } = await supabaseAdmin
       .from('whatsapp_events')
-      .select('id, status, event_sequence, occurred_at')
-      .eq('billzo_message_id', billzoMessageId)
+      .select('id, invoice_id, tenant_id')
+      .eq('billzo_message_id', resolvedBillzoMessageId)
+      .order('event_sequence', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latest) {
+      const now = new Date().toISOString()
+      eventId = crypto.randomUUID()
+      await supabaseAdmin
+        .from('whatsapp_events')
+        .insert({
+          id: eventId,
+          billzo_message_id: resolvedBillzoMessageId,
+          event_sequence: Number(generateEventSequence()),
+          status,
+          occurred_at: new Date(event.payload?.timestamp || now).toISOString(),
+          created_at: now,
+          invoice_id: latest.invoice_id || null,
+          tenant_id: latest.tenant_id || tenantId,
+          provider: provider || 'baileys',
+          provider_message_id: providerMessageId,
+          direction: 'outbound',
+          event_layer: 'transport',
+          sync_status: 'synced',
+        })
+    }
+  }
+
+  // Fetch customerId for projection delta
+  let customerId: string | undefined
+
+  if (resolvedBillzoMessageId) {
+    // Read latest event state from the append-only stream
+    const { data: latestEvent } = await supabaseAdmin
+      .from('whatsapp_events')
+      .select('id, status, event_sequence, occurred_at, invoice_id')
+      .eq('billzo_message_id', resolvedBillzoMessageId)
       .order('event_sequence', { ascending: false })
       .limit(1)
       .single()
 
-    if (latest) {
-      const state: MessageProjectionState = {
-        billzoMessageId,
-        latestStatus: latest.status,
-        latestEventSequence: latest.event_sequence,
-        latestOccurredAt: latest.occurred_at,
-        provider,
-        providerMessageId,
-        invoiceId: invoiceId || null,
-        tenantId,
-        eventId: latest.id,
-        customerId,
+    if (latestEvent) {
+      // Resolve customerId if we have an invoice
+      if (latestEvent.invoice_id) {
+        const { data: invoice } = await supabaseAdmin
+          .from('invoices')
+          .select('customer_id')
+          .eq('id', latestEvent.invoice_id)
+          .maybeSingle()
+        customerId = invoice?.customer_id
       }
 
-      if (invoiceId) {
-        await supabaseAdmin
-          .from('invoices')
-          .update({
-            last_whatsapp_status: state.latestStatus,
-            last_whatsapp_at: state.latestOccurredAt,
-          })
-          .eq('id', invoiceId)
+      const state: MessageProjectionState = {
+        billzoMessageId: resolvedBillzoMessageId,
+        latestStatus: latestEvent.status,
+        latestEventSequence: latestEvent.event_sequence,
+        latestOccurredAt: latestEvent.occurred_at,
+        provider,
+        providerMessageId,
+        invoiceId: latestEvent.invoice_id || null,
+        tenantId,
+        eventId: latestEvent.id,
+        customerId,
       }
 
       // Publish to Redis for real-time subscribers
       await publishToRedis(tenantId, 'whatsapp.status.updated', {
-        invoiceId,
+        invoiceId: latestEvent.invoice_id,
         status: state.latestStatus,
-        billzoMessageId,
+        billzoMessageId: resolvedBillzoMessageId,
       })
 
       return state
     }
-  } else {
-    // Fallback: update invoice using status from payload (legacy events without billzoMessageId)
-    if (invoiceId) {
-      await supabaseAdmin
-        .from('invoices')
-        .update({ last_whatsapp_status: status, last_whatsapp_at: new Date().toISOString() })
-        .eq('id', invoiceId)
-    }
-
-    await publishToRedis(tenantId, 'whatsapp.status.updated', {
-      invoiceId,
-      status,
-      billzoMessageId,
-    })
   }
 
   return null

@@ -188,36 +188,38 @@ export function createRemindersWorker() {
         const { identity } = sendResult
         const eventStatus = sendResult.error ? 'failed' : 'queued'
 
-        await supabaseAdmin.from('whatsapp_events').insert({
-          id: identity.billzoMessageId,
-          billzo_message_id: identity.billzoMessageId,
-          conversation_id: identity.conversationId,
-          message_origin: identity.messageOrigin,
-          event_sequence: Number(identity.eventSequence),
-          transport_message_hash: identity.transportMessageHash,
-          parent_billzo_message_id: identity.parentBillzoMessageId,
-          attempt_number: identity.attemptNumber,
-          reminder_stage: identity.reminderStage,
-          tenant_id: tenantId,
-          invoice_id: invoiceId,
-          customer_id: customer?.id || null,
-          phone: `+${cleanPhone}`,
-          status: eventStatus,
-          message_type: stage,
-          direction: 'outbound',
-          event_layer: 'transport',
-          provider_message_id: sendResult.messageId,
-          template: stage,
-          recovery_stage: stage,
-          occurred_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          sync_status: eventStatus === 'failed' ? 'failed' : 'pending',
-          provider: sendResult.provider,
-          error: sendResult.error || null,
+        // Emit transport event via outbox (transport projector will record to whatsapp_events)
+        await emitEvent({
+          type: EventType.WHATSAPP_SENT,
+          tenantId,
+          entityId: invoiceId,
+          payload: {
+            billzoMessageId: identity.billzoMessageId,
+            conversationId: identity.conversationId,
+            messageOrigin: identity.messageOrigin,
+            eventSequence: identity.eventSequence,
+            transportMessageHash: identity.transportMessageHash,
+            parentBillzoMessageId: identity.parentBillzoMessageId,
+            attemptNumber: identity.attemptNumber,
+            reminderStage: identity.reminderStage,
+            customerId: customer?.id || null,
+            phone: `+${cleanPhone}`,
+            status: eventStatus,
+            messageType: stage,
+            providerMessageId: sendResult.messageId,
+            provider: sendResult.provider,
+            error: sendResult.error || null,
+          },
+          causationId: null,
+          correlationId: generateCorrelationId(invoiceId),
+          producer: 'worker',
+          idempotencyKey: `whatsapp:sent:${identity.billzoMessageId}`,
+          retentionDays: 90,
         })
 
         const nextStage = getNextStage(stage as ReminderStage)
 
+        // Recovery orchestration fields update (owned by recovery domain)
         await supabaseAdmin.from('invoices').update({
           last_whatsapp_status: eventStatus,
           last_whatsapp_at: new Date().toISOString(),

@@ -54,8 +54,8 @@ jobs:
       - name: Set apps.json
         run: |
           echo '[
-            {"url": "https://github.com/frappe/erpnext", "branch": "version-15"},
-            {"url": "https://github.com/resilient-tech/india_compliance", "branch": "version-15"},
+            {"url": "https://github.com/frappe/erpnext", "branch": "version-16"},
+            {"url": "https://github.com/resilient-tech/india_compliance", "branch": "version-16"},
             {"path": "frappe_docker/electrical_trader_pack"}
           ]' > frappe_docker/apps.json
 
@@ -68,7 +68,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            FRAPPE_BRANCH=version-15
+            FRAPPE_BRANCH=version-16
           secrets: |
             apps_json=apps.json
           cache-from: type=gha
