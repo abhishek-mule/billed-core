@@ -4,6 +4,7 @@ import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFai
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
+import { createQueueLogger } from '../lib/queue-logger'
 import { startBaileysSocket, disconnectBaileys } from '../lib/baileys-socket'
 import { sendPushNotification } from '../src/lib/billzo/notifications'
 import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
@@ -14,6 +15,7 @@ import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
+const logger = createQueueLogger('outbox')
 
 export function createOutboxWorker() {
   const connection = createRedisConnection()
@@ -101,11 +103,11 @@ export function createOutboxWorker() {
   )
 
   worker.on('completed', (job) => {
-    console.log(`[OutboxWorker] Job ${job.id} completed:`, job.returnvalue)
+    logger.info({ jobId: job.id, result: job.returnvalue }, 'Job completed')
   })
 
   worker.on('failed', (job, err) => {
-    console.error(`[OutboxWorker] Job ${job?.id} failed:`, err.message)
+    logger.error({ jobId: job?.id, err: err.message }, 'Job failed')
   })
 
   return worker
@@ -156,7 +158,7 @@ async function processOutboxEvent(event: any): Promise<void> {
       try {
         await handler.handle(event)
       } catch (err: any) {
-        console.error(`[Outbox] Handler ${handler.name} (${handler.lane}) failed for ${event.type}:`, err.message)
+        logger.error({ handler: handler.name, lane: handler.lane, eventType: event.type, err: err.message }, 'Handler failed')
       }
     }
   }
@@ -316,7 +318,7 @@ async function tryHandleBehavioralMaterializer(event: any): Promise<void> {
     const observation = event.payload
     if (!observation?.customerId) return
 
-    await materializeObservation(observation)
+    await materializeObservation(observation, event.id)
   }
 }
 
@@ -361,7 +363,7 @@ async function handlePaymentEvent(event: any): Promise<void> {
 }
 
 async function handleReminderEvent(event: any): Promise<void> {
-  console.log(`[OutboxWorker] Reminder sent: ${event.entityId}`)
+  logger.info({ entityId: event.entityId }, 'Reminder sent')
   if (event.tenantId) {
     await publishToRedis(event.tenantId, 'recovery.reminder.sent', {
       invoiceId: event.entityId,
@@ -374,7 +376,7 @@ async function handleWhatsAppPairRequested(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
-  console.log(`[OutboxWorker] Starting Baileys pairing for tenant ${tenantId}`)
+  logger.info({ tenantId }, 'Starting Baileys pairing')
   await startBaileysSocket(tenantId)
 }
 
@@ -382,7 +384,7 @@ async function handleWhatsAppUnpaired(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
-  console.log(`[OutboxWorker] Disconnecting Baileys for tenant ${tenantId}`)
+  logger.info({ tenantId }, 'Disconnecting Baileys')
   await disconnectBaileys(tenantId)
 }
 
@@ -576,10 +578,7 @@ async function updateMessageProjection(state: MessageProjectionState): Promise<v
   })
 
   if (error) {
-    console.error('[Projection] CAS RPC failed', {
-      billzoMessageId: state.billzoMessageId,
-      error,
-    })
+    logger.error({ billzoMessageId: state.billzoMessageId, error }, 'CAS RPC failed')
     return
   }
 
@@ -615,7 +614,7 @@ async function emitProjectionDelta(
       occurred_at: state.latestOccurredAt,
     })
   } catch (err: any) {
-    console.error('[Projection] Delta log insert failed:', err.message)
+    logger.error({ err: err.message }, 'Delta log insert failed')
   }
 
   // Write outbox event for the observation interpreter
@@ -642,7 +641,7 @@ async function emitProjectionDelta(
       idempotencyKey: `projection:delta:${state.billzoMessageId}:${transportState}`,
     })
   } catch (err: any) {
-    console.error('[Projection] Delta outbox write failed:', err.message)
+    logger.error({ err: err.message }, 'Delta outbox write failed')
   }
 }
 
@@ -650,7 +649,7 @@ async function handleWhatsAppCircuitOpen(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
-  console.log(`[OutboxWorker] Circuit opened for tenant ${tenantId}`)
+  logger.warn({ tenantId }, 'Circuit opened for tenant')
 
   await sendPushNotification({
     tenantId,
@@ -735,7 +734,7 @@ async function handleOverdueEvent(event: any): Promise<void> {
       attempts: 3,
       backoff: { type: 'exponential', delay: 60000 },
     })
-    console.log(`[OutboxWorker] Enqueued ${stage} reminder for overdue invoice ${invoiceId}`)
+    logger.info({ invoiceId, stage }, 'Enqueued reminder for overdue invoice')
   } finally {
     await queue.close()
   }

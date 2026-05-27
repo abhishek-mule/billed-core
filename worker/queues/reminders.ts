@@ -3,6 +3,7 @@ import { createRedisConnection } from '../lib/redis'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
+import { createQueueLogger } from '../lib/queue-logger'
 import { EventType, DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
 import { generateCorrelationId } from '../src/lib/billzo/idempotency'
@@ -21,6 +22,8 @@ import {
   type BehavioralRecommendationContext,
   type CustomerBehavioralMetrics,
 } from '@billzo/shared'
+
+const logger = createQueueLogger('reminders')
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
@@ -121,7 +124,7 @@ export function createRemindersWorker() {
 
       const lockKey = `reminder:${invoiceId}:${stage}`
       const result = await withLock(lockKey, 60000, async () => {
-        console.log(`[RemindersWorker] Sending ${stage} reminder for invoice ${invoiceId}`)
+        logger.info({ invoiceId, stage }, 'Sending reminder')
 
         const [invoiceResult, tenantResult] = await Promise.all([
           supabaseAdmin.from('invoices').select('*, customers!inner(*)').eq('id', invoiceId).single(),
@@ -142,7 +145,7 @@ export function createRemindersWorker() {
 
         const phoneNumber = customer?.whatsapp_number || customer?.phone
         if (!phoneNumber) {
-          console.log(`[RemindersWorker] No phone for customer ${customer?.id}, skipping`)
+          logger.warn({ customerId: customer?.id, invoiceId }, 'No phone for customer, skipping')
           return { skipped: true, reason: 'no_phone', invoiceId, stage }
         }
 
@@ -153,7 +156,7 @@ export function createRemindersWorker() {
         // Rate limit check
         const withinLimit = await checkRateLimit(tenantId, effectiveProvider)
         if (!withinLimit) {
-          console.log(`[RemindersWorker] Rate limit hit for tenant ${tenantId}, requeueing ${stage} for ${invoiceId}`)
+          logger.warn({ tenantId, stage, invoiceId }, 'Rate limit hit, requeueing')
           const queue = new Queue<ReminderJobData>('reminders', { connection })
           await queue.add(`reminder:${invoiceId}:${stage}`, { invoiceId, tenantId, stage }, {
             delay: 60000 + Math.floor(Math.random() * 120000),
@@ -167,9 +170,9 @@ export function createRemindersWorker() {
         const message = buildMessage(stage as ReminderStage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo', upiId, tenantId, invoiceId)
 
         if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
-          console.log(`[RemindersWorker] Starting Baileys socket for tenant ${tenantId}`)
+          logger.info({ tenantId }, 'Starting Baileys socket')
           startBaileysSocket(tenantId).catch((err) =>
-            console.error(`[RemindersWorker] Failed to start Baileys for ${tenantId}:`, err)
+            logger.error({ tenantId, err }, 'Failed to start Baileys')
           )
         }
 
@@ -182,7 +185,7 @@ export function createRemindersWorker() {
         })
 
         if (sendResult.error) {
-          console.error(`[RemindersWorker] Send failed for invoice ${invoiceId}:`, sendResult.error)
+          logger.error({ invoiceId, err: sendResult.error }, 'Send failed')
         }
 
         const { identity } = sendResult
@@ -349,24 +352,17 @@ export function createRemindersWorker() {
               recommendEscalation = recommendation.escalation.shouldEscalate
               nextFollowUpDays = recommendation.cadence.nextFollowUpDays
 
-              console.log(`[RemindersWorker] Orchestrator recommendation for ${invoiceId}:`,
-                JSON.stringify({
-                  shouldSend: recommendation.shouldSend,
-                  tone: recommendation.content.tone,
-                  escalate: recommendation.escalation.shouldEscalate,
-                  cadenceDays: nextFollowUpDays,
-                  confidence,
-                }))
+              logger.info({ invoiceId, recommendation: { shouldSend: recommendation.shouldSend, tone: recommendation.content.tone, escalate: recommendation.escalation.shouldEscalate, cadenceDays: nextFollowUpDays, confidence } }, 'Orchestrator recommendation')
 
               // Emit orchestration snapshot for forensic replay
               await emitOrchestrationSnapshot(orchInput, { triggeredBy: 'reminders-worker' }).catch((err: any) =>
-                console.error(`[RemindersWorker] Failed to emit orchestration snapshot for ${invoiceId}:`, err)
+                logger.error({ invoiceId, err }, 'Failed to emit orchestration snapshot')
               )
             }
 
             if (recommendEscalation) {
               const emitReason = `Invoice ${amountRatio.toFixed(1)}x avg, ignored ${ignoreCount}x`
-              console.log(`[RemindersWorker] Escalation suggested for invoice ${invoiceId}: ${emitReason}`)
+              logger.info({ invoiceId, amountRatio, ignoreCount }, `Escalation suggested: ${emitReason}`)
               await emitEvent({
                 type: EventType.RECOVERY_ESCALATION_SUGGESTED,
                 tenantId,
@@ -388,7 +384,7 @@ export function createRemindersWorker() {
               await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
             }
           } catch (err) {
-            console.error(`[RemindersWorker] Orchestrator error for ${invoiceId}:`, err)
+            logger.error({ invoiceId, err }, 'Orchestrator error')
           }
         }
 
@@ -396,7 +392,7 @@ export function createRemindersWorker() {
           throw new Error(sendResult.error)
         }
 
-        console.log(`[RemindersWorker] ${stage} sent for invoice ${invoiceId} to ${cleanPhone} via ${sendResult.provider}`)
+        logger.info({ invoiceId, stage, cleanPhone, provider: sendResult.provider }, 'Reminder sent')
         return { sent: true, invoiceId, stage, status: eventStatus, messageId: identity.billzoMessageId, provider: sendResult.provider }
       })
 
@@ -426,11 +422,11 @@ export function createRemindersWorker() {
   )
 
   worker.on('completed', (job) => {
-    console.log(`[RemindersWorker] Job ${job.id} completed:`, job.returnvalue)
+    logger.info({ jobId: job.id, result: job.returnvalue }, 'Job completed')
   })
 
   worker.on('failed', (job, err) => {
-    console.error(`[RemindersWorker] Job ${job?.id} failed:`, err.message)
+    logger.error({ jobId: job?.id, err: err.message }, 'Job failed')
   })
 
   return worker
@@ -453,7 +449,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
     .limit(200)
 
   if (error || !invoices) {
-    console.error('[RemindersWorker] Failed to fetch overdue invoices:', error?.message)
+    logger.error({ err: error?.message }, 'Failed to fetch overdue invoices')
     return 0
   }
 
@@ -475,6 +471,6 @@ export async function enqueueOverdueReminders(): Promise<number> {
   }
 
   await queue.close()
-  console.log(`[RemindersWorker] Enqueued ${enqueued} overdue reminder jobs`)
+  logger.info({ enqueued }, 'Enqueued overdue reminder jobs')
   return enqueued
 }

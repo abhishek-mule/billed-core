@@ -3,6 +3,7 @@ import { EventType, INTERPRETER_VERSION } from '@billzo/shared'
 import { supabaseAdmin } from './supabase-admin'
 import { decayedEMA, daysBetween, getHalfLife } from './decay'
 import { writeOutboxEvent } from './outbox'
+import { executeIdempotent } from './idempotency'
 
 // ============================================================
 // BEHAVIORAL MATERIALIZER
@@ -23,26 +24,34 @@ const SCHEMA_VERSION = 1
 
 export async function materializeObservation(
   observation: BehavioralObservation,
+  causationEventId?: string,
 ): Promise<void> {
-  switch (observation.type) {
-    case 'message_seen':
-      await handleMessageSeen(observation)
-      break
-    case 'attention_absent':
-    case 'response_absent':
-    case 'resolution_absent':
-      await handleAbsence(observation)
-      break
-    case 'payment_intent':
-      await handlePaymentIntent(observation)
-      break
-    case 'resolution_completed':
-      await handleResolutionCompleted(observation)
-      break
-    case 'channel_failure':
-      await handleChannelFailure(observation)
-      break
-  }
+  const idempotencyKey = causationEventId
+    ? `behavioral:materialize:${causationEventId}`
+    : `behavioral:materialize:${observation.tenantId}:${observation.customerId}:${observation.type}:${observation.occurredAt}`
+
+  await executeIdempotent(idempotencyKey, 'behavioral_materialize', observation.tenantId, async () => {
+    switch (observation.type) {
+      case 'message_seen':
+        await handleMessageSeen(observation)
+        break
+      case 'attention_absent':
+      case 'response_absent':
+      case 'resolution_absent':
+        await handleAbsence(observation)
+        break
+      case 'payment_intent':
+        await handlePaymentIntent(observation)
+        break
+      case 'resolution_completed':
+        await handleResolutionCompleted(observation)
+        break
+      case 'channel_failure':
+        await handleChannelFailure(observation)
+        break
+    }
+    return null
+  })
 }
 
 // ============================================================
