@@ -56,5 +56,9 @@ exports.EventType = {
     // Experiments
     EXPERIMENT_ASSIGNED: 'experiment.assigned',
     EXPERIMENT_COMPLETED: 'experiment.completed',
+    // Behavioral Memory
+    PROJECTION_DELTA: 'projection.delta',
+    BEHAVIORAL_OBSERVATION: 'behavioral.observation',
+    PROFILE_CHANGED: 'profile.changed',
 };
 //# sourceMappingURL=events.js.map

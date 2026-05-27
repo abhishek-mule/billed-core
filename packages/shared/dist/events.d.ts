@@ -39,6 +39,9 @@ export declare const EventType: {
     readonly ANALYTICS_SNAPSHOT_GENERATED: "analytics.snapshot.generated";
     readonly EXPERIMENT_ASSIGNED: "experiment.assigned";
     readonly EXPERIMENT_COMPLETED: "experiment.completed";
+    readonly PROJECTION_DELTA: "projection.delta";
+    readonly BEHAVIORAL_OBSERVATION: "behavioral.observation";
+    readonly PROFILE_CHANGED: "profile.changed";
 };
 export type EventType = (typeof EventType)[keyof typeof EventType];
 export type EventProducer = 'api' | 'worker' | 'webhook' | 'cron' | 'client';

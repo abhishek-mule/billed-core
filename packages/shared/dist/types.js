@@ -6,7 +6,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_OPERATING_HOURS = exports.RECOVERY_ENGAGEMENT_STATES = exports.RECOVERY_STATES = exports.MESSAGE_ORIGINS = exports.STAGE_LABELS = exports.REMINDER_STAGES = void 0;
+exports.INTERPRETER_VERSION = exports.DECAY_HALF_LIVES = exports.DEFAULT_OPERATING_HOURS = exports.RECOVERY_ENGAGEMENT_STATES = exports.RECOVERY_STATES = exports.MESSAGE_ORIGINS = exports.STAGE_LABELS = exports.REMINDER_STAGES = void 0;
 exports.normalizeStage = normalizeStage;
 exports.getNextStage = getNextStage;
 exports.generateBillzoMessageId = generateBillzoMessageId;
@@ -125,4 +125,18 @@ exports.DEFAULT_OPERATING_HOURS = {
     quietDays: [0],
     quietAfter: '21:00',
 };
+// ============================================================
+// DECAY CONFIGURATION
+// ============================================================
+exports.DECAY_HALF_LIVES = {
+    readRate: 30,
+    paymentConversion: 45,
+    readToPayLatency: 45,
+    reminderResponseLatency: 30,
+    settlementLatency: 60,
+    liquidityWindowAffinity: 60,
+    channelViability: 21,
+    escalationSensitivity: 120,
+};
+exports.INTERPRETER_VERSION = '1.0.0';
 //# sourceMappingURL=types.js.map

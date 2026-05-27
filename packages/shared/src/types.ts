@@ -232,6 +232,185 @@ export const DEFAULT_OPERATING_HOURS: OperatingHoursConfig = {
 }
 
 // ============================================================
+// BEHAVIORAL MEMORY — Observation layer
+// ============================================================
+// Observations are interpreted hypotheses, not facts.
+// They carry confidence and interpreter version for replay determinism.
+// Raw transport events remain the only canonical truth.
+
+export type ObservationSource = 'transport' | 'payment' | 'merchant_action' | 'system_inference'
+
+export type ObservationType =
+  | 'message_seen'
+  | 'attention_absent'
+  | 'response_absent'
+  | 'resolution_absent'
+  | 'payment_intent'
+  | 'resolution_completed'
+  | 'channel_failure'
+
+export interface BehavioralObservation {
+  type: ObservationType
+  confidence: number
+  source: ObservationSource
+  sourceReliability: number
+  interpreterVersion: string
+  occurredAt: string
+  tenantId: string
+  customerId: string
+  invoiceId?: string
+  absenceWindowHours?: number
+  metadata?: Record<string, unknown>
+}
+
+export interface ProjectionDelta {
+  tenantId: string
+  customerId: string
+  invoiceId: string
+  billzoMessageId: string
+  transportState: string
+  deliveryHealth: string
+  prevTransportState: string | null
+  prevDeliveryHealth: string | null
+  occurredAt: string
+  prevOccurredAt: string | null
+}
+
+export interface ProfileChanged {
+  tenantId: string
+  customerId: string
+  changedFields: string[]
+  confidenceBefore: number
+  confidenceAfter: number
+  traitChanges?: Record<string, number>
+  occurredAt: string
+}
+
+// ============================================================
+// BEHAVIORAL MEMORY — Materialized aggregates
+// ============================================================
+
+export interface CustomerBehavioralMetrics {
+  tenantId: string
+  customerId: string
+  schemaVersion: number
+  readRate: number
+  paymentConversionRate: number
+  avgReadToPayHours: number
+  avgReminderResponseHours: number
+  avgSettlementLatencyHours: number
+  observationCount: number
+  totalInterventionsSent: number
+  totalInterventionsRead: number
+  totalResolutionsAfterIntervention: number
+  totalEscalationsReceived: number
+  lastEscalationAt: string | null
+  interventionsUntilResolution: number | null
+  lastResolutionAt: string | null
+  lastReadAt: string | null
+  lastResponseAt: string | null
+  lastEventAt: string | null
+  updatedAt: string
+}
+
+export interface CustomerLiquidityWindow {
+  tenantId: string
+  customerId: string
+  schemaVersion: number
+  windowType: string
+  weekday: number
+  hourBucket: number
+  affinityScore: number
+  observationCount: number
+  lastSeenAt: string | null
+}
+
+export interface TraitValue {
+  value: number
+  priorSource: ResolvedPrior['source']
+  evidenceWeight: number
+}
+
+export interface BehavioralTraits {
+  temporalRegularity: TraitValue
+  constraintAffinity: TraitValue
+  strategicDelayLikelihood: TraitValue
+  disputeRisk: TraitValue
+  channelViability: TraitValue
+}
+
+// ============================================================
+// TEMPORAL PRIOR — Distributional prior for Bayesian blending
+// ============================================================
+// Used to regress sparse customer observations toward cohort/tenant
+// baselines instead of zero or uniform.
+//
+// design notes:
+//   - effectiveWeight is NOT equivalent to observationCount.
+//     It represents trust-adjusted contribution mass after decay
+//     and confidence weighting. Raw observation count is
+//     semantically different and should not be substituted.
+//   - All distributions are normalized (sum to 1).
+//   - Currently assumes approximate independence between dimensions.
+//     Future versions may move toward conditional/joint distributions.
+// ============================================================
+
+export interface TemporalPrior {
+  weekdayDistribution: number[]
+  hourDistribution: number[]
+  interventionLatencyDistribution: number[]
+  observationCount: number
+  effectiveWeight: number
+}
+
+export type PriorSource = 'customer' | 'segment' | 'tenant' | 'global' | 'none'
+
+export interface ResolvedPrior {
+  source: PriorSource
+  prior: TemporalPrior | null
+}
+
+// ============================================================
+// BEHAVIORAL RECOMMENDATION CONTEXT — Orchestrator boundary
+// ============================================================
+// The orchestrator must consume this, never raw
+// customer_behavioral_metrics directly.
+//
+// This is the inference→policy boundary:
+//   memory → inference → recommendation → policy
+//   NEVER:  memory → orchestration spaghetti
+// ============================================================
+
+export interface BehavioralRecommendationContext {
+  tenantId: string
+  customerId: string
+  traits: BehavioralTraits
+  readRate: number
+  channelViability: number
+  entropy: number
+  priorSource: PriorSource
+  observationCount: number
+  updatedAt: string
+}
+
+// ============================================================
+// DECAY CONFIGURATION
+// ============================================================
+
+export const DECAY_HALF_LIVES = {
+  readRate: 30,
+  paymentConversion: 45,
+  readToPayLatency: 45,
+  reminderResponseLatency: 30,
+  settlementLatency: 60,
+  liquidityWindowAffinity: 60,
+  channelViability: 21,
+  escalationSensitivity: 120,
+} as const
+
+export const INTERPRETER_VERSION = '1.0.0'
+
+// ============================================================
 // TENANT WHATSAPP CONFIG
 // ============================================================
 

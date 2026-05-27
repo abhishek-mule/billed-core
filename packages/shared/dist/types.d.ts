@@ -63,6 +63,121 @@ export interface OperatingHoursConfig {
     quietAfter: string;
 }
 export declare const DEFAULT_OPERATING_HOURS: OperatingHoursConfig;
+export type ObservationSource = 'transport' | 'payment' | 'merchant_action' | 'system_inference';
+export type ObservationType = 'message_seen' | 'attention_absent' | 'response_absent' | 'resolution_absent' | 'payment_intent' | 'resolution_completed' | 'channel_failure';
+export interface BehavioralObservation {
+    type: ObservationType;
+    confidence: number;
+    source: ObservationSource;
+    sourceReliability: number;
+    interpreterVersion: string;
+    occurredAt: string;
+    tenantId: string;
+    customerId: string;
+    invoiceId?: string;
+    absenceWindowHours?: number;
+    metadata?: Record<string, unknown>;
+}
+export interface ProjectionDelta {
+    tenantId: string;
+    customerId: string;
+    invoiceId: string;
+    billzoMessageId: string;
+    transportState: string;
+    deliveryHealth: string;
+    prevTransportState: string | null;
+    prevDeliveryHealth: string | null;
+    occurredAt: string;
+    prevOccurredAt: string | null;
+}
+export interface ProfileChanged {
+    tenantId: string;
+    customerId: string;
+    changedFields: string[];
+    confidenceBefore: number;
+    confidenceAfter: number;
+    traitChanges?: Record<string, number>;
+    occurredAt: string;
+}
+export interface CustomerBehavioralMetrics {
+    tenantId: string;
+    customerId: string;
+    schemaVersion: number;
+    readRate: number;
+    paymentConversionRate: number;
+    avgReadToPayHours: number;
+    avgReminderResponseHours: number;
+    avgSettlementLatencyHours: number;
+    observationCount: number;
+    totalInterventionsSent: number;
+    totalInterventionsRead: number;
+    totalResolutionsAfterIntervention: number;
+    totalEscalationsReceived: number;
+    lastEscalationAt: string | null;
+    interventionsUntilResolution: number | null;
+    lastResolutionAt: string | null;
+    lastReadAt: string | null;
+    lastResponseAt: string | null;
+    lastEventAt: string | null;
+    updatedAt: string;
+}
+export interface CustomerLiquidityWindow {
+    tenantId: string;
+    customerId: string;
+    schemaVersion: number;
+    windowType: string;
+    weekday: number;
+    hourBucket: number;
+    affinityScore: number;
+    observationCount: number;
+    lastSeenAt: string | null;
+}
+export interface TraitValue {
+    value: number;
+    priorSource: ResolvedPrior['source'];
+    evidenceWeight: number;
+}
+export interface BehavioralTraits {
+    temporalRegularity: TraitValue;
+    constraintAffinity: TraitValue;
+    strategicDelayLikelihood: TraitValue;
+    disputeRisk: TraitValue;
+    channelViability: TraitValue;
+}
+export interface TemporalPrior {
+    weekdayDistribution: number[];
+    hourDistribution: number[];
+    interventionLatencyDistribution: number[];
+    observationCount: number;
+    effectiveWeight: number;
+}
+export type PriorSource = 'customer' | 'segment' | 'tenant' | 'global' | 'none';
+export interface ResolvedPrior {
+    source: PriorSource;
+    prior: TemporalPrior | null;
+}
+export interface BehavioralRecommendationContext {
+    tenantId: string;
+    customerId: string;
+    traits: BehavioralTraits;
+    readRate: number;
+    channelViability: number;
+    entropy: number;
+    priorSource: PriorSource;
+    observationCount: number;
+    updatedAt: string;
+}
+export declare const DECAY_HALF_LIVES: {
+    readonly readRate: 30;
+    readonly paymentConversion: 45;
+    readonly readToPayLatency: 45;
+    readonly reminderResponseLatency: 30;
+    readonly settlementLatency: 60;
+    readonly liquidityWindowAffinity: 60;
+    readonly channelViability: 21;
+    readonly escalationSensitivity: 120;
+};
+export declare const INTERPRETER_VERSION = "1.0.0";
 export interface TenantWhatsAppConfig {
     gupshupApiKey?: string;
     gupshupAppName?: string;
