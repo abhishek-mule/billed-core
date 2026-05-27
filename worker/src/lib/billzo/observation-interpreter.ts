@@ -6,6 +6,8 @@ import type {
 } from '@billzo/shared'
 import { INTERPRETER_VERSION } from '@billzo/shared'
 
+export const OBSERVATION_INTERPRETER_VERSION = '1.0.0'
+
 // ============================================================
 // OBSERVATION INTERPRETER
 // ============================================================

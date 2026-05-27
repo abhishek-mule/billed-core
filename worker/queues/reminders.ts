@@ -9,7 +9,8 @@ import { generateCorrelationId } from '../src/lib/billzo/idempotency'
 import { sendWhatsAppMessage, getEffectiveProvider } from '../lib/whatsapp-router'
 import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
 import { signUpiToken } from '../lib/crypto'
-import { buildRecommendation } from '../src/lib/billzo/orchestrator'
+import { buildRecommendation, buildRecommendationFull } from '../src/lib/billzo/orchestrator'
+import { emitOrchestrationSnapshot } from '../src/lib/billzo/orchestration-snapshot'
 import {
   REMINDER_STAGES,
   STAGE_LABELS,
@@ -318,24 +319,47 @@ export function createRemindersWorker() {
                 updatedAt: behMetrics.updatedAt,
               }
 
-              const recommendation = buildRecommendation({
+              // Compute transport confidence from recent receipt telemetry
+              const receiptStatuses: string[] = ['delivered', 'read', 'server_ack', 'received']
+              const receiptEvents = (recentEvents || []).filter((e: any) => receiptStatuses.includes(e.status))
+              const transportConfidence = recentEvents && recentEvents.length > 0
+                ? receiptEvents.length / recentEvents.length
+                : 0.5
+
+              const invoiceOrchInput = {
+                id: invoiceId,
+                total: invoice.total || 0,
+                daysOverdue: Math.floor((Date.now() - new Date(invoice.created_at || Date.now()).getTime()) / (24 * 60 * 60 * 1000)),
+                currentStage: stage as ReminderStage,
+                ignoreCount,
+                amountRatio,
+              }
+
+              const orchInput = {
                 context,
-                invoice: {
-                  id: invoiceId,
-                  total: invoice.total || 0,
-                  daysOverdue: Math.floor((Date.now() - new Date(invoice.created_at || Date.now()).getTime()) / (24 * 60 * 60 * 1000)),
-                  currentStage: stage as ReminderStage,
-                  ignoreCount,
-                  amountRatio,
-                },
+                invoice: invoiceOrchInput,
                 operatingHours: (config.operatingHours || DEFAULT_OPERATING_HOURS),
-              })
+                transportConfidence,
+              }
+
+              const { recommendation, confidence } = buildRecommendationFull(orchInput)
 
               recommendEscalation = recommendation.escalation.shouldEscalate
               nextFollowUpDays = recommendation.cadence.nextFollowUpDays
 
               console.log(`[RemindersWorker] Orchestrator recommendation for ${invoiceId}:`,
-                JSON.stringify({ shouldSend: recommendation.shouldSend, tone: recommendation.content.tone, escalate: recommendation.escalation.shouldEscalate, cadenceDays: nextFollowUpDays }))
+                JSON.stringify({
+                  shouldSend: recommendation.shouldSend,
+                  tone: recommendation.content.tone,
+                  escalate: recommendation.escalation.shouldEscalate,
+                  cadenceDays: nextFollowUpDays,
+                  confidence,
+                }))
+
+              // Emit orchestration snapshot for forensic replay
+              await emitOrchestrationSnapshot(orchInput, { triggeredBy: 'reminders-worker' }).catch((err: any) =>
+                console.error(`[RemindersWorker] Failed to emit orchestration snapshot for ${invoiceId}:`, err)
+              )
             }
 
             if (recommendEscalation) {

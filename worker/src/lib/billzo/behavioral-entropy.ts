@@ -1,5 +1,7 @@
 import type { CustomerLiquidityWindow } from '@billzo/shared'
 
+export const ENTROPY_INTERPRETER_VERSION = '1.0.0'
+
 // ============================================================
 // BEHAVIORAL ENTROPY — Uncertainty measurement
 // ============================================================

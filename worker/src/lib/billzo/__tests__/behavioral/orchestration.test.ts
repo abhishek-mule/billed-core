@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildRecommendation,
+  buildRecommendationFull,
+  computeDecisionConfidence,
   decideSendTiming,
   decideChannel,
   decideContentTone,
@@ -393,5 +395,61 @@ describe('buildRecommendation (integration)', () => {
     expect(result.shouldSend).toBe(true)
     expect(result.content.tone).toBe('neutral')
     expect(result.cadence.nextFollowUpDays).toBe(3)
+  })
+})
+
+// ============================================================
+// computeDecisionConfidence
+// ============================================================
+
+describe('computeDecisionConfidence', () => {
+  it('returns high confidence with many observations and customer prior', () => {
+    const ctx = makeContext({ observationCount: 50, priorSource: 'customer' })
+    const conf = computeDecisionConfidence(ctx, 1.0)
+    expect(conf.timing).toBeGreaterThan(0.5)
+    expect(conf.channel).toBeGreaterThan(0.5)
+    expect(conf.cadence).toBeGreaterThan(0.5)
+    expect(conf.escalation).toBeGreaterThan(0.5)
+  })
+
+  it('returns low confidence with no observations and none prior', () => {
+    const ctx = makeContext({ observationCount: 0, priorSource: 'none' })
+    const conf = computeDecisionConfidence(ctx, 0.5)
+    expect(conf.timing).toBeLessThan(0.3)
+    expect(conf.channel).toBeLessThan(0.3)
+    expect(conf.cadence).toBeLessThan(0.3)
+    expect(conf.escalation).toBeLessThan(0.3)
+  })
+
+  it('transport confidence dampens all sub-confidences', () => {
+    const baseCtx = makeContext({ observationCount: 50, priorSource: 'customer' })
+    const highTc = computeDecisionConfidence(baseCtx, 1.0)
+    const lowTc = computeDecisionConfidence(baseCtx, 0.1)
+    expect(lowTc.timing).toBeLessThan(highTc.timing)
+    expect(lowTc.channel).toBeLessThan(highTc.channel)
+    expect(lowTc.cadence).toBeLessThan(highTc.cadence)
+    expect(lowTc.escalation).toBeLessThan(highTc.escalation)
+  })
+
+  it('transport field equals the passed transportConfidence', () => {
+    const ctx = makeContext({ observationCount: 10 })
+    const conf = computeDecisionConfidence(ctx, 0.75)
+    expect(conf.transport).toBe(0.75)
+  })
+
+  it('handles entropy=1 (max uncertainty) gracefully', () => {
+    const ctx = makeContext({ observationCount: 30, priorSource: 'customer', entropy: 1.0 })
+    const conf = computeDecisionConfidence(ctx, 1.0)
+    expect(conf.timing).toBe(0)
+    expect(conf.channel).toBeGreaterThan(0)
+    expect(conf.cadence).toBeGreaterThan(0)
+    expect(conf.escalation).toBeGreaterThan(0)
+  })
+
+  it('priorSource hierarchy affects timing confidence', () => {
+    const baseCtx = makeContext({ observationCount: 10 })
+    const customerConf = computeDecisionConfidence({ ...baseCtx, priorSource: 'customer' }, 1.0)
+    const globalConf = computeDecisionConfidence({ ...baseCtx, priorSource: 'global' }, 1.0)
+    expect(customerConf.timing).toBeGreaterThan(globalConf.timing)
   })
 })

@@ -1,5 +1,7 @@
 import type { PredictionOutcome, CalibrationBin, CalibrationReport } from '@billzo/shared'
 
+export const CALIBRATION_VERSION = '1.0.0'
+
 export function buildCalibrationBins(
   pairs: PredictionOutcome[],
   binCount = 10,

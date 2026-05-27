@@ -1,6 +1,8 @@
 import { supabaseAdmin } from './supabase-admin'
 import { emitRecoveryCompleted } from './events'
 
+export const ATTRIBUTION_VERSION = '1.0.0'
+
 export interface AttributionResult {
   attributed: boolean
   reminderEventId: string | null

@@ -8,6 +8,8 @@ import type {
 import { computeLiquidityEntropy, normalizedEntropy, shannonEntropy, entropyToConfidence } from './behavioral-entropy'
 import { computeConfidence } from './decay'
 
+export const TRAITS_VERSION = '1.0.0'
+
 // ============================================================
 // BAYESIAN PRIOR RESOLUTION
 // ============================================================

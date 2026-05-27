@@ -1,13 +1,17 @@
 import { Worker, Job, Queue } from 'bullmq'
 import { createRedisConnection } from '../lib/redis'
-import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed } from '../src/lib/billzo/outbox'
+import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { startBaileysSocket, disconnectBaileys } from '../lib/baileys-socket'
 import { sendPushNotification } from '../src/lib/billzo/notifications'
 import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
-import type { ProjectionTransportState, ProjectionDeliveryHealth } from '@billzo/shared'
+import { interpretProjectionDelta } from '../src/lib/billzo/observation-interpreter'
+import { materializeObservation } from '../src/lib/billzo/behavioral-materializer'
+import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
+import { EventType } from '@billzo/shared'
+import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
@@ -107,24 +111,53 @@ export function createOutboxWorker() {
   return worker
 }
 
-async function processOutboxEvent(event: any): Promise<void> {
-  // Isolated projection handlers — each catches its own errors
-  // so a failure in one concern does not block others.
-  const projections = [
-    tryHandleTransportProjection,
-    tryHandleAttribution,
-    tryHandleEscalation,
-    tryHandleRecoveryCaseProjection,
-    tryHandleNotifications,
-    tryHandleBaileysLifecycle,
-    tryHandleRedisPublish,
-  ]
+type HandlerLane = 'transport' | 'behavior' | 'attribution' | 'notification'
 
-  for (const projection of projections) {
-    try {
-      await projection(event)
-    } catch (err: any) {
-      console.error(`[Outbox] Projection ${projection.name} failed for ${event.type}:`, err.message)
+interface LaneHandler {
+  lane: HandlerLane
+  priority: number
+  handle(event: any): Promise<void>
+  name: string
+}
+
+// Lane ordering: transport → behavior → attribution → notification
+// Within each lane, handlers execute by priority (lower = first)
+const HANDLER_LANES: LaneHandler[] = [
+  // TRANSPORT LANE — Physical delivery truth
+  { lane: 'transport', priority: 0, name: 'tryHandleSendMessageIntent', handle: tryHandleSendMessageIntent },
+  { lane: 'transport', priority: 1, name: 'tryHandleTransportProjection', handle: tryHandleTransportProjection },
+
+  // BEHAVIOR LANE — Observation interpretation → behavioral memory
+  { lane: 'behavior', priority: 1, name: 'tryHandleObservationInterpreter', handle: tryHandleObservationInterpreter },
+  { lane: 'behavior', priority: 2, name: 'tryHandleBehavioralMaterializer', handle: tryHandleBehavioralMaterializer },
+  { lane: 'behavior', priority: 3, name: 'tryHandleRecoveryCaseProjection', handle: tryHandleRecoveryCaseProjection },
+
+  // ATTRIBUTION LANE — Economic causality
+  { lane: 'attribution', priority: 1, name: 'tryHandleAttribution', handle: tryHandleAttribution },
+  { lane: 'attribution', priority: 2, name: 'tryHandleEscalation', handle: tryHandleEscalation },
+
+  // NOTIFICATION LANE — Presentation layer
+  { lane: 'notification', priority: 1, name: 'tryHandleNotifications', handle: tryHandleNotifications },
+  { lane: 'notification', priority: 2, name: 'tryHandleBaileysLifecycle', handle: tryHandleBaileysLifecycle },
+  { lane: 'notification', priority: 3, name: 'tryHandleRedisPublish', handle: tryHandleRedisPublish },
+]
+
+async function processOutboxEvent(event: any): Promise<void> {
+  // Execute handlers in lane order (transport → behavior → attribution → notification)
+  // Each handler catches its own errors — a failure in one concern does not block others.
+  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'attribution', 'notification']
+
+  for (const lane of laneOrder) {
+    const laneHandlers = HANDLER_LANES
+      .filter(h => h.lane === lane)
+      .sort((a, b) => a.priority - b.priority)
+
+    for (const handler of laneHandlers) {
+      try {
+        await handler.handle(event)
+      } catch (err: any) {
+        console.error(`[Outbox] Handler ${handler.name} (${handler.lane}) failed for ${event.type}:`, err.message)
+      }
     }
   }
 }
@@ -240,7 +273,55 @@ async function tryHandleBaileysLifecycle(event: any): Promise<void> {
 }
 
 // ============================================================
-// 6. REDIS PUBLISH — Real-time pub/sub (best-effort)
+// 6. OBSERVATION INTERPRETER — Transport delta → behavioral observation
+// ============================================================
+async function tryHandleObservationInterpreter(event: any): Promise<void> {
+  if (event.type === EventType.PROJECTION_DELTA) {
+    const delta: ProjectionDelta = {
+      tenantId: event.tenantId,
+      customerId: event.payload?.customerId,
+      invoiceId: event.entityId,
+      billzoMessageId: event.payload?.billzoMessageId,
+      transportState: event.payload?.transportState,
+      deliveryHealth: event.payload?.deliveryHealth,
+      prevTransportState: event.payload?.prevTransportState,
+      prevDeliveryHealth: event.payload?.prevDeliveryHealth,
+      occurredAt: event.payload?.occurredAt,
+      prevOccurredAt: event.payload?.prevOccurredAt || null,
+    }
+
+    if (!delta.customerId) return
+
+    const observation = interpretProjectionDelta(delta)
+    if (!observation) return
+
+    await writeOutboxEvent({
+      type: EventType.BEHAVIORAL_OBSERVATION,
+      version: 1,
+      tenantId: delta.tenantId,
+      entityId: delta.customerId,
+      payload: observation as unknown as Record<string, unknown>,
+      causationId: event.id,
+      correlationId: event.correlationId || '',
+      idempotencyKey: null,
+    })
+  }
+}
+
+// ============================================================
+// 7. BEHAVIORAL MATERIALIZER — Observation → behavioral memory
+// ============================================================
+async function tryHandleBehavioralMaterializer(event: any): Promise<void> {
+  if (event.type === EventType.BEHAVIORAL_OBSERVATION) {
+    const observation = event.payload
+    if (!observation?.customerId) return
+
+    await materializeObservation(observation)
+  }
+}
+
+// ============================================================
+// 8. REDIS PUBLISH — Real-time pub/sub (best-effort)
 // ============================================================
 async function tryHandleRedisPublish(event: any): Promise<void> {
   // Redis publish is non-critical; already handled inline in each handler.
@@ -315,6 +396,7 @@ interface MessageProjectionState {
   invoiceId: string | null
   tenantId: string
   eventId: string
+  customerId?: string
 }
 
 function mapStatusToProjection(
@@ -352,6 +434,17 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
 
   if (!tenantId || !status) return null
 
+  // Fetch customerId for projection delta
+  let customerId: string | undefined
+  if (invoiceId) {
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('customer_id')
+      .eq('id', invoiceId)
+      .maybeSingle()
+    customerId = invoice?.customer_id
+  }
+
   if (billzoMessageId) {
     // Read latest event state from the append-only stream
     const { data: latest } = await supabaseAdmin
@@ -373,6 +466,7 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
         invoiceId: invoiceId || null,
         tenantId,
         eventId: latest.id,
+        customerId,
       }
 
       if (invoiceId) {
@@ -419,6 +513,17 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
 async function updateMessageProjection(state: MessageProjectionState): Promise<void> {
   if (!state.billzoMessageId) return
 
+  // Capture previous state before CAS for delta computation
+  const { data: prevProjection } = await supabaseAdmin
+    .from('whatsapp_message_projection')
+    .select('transport_state, delivery_health, causal_occurred_at')
+    .eq('billzo_message_id', state.billzoMessageId)
+    .maybeSingle()
+
+  const prevTransportState = prevProjection?.transport_state || null
+  const prevDeliveryHealth = prevProjection?.delivery_health || null
+  const prevOccurredAt = prevProjection?.causal_occurred_at || null
+
   const mapping = mapStatusToProjection(state.latestStatus)
   if (!mapping) return
 
@@ -428,7 +533,7 @@ async function updateMessageProjection(state: MessageProjectionState): Promise<v
   const read = transportState === 'read'
   const failed = transportState === 'failed_terminal'
 
-  const { error } = await supabaseAdmin.rpc('cas_upsert_projection', {
+  const { data: casResult, error } = await supabaseAdmin.rpc('cas_upsert_projection', {
     p_billzo_message_id: state.billzoMessageId,
     p_transport_state: transportState,
     p_delivery_health: deliveryHealth,
@@ -451,6 +556,69 @@ async function updateMessageProjection(state: MessageProjectionState): Promise<v
       billzoMessageId: state.billzoMessageId,
       error,
     })
+    return
+  }
+
+  // Emit projection.delta only on successful CAS (inserted or updated)
+  if (casResult === 'inserted' || casResult === 'updated') {
+    await emitProjectionDelta(state, transportState, deliveryHealth, prevTransportState, prevDeliveryHealth, prevOccurredAt)
+  }
+}
+
+async function emitProjectionDelta(
+  state: MessageProjectionState,
+  transportState: string,
+  deliveryHealth: string,
+  prevTransportState: string | null,
+  prevDeliveryHealth: string | null,
+  prevOccurredAt: string | null,
+): Promise<void> {
+  if (!state.customerId) {
+    return
+  }
+
+  // Write to projection_delta_log for reinterpretation replay
+  try {
+    await supabaseAdmin.from('projection_delta_log').insert({
+      tenant_id: state.tenantId,
+      customer_id: state.customerId,
+      invoice_id: state.invoiceId,
+      billzo_message_id: state.billzoMessageId,
+      transport_state: transportState,
+      delivery_health: deliveryHealth,
+      prev_transport_state: prevTransportState,
+      prev_delivery_health: prevDeliveryHealth,
+      occurred_at: state.latestOccurredAt,
+    })
+  } catch (err: any) {
+    console.error('[Projection] Delta log insert failed:', err.message)
+  }
+
+  // Write outbox event for the observation interpreter
+  try {
+    await writeOutboxEvent({
+      type: EventType.PROJECTION_DELTA,
+      version: 1,
+      tenantId: state.tenantId,
+      entityId: state.invoiceId,
+      payload: {
+        tenantId: state.tenantId,
+        customerId: state.customerId,
+        invoiceId: state.invoiceId,
+        billzoMessageId: state.billzoMessageId,
+        transportState,
+        deliveryHealth,
+        prevTransportState,
+        prevDeliveryHealth,
+        occurredAt: state.latestOccurredAt,
+        prevOccurredAt,
+      } as unknown as Record<string, unknown>,
+      causationId: null,
+      correlationId: '',
+      idempotencyKey: `projection:delta:${state.billzoMessageId}:${transportState}`,
+    })
+  } catch (err: any) {
+    console.error('[Projection] Delta outbox write failed:', err.message)
   }
 }
 
