@@ -18,4 +18,5 @@ __exportStar(require("./types"), exports);
 __exportStar(require("./events"), exports);
 __exportStar(require("./calibration-types"), exports);
 __exportStar(require("./counterfactual-types"), exports);
+__exportStar(require("./orchestrator-types"), exports);
 //# sourceMappingURL=index.js.map
