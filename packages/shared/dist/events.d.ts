@@ -26,6 +26,8 @@ export declare const EventType: {
     readonly WHATSAPP_DELIVERED: "whatsapp.delivered";
     readonly WHATSAPP_FAILED: "whatsapp.failed";
     readonly WHATSAPP_INBOUND: "whatsapp.inbound";
+    readonly SEND_MESSAGE_INTENDED: "send_message.intended";
+    readonly SEND_MESSAGE_EXECUTED: "send_message.executed";
     readonly SYNC_COMPLETED: "sync.completed";
     readonly SYNC_FAILED: "sync.failed";
     readonly SYNC_CONFLICT: "sync.conflict";
@@ -42,6 +44,7 @@ export declare const EventType: {
     readonly PROJECTION_DELTA: "projection.delta";
     readonly BEHAVIORAL_OBSERVATION: "behavioral.observation";
     readonly PROFILE_CHANGED: "profile.changed";
+    readonly ORCHESTRATION_DECISION_MADE: "orchestration.decision.made";
 };
 export type EventType = (typeof EventType)[keyof typeof EventType];
 export type EventProducer = 'api' | 'worker' | 'webhook' | 'cron' | 'client';

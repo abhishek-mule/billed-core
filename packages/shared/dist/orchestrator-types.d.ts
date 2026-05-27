@@ -49,6 +49,82 @@ export interface OrchestrationInput {
     context: BehavioralRecommendationContext;
     invoice: InvoiceOrchestrationState;
     operatingHours: OperatingHoursConfig;
+    transportConfidence?: number;
+}
+export interface DecisionRuleTrace {
+    ruleId: string;
+    inputs: Record<string, number>;
+    threshold?: number;
+    outcome: boolean;
+    contributionWeight?: number;
+}
+export interface DecisionConfidence {
+    timing: number;
+    channel: number;
+    cadence: number;
+    escalation: number;
+    transport: number;
+}
+export interface BehavioralInterpreterVersions {
+    entropy: string;
+    traits: string;
+    attribution: string;
+    calibration: string;
+    observation: string;
+}
+export interface OrchestrationSnapshot {
+    invoiceId: string;
+    customerId: string;
+    tenantId: string;
+    policyVersion: string;
+    orchestratorVersion: string;
+    inputHash: string;
+    interpreterVersions: BehavioralInterpreterVersions;
+    behavioralSnapshot: {
+        traits: {
+            temporalRegularity: {
+                value: number;
+                priorSource: string;
+                evidenceWeight: number;
+            };
+            constraintAffinity: {
+                value: number;
+                priorSource: string;
+                evidenceWeight: number;
+            };
+            strategicDelayLikelihood: {
+                value: number;
+                priorSource: string;
+                evidenceWeight: number;
+            };
+            disputeRisk: {
+                value: number;
+                priorSource: string;
+                evidenceWeight: number;
+            };
+            channelViability: {
+                value: number;
+                priorSource: string;
+                evidenceWeight: number;
+            };
+        };
+        readRate: number;
+        channelViability: number;
+        entropy: number;
+        priorSource: string;
+        observationCount: number;
+    };
+    recommendation: SendRecommendation;
+    decisionConfidence: DecisionConfidence;
+    ruleTraces: DecisionRuleTrace[];
+    rationale: string[];
+    executedAt: string;
+    triggeredBy: string;
+}
+export interface BuildRecommendationResult {
+    recommendation: SendRecommendation;
+    traces: DecisionRuleTrace[];
+    confidence: DecisionConfidence;
 }
 export declare const DEFAULT_SEND_RECOMMENDATION: SendRecommendation;
 //# sourceMappingURL=orchestrator-types.d.ts.map

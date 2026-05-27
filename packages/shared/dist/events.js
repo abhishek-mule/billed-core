@@ -38,6 +38,8 @@ exports.EventType = {
     WHATSAPP_DELIVERED: 'whatsapp.delivered',
     WHATSAPP_FAILED: 'whatsapp.failed',
     WHATSAPP_INBOUND: 'whatsapp.inbound',
+    SEND_MESSAGE_INTENDED: 'send_message.intended',
+    SEND_MESSAGE_EXECUTED: 'send_message.executed',
     // Sync
     SYNC_COMPLETED: 'sync.completed',
     SYNC_FAILED: 'sync.failed',
@@ -60,5 +62,7 @@ exports.EventType = {
     PROJECTION_DELTA: 'projection.delta',
     BEHAVIORAL_OBSERVATION: 'behavioral.observation',
     PROFILE_CHANGED: 'profile.changed',
+    // Orchestration
+    ORCHESTRATION_DECISION_MADE: 'orchestration.decision.made',
 };
 //# sourceMappingURL=events.js.map

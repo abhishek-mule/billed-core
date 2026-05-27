@@ -106,6 +106,106 @@ export interface OrchestrationInput {
   context: BehavioralRecommendationContext
   invoice: InvoiceOrchestrationState
   operatingHours: OperatingHoursConfig
+  transportConfidence?: number  // 0-1, computed from recent telemetry completeness; defaults to 0.5
+}
+
+// ============================================================
+// DEFAULTS — Safe fallbacks when observationCount is 0
+// ============================================================
+
+// ============================================================
+// DECISION RULE TRACE — Machine-replayable decision audit
+// ============================================================
+// Each trace records a single rule evaluation within a decision function.
+// Together they form a complete, diffable audit of every orchestration decision.
+// This is the foundation for policy regression testing, replay verification,
+// and operator trust in autonomous behavior.
+// ============================================================
+
+export interface DecisionRuleTrace {
+  ruleId: string
+  inputs: Record<string, number>
+  threshold?: number
+  outcome: boolean
+  contributionWeight?: number
+}
+
+// ============================================================
+// DECISION CONFIDENCE — Per-output certainty estimation
+// ============================================================
+// Each sub-decision carries its own confidence derived from:
+//   - observation count
+//   - entropy (behavioral predictability)
+//   - prior provenance (customer|segment|tenant|global|none)
+//   - calibration quality (future)
+//   - transport completeness
+//
+// This prevents the orchestrator from projecting false certainty
+// onto customers with sparse or unreliable data.
+// ============================================================
+
+export interface DecisionConfidence {
+  timing: number
+  channel: number
+  cadence: number
+  escalation: number
+  transport: number
+}
+
+// ============================================================
+// ORCHESTRATION SNAPSHOT — Frozen decision record
+// ============================================================
+// Emitted as orchestration.decision.made event for forensic replay.
+// Contains everything needed to explain WHY a decision was made
+// without requiring current runtime code or database state.
+// ============================================================
+
+export interface BehavioralInterpreterVersions {
+  entropy: string
+  traits: string
+  attribution: string
+  calibration: string
+  observation: string
+}
+
+export interface OrchestrationSnapshot {
+  invoiceId: string
+  customerId: string
+  tenantId: string
+  policyVersion: string
+  orchestratorVersion: string
+  inputHash: string
+  interpreterVersions: BehavioralInterpreterVersions
+  behavioralSnapshot: {
+    traits: {
+      temporalRegularity: { value: number; priorSource: string; evidenceWeight: number }
+      constraintAffinity: { value: number; priorSource: string; evidenceWeight: number }
+      strategicDelayLikelihood: { value: number; priorSource: string; evidenceWeight: number }
+      disputeRisk: { value: number; priorSource: string; evidenceWeight: number }
+      channelViability: { value: number; priorSource: string; evidenceWeight: number }
+    }
+    readRate: number
+    channelViability: number
+    entropy: number
+    priorSource: string
+    observationCount: number
+  }
+  recommendation: SendRecommendation
+  decisionConfidence: DecisionConfidence
+  ruleTraces: DecisionRuleTrace[]
+  rationale: string[]
+  executedAt: string
+  triggeredBy: string
+}
+
+// ============================================================
+// BUILD RECOMMENDATION RESULT — Enhanced return from buildRecommendation
+// ============================================================
+
+export interface BuildRecommendationResult {
+  recommendation: SendRecommendation
+  traces: DecisionRuleTrace[]
+  confidence: DecisionConfidence
 }
 
 // ============================================================
