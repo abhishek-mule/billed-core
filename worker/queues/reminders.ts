@@ -3,12 +3,13 @@ import { createRedisConnection } from '../lib/redis'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
-import { EventType } from '@billzo/shared'
+import { EventType, DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
 import { generateCorrelationId } from '../src/lib/billzo/idempotency'
 import { sendWhatsAppMessage, getEffectiveProvider } from '../lib/whatsapp-router'
 import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
 import { signUpiToken } from '../lib/crypto'
+import { buildRecommendation } from '../src/lib/billzo/orchestrator'
 import {
   REMINDER_STAGES,
   STAGE_LABELS,
@@ -16,6 +17,8 @@ import {
   getNextStage,
   type ReminderStage,
   type WhatsAppProvider,
+  type BehavioralRecommendationContext,
+  type CustomerBehavioralMetrics,
 } from '@billzo/shared'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
@@ -235,59 +238,131 @@ export function createRemindersWorker() {
           })
         }
 
-        // Escalation detection: after 3 ignored reminders with high amount
+        // Orchestrator-driven escalation and cadence
         if (eventStatus !== 'failed') {
-          const { data: recentEvents } = await supabaseAdmin
-            .from('whatsapp_events')
-            .select('status, created_at')
-            .eq('invoice_id', invoiceId)
-            .eq('tenant_id', tenantId)
-            .eq('direction', 'outbound')
-            .order('created_at', { ascending: false })
-            .limit(5)
+          try {
+            const { data: recentEvents } = await supabaseAdmin
+              .from('whatsapp_events')
+              .select('status, created_at')
+              .eq('invoice_id', invoiceId)
+              .eq('tenant_id', tenantId)
+              .eq('direction', 'outbound')
+              .order('created_at', { ascending: false })
+              .limit(5)
 
-          if (recentEvents && recentEvents.length >= 3) {
-            const allIgnored = recentEvents.slice(0, 3).every((e: any) =>
-              e.status === 'sent' || e.status === 'queued'
-            )
+            // Build ignore count from recent events
+            const ignoreCount = recentEvents
+              ? recentEvents.filter((e: any) => e.status === 'sent' || e.status === 'queued').length
+              : 0
 
-            if (allIgnored) {
-              const { data: avgInvoice } = await supabaseAdmin
-                .from('invoices')
-                .select('total')
-                .eq('tenant_id', tenantId)
-                .order('created_at', { ascending: false })
-                .limit(20)
+            const { data: avgInvoice } = await supabaseAdmin
+              .from('invoices')
+              .select('total')
+              .eq('tenant_id', tenantId)
+              .order('created_at', { ascending: false })
+              .limit(20)
 
-              const invoices = avgInvoice || []
-              const avgAmount = invoices.length > 0
-                ? invoices.reduce((sum: number, i: any) => sum + (i.total || 0), 0) / invoices.length
-                : 1
-              const amountRatio = (invoice.total || 0) / Math.max(avgAmount, 1)
+            const invoices = avgInvoice || []
+            const avgAmount = invoices.length > 0
+              ? invoices.reduce((sum: number, i: any) => sum + (i.total || 0), 0) / invoices.length
+              : 1
+            const amountRatio = (invoice.total || 0) / Math.max(avgAmount, 1)
 
-              const { data: customerRisk } = await supabaseAdmin
-                .from('customers')
-                .select('risk_score')
-                .eq('id', customer?.id)
-                .single()
+            // Fetch behavioral metrics for orchestrator context
+            const { data: behMetrics } = await supabaseAdmin
+              .from('customer_behavioral_metrics')
+              .select('*')
+              .eq('tenant_id', tenantId)
+              .eq('customer_id', customer?.id)
+              .maybeSingle()
 
-              const riskScore = (customerRisk as any)?.risk_score || 0.5
+            let recommendEscalation = ignoreCount >= 3 && amountRatio > 2.5
+            let nextFollowUpDays = 3
 
-              if (amountRatio > 2.5 && riskScore > 0.6) {
-                console.log(`[RemindersWorker] Escalation suggested for invoice ${invoiceId}`)
-                await emitEvent({
-                  type: EventType.RECOVERY_ESCALATION_SUGGESTED,
-                  tenantId,
-                  entityId: invoiceId,
-                  payload: { amount: invoice.total, customerName: customer?.name },
-                  causationId: null,
-                  correlationId: generateCorrelationId(invoiceId),
-                  producer: 'worker',
-                  idempotencyKey: `escalation:${invoiceId}:${new Date().toISOString().slice(0, 10)}`,
-                  retentionDays: 90,
-                })
+            if (behMetrics) {
+              const context: BehavioralRecommendationContext = {
+                tenantId,
+                customerId: customer?.id || '',
+                traits: {
+                  temporalRegularity: { value: 0, priorSource: 'none', evidenceWeight: 0 },
+                  constraintAffinity: {
+                    value: behMetrics.totalInterventionsSent > 0
+                      ? Math.min((behMetrics.totalInterventionsSent - behMetrics.totalResolutionsAfterIntervention) / behMetrics.totalInterventionsSent, 1)
+                      : 0,
+                    priorSource: 'customer',
+                    evidenceWeight: behMetrics.observationCount,
+                  },
+                  strategicDelayLikelihood: {
+                    value: behMetrics.avgReadToPayHours > 72 ? 0.7 : behMetrics.avgReadToPayHours > 48 ? 0.4 : 0.2,
+                    priorSource: 'customer',
+                    evidenceWeight: behMetrics.observationCount,
+                  },
+                  disputeRisk: {
+                    value: behMetrics.totalResolutionsAfterIntervention > 0
+                      ? Math.min(behMetrics.totalEscalationsReceived / behMetrics.totalResolutionsAfterIntervention, 1)
+                      : 0,
+                    priorSource: 'customer',
+                    evidenceWeight: behMetrics.observationCount,
+                  },
+                  channelViability: {
+                    value: behMetrics.readRate,
+                    priorSource: 'customer',
+                    evidenceWeight: behMetrics.observationCount,
+                  },
+                },
+                readRate: behMetrics.readRate,
+                channelViability: behMetrics.readRate,
+                entropy: 0.3,
+                priorSource: behMetrics.observationCount > 0 ? 'customer' : 'none',
+                observationCount: behMetrics.observationCount,
+                updatedAt: behMetrics.updatedAt,
               }
+
+              const recommendation = buildRecommendation({
+                context,
+                invoice: {
+                  id: invoiceId,
+                  total: invoice.total || 0,
+                  daysOverdue: Math.floor((Date.now() - new Date(invoice.created_at || Date.now()).getTime()) / (24 * 60 * 60 * 1000)),
+                  currentStage: stage as ReminderStage,
+                  ignoreCount,
+                  amountRatio,
+                },
+                operatingHours: (config.operatingHours || DEFAULT_OPERATING_HOURS),
+              })
+
+              recommendEscalation = recommendation.escalation.shouldEscalate
+              nextFollowUpDays = recommendation.cadence.nextFollowUpDays
+
+              console.log(`[RemindersWorker] Orchestrator recommendation for ${invoiceId}:`,
+                JSON.stringify({ shouldSend: recommendation.shouldSend, tone: recommendation.content.tone, escalate: recommendation.escalation.shouldEscalate, cadenceDays: nextFollowUpDays }))
             }
+
+            if (recommendEscalation) {
+              const emitReason = `Invoice ${amountRatio.toFixed(1)}x avg, ignored ${ignoreCount}x`
+              console.log(`[RemindersWorker] Escalation suggested for invoice ${invoiceId}: ${emitReason}`)
+              await emitEvent({
+                type: EventType.RECOVERY_ESCALATION_SUGGESTED,
+                tenantId,
+                entityId: invoiceId,
+                payload: { amount: invoice.total, customerName: customer?.name, ignoreCount, amountRatio },
+                causationId: null,
+                correlationId: generateCorrelationId(invoiceId),
+                producer: 'worker',
+                idempotencyKey: `escalation:${invoiceId}:${new Date().toISOString().slice(0, 10)}`,
+                retentionDays: 90,
+              })
+            }
+
+            // Use orchestrator's cadence for next follow-up timing
+            if (nextFollowUpDays !== 3) {
+              const cadenceUpdate: Record<string, any> = {
+                next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+              }
+              await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
+            }
+          } catch (err) {
+            console.error(`[RemindersWorker] Orchestrator error for ${invoiceId}:`, err)
           }
         }
 
