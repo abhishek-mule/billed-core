@@ -69,6 +69,9 @@ class BillzoDB extends Dexie {
     this.version(3).stores({
       tenants: 'id, ownerUserId, createdAt, updatedAt',
     })
+    this.version(4).stores({
+      queue: 'id, tenantId, status, [tenantId+status], entity, entityId, nextAttemptAt, idempotencyKey',
+    })
   }
 }
 

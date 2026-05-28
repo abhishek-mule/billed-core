@@ -86,7 +86,7 @@ export default function InvoiceDetailPage() {
     setSendingWA(true)
     setWaError('')
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await fetch('/api/intents/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

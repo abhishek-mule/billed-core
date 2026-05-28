@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_message_projection (
 -- 3. Recovery cases — behavioral entity, not accounting artifact
 CREATE TABLE IF NOT EXISTS recovery_cases (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  tenant_id UUID NOT NULL,
+  tenant_id VARCHAR(255) NOT NULL,
   customer_id UUID NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',
   total_outstanding NUMERIC DEFAULT 0,

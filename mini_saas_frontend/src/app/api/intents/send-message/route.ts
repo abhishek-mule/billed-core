@@ -16,9 +16,7 @@ export async function POST(request: NextRequest) {
       invoiceId?: string
       templateKey?: string
       vars?: Record<string, string | number>
-      message?: string
       personalNote?: string
-      sendWhatsAppDirect?: boolean
       clientCorrelationId?: string
     }
 
@@ -37,20 +35,13 @@ export async function POST(request: NextRequest) {
         vars: vars || null,
         personalNote: personalNote || null,
         clientCorrelationId: clientCorrelationId || null,
-        message: body.message || null,
       },
       idempotencyKey: clientCorrelationId || null,
     })
 
-    const response = NextResponse.json({
-      success: true,
-      eventId,
-      message: 'Message queued for delivery',
-    })
-
-    return response
+    return NextResponse.json({ success: true, eventId })
   } catch (err: any) {
-    console.error('[WhatsAppSend] Error:', err)
+    console.error('[Intents/SendMessage] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { generateGSTR1JSON } from '@/lib/billzo/gstr1'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant ID not found' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()

@@ -3,6 +3,8 @@ import { createRedisConnection } from '../lib/redis'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { createQueueLogger } from '../lib/queue-logger'
+import { reconcilePayment } from '../src/lib/billzo/reconciliation'
+import { executeIdempotent, IdempotencyPatterns } from '../src/lib/billzo/idempotency'
 
 const logger = createQueueLogger('reconciliation')
 
@@ -18,8 +20,31 @@ export function createReconciliationWorker() {
       try {
         const lockKey = `reconciliation:${invoiceId}:${paymentData?.providerPaymentId}`
         const result = await withLock(lockKey, 60000, async () => {
-          logger.info({ invoiceId }, 'Processing payment')
-          return { reconciled: true, invoiceId }
+          const signal = {
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'INR',
+            phone: paymentData.phone || null,
+            upiReference: paymentData.upiReference || null,
+            customerName: paymentData.customerName || null,
+            provider: paymentData.provider || 'razorpay',
+            providerPaymentId: paymentData.providerPaymentId,
+            paymentLinkId: paymentData.paymentLinkId || null,
+            timestamp: paymentData.timestamp || new Date().toISOString(),
+            rawPayload: paymentData.rawPayload || {},
+          }
+
+          const idempotencyKey = IdempotencyPatterns.paymentReconcile(
+            signal.paymentLinkId || invoiceId || 'unknown',
+            signal.provider,
+            signal.providerPaymentId,
+          )
+
+          return executeIdempotent(
+            idempotencyKey,
+            'payment_reconciliation',
+            tenantId,
+            async () => reconcilePayment(signal, tenantId),
+          )
         })
 
         if (!result) {
@@ -27,7 +52,7 @@ export function createReconciliationWorker() {
         }
 
         const duration = Date.now() - startTime
-        logger.info({ invoiceId, tenantId, duration_ms: duration, attempt: job.attemptsMade }, 'Payment reconciled')
+        logger.info({ invoiceId, tenantId, duration_ms: duration, matchType: result.matchType, matched: result.matched }, 'Payment reconciled')
         logWorkerEvent({
           tenant_id: tenantId,
           entity_id: invoiceId,
@@ -58,7 +83,7 @@ export function createReconciliationWorker() {
     {
       connection,
       concurrency: 5,
-    }
+    },
   )
 
   worker.on('completed', (job) => {

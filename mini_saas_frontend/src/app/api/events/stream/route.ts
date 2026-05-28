@@ -1,18 +1,17 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/billzo/db'
 import { createRedisSubscriber } from '@/lib/billzo/redis'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const tenantId =
-    request.nextUrl.searchParams.get('tenantId') ||
-    request.cookies.get('bz_tenant')?.value ||
-    request.headers.get('x-tenant-id')
-
-  if (!tenantId) {
+  const verified = getVerifiedTenantIdFromRequest(request)
+  if (!verified) {
     return new Response('Unauthorized', { status: 401 })
   }
+
+  const tenantId = verified
 
   const encoder = new TextEncoder()
   let isClosed = false

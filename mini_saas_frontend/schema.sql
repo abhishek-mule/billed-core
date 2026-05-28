@@ -192,24 +192,31 @@ CREATE TABLE IF NOT EXISTS stock_reservations (
   id VARCHAR(255) PRIMARY KEY,
   tenant_id VARCHAR(255) REFERENCES tenants(id),
   product_id VARCHAR(255) REFERENCES products(id),
-  session_id VARCHAR(255),
-  quantity DECIMAL(12,3),
-  expires_at TIMESTAMP,
+  session_id VARCHAR(255) NOT NULL,
+  quantity DECIMAL(12,3) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  status VARCHAR(50) DEFAULT 'active',
   created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- WhatsApp message tracking
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
   id VARCHAR(255) PRIMARY KEY,
-  tenant_id VARCHAR(255) REFERENCES tenants(invoice_id),
+  tenant_id VARCHAR(255) REFERENCES tenants(id),
   invoice_id VARCHAR(255) REFERENCES invoices(id),
-  phone VARCHAR(20),
+  phone VARCHAR(20) NOT NULL,
   message_type VARCHAR(50) DEFAULT 'INVOICE',
+  message_text TEXT,
   status VARCHAR(50) DEFAULT 'PENDING',
   whatsapp_message_id VARCHAR(255),
+  error_code VARCHAR(50),
   error_message TEXT,
+  attempts INT DEFAULT 0,
+  max_attempts INT DEFAULT 3,
+  sent_at TIMESTAMP,
+  delivered_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW(),
-  delivered_at TIMESTAMP
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Create indexes
@@ -227,7 +234,10 @@ CREATE INDEX IF NOT EXISTS idx_invoices_invoice_number ON invoices(invoice_numbe
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_payments_tenant_id ON payments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_stock_reservations_product_id ON stock_reservations(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_session ON stock_reservations(session_id);
+CREATE INDEX IF NOT EXISTS idx_stock_reservations_expires ON stock_reservations(expires_at);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_invoice_id ON whatsapp_messages(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_status ON whatsapp_messages(status);
 
 -- GSTR Exports Tracking (Phase 1: Compliance)
 CREATE TABLE IF NOT EXISTS gstr_exports (
@@ -258,7 +268,7 @@ CREATE TABLE IF NOT EXISTS eway_bills (
 
 -- System Automation State
 CREATE TABLE IF NOT EXISTS automation_state (
-  tenant_id UUID PRIMARY KEY REFERENCES tenants(id),
+  tenant_id VARCHAR(255) PRIMARY KEY REFERENCES tenants(id),
   is_enabled BOOLEAN DEFAULT true,
   last_failure_at TIMESTAMPTZ,
   failure_count INT DEFAULT 0,
@@ -269,11 +279,11 @@ CREATE TABLE IF NOT EXISTS automation_state (
 DROP TABLE IF EXISTS events;
 CREATE TABLE events (
   id BIGSERIAL PRIMARY KEY,
-  tenant_id UUID NOT NULL,
-  user_id UUID,
+  tenant_id VARCHAR(255) NOT NULL,
+  user_id VARCHAR(255),
   event_name TEXT NOT NULL,
   entity_type TEXT NOT NULL,
-  entity_id UUID NOT NULL,
+  entity_id VARCHAR(255) NOT NULL,
   amount_paise BIGINT,
   source TEXT,
   channel TEXT,
@@ -294,3 +304,87 @@ CREATE INDEX idx_events_metadata ON events USING GIN (metadata);
 CREATE UNIQUE INDEX uniq_payment_event ON events ((metadata->>'razorpay_payment_id')) WHERE event_name = 'payment.success';
 CREATE UNIQUE INDEX uniq_reminder_event ON events (entity_id, follow_up_stage) WHERE event_name = 'reminder.sent';
 CREATE UNIQUE INDEX uniq_invoice_event ON events (entity_id) WHERE event_name = 'invoice.created';
+
+-- ============================================================
+-- ROW-LEVEL SECURITY — Tenant isolation via JWT claim
+-- Enables auth.jwt() ->> 'tenant_id' to scope all queries.
+-- ============================================================
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON tenants
+  USING (id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON users
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON customers
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON products
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON suppliers
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON purchases
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE purchase_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON purchase_items
+  USING (purchase_id IN (SELECT id FROM purchases WHERE tenant_id = auth.jwt() ->> 'tenant_id'))
+  WITH CHECK (purchase_id IN (SELECT id FROM purchases WHERE tenant_id = auth.jwt() ->> 'tenant_id'));
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON invoices
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON invoice_items
+  USING (invoice_id IN (SELECT id FROM invoices WHERE tenant_id = auth.jwt() ->> 'tenant_id'))
+  WITH CHECK (invoice_id IN (SELECT id FROM invoices WHERE tenant_id = auth.jwt() ->> 'tenant_id'));
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON payments
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE stock_reservations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON stock_reservations
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE whatsapp_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON whatsapp_messages
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE gstr_exports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON gstr_exports
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE eway_bills ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON eway_bills
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE automation_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON automation_state
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');
+
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON events
+  USING (tenant_id = auth.jwt() ->> 'tenant_id')
+  WITH CHECK (tenant_id = auth.jwt() ->> 'tenant_id');

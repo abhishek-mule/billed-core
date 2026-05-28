@@ -5,6 +5,7 @@ import { buildPreprocessSummary } from '@/lib/billzo/scan-preprocess-service'
 import { buildFastHeaderPayload, buildTotalsPayload, runExtractionPasses } from '@/lib/billzo/scan-extraction-service'
 import { reconstructCommerce } from '@/lib/billzo/scan-reconstruction-service'
 import { projectReview } from '@/lib/billzo/scan-review-service'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import type { ScanSessionPayload } from '@/lib/billzo/scan-types'
 
 export const dynamic = 'force-dynamic'
@@ -76,6 +77,11 @@ async function processScanJob(scanJobId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const tenantId = getVerifiedTenantIdFromRequest(request)
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const body = await request.json() as ScanSessionPayload
 
   if (!body?.croppedCompressedImage) {

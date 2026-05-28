@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteDeviceTokens, getDeviceTokens } from '@/lib/billzo/supabase-admin'
 import { getFirebaseMessaging } from '@/lib/billzo/firebase-admin'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Sends a push notification to all devices of a tenant
- * In production, this requires a Firebase Service Account.
- */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { tenantId, title, body: message, icon, type, url } = body
+    const tenantId = getVerifiedTenantIdFromRequest(request)
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    if (!tenantId || !title || !message) {
+    const body = await request.json()
+    const { title, body: message, icon, type, url } = body
+
+    if (!title || !message) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

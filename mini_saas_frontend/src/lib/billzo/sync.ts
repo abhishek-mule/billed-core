@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { db, notifyChanged } from './db'
+import { getTenantId } from './tenant'
 import type { QueueItem } from './types'
 
 const MAX_DELAY_MS = 10 * 60 * 1000
@@ -129,12 +130,15 @@ export async function syncPendingQueue() {
   ;(window as any).__billzoSyncing = true
 
   try {
+    const tenantId = getTenantId()
+    if (!tenantId) return
+
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     const due = new Date().toISOString()
     const pending = await db()
-      .queue.where('status')
-      .anyOf('pending', 'failed', 'conflict')
+      .queue.where('[tenantId+status]')
+      .anyOf([tenantId, 'pending'], [tenantId, 'failed'], [tenantId, 'conflict'])
       .filter((item) => item.nextAttemptAt <= due && item.attempts < 10)
       .sortBy('createdAt')
 

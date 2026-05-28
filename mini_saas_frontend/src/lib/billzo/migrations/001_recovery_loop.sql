@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS outbox (
   correlation_id UUID NOT NULL,
   type VARCHAR NOT NULL,
   version INT DEFAULT 1,
-  tenant_id UUID NOT NULL,
+  tenant_id VARCHAR(255) NOT NULL,
   entity_id UUID,
   payload JSONB,
   idempotency_key VARCHAR UNIQUE,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS outbox (
 CREATE TABLE IF NOT EXISTS processed_jobs (
   idempotency_key VARCHAR PRIMARY KEY,
   job_type VARCHAR NOT NULL,
-  tenant_id UUID NOT NULL,
+  tenant_id VARCHAR(255) NOT NULL,
   status VARCHAR NOT NULL,
   result JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS recovery_attributions (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS recovery_experiments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL,
+  tenant_id VARCHAR(255) NOT NULL,
   experiment_type VARCHAR NOT NULL,
   variant VARCHAR NOT NULL,
   invoice_id UUID,
