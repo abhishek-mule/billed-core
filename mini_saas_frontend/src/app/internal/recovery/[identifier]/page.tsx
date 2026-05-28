@@ -20,7 +20,7 @@ interface PageProps {
 }
 
 async function fetchTimeline(identifier: string, type: string): Promise<{ events: TimelineEvent[]; metadata: any }> {
-  const fetchers: Promise<any[]>[] = []
+  const fetchers: PromiseLike<any[]>[] = []
 
   if (type === 'customer') {
     fetchers.push(
@@ -223,18 +223,10 @@ export default async function RecoveryTimelinePage(props: PageProps) {
 
             <div style={{ marginTop: 24, fontSize: 11, color: '#555' }}>
               <h3 style={{ fontSize: 13, margin: '0 0 8px 0', color: '#888' }}>Graph Export</h3>
-              <button onClick="copyGraph()" style={{ background: '#16213e', color: '#888', border: '1px solid #333', padding: '4px 12px', borderRadius: 3, cursor: 'pointer' }}>
+              <button onClick={() => { const el = document.getElementById('graph-data'); if (el) navigator.clipboard.writeText(el.textContent || '') }} style={{ background: '#16213e', color: '#888', border: '1px solid #333', padding: '4px 12px', borderRadius: 3, cursor: 'pointer' }}>
                 Copy JSON
               </button>
               <pre id="graph-data" style={{ display: 'none' }}>{JSON.stringify({ nodes: data.events, edges: [] }, null, 2)}</pre>
-              <script dangerouslySetInnerHTML={{
-                __html: `
-                  window.copyGraph = function() {
-                    const el = document.getElementById('graph-data');
-                    navigator.clipboard.writeText(el.textContent);
-                  }
-                `
-              }} />
             </div>
           </>
         )}

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch from all sources in parallel
-    const fetchers: Promise<any[]>[] = []
+    const fetchers: PromiseLike<any[]>[] = []
 
     // 1. whatsapp_events
     if (type === 'customer') {
@@ -79,10 +79,9 @@ export async function GET(request: NextRequest) {
             payload: r.data,
           }] : [])
       )
+      const invoiceIds = await supabaseAdmin.from('invoices').select('id').eq('customer_id', identifier).then(r => r.data?.map(i => i.id) || [])
       fetchers.push(
-        supabaseAdmin.from('recovery_attributions').select('*').in('invoice_id',
-          supabaseAdmin.from('invoices').select('id').eq('customer_id', identifier).then(r => r.data?.map(i => i.id) || [])
-        ).order('created_at', { ascending: true })
+        supabaseAdmin.from('recovery_attributions').select('*').in('invoice_id', invoiceIds).order('created_at', { ascending: true })
           .then(r => (r.data || []).map((row: any) => ({
             id: `attr_${row.id}`,
             type: 'attribution.assigned',
