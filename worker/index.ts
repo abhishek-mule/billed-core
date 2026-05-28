@@ -8,6 +8,7 @@ import { startBaileysSocket } from './lib/baileys-socket'
 import { sendPushNotification } from './src/lib/billzo/notifications'
 import { createRedisConnection } from './lib/redis'
 import { logWorkerEvent, logWorkerError } from './lib/logging'
+import { AuthorityRuntime } from './src/lib/authority/authority-runtime'
 
 async function getQueueHealth() {
   const connection = createRedisConnection()
@@ -23,15 +24,18 @@ async function getQueueHealth() {
   }
 }
 
-function startHealthServer() {
+function startHealthServer(runtime: AuthorityRuntime) {
   const port = parseInt(process.env.PORT || '10000', 10)
   const server = http.createServer(async (req, res) => {
     if (req.url === '/health') {
       try {
         const queueHealth = await getQueueHealth()
-        res.writeHead(200, { 'Content-Type': 'application/json' })
+        const report = runtime.assertOperational()
+        res.writeHead(report.operational ? 200 : 503, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
-          status: 'ok',
+          status: report.operational ? 'ok' : 'degraded',
+          phase: report.phase,
+          checks: report.checks,
           queues: queueHealth,
           uptime: process.uptime(),
           timestamp: new Date().toISOString(),
@@ -64,15 +68,51 @@ async function main() {
     process.exit(1)
   }
 
-  logWorkerEvent({ message: 'Worker config loaded', level: 'info', timestamp: new Date().toISOString(), metadata: { redis: process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...', supabase: process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set' } })
+  logWorkerEvent({
+    message: 'Worker config loaded',
+    level: 'info',
+    timestamp: new Date().toISOString(),
+    metadata: {
+      redis: process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...',
+      supabase: process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set',
+    },
+  })
 
-  const healthServer = startHealthServer()
+  // ---- PHASE 1-3: Authority initialization (policy, capabilities, core) ----
+  const runtime = new AuthorityRuntime()
+  await runtime.initialize({
+    supabaseAdmin: supabaseAdmin as any,
+    redisRateLimitStore: null, // TODO: wire Redis rate limit store
+    tenantPlanLookup: async (tenantId: string) => {
+      const { data } = await supabaseAdmin.from('tenants').select('plan').eq('id', tenantId).single()
+      return data?.plan ?? undefined
+    },
+    capabilityProviders: [], // TODO: register real capabilities
+    requiredCapabilities: [],
+    bootstrapCreatedBy: 'worker',
+  })
+  console.log(`[Worker] Authority initialized — phase: ${runtime.orchestrator.currentPhase}`)
 
+  // ---- Health server (safe before queues, reports runtime phase) ----
+  const healthServer = startHealthServer(runtime)
+
+  // ---- Queue workers (start AFTER authority core is ready) ----
   const outboxWorker = createOutboxWorker()
   const remindersWorker = createRemindersWorker()
   const reconciliationWorker = createReconciliationWorker()
+  logWorkerEvent({ message: 'All queue workers started', level: 'info', timestamp: new Date().toISOString() })
 
-  logWorkerEvent({ message: 'All workers started', level: 'info', timestamp: new Date().toISOString() })
+  // ---- PHASE 4-6: Authority activation (queues → gateway → readiness → RUNNING) ----
+  // Gateway on port 3001 starts LAST — after all queue consumers exist.
+  await runtime.activate({
+    supabaseAdmin: supabaseAdmin as any,
+    redisRateLimitStore: null,
+    tenantPlanLookup: async () => undefined,
+    capabilityProviders: [],
+    requiredCapabilities: [],
+    bootstrapCreatedBy: 'worker',
+  })
+  console.log(`[Worker] Authority activated — phase: ${runtime.orchestrator.currentPhase}`)
 
   // Start Baileys sockets for tenants with Baileys WhatsApp provider
   supabaseAdmin.from('tenants').select('id, whatsapp_config').then(({ data: tenants }) => {
@@ -82,7 +122,7 @@ async function main() {
         if (cfg.whatsappProvider === 'baileys') {
           console.log(`[Worker] Starting Baileys socket for tenant ${t.id}`)
           startBaileysSocket(t.id).catch((err) =>
-            console.error(`[Worker] Failed to start Baileys for ${t.id}:`, err)
+            console.error(`[Worker] Failed to start Baileys for ${t.id}:`, err),
           )
         }
       }
@@ -139,7 +179,12 @@ async function main() {
             .eq('id', t.id)
 
           if (reputation < 0.1) {
-            logWorkerEvent({ message: `Reputation critical for tenant ${t.id}, pausing sends`, level: 'warn', timestamp: new Date().toISOString(), tenant_id: t.id })
+            logWorkerEvent({
+              message: `Reputation critical for tenant ${t.id}, pausing sends`,
+              level: 'warn',
+              timestamp: new Date().toISOString(),
+              tenant_id: t.id,
+            })
             await sendPushNotification({
               tenantId: t.id,
               title: 'WhatsApp Reputation Critical',
@@ -149,12 +194,21 @@ async function main() {
             }).catch(() => {})
           }
         } catch (err) {
-          logWorkerError(err instanceof Error ? err : new Error(String(err)), { tenant_id: t.id, context: 'reputation_computation' })
+          logWorkerError(err instanceof Error ? err : new Error(String(err)), {
+            tenant_id: t.id,
+            context: 'reputation_computation',
+          })
         }
       }
-      logWorkerEvent({ message: 'Reputation computation completed', level: 'info', timestamp: new Date().toISOString() })
+      logWorkerEvent({
+        message: 'Reputation computation completed',
+        level: 'info',
+        timestamp: new Date().toISOString(),
+      })
     } catch (err) {
-      logWorkerError(err instanceof Error ? err : new Error(String(err)), { context: 'reputation_computation_top_level' })
+      logWorkerError(err instanceof Error ? err : new Error(String(err)), {
+        context: 'reputation_computation_top_level',
+      })
     }
   }
 
@@ -165,6 +219,11 @@ async function main() {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
     clearInterval(reputationInterval)
+
+    // Shutdown authority gateway first (stop accepting new intents)
+    await runtime.shutdown()
+
+    // Then stop queue consumers
     healthServer.close()
     await Promise.all([
       outboxWorker.close(),

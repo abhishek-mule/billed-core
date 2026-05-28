@@ -8,7 +8,7 @@
 
 // --- Enums / Literal Unions ---
 
-export type IntentSource = 'n8n' | 'frappe' | 'admin' | 'worker' | 'app' | 'internal_worker'
+export type IntentSource = 'n8n' | 'n8n_prod' | 'frappe' | 'admin' | 'worker' | 'app' | 'internal_worker' | 'provisioning_sidecar'
 
 export type PriorityClass =
   | 'critical_financial'

@@ -14,10 +14,12 @@
   "dependencies": {
     "@billzo/shared": "workspace:*",
     "@hapi/boom": "^10.0.1",
+    "@hono/node-server": "^2.0.4",
     "@supabase/supabase-js": "^2.39.0",
     "@whiskeysockets/baileys": "^6.7.0",
     "bullmq": "^5.1.0",
     "firebase-admin": "^13.10.0",
+    "hono": "^4.12.23",
     "ioredis": "5.10.1",
     "pino": "^8.17.0",
     "typescript": "^5.3.0"
