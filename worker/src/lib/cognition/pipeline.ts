@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../billzo/supabase-admin'
+import { supabaseAdmin, getDeviceTokens } from '../billzo/supabase-admin'
 import type { AttentionItem, OperationalSituation, CorrelationGroup } from './types'
 import { computeAttentionItems } from './scorer'
 import { correlate } from './correlation'
@@ -6,6 +6,7 @@ import { cluster, setCustomerNameCache } from './clusterer'
 import { prioritize } from './prioritizer'
 import { synthesize } from './synthesizer'
 import { MAX_ACTIVE_SITUATIONS } from './types'
+import { sendPushNotification } from '../billzo/notifications'
 
 const logger = {
   info: (ctx: Record<string, any>, msg: string) => console.log(`[cognition] ${msg}`, ctx),
@@ -65,6 +66,15 @@ export async function runCognitionPipeline(tenantId: string): Promise<{
 }
 
 async function persistSituations(tenantId: string, situations: OperationalSituation[], items: AttentionItem[]): Promise<void> {
+  // Fetch previously active situations to detect new ones for notification routing
+  const { data: prevActive } = await supabaseAdmin
+    .from('operational_situations')
+    .select('situation_fingerprint, priority_score, headline')
+    .eq('tenant_id', tenantId)
+    .eq('situation_state', 'active')
+
+  const prevFingerprints = new Set((prevActive || []).map(s => s.situation_fingerprint))
+
   // Upsert situations by fingerprint
   for (const sit of situations) {
     const { error } = await supabaseAdmin
@@ -125,6 +135,45 @@ async function persistSituations(tenantId: string, situations: OperationalSituat
       .eq('situation_state', 'active')
       .not('situation_fingerprint', 'in', `(${activeFingerprints.map(f => `'${f}'`).join(',')})`)
   }
+
+  // Send push notifications for new high-priority situations
+  const newHighPriority = situations.filter(
+    s => !prevFingerprints.has(s.situationFingerprint) && s.priorityScore >= 25,
+  )
+  for (const sit of newHighPriority) {
+    const customerName = sit.affectedEntities?.customers?.[0]
+      ? await getCustomerName(sit.affectedEntities.customers[0])
+      : undefined
+
+    const url = buildSituationUrl(sit.situationType, customerName, sit.affectedEntities?.customers?.[0])
+    const title = sit.headline || 'New situation detected'
+    const body = customerName ? `${customerName} — ${sit.headline}` : sit.headline
+
+    sendPushNotification({ tenantId, title, body, type: sit.situationType, url }).catch(err =>
+      logger.error({ tenantId, fingerprint: sit.situationFingerprint, err: (err as Error).message }, 'Push notification failed'),
+    )
+  }
+}
+
+function buildSituationUrl(type: string, customerName?: string, customerId?: string): string {
+  if (customerName || customerId) {
+    const q = encodeURIComponent(customerName || customerId || '')
+    if (type === 'send_reminder') return `/cashflow?q=${q}`
+    if (type === 'cashflow') return `/cashflow?q=${q}`
+    if (type === 'call') return `/cashflow?q=${q}`
+    if (type === 'review') return `/cashflow?q=${q}`
+  }
+  if (type === 'payment_anomaly') return '/pulse'
+  return '/dashboard'
+}
+
+async function getCustomerName(customerId: string): Promise<string | undefined> {
+  const { data } = await supabaseAdmin
+    .from('customers')
+    .select('name')
+    .eq('id', customerId)
+    .single()
+  return data?.name || undefined
 }
 
 async function resolveAllActiveSituations(tenantId: string): Promise<void> {

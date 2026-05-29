@@ -61,11 +61,11 @@ export class GupshupAdapter implements TransportAdapter {
           apikey: config.apiKey,
         },
         body: new URLSearchParams(
-          Object.entries(body).map(([k, v]) => [k, String(v)]),
+          Object.fromEntries(Object.entries(body).map(([k, v]) => [k, String(v)])),
         ).toString(),
       })
 
-      const data = await res.json().catch(() => ({}))
+      const data = (await res.json().catch(() => ({}))) as Record<string, any>
 
       if (!res.ok) {
         await this.recordSendFailure(channelId)

@@ -42,6 +42,7 @@ export const reminderAdvanceStage: Handler = {
     if (lastWhatsappAt !== undefined) updates.last_whatsapp_at = lastWhatsappAt
     if (recoveryStage !== undefined) updates.recovery_stage = recoveryStage
     if (nextRecoveryAt !== undefined) updates.next_recovery_at = nextRecoveryAt
+    // authority:governed reminder.advance_stage
     const { error } = await supabaseAdmin.from('invoices').update(updates).eq('id', invoiceId)
     if (error) {
       return { outcome: 'failure', error: error.message, touchedRows: [], transitionTraces: [] }
@@ -90,6 +91,7 @@ export const invoiceUpdateRecoveryState: Handler = {
     if (recoveryFlag !== undefined) updates.recovery_flag = recoveryFlag
     if (lastWhatsappStatus !== undefined) updates.last_whatsapp_status = lastWhatsappStatus
     if (lastWhatsappAt !== undefined) updates.last_whatsapp_at = lastWhatsappAt
+    // authority:governed invoice.update_recovery_state
     const { error } = await supabaseAdmin.from('invoices').update(updates).eq('id', invoiceId)
     if (error) {
       return { outcome: 'failure', error: error.message, touchedRows: [], transitionTraces: [] }

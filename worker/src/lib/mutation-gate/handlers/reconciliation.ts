@@ -14,6 +14,7 @@ export const reconciliationLogAttribution: Handler = {
     if (!invoiceId) {
       return { outcome: 'failure', error: 'invoiceId is required', touchedRows: [], transitionTraces: [] }
     }
+    // authority:governed reconciliation.log_attribution
     const { error } = await supabaseAdmin.from('payment_attribution_log').insert({
       tenant_id: tenantId,
       invoice_id: invoiceId,

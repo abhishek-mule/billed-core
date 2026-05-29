@@ -36,6 +36,12 @@ export function correlate(items: AttentionItem[]): Map<string, CorrelationGroup>
     if (item.entityType === 'customer') group.entities.customers.add(item.entityId)
     if (item.entityType === 'payment') group.entities.payments.add(item.entityId)
 
+    const cid = item.signalData?.customer_id as string | undefined
+    if (cid) {
+      group.entities.customers.add(cid)
+      group.signals.customerIds.add(cid)
+    }
+
     const urgencyRank = { critical: 4, high: 3, medium: 2, low: 1 }
     if (urgencyRank[item.urgency] > urgencyRank[group.signals.maxUrgency]) {
       group.signals.maxUrgency = item.urgency
@@ -44,9 +50,6 @@ export function correlate(items: AttentionItem[]): Map<string, CorrelationGroup>
     group.signals.avgConfidence += item.confidence
     group.signals.totalAmount += (item.signalData?.total as number) || 0
     group.signals.stageLevels.push((item.signalData?.stage_score as number) || 0)
-
-    const cid = item.signalData?.customer_id as string | undefined
-    if (cid) group.signals.customerIds.add(cid)
 
     const dl = item.signalData?.delay_likelihood as number | undefined
     if (dl !== undefined && (group.signals.delayLikelihood === null || dl > group.signals.delayLikelihood)) {

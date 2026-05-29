@@ -8,6 +8,7 @@ export const recoveryRecordAttribution: Handler = {
     if (!invoiceId || !reminderEventId) {
       return { outcome: 'failure', error: 'invoiceId and reminderEventId are required', touchedRows: [], transitionTraces: [] }
     }
+    // authority:governed recovery.record_attribution
     const { error } = await supabaseAdmin.from('recovery_attributions').insert({
       invoice_id: invoiceId,
       payment_id: paymentId ?? null,

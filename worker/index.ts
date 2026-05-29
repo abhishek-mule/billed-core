@@ -145,9 +145,9 @@ async function main() {
   const healthServer = startHealthServer(runtime)
 
   // ---- Queue workers (start AFTER authority core is ready) ----
-  const outboxWorker = createOutboxWorker(gatedClient)
-  const remindersWorker = createRemindersWorker(gatedClient)
-  const reconciliationWorker = createReconciliationWorker(gatedClient)
+  const outboxWorker = createOutboxWorker(gatedClient as any)
+  const remindersWorker = createRemindersWorker(gatedClient as any)
+  const reconciliationWorker = createReconciliationWorker(gatedClient as any)
   const cognitionWorker = createCognitionWorker()
   const retryWorker = createRetryWorker()
   logWorkerEvent({ message: 'All queue workers started', level: 'info', timestamp: new Date().toISOString() })

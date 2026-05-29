@@ -6,18 +6,12 @@ export { submitAuthorityIntent } from '@billzo/shared/authority-transport'
 export type { IntentEnvelope }
 
 export function getAuthorityTransport() {
-  return {
-    gatewayUrl: AUTHORITY_CONFIG.gatewayUrl,
-    hmacSecrets: AUTHORITY_CONFIG.hmacSecrets,
-    timeoutMs: AUTHORITY_CONFIG.transportTimeoutMs,
-    retryCount: AUTHORITY_CONFIG.transportRetryCount,
-    retryBaseMs: AUTHORITY_CONFIG.transportRetryBaseMs,
-  }
+  return AUTHORITY_CONFIG
 }
 
 export async function submitIntent(
   intent: Omit<IntentEnvelope, 'signature'>,
   source: string,
 ): Promise<{ accepted: boolean; intentId: string; error?: string }> {
-  return submitAuthorityIntent(intent, source, getAuthorityTransport())
+  return submitAuthorityIntent(AUTHORITY_CONFIG, intent as any, source as any)
 }

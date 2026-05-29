@@ -11,6 +11,8 @@ export interface WorkerLogEntry {
   timestamp: string
   level: 'info' | 'warn' | 'error'
   message: string
+  channel_id?: string
+  provider?: string
   metadata?: Record<string, unknown>
 }
 

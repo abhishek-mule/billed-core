@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc && npm run lint:mutations",
-    "lint:mutations": "ts-node --project tsconfig.json scripts/check-ungoverned-mutations.ts",
+    "build": "tsc && pnpm run lint:mutations",
+    "lint:mutations": "node scripts/check-ungoverned-mutations.mjs",
     "dev": "ts-node-dev --respawn index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
