@@ -1,3 +1,10 @@
 import { parseEnv } from '@billzo/shared/authority-config'
 
-export const AUTHORITY_CONFIG = parseEnv(typeof process !== 'undefined' ? process.env : {})
+let _config: ReturnType<typeof parseEnv> | null = null
+
+export function getAuthorityConfig() {
+  if (!_config) {
+    _config = parseEnv(typeof process !== 'undefined' ? process.env : {})
+  }
+  return _config
+}
