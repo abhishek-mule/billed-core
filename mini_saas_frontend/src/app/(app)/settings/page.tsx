@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut, Printer, Send, Loader2, Save, Building, Banknote, SwitchCamera, Zap } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/billzo/Button";
+import ConnectionDashboard from "@/components/channels/ConnectionDashboard";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
 import { getCookie, setCookie, clearAuthCookies } from "@/lib/cookies";
@@ -358,6 +359,11 @@ export default function SettingsPage() {
             />
           </label>
         </div>
+      </div>
+
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Infrastructure</div>
+        <ConnectionDashboard />
       </div>
 
       <div>
