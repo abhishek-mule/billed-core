@@ -52,6 +52,15 @@ export function createCognitionQueue() {
   return new Queue<{ tenantId: string }>('cognition', { connection: conn })
 }
 
+export async function enqueueCognitionJob(tenantId: string): Promise<void> {
+  const queue = createCognitionQueue()
+  await queue.add(`cognition:${tenantId}`, { tenantId }, {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 30000 },
+  })
+  await queue.close()
+}
+
 export async function enqueueCognitionJobs(): Promise<number> {
   const { data: tenants, error } = await supabaseAdmin
     .from('tenants')
@@ -63,18 +72,13 @@ export async function enqueueCognitionJobs(): Promise<number> {
     return 0
   }
 
-  const queue = createCognitionQueue()
   let enqueued = 0
 
   for (const t of tenants) {
-    await queue.add(`cognition:${t.id}`, { tenantId: t.id }, {
-      attempts: 2,
-      backoff: { type: 'exponential', delay: 30000 },
-    })
+    await enqueueCognitionJob(t.id)
     enqueued++
   }
 
-  await queue.close()
   logger.info({ enqueued }, 'Enqueued cognition jobs')
   return enqueued
 }

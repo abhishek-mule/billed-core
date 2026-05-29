@@ -13,6 +13,7 @@ import { materializeObservation } from '../src/lib/billzo/behavioral-materialize
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
+import { enqueueCognitionJob } from './cognition'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
@@ -117,7 +118,7 @@ export function createOutboxWorker(authority?: InternalAuthorityClient) {
   return worker
 }
 
-type HandlerLane = 'transport' | 'behavior' | 'attribution' | 'notification'
+type HandlerLane = 'transport' | 'behavior' | 'cognition' | 'attribution' | 'notification'
 
 interface LaneHandler {
   lane: HandlerLane
@@ -138,6 +139,9 @@ const HANDLER_LANES: LaneHandler[] = [
   { lane: 'behavior', priority: 2, name: 'tryHandleBehavioralMaterializer', handle: tryHandleBehavioralMaterializer },
   { lane: 'behavior', priority: 3, name: 'tryHandleRecoveryCaseProjection', handle: tryHandleRecoveryCaseProjection },
 
+  // COGNITION LANE — Trigger attention pipeline recompute on relevant events
+  { lane: 'cognition', priority: 1, name: 'tryHandleCognitionTrigger', handle: tryHandleCognitionTrigger },
+
   // ATTRIBUTION LANE — Economic causality
   { lane: 'attribution', priority: 1, name: 'tryHandleAttribution', handle: tryHandleAttribution },
   { lane: 'attribution', priority: 2, name: 'tryHandleEscalation', handle: tryHandleEscalation },
@@ -151,7 +155,7 @@ const HANDLER_LANES: LaneHandler[] = [
 async function processOutboxEvent(event: any): Promise<void> {
   // Execute handlers in lane order (transport → behavior → attribution → notification)
   // Each handler catches its own errors — a failure in one concern does not block others.
-  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'attribution', 'notification']
+  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'cognition', 'attribution', 'notification']
 
   for (const lane of laneOrder) {
     const laneHandlers = HANDLER_LANES
@@ -293,6 +297,27 @@ async function tryHandleBaileysLifecycle(event: any): Promise<void> {
   if (event.type === 'whatsapp.unpaired') {
     await handleWhatsAppUnpaired(event)
   }
+}
+
+// ============================================================
+// COGNITION TRIGGER — Recompute attention pipeline on relevant events
+// ============================================================
+const COGNITION_TRIGGER_EVENTS = new Set([
+  'payment.completed',
+  'payment.reconciled',
+  'invoice.created',
+  'invoice.updated',
+  'invoice.overdue',
+  'recovery.reminder.sent',
+  'recovery.reminder.delivered',
+  'recovery.reminder.failed',
+  'whatsapp.status.updated',
+  'whatsapp.upi_clicked',
+])
+
+async function tryHandleCognitionTrigger(event: any): Promise<void> {
+  if (!COGNITION_TRIGGER_EVENTS.has(event.type)) return
+  await enqueueCognitionJob(event.tenantId)
 }
 
 // ============================================================
