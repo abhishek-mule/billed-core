@@ -13,5 +13,9 @@ export async function submitIntent(
   intent: Omit<IntentEnvelope, 'signature'>,
   source: string,
 ): Promise<{ accepted: boolean; intentId: string; error?: string }> {
-  return submitAuthorityIntent(getAuthorityConfig(), intent as any, source as any)
+  const config = getAuthorityConfig()
+  if (!config) {
+    return { accepted: false, intentId: '', error: 'Authority config not available (missing env vars)' }
+  }
+  return submitAuthorityIntent(config, intent as any, source as any)
 }
