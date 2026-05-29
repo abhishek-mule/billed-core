@@ -72,6 +72,63 @@ const RULES_V1: readonly SovereigntyRule[] = [
     allowedSources: ['n8n_prod', 'worker'],
     rateLimit: { perHour: 100 },
   },
+  {
+    intent: 'invoice.mark_paid',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 30 },
+  },
+  {
+    intent: 'reminder.advance_stage',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 60 },
+  },
+  {
+    intent: 'reminder.update_cadence',
+    allowedSources: ['worker'],
+    rateLimit: { perMinute: 30 },
+  },
+  {
+    intent: 'reconciliation.log_attribution',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 60 },
+  },
+  {
+    intent: 'recovery.record_attribution',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 30 },
+  },
+  {
+    intent: 'tenant.update_subscription',
+    allowedSources: ['worker', 'app', 'admin'],
+    allowedPlans: ['premium', 'enterprise', 'standard'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
+    intent: 'tenant.update_whatsapp_config',
+    allowedSources: ['worker', 'app'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
+    intent: 'recovery.upsert_case',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 30 },
+  },
+  {
+    intent: 'invoice.update_recovery_state',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 30 },
+  },
+  {
+    intent: 'tenant.update_operational_health',
+    allowedSources: ['worker', 'internal_worker'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
+    intent: 'gstr.save_export',
+    allowedSources: ['worker', 'app'],
+    allowedPlans: ['premium', 'enterprise', 'standard'],
+    rateLimit: { perMinute: 10 },
+  },
 ]
 
 export const DEFAULT_POLICY_BUNDLE_V1: PolicyBundle = {

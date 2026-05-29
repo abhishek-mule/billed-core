@@ -1,3 +1,6 @@
+// authority:deferred-authoritative offline_sync_debt — Dexie→Supabase client sync
+// Mutates authoritative tables (invoices, payments, tenants) without authority governance.
+// Constitutional debt acknowledged — requires Dexie→authority ingress architecture.
 import { createClient } from '@supabase/supabase-js'
 import { db, notifyChanged } from './db'
 import { getTenantId } from './tenant'

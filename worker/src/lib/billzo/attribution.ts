@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase-admin'
 import { emitRecoveryCompleted } from './events'
+import type { InternalAuthorityClient } from '../authority/internal-authority'
 
 export const ATTRIBUTION_VERSION = '1.0.0'
 
@@ -15,13 +16,16 @@ export interface AttributionResult {
  * Last-touch attribution: find the most recent reminder sent before payment.
  * Attribution window: 48 hours by default.
  */
-export async function attributeRecovery(params: {
-  invoiceId: string
-  tenantId: string
-  paymentId?: string
-  paymentTimestamp: string
-  attributionWindowHours?: number
-}): Promise<AttributionResult> {
+export async function attributeRecovery(
+  params: {
+    invoiceId: string
+    tenantId: string
+    paymentId?: string
+    paymentTimestamp: string
+    attributionWindowHours?: number
+  },
+  authority?: InternalAuthorityClient,
+): Promise<AttributionResult> {
   const {
     invoiceId,
     tenantId,
@@ -70,22 +74,41 @@ export async function attributeRecovery(params: {
     confidenceScore = 0.95
   }
 
-  // Write attribution to recovery_attributions table
-  const { data: attribution, error: attributionError } = await supabaseAdmin
-    .from('recovery_attributions')
-    .insert({
-      invoice_id: invoiceId,
-      payment_id: paymentId,
-      reminder_event_id: reminder.id,
-      attribution_type: 'last_touch',
-      attribution_window_hours: attributionWindowHours,
-      confidence_score: confidenceScore,
-    })
-    .select()
-    .single()
+  // Write attribution to recovery_attributions table (governed by authority if available)
+  if (authority) {
+    const attrResult = await authority.submit({
+      intentType: 'recovery.record_attribution',
+      tenantId,
+      actor: 'attribution-worker',
+      payload: {
+        invoiceId,
+        paymentId: paymentId ?? null,
+        reminderEventId: reminder.id,
+        attributionType: 'last_touch',
+        attributionWindowHours,
+        confidenceScore,
+      },
+    }, 'trusted_sync')
 
-  if (attributionError) {
-    console.error('[Attribution] Failed to write attribution:', attributionError)
+    if (!attrResult.accepted) {
+      console.error('[Attribution] Authority rejected attribution:', attrResult.error)
+    }
+  } else {
+    // authority:fallback recovery.record_attribution
+    const { error: attributionError } = await supabaseAdmin
+      .from('recovery_attributions')
+      .insert({
+        invoice_id: invoiceId,
+        payment_id: paymentId,
+        reminder_event_id: reminder.id,
+        attribution_type: 'last_touch',
+        attribution_window_hours: attributionWindowHours,
+        confidence_score: confidenceScore,
+      })
+
+    if (attributionError) {
+      console.error('[Attribution] Failed to write attribution:', attributionError)
+    }
   }
 
   // Emit recovery completed event

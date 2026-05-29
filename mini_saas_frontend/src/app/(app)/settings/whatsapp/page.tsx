@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, MessageCircle, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff, Smartphone, Wifi, WifiOff, QrCode } from 'lucide-react'
 import type { TenantWhatsAppConfig, WhatsAppProvider } from '@/lib/billzo/types'
+import QRCode from 'qrcode'
 
 const DEFAULT_CONFIG: TenantWhatsAppConfig = {
   autoSend: false,
@@ -78,7 +79,10 @@ export default function WhatsAppSettingsPage() {
 
   const [pairStatus, setPairStatus] = useState<'idle' | 'requested' | 'awaiting_scan' | 'connected' | 'failed'>('idle')
   const [pairQr, setPairQr] = useState<string | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [pairPollInterval, setPairPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
+  const [connectionState, setConnectionState] = useState<string>('disconnected')
+  const [channelHealth, setChannelHealth] = useState<Record<string, any> | null>(null)
 
   const getTenantId = () => {
     if (typeof document === 'undefined') return null
@@ -97,6 +101,8 @@ export default function WhatsAppSettingsPage() {
       try {
         const res = await fetch(`/api/whatsapp/pair?tenantId=${tenantId}`, { credentials: 'include' })
         const data = await res.json()
+        setConnectionState(data.connectionState || 'disconnected')
+        setChannelHealth(data.health || null)
         if (data.status === 'connected') {
           setPairStatus('connected')
           setPairQr(null)
@@ -123,6 +129,14 @@ export default function WhatsAppSettingsPage() {
   }
 
   useEffect(() => {
+    if (pairQr) {
+      QRCode.toDataURL(pairQr, { width: 256, margin: 2, color: { dark: '#1a1a2e', light: '#ffffff' } }).then(setQrDataUrl).catch(() => {})
+    } else {
+      setQrDataUrl(null)
+    }
+  }, [pairQr])
+
+  useEffect(() => {
     return () => {
       if (pairPollInterval) clearInterval(pairPollInterval)
     }
@@ -134,6 +148,8 @@ export default function WhatsAppSettingsPage() {
     fetch(`/api/whatsapp/pair?tenantId=${tenantId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
+        setConnectionState(data.connectionState || 'disconnected')
+        setChannelHealth(data.health || null)
         if (data.status === 'connected') setPairStatus('connected')
       })
       .catch(() => {})
@@ -270,13 +286,24 @@ export default function WhatsAppSettingsPage() {
           <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {pairStatus === 'connected' ? (
+                {connectionState === 'connected' ? (
                   <Wifi className="h-4 w-4 text-green-600" />
+                ) : connectionState === 'connecting' || connectionState === 'reconnecting' ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                ) : connectionState === 'auth_expired' || connectionState === 'banned' ? (
+                  <AlertCircle className="h-4 w-4 text-red-600" />
                 ) : (
                   <WifiOff className="h-4 w-4 text-amber-600" />
                 )}
                 <span className="text-sm font-semibold">
-                  {pairStatus === 'connected' ? 'WhatsApp Connected' : 'Not Connected'}
+                  {connectionState === 'connected' ? 'WhatsApp Connected' :
+                   connectionState === 'connecting' ? 'Connecting...' :
+                   connectionState === 'reconnecting' ? 'Reconnecting...' :
+                   connectionState === 'degraded' ? 'Degraded' :
+                   connectionState === 'rate_limited' ? 'Rate Limited' :
+                   connectionState === 'auth_expired' ? 'Session Expired — Reconnect Required' :
+                   connectionState === 'banned' ? 'Account Banned' :
+                   'Not Connected'}
                 </span>
               </div>
               {pairStatus === 'connected' ? (
@@ -296,6 +323,27 @@ export default function WhatsAppSettingsPage() {
               )}
             </div>
 
+            {channelHealth && connectionState === 'connected' && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {channelHealth.lastConnectedAt && (
+                  <div className="text-xs text-muted-foreground">
+                    Connected: {new Date(channelHealth.lastConnectedAt).toLocaleString()}
+                  </div>
+                )}
+                {channelHealth.deliverySuccessRate !== null && channelHealth.deliverySuccessRate !== undefined && (
+                  <div className="text-xs text-muted-foreground">
+                    Delivery rate: {Math.round(channelHealth.deliverySuccessRate * 100)}%
+                  </div>
+                )}
+              </div>
+            )}
+
+            {connectionState === 'auth_expired' && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                Your WhatsApp session has expired. Click "Link WhatsApp" to re-connect.
+              </div>
+            )}
+
             {pairStatus === 'awaiting_scan' && pairQr && (
               <div className="flex flex-col items-center gap-2 pt-2">
                 <QrCode className="h-8 w-8 text-green-600" />
@@ -303,9 +351,13 @@ export default function WhatsAppSettingsPage() {
                   Open WhatsApp on your phone → Menu → Linked Devices → Link a Device → Scan this QR
                 </p>
                 <div className="rounded-xl border bg-white p-2">
-                  <div className="h-48 w-48 bg-slate-100 rounded-lg flex items-center justify-center text-xs text-muted-foreground">
-                    <code className="break-all px-2 text-[8px] leading-tight">{pairQr.slice(0, 200)}</code>
-                  </div>
+                  {qrDataUrl ? (
+                    <img src={qrDataUrl} alt="WhatsApp QR Code" className="h-48 w-48 rounded-lg" />
+                  ) : (
+                    <div className="h-48 w-48 bg-slate-100 rounded-lg flex items-center justify-center text-xs text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  )}
                 </div>
               </div>
             )}

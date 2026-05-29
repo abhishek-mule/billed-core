@@ -1,3 +1,4 @@
+// authority:exempt ephemeral_operational_state — event outbox infrastructure
 import { supabaseAdmin } from './supabase-admin'
 import { randomUUID } from 'crypto'
 

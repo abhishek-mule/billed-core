@@ -6,6 +6,7 @@ import {
 import { Boom } from '@hapi/boom'
 import { getBaileysAuthState, saveBaileysAuthState, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
 import { storeQrCode, clearQrCode } from '../stores/baileys-qr'
+import { setBaileysState, clearBaileysState } from '../stores/baileys-state'
 import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
@@ -72,6 +73,7 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
     if (qr) {
       console.log(`[Baileys] QR generated for tenant ${tenantId}`)
       await storeQrCode(tenantId, qr)
+      await setBaileysState(tenantId, { connectionState: 'connecting', qrGeneratedAt: new Date().toISOString() })
     }
 
     if (qr === undefined && connection !== 'open') {
@@ -80,25 +82,30 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
 
     if (connection === 'open') {
       entry.connected = true
+      const now = new Date().toISOString()
       console.log(`[Baileys] Connected for tenant ${tenantId}`)
       await clearQrCode(tenantId)
+      await setBaileysState(tenantId, { connectionState: 'connected', lastConnectedAt: now, lastHeartbeatAt: now, error: null })
     }
 
     if (connection === 'close') {
       entry.connected = false
       await releaseSocketLock(tenantId)
-      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
-      console.log(`[Baileys] Disconnected for tenant ${tenantId}, reconnecting: ${shouldReconnect}`)
+      const isLoggedOut = (lastDisconnect?.error as Boom)?.output?.statusCode === DisconnectReason.loggedOut
+      console.log(`[Baileys] Disconnected for tenant ${tenantId}, reconnecting: ${!isLoggedOut}`)
 
-      if (shouldReconnect) {
+      if (isLoggedOut) {
+        await setBaileysState(tenantId, { connectionState: 'auth_expired', error: 'logged_out' })
+        await deleteBaileysAuthState(tenantId)
+        await clearBaileysState(tenantId)
+        sockets.delete(tenantId)
+        console.log(`[Baileys] Logged out for tenant ${tenantId}, auth cleared`)
+      } else {
+        await setBaileysState(tenantId, { connectionState: 'reconnecting', error: 'connection_closed' })
         setTimeout(() => {
           sockets.delete(tenantId)
           startBaileysSocket(tenantId)
         }, 1000)
-      } else {
-        await deleteBaileysAuthState(tenantId)
-        sockets.delete(tenantId)
-        console.log(`[Baileys] Logged out for tenant ${tenantId}, auth cleared`)
       }
     }
   })

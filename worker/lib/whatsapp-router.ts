@@ -1,155 +1,38 @@
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
-import { sendViaBaileys, isBaileysConnected, isBaileysPaired, sendBaileysDocument } from './baileys-socket'
-import { createRedisConnection } from './redis'
-import { emitWhatsAppCircuitOpen } from '../src/lib/billzo/events'
+import { isBaileysConnected, isBaileysPaired } from './baileys-socket'
+import { TransportRegistry } from '../src/lib/transport/registry'
 import {
-  type WhatsAppProvider,
   generateBillzoMessageId,
   generateEventSequence,
   computeTransportHash,
   type MessageIdentity,
   type MessageOrigin,
+  type WhatsAppProvider,
 } from '@billzo/shared'
+
 export type MessageType = 'text' | 'document' | 'image'
 
-const CIRCUIT_THRESHOLD = 5
-const CIRCUIT_TTL = 3600
+let registry: TransportRegistry | null = null
 
-interface SendResult {
-  messageId: string
-  provider: WhatsAppProvider
+export function setTransportRegistry(r: TransportRegistry): void {
+  registry = r
 }
 
-interface WhatsAppConfig {
-  provider: WhatsAppProvider
-  gupshupApiKey?: string
-  gupshupAppName?: string
-  sourceNumber?: string
-}
-
-async function getRedis(): Promise<ReturnType<typeof createRedisConnection>> {
-  return createRedisConnection()
-}
-
-/**
- * Check circuit breaker state for a tenant.
- * Returns true if circuit is open (too many failures, skip Baileys).
- */
-async function isCircuitOpen(tenantId: string): Promise<boolean> {
-  try {
-    const redis = await getRedis()
-    const raw = await redis.get(`circuit:${tenantId}`)
-    if (!raw) return false
-    const state = JSON.parse(raw)
-    if (state.open) {
-      if (Date.now() - state.openedAt > CIRCUIT_TTL * 1000) {
-        await redis.del(`circuit:${tenantId}`)
-        redis.disconnect()
-        return false
-      }
-      redis.disconnect()
-      return true
-    }
-    redis.disconnect()
-    return false
-  } catch {
-    return false
-  }
-}
-
-/**
- * Record a successful send — reset circuit counter.
- */
-async function recordSendSuccess(tenantId: string): Promise<void> {
-  try {
-    const redis = await getRedis()
-    await redis.del(`circuit:${tenantId}`)
-    redis.disconnect()
-  } catch {
-    // non-critical
-  }
-}
-
-/**
- * Record a failed send — increment circuit counter, open circuit if threshold exceeded.
- */
-async function recordSendFailure(tenantId: string): Promise<void> {
-  try {
-    const redis = await getRedis()
-    const raw = await redis.get(`circuit:${tenantId}`)
-    const now = Date.now()
-
-    if (raw) {
-      const state = JSON.parse(raw)
-      state.failures = (state.failures || 0) + 1
-      if (state.failures >= CIRCUIT_THRESHOLD) {
-        state.open = true
-        state.openedAt = now
-        await redis.set(`circuit:${tenantId}`, JSON.stringify(state), 'EX', CIRCUIT_TTL)
-        redis.disconnect()
-        await emitWhatsAppCircuitOpen({
-          tenantId,
-          failures: state.failures,
-        })
-        return
-      }
-      await redis.set(`circuit:${tenantId}`, JSON.stringify(state), 'EX', CIRCUIT_TTL)
-    } else {
-      await redis.set(`circuit:${tenantId}`, JSON.stringify({ failures: 1, open: false }), 'EX', CIRCUIT_TTL)
-    }
-    redis.disconnect()
-  } catch {
-    // non-critical
-  }
-}
-
-export async function resolveWhatsAppConfig(tenantId: string): Promise<WhatsAppConfig> {
-  const envProvider = process.env.WHATSAPP_PROVIDER as WhatsAppProvider | undefined
-
-  const { data: tenant } = await supabaseAdmin
-    .from('tenants')
-    .select('whatsapp_config')
-    .eq('id', tenantId)
+async function getActiveChannel(tenantId: string): Promise<{
+  id: string
+  provider: string
+  phoneNumber: string
+} | null> {
+  const { data } = await supabaseAdmin
+    .from('messaging_channels')
+    .select('id, provider, phone_number')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('priority', { ascending: true })
+    .limit(1)
     .single()
 
-  const config = (tenant?.whatsapp_config || {}) as Record<string, any>
-  const provider: WhatsAppProvider = config.whatsappProvider || envProvider || 'gupshup'
-
-  return {
-    provider,
-    gupshupApiKey: config.gupshupApiKey,
-    gupshupAppName: config.gupshupAppName,
-    sourceNumber: config.sourceNumber,
-  }
-}
-
-export async function sendViaGupshup(
-  apiKey: string,
-  appName: string,
-  source: string,
-  destination: string,
-  message: string,
-): Promise<{ messageId: string }> {
-  const payload = new URLSearchParams({
-    api_key: apiKey,
-    app_name: appName,
-    channel: 'whatsapp',
-    source,
-    destination: destination.replace(/\D/g, '').replace(/^91/, ''),
-    message,
-  })
-
-  const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: payload.toString(),
-  })
-
-  const data = await res.json() as any
-  if (!res.ok && data.status !== 'queued') {
-    throw new Error(data.error || `Gupshup error: ${res.status}`)
-  }
-  return { messageId: data.messageId || `wa_${Date.now()}` }
+  return data ? { id: data.id, provider: data.provider, phoneNumber: data.phone_number } : null
 }
 
 export async function sendWhatsAppMessage(
@@ -175,10 +58,8 @@ export async function sendWhatsAppMessage(
   identity: MessageIdentity
   error?: string
 }> {
-  const config = await resolveWhatsAppConfig(tenantId)
   const cleanPhone = phone.replace(/\D/g, '')
 
-  // Generate canonical identity BEFORE send — preserves identity even on failure
   const eventSequence = generateEventSequence()
   const conversationId = options?.conversationId || options?.invoiceId || `conv_${cleanPhone}`
   const transportMessageHash = computeTransportHash({
@@ -202,71 +83,100 @@ export async function sendWhatsAppMessage(
     reminderStage: options?.reminderStage || null,
   }
 
-  // Attempt send — never throw, capture error in result
   try {
-    const sendResult = await doSend(config, tenantId, cleanPhone, message, options)
-    return { ...sendResult, identity }
+    const channel = await getActiveChannel(tenantId)
+    if (!channel) {
+      console.log(`[WhatsAppRouter] No active channel for tenant ${tenantId}, simulating send to ${cleanPhone}`)
+      return {
+        messageId: billzoMessageId,
+        provider: 'gupshup',
+        identity,
+        error: undefined,
+      }
+    }
+
+    if (!registry) {
+      return {
+        messageId: billzoMessageId,
+        provider: channel.provider as WhatsAppProvider,
+        identity,
+        error: 'Transport registry not initialized',
+      }
+    }
+
+    // Resolve effective provider: use baileys only if paired + connected, otherwise fallback
+    let effectiveProvider = channel.provider
+    if (effectiveProvider === 'baileys') {
+      if (!(await isBaileysPaired(tenantId)) || !isBaileysConnected(tenantId)) {
+        console.log(`[WhatsAppRouter] Baileys not available for tenant ${tenantId}, falling back`)
+        effectiveProvider = 'gupshup'
+      }
+    }
+
+    const sendResult = await registry.send(channel.id, {
+      to: cleanPhone,
+      text: message,
+      ...(options?.type === 'document' && options?.documentUrl
+        ? { document: { url: options.documentUrl, fileName: options.documentName || 'document.pdf', caption: message } }
+        : {}),
+    }, { provider: effectiveProvider })
+
+    if (sendResult.success) {
+      return {
+        messageId: sendResult.providerMessageId || billzoMessageId,
+        provider: effectiveProvider as WhatsAppProvider,
+        identity,
+      }
+    }
+
+    // Primary provider failed — try fallback
+    if (effectiveProvider === 'baileys') {
+      const fallbackChannel = await supabaseAdmin
+        .from('messaging_channels')
+        .select('id, provider')
+        .eq('tenant_id', tenantId)
+        .eq('provider', 'gupshup')
+        .eq('is_active', true)
+        .limit(1)
+        .single()
+
+      if (fallbackChannel.data) {
+        const fallbackResult = await registry.send(fallbackChannel.data.id, {
+          to: cleanPhone,
+          text: message,
+        }, { provider: 'gupshup' })
+
+        if (fallbackResult.success) {
+          return {
+            messageId: fallbackResult.providerMessageId || billzoMessageId,
+            provider: 'gupshup',
+            identity,
+          }
+        }
+      }
+    }
+
+    return {
+      messageId: billzoMessageId,
+      provider: effectiveProvider as WhatsAppProvider,
+      identity,
+      error: sendResult.error || 'Send failed',
+    }
   } catch (err: any) {
     console.log(`[WhatsAppRouter] Send failed for tenant ${tenantId}:`, err.message)
     return {
       messageId: billzoMessageId,
-      provider: config.provider,
+      provider: 'gupshup',
       identity,
       error: err.message,
     }
   }
 }
 
-async function doSend(
-  config: WhatsAppConfig,
-  tenantId: string,
-  cleanPhone: string,
-  message: string,
-  options?: {
-    type?: MessageType
-    documentUrl?: string
-    documentName?: string
-  },
-): Promise<SendResult> {
-  if (config.provider === 'baileys') {
-    if (!(await isBaileysPaired(tenantId))) {
-      console.log(`[WhatsAppRouter] Baileys not paired for tenant ${tenantId}, falling back to Gupshup`)
-    } else if (!isBaileysConnected(tenantId)) {
-      console.log(`[WhatsAppRouter] Baileys not connected for tenant ${tenantId}, falling back to Gupshup`)
-    } else if (await isCircuitOpen(tenantId)) {
-      console.log(`[WhatsAppRouter] Circuit open for tenant ${tenantId}, falling back to Gupshup`)
-    } else {
-      let result: { messageId: string }
-      const type = options?.type || 'text'
-      if (type === 'document' && options?.documentUrl) {
-        result = await sendBaileysDocument(tenantId, cleanPhone, options.documentUrl, options.documentName || 'document.pdf', message)
-      } else {
-        result = await sendViaBaileys(tenantId, cleanPhone, message)
-      }
-      await recordSendSuccess(tenantId)
-      return { messageId: result.messageId, provider: 'baileys' }
-    }
-  }
-
-  if (!config.gupshupApiKey || !config.gupshupAppName || !config.sourceNumber) {
-    console.log(`[WhatsAppRouter] No Gupshup config for tenant ${tenantId}, simulating send to ${cleanPhone}`)
-    return { messageId: `sim_${Date.now()}`, provider: 'gupshup' }
-  }
-
-  const result = await sendViaGupshup(
-    config.gupshupApiKey,
-    config.gupshupAppName,
-    config.sourceNumber,
-    `+${cleanPhone}`,
-    message,
-  )
-
-  return { messageId: result.messageId, provider: 'gupshup' }
-}
-
 export async function getEffectiveProvider(tenantId: string): Promise<WhatsAppProvider> {
-  const config = await resolveWhatsAppConfig(tenantId)
-  if (config.provider === 'baileys' && (await isBaileysPaired(tenantId)) && isBaileysConnected(tenantId) && !(await isCircuitOpen(tenantId))) {
+  const channel = await getActiveChannel(tenantId)
+  if (!channel) return 'gupshup'
+  if (channel.provider === 'baileys' && (await isBaileysPaired(tenantId)) && isBaileysConnected(tenantId)) {
     return 'baileys'
   }
   return 'gupshup'

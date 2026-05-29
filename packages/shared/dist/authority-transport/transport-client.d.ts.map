@@ -1,0 +1,1 @@
+{"version":3,"file":"transport-client.d.ts","sourceRoot":"","sources":["../../src/authority-transport/transport-client.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,qBAAqB,CAAA;AAC1D,OAAO,KAAK,EAAE,eAAe,EAAE,YAAY,EAAE,cAAc,EAAE,MAAM,SAAS,CAAA;AAqC5E,wBAAsB,qBAAqB,CACzC,MAAM,EAAE,eAAe,EACvB,MAAM,EAAE,cAAc,EACtB,MAAM,EAAE,YAAY,GACnB,OAAO,CAAC,eAAe,CAAC,CA4D1B"}

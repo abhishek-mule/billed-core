@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  Bell, Search, Home, ScanLine, Receipt,
-  ShoppingBag, Users, Package, BarChart3, Settings,
+  Bell, Search, Home, ScanLine, Receipt, TrendingUp, Activity,
+  Users, Package, BarChart3, Settings,
   MoreHorizontal, Menu, LogOut,
 } from 'lucide-react'
 import { Button } from './Button'
@@ -13,12 +13,12 @@ import { cn } from '@/lib/utils'
 import '@/styles/app-shell.css'
 
 const NAV_WORKSPACE = [
-  { href: '/dashboard', label: 'Home',      icon: Home        },
-  { href: '/pos',       label: 'POS',       icon: ScanLine    },
-  { href: '/invoices',  label: 'Invoices',  icon: Receipt     },
-  { href: '/purchases', label: 'Purchases', icon: ShoppingBag },
-  { href: '/parties',   label: 'Parties',   icon: Users       },
-  { href: '/products',  label: 'Products',  icon: Package     },
+  { href: '/dashboard', label: 'Home',       icon: Home        },
+  { href: '/pulse',     label: 'Pulse',      icon: Activity    },
+  { href: '/cashflow',  label: 'Cashflow',   icon: TrendingUp  },
+  { href: '/invoices',  label: 'Invoices',   icon: Receipt     },
+  { href: '/parties',   label: 'Customers',  icon: Users       },
+  { href: '/products',  label: 'Products',   icon: Package     },
 ]
 
 const NAV_SYSTEM = [

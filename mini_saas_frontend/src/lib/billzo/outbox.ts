@@ -1,3 +1,4 @@
+// authority:exempt ephemeral_operational_state — event outbox infrastructure
 import { supabaseAdmin } from './supabase-admin'
 
 export type OutboxStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'dead_letter'

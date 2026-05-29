@@ -1,7 +1,9 @@
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabase } from '@/lib/billzo/supabase'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
+import { submitIntent } from '@/lib/authority/transport'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,17 +85,24 @@ export async function PUT(request: NextRequest) {
     if (config.gupshupAppName === '') updated.gupshupAppName = undefined
     if (config.sourceNumber === '') updated.sourceNumber = undefined
 
-    const { error: updateError } = await supabase
-      .from('tenants')
-      .update({
-        whatsapp_config: updated,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tenantId)
+    // authority:governed tenant.update_whatsapp_config
+    const intentResult = await submitIntent({
+      intentId: crypto.randomUUID(),
+      intentType: 'tenant.update_whatsapp_config',
+      intentVersion: 1,
+      tenantId,
+      actor: `tenant:${tenantId}`,
+      source: 'app',
+      timestamp: new Date().toISOString(),
+      causationId: null,
+      correlationId: null,
+      payload: { whatsappConfig: updated },
+      nonce: crypto.randomUUID(),
+    }, 'app')
 
-    if (updateError) {
-      console.error('[WhatsAppConfig] PUT update error:', updateError.message)
-      return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+    if (!intentResult.accepted) {
+      console.error('[WhatsAppConfig] Authority rejected update:', intentResult.error)
+      return NextResponse.json({ error: 'Authority rejected update' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, config: updated })

@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc",
+    "build": "tsc && npm run lint:mutations",
+    "lint:mutations": "ts-node --project tsconfig.json scripts/check-ungoverned-mutations.ts",
     "dev": "ts-node-dev --respawn index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -22,6 +23,7 @@
     "hono": "^4.12.23",
     "ioredis": "5.10.1",
     "pino": "^8.17.0",
+    "postgres": "^3.4.5",
     "typescript": "^5.3.0"
   },
   "devDependencies": {

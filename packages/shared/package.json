@@ -4,6 +4,23 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./authority-config": {
+      "import": "./dist/authority-config/index.js",
+      "require": "./dist/authority-config/index.js",
+      "types": "./dist/authority-config/index.d.ts"
+    },
+    "./authority-transport": {
+      "import": "./dist/authority-transport/index.js",
+      "require": "./dist/authority-transport/index.js",
+      "types": "./dist/authority-transport/index.d.ts"
+    }
+  },
   "devDependencies": {
     "@types/node": "^20.19.41",
     "typescript": "^5.3.0",

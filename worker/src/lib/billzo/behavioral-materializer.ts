@@ -1,3 +1,4 @@
+// authority:exempt append_only_observability — behavioral analytics materialization
 import type { BehavioralObservation, CustomerBehavioralMetrics, ProfileChanged } from '@billzo/shared'
 import { EventType, INTERPRETER_VERSION } from '@billzo/shared'
 import { supabaseAdmin } from './supabase-admin'

@@ -1,11 +1,14 @@
 "use client";
 
-import { ShoppingBag, Users, BarChart3, Settings as SettingsIcon, ChevronRight, Loader2 } from "lucide-react";
+import { TrendingUp, Bell, Activity, Users, BarChart3, Settings as SettingsIcon, ChevronRight, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 
 const items = [
+  { href: "/cashflow", label: "Cashflow", icon: TrendingUp, desc: "Receivables & recovery" },
+  { href: "/pulse", label: "Pulse", icon: Activity, desc: "Real-time payment stream" },
+  { href: "/send", label: "Send", icon: Bell, desc: "Broadcasts & reminders" },
   { href: "/purchases", label: "Purchases", icon: ShoppingBag, desc: "Scan supplier invoices" },
-  { href: "/parties", label: "Parties", icon: Users, desc: "Customers & suppliers" },
+  { href: "/parties", label: "Customers", icon: Users, desc: "Customers & suppliers" },
   { href: "/reports", label: "Reports", icon: BarChart3, desc: "GST & sales" },
   { href: "/settings", label: "Settings", icon: SettingsIcon, desc: "Shop, users, security" },
 ];

@@ -1,3 +1,4 @@
+// authority:exempt ephemeral_operational_state — generic supabase helpers (non-governed context)
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL

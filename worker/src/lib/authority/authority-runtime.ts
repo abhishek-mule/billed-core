@@ -1,6 +1,9 @@
+import postgres from 'postgres'
 import { RuntimeOrchestrator, RuntimePhase } from './runtime-phase'
 import { CapabilityRegistry } from './capabilities'
 import { InternalAuthorityClient } from './internal-authority'
+import { AuthorityPersistence } from './persistence'
+import { AuthorityOutboxDispatcher } from './outbox-dispatcher'
 import { createAuthorityGateway } from './gateway'
 import { ensureMinimumPolicySet, BOOTSTRAP_POLICYSET_VERSION, BOOTSTRAP_POLICYSET_HASH } from './policy-compiler'
 import { emitRuntimeFingerprint } from './runtime-fingerprint'
@@ -26,6 +29,7 @@ export interface AuthorityRuntimeConfig {
   readonly requiredCapabilities: readonly string[]
   readonly bootstrapCreatedBy: string
   readonly gatewayPort?: number
+  readonly databaseUrl?: string
 }
 
 export class AuthorityRuntime {
@@ -33,13 +37,16 @@ export class AuthorityRuntime {
   readonly capabilities: CapabilityRegistry
   readonly internalClient: InternalAuthorityClient
 
+  private _persistence: AuthorityPersistence | null = null
   private _policy: PolicyBundle | null = null
   private _policySnapshotHash: string | null = null
   private _config: AuthorityCoreConfig | null = null
+  private _dispatcher: AuthorityOutboxDispatcher | null = null
   private _gateway: ReturnType<typeof createAuthorityGateway> | null = null
   private _gatewayServer: { close: () => void } | null = null
   private _rateLimitStore: RateLimitStore
   private _fingerprint: ReturnType<typeof emitRuntimeFingerprint> | null = null
+  private _sql: postgres.Sql | null = null
 
   constructor() {
     this.orchestrator = new RuntimeOrchestrator()
@@ -50,7 +57,12 @@ export class AuthorityRuntime {
       capabilities: this.capabilities.getAll(),
       rateLimitStore: this._rateLimitStore,
       tenantPlanLookup: async () => undefined,
+      registrySnapshotHash: '',
     })
+  }
+
+  get persistence(): AuthorityPersistence | null {
+    return this._persistence
   }
 
   private fallbackPolicy(): PolicyBundle {
@@ -122,6 +134,13 @@ export class AuthorityRuntime {
     this.capabilities.freeze()
     this.orchestrator.transition(RuntimePhase.CAPABILITIES_READY)
 
+    // PHASE 2b: PERSISTENCE
+    const databaseUrl = conf.databaseUrl || process.env.AUTHORITY_DATABASE_URL
+    if (databaseUrl) {
+      this._sql = postgres(databaseUrl, { max: 4, connection: { application_name: 'authority-runtime' } })
+      this._persistence = new AuthorityPersistence(this._sql)
+    }
+
     // PHASE 3: AUTHORITY CORE
     this._rateLimitStore = createDegradeableRateLimitStore(conf.redisRateLimitStore)
     this._config = {
@@ -129,14 +148,19 @@ export class AuthorityRuntime {
       capabilities: this.capabilities.getAll(),
       rateLimitStore: this._rateLimitStore,
       tenantPlanLookup: conf.tenantPlanLookup,
+      registrySnapshotHash: this.capabilities.runtimeHash,
     }
-    ;(this.internalClient as any).config = this._config
+    this.internalClient.reconfigure(this._config, this._persistence, this.capabilities)
     this.orchestrator.transition(RuntimePhase.AUTHORITY_READY)
   }
 
   private async activateGateway(conf: AuthorityRuntimeConfig): Promise<void> {
-    // PHASE 4: QUEUES (placeholder — actual BullMQ wiring deferred)
+    // PHASE 4: QUEUES — start authority outbox dispatcher
     this.orchestrator.assertPhase(RuntimePhase.AUTHORITY_READY)
+    if (this._sql && this.capabilities.isFrozen) {
+      this._dispatcher = new AuthorityOutboxDispatcher(this._sql, this.capabilities)
+      this._dispatcher.start()
+    }
     this.orchestrator.transition(RuntimePhase.QUEUES_READY)
 
     // PHASE 5: HTTP GATEWAY (starts LAST)
@@ -187,9 +211,17 @@ export class AuthorityRuntime {
 
   async shutdown(): Promise<void> {
     console.log('[AuthorityRuntime] Shutting down...')
+    if (this._dispatcher) {
+      this._dispatcher.stop()
+      console.log('[AuthorityRuntime] Dispatcher stopped')
+    }
     if (this._gatewayServer) {
       this._gatewayServer.close()
       console.log('[AuthorityRuntime] Gateway stopped')
+    }
+    if (this._sql) {
+      await this._sql.end()
+      console.log('[AuthorityRuntime] DB connection closed')
     }
     console.log('[AuthorityRuntime] Shutdown complete')
   }

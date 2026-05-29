@@ -117,9 +117,16 @@ export interface ExecutionPlan {
   readonly planCompilerVersion: string
   readonly steps: readonly ExecutionPlanStep[]
   readonly capabilityImplementationHashes: Readonly<Record<string, string>>
+  readonly policySnapshotHash: string
+  readonly registrySnapshotHash: string
 }
 
 // --- Capability System ---
+
+export interface OwnedMutation {
+  readonly table: string
+  readonly columns?: readonly string[]
+}
 
 export interface CapabilityProvider {
   readonly capabilityId: string
@@ -134,6 +141,7 @@ export interface CapabilityProvider {
   readonly compensatable: boolean
   readonly minIntentVersion: number
   readonly maxIntentVersion: number
+  readonly ownedMutations: readonly OwnedMutation[]
   readonly execute: (
     intent: IntentEnvelope,
     decision: DeterministicDecision,
@@ -174,6 +182,7 @@ export interface AuthorityResult {
   readonly decisionId: string | null
   readonly decision: DeterministicDecision | null
   readonly error?: string
+  readonly plan?: ExecutionPlan
 }
 
 // --- Sovereignty Evaluation ---

@@ -1,3 +1,4 @@
+// authority:exempt event_transport — whatsapp provider pipeline
 import { supabaseAdmin } from './supabase-admin'
 import { writeOutboxEvent } from './outbox'
 import { sendWhatsAppMessage } from '../../../lib/whatsapp-router'

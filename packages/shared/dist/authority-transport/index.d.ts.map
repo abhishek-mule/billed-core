@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../src/authority-transport/index.ts"],"names":[],"mappings":"AAAA,YAAY,EAAE,YAAY,EAAE,cAAc,EAAE,eAAe,EAAE,cAAc,EAAE,MAAM,SAAS,CAAA;AAC5F,OAAO,EAAE,gBAAgB,EAAE,UAAU,EAAE,YAAY,EAAE,MAAM,WAAW,CAAA;AACtE,OAAO,EAAE,aAAa,EAAE,sBAAsB,EAAE,kBAAkB,EAAE,MAAM,gBAAgB,CAAA;AAC1F,OAAO,EAAE,qBAAqB,EAAE,MAAM,oBAAoB,CAAA"}

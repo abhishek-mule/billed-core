@@ -13,11 +13,15 @@ import { materializeObservation } from '../src/lib/billzo/behavioral-materialize
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
+import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
 
-export function createOutboxWorker() {
+let _authorityClient: InternalAuthorityClient | null = null
+
+export function createOutboxWorker(authority?: InternalAuthorityClient) {
+  if (authority) _authorityClient = authority
   const connection = createRedisConnection()
 
   const worker = new Worker(
@@ -176,15 +180,32 @@ async function tryHandleRecoveryCaseProjection(event: any): Promise<void> {
 
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
-      .select('customer_id, total')
+      .select('id, customer_id, total')
       .eq('id', invoiceId)
       .single()
 
     if (!invoice || !invoice.customer_id) return
 
-    const now = new Date().toISOString()
+    if (_authorityClient) {
+      const result = await _authorityClient.submit({
+        intentType: 'recovery.upsert_case',
+        intentVersion: 1,
+        tenantId,
+        actor: 'system:outbox',
+        payload: {
+          customerId: invoice.customer_id,
+          invoiceId: invoice.id,
+          totalOutstanding: invoice.total || 0,
+        },
+      }, 'trusted_sync')
+      if (!result.accepted) {
+        logger.error({ tenantId, err: result.error }, 'Authority rejected recovery case upsert')
+      }
+      return
+    }
 
-    // Find existing open recovery case for this tenant + customer
+    // authority:fallback recovery.upsert_case
+    const now = new Date().toISOString()
     const { data: existing } = await supabaseAdmin
       .from('recovery_cases')
       .select('id')
@@ -600,6 +621,7 @@ async function emitProjectionDelta(
     return
   }
 
+  // authority:exempt derived_state
   // Write to projection_delta_log for reinterpretation replay
   try {
     await supabaseAdmin.from('projection_delta_log').insert({
@@ -668,11 +690,26 @@ async function handleUpiClicked(event: any): Promise<void> {
   if (!tenantId) return
 
   if (invoiceId) {
-    const now = new Date().toISOString()
-    await supabaseAdmin
-      .from('invoices')
-      .update({ last_whatsapp_status: 'clicked_upi', last_whatsapp_at: now })
-      .eq('id', invoiceId)
+    if (_authorityClient) {
+      const now = new Date().toISOString()
+      const result = await _authorityClient.submit({
+        intentType: 'invoice.update_recovery_state',
+        intentVersion: 1,
+        tenantId,
+        actor: 'system:outbox',
+        payload: { invoiceId, lastWhatsappStatus: 'clicked_upi', lastWhatsappAt: now },
+      }, 'trusted_sync')
+      if (!result.accepted) {
+        logger.error({ invoiceId, err: result.error }, 'Authority rejected recovery state update (UPI)')
+      }
+    } else {
+      // authority:fallback invoice.update_recovery_state
+      const now = new Date().toISOString()
+      await supabaseAdmin
+        .from('invoices')
+        .update({ last_whatsapp_status: 'clicked_upi', last_whatsapp_at: now })
+        .eq('id', invoiceId)
+    }
   }
 
   await publishToRedis(tenantId, 'whatsapp.upi_clicked', {
@@ -686,10 +723,24 @@ async function handleEscalationSuggested(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!invoiceId || !tenantId) return
 
-  await supabaseAdmin
-    .from('invoices')
-    .update({ recovery_flag: 'call_customer' })
-    .eq('id', invoiceId)
+  if (_authorityClient) {
+    const result = await _authorityClient.submit({
+      intentType: 'invoice.update_recovery_state',
+      intentVersion: 1,
+      tenantId,
+      actor: 'system:outbox',
+      payload: { invoiceId, recoveryFlag: 'call_customer' },
+    }, 'trusted_sync')
+    if (!result.accepted) {
+      logger.error({ invoiceId, err: result.error }, 'Authority rejected recovery state update (escalation)')
+    }
+  } else {
+    // authority:fallback invoice.update_recovery_state
+    await supabaseAdmin
+      .from('invoices')
+      .update({ recovery_flag: 'call_customer' })
+      .eq('id', invoiceId)
+  }
 
   const { data: invoice } = await supabaseAdmin
     .from('invoices')

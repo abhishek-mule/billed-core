@@ -1,4 +1,6 @@
+import crypto from 'crypto'
 import { supabaseAdmin } from './supabase-admin'
+import { submitIntent } from '@/lib/authority/transport'
 import { matchPaymentToInvoice, type MatchResult } from './matching'
 import { executeIdempotent, IdempotencyPatterns } from './idempotency'
 import { emitPaymentReconciled, emitPaymentCompleted, logStructuredError } from './events'
@@ -165,25 +167,29 @@ async function finalizeReconciliation(
 ): Promise<PaymentReconciliationResult> {
   const { invoiceId, invoice } = match
 
-  // Update invoice status to paid
+  // authority:governed invoice.mark_paid
   const now = new Date().toISOString()
-  const { error: updateError } = await supabaseAdmin
-    .from('invoices')
-    .update({
-      status: 'paid',
-      paid_amount: invoice.total || signal.amount,
-      updated_at: now,
-      sync_status: 'pending',
-    })
-    .eq('id', invoiceId)
+  const intentResult = await submitIntent({
+    intentId: crypto.randomUUID(),
+    intentType: 'invoice.mark_paid',
+    intentVersion: 1,
+    tenantId,
+    actor: 'system:reconciliation',
+    source: 'app',
+    timestamp: now,
+    causationId: null,
+    correlationId: null,
+    payload: { invoiceId, status: 'paid', paidAmount: invoice.total || signal.amount },
+    nonce: crypto.randomUUID(),
+  }, 'app')
 
-  if (updateError) {
-    logStructuredError(new Error(updateError.message), {
-      type: 'reconciliation_update_failed',
+  if (!intentResult.accepted) {
+    logStructuredError(new Error(intentResult.error || 'Authority rejected reconciliation'), {
+      type: 'reconciliation_authority_rejected',
       invoiceId,
       tenantId,
     })
-    throw updateError
+    throw new Error(intentResult.error || 'Authority rejected reconciliation')
   }
 
   // Emit payment reconciled event

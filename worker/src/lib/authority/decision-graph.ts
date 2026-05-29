@@ -1,11 +1,12 @@
-import { sha256, canonicalHash } from './hashing'
+import { sha256 } from './hashing'
+import { buildExecutionPlan } from './plan-builder'
+import { constitutionalTelemetry } from './telemetry'
 import type {
   IntentEnvelope,
   DeterministicDecision,
   DecisionNodeResult,
   DecisionNodeType,
   ExecutionPlan,
-  ExecutionPlanStep,
   CapabilityProvider,
   PolicyBundle,
   SovereigntyDecision,
@@ -84,6 +85,8 @@ export interface DecisionGraphInput {
   readonly capabilities: readonly CapabilityProvider[]
   readonly semanticalDedupHash: string | null
   readonly dedupOnMatch: 'reject' | 'require_approval' | null
+  readonly policySnapshotHash: string
+  readonly registrySnapshotHash: string
 }
 
 export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecision {
@@ -91,11 +94,14 @@ export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecisio
   const graph: DecisionNodeResult[] = []
   const startTotal = performance.now()
 
+  constitutionalTelemetry.incrementEvaluation()
+
   // 1. Schema validation
   const t0 = performance.now()
   const schema = validateIntentSchema(input.intent)
   graph.push(record('schema_validation', schema.valid, schema.valid ? 'schema ok' : schema.failures.join('; '), t0))
   if (!schema.valid) {
+    constitutionalTelemetry.recordViolation('schema_validation')
     return rejection(graph, input, config)
   }
 
@@ -110,6 +116,7 @@ export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecisio
     ),
   )
   if (!input.sovereignty.allowed) {
+    constitutionalTelemetry.recordViolation('sovereignty')
     return rejection(graph, input, config)
   }
 
@@ -117,6 +124,7 @@ export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecisio
   const t2 = performance.now()
   if (input.dedupOnMatch === 'reject') {
     graph.push(record('semantic_dedup', false, `duplicate: hash=${input.semanticalDedupHash}`, t2))
+    constitutionalTelemetry.recordViolation('semantic_dedup')
     return rejection(graph, input, config)
   }
   graph.push(record('semantic_dedup', true, input.semanticalDedupHash ? `known: ${input.semanticalDedupHash}` : 'no match', t2))
@@ -134,6 +142,7 @@ export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecisio
     ),
   )
   if (!capsOk) {
+    constitutionalTelemetry.recordViolation('capability_resolution')
     return rejection(graph, input, config)
   }
 
@@ -141,8 +150,14 @@ export function compileDecisionGraph(input: DecisionGraphInput): CompiledDecisio
   const t4 = performance.now()
   graph.push(record('policy', true, 'all policy checks passed', t4))
 
-  // Compile plan
-  const plan = compileExecutionPlan(input.intent, matchedCaps, config)
+  // Compile plan via standalone plan builder
+  const plan = buildExecutionPlan(
+    input.intent,
+    matchedCaps,
+    input.policySnapshotHash,
+    input.registrySnapshotHash,
+    { plannerVersion: config.plannerVersion },
+  )
 
   const decision: DeterministicDecision = {
     outcome: 'accepted',
@@ -182,37 +197,11 @@ function resolveCapabilities(
   })
 }
 
+/** @deprecated Use buildExecutionPlan from plan-builder.ts instead. */
 export function compileExecutionPlan(
   intent: IntentEnvelope,
   steps: readonly CapabilityProvider[],
   config: DecisionGraphConfig = DEFAULT_CONFIG,
 ): ExecutionPlan {
-  const compiledSteps: ExecutionPlanStep[] = steps.map((c, i) => ({
-    capabilityId: c.capabilityId,
-    order: i,
-    compensatable: c.compensatable,
-    requiresApproval: c.requiresApproval,
-    priorityClass: c.priorityClass,
-    implementationHash: canonicalHash({ capability: c.capabilityId, classification: c.classification }),
-    input: { ...intent.payload },
-  }))
-
-  const planHash = canonicalHash({
-    intentId: intent.intentId,
-    steps: compiledSteps.map((s) => s.capabilityId),
-    config: config.plannerVersion,
-  })
-
-  const implHashes: Record<string, string> = {}
-  for (const c of steps) {
-    implHashes[c.capabilityId] = canonicalHash({ capability: c.capabilityId, classification: c.classification })
-  }
-
-  return {
-    intentId: intent.intentId,
-    planHash,
-    planCompilerVersion: config.plannerVersion,
-    steps: compiledSteps,
-    capabilityImplementationHashes: implHashes,
-  }
+  return buildExecutionPlan(intent, steps, '', '', { plannerVersion: config.plannerVersion })
 }

@@ -1,5 +1,7 @@
+import crypto from 'crypto'
 import { supabaseAdmin } from './supabase-admin'
 import { emitRecoveryCompleted } from './events'
+import { submitIntent } from '@/lib/authority/transport'
 
 export interface AttributionResult {
   attributed: boolean
@@ -68,22 +70,30 @@ export async function attributeRecovery(params: {
     confidenceScore = 0.95
   }
 
-  // Write attribution to recovery_attributions table
-  const { data: attribution, error: attributionError } = await supabaseAdmin
-    .from('recovery_attributions')
-    .insert({
-      invoice_id: invoiceId,
-      payment_id: paymentId,
-      reminder_event_id: reminder.id,
-      attribution_type: 'last_touch',
-      attribution_window_hours: attributionWindowHours,
-      confidence_score: confidenceScore,
-    })
-    .select()
-    .single()
+  // authority:governed recovery.record_attribution
+  const intentResult = await submitIntent({
+    intentId: crypto.randomUUID(),
+    intentType: 'recovery.record_attribution',
+    intentVersion: 1,
+    tenantId,
+    actor: 'system:attribution',
+    source: 'app',
+    timestamp: new Date().toISOString(),
+    causationId: null,
+    correlationId: null,
+    payload: {
+      invoiceId,
+      paymentId: paymentId ?? null,
+      reminderEventId: reminder.id,
+      attributionType: 'last_touch',
+      attributionWindowHours,
+      confidenceScore,
+    },
+    nonce: crypto.randomUUID(),
+  }, 'app')
 
-  if (attributionError) {
-    console.error('[Attribution] Failed to write attribution:', attributionError)
+  if (!intentResult.accepted) {
+    console.error('[Attribution] Authority rejected attribution:', intentResult.error)
   }
 
   // Emit recovery completed event

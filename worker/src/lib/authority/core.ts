@@ -1,5 +1,5 @@
-import { evaluateSovereignty, checkRateLimit } from './sovereignty'
-import { semanticHash } from './hashing'
+import { sha256, semanticHash } from './hashing'
+import { evaluateSovereignty } from './sovereignty'
 import { compileDecisionGraph, type DecisionGraphInput } from './decision-graph'
 import type {
   IntentEnvelope,
@@ -23,6 +23,7 @@ export interface AuthorityCoreConfig {
   readonly capabilities: readonly CapabilityProvider[]
   readonly rateLimitStore: RateLimitStore
   readonly tenantPlanLookup: (tenantId: string) => Promise<string | undefined>
+  readonly registrySnapshotHash: string
 }
 
 export async function evaluate(
@@ -36,6 +37,8 @@ export async function evaluate(
   const dedupHash = semanticHash(intent.payload, (p) => p)
   const dedupOnMatch = detectDedupMatch(intent, dedupHash)
 
+  const policySnapshotHash = sha256(JSON.stringify(config.policy))
+
   const graphInput: DecisionGraphInput = {
     intent,
     policy: config.policy,
@@ -43,6 +46,8 @@ export async function evaluate(
     capabilities: config.capabilities,
     semanticalDedupHash: dedupHash,
     dedupOnMatch,
+    policySnapshotHash,
+    registrySnapshotHash: config.registrySnapshotHash,
   }
 
   const { decision, plan } = compileDecisionGraph(graphInput)
@@ -65,6 +70,7 @@ export async function evaluate(
     intentId: intent.intentId,
     decisionId: plan.planHash,
     decision,
+    plan,
   }
 }
 

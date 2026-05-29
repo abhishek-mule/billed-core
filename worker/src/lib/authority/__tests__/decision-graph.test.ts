@@ -56,7 +56,31 @@ const dummyCapability: CapabilityProvider = {
   compensatable: false,
   minIntentVersion: 1,
   maxIntentVersion: 1,
+  ownedMutations: [],
   execute: async () => ({ success: true, executionLatencyMs: 0 }),
+}
+
+function makeGraphInput(overrides: Partial<{
+  intent: IntentEnvelope
+  policy: PolicyBundle
+  sovereignty: SovereigntyDecision
+  capabilities: readonly CapabilityProvider[]
+  semanticalDedupHash: string | null
+  dedupOnMatch: 'reject' | 'require_approval' | null
+  policySnapshotHash: string
+  registrySnapshotHash: string
+}> = {}) {
+  return {
+    intent: validIntent,
+    policy: DEFAULT_POLICY_BUNDLE_V1,
+    sovereignty: allowedSovereignty,
+    capabilities: [dummyCapability],
+    semanticalDedupHash: null,
+    dedupOnMatch: null,
+    policySnapshotHash: 'test-policy-hash',
+    registrySnapshotHash: 'test-registry-hash',
+    ...overrides,
+  }
 }
 
 // ============================================================
@@ -113,14 +137,7 @@ describe('validateIntentSchema', () => {
 
 describe('compileDecisionGraph', () => {
   it('accepts with valid intent, passing sovereignty, and matched capability', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [dummyCapability],
-      semanticalDedupHash: null,
-      dedupOnMatch: null,
-    })
+    const result = compileDecisionGraph(makeGraphInput())
     expect(result.decision.outcome).toBe('accepted')
     expect(result.plan).not.toBeNull()
     expect(result.plan!.steps).toHaveLength(1)
@@ -128,14 +145,7 @@ describe('compileDecisionGraph', () => {
   })
 
   it('rejects when schema validation fails', () => {
-    const result = compileDecisionGraph({
-      intent: { ...validIntent, intentId: '' },
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [dummyCapability],
-      semanticalDedupHash: null,
-      dedupOnMatch: null,
-    })
+    const result = compileDecisionGraph(makeGraphInput({ intent: { ...validIntent, intentId: '' } }))
     expect(result.decision.outcome).toBe('rejected')
     expect(result.plan).toBeNull()
     expect(result.decision.decisionGraph[0].nodeType).toBe('schema_validation')
@@ -143,66 +153,37 @@ describe('compileDecisionGraph', () => {
   })
 
   it('rejects when sovereignty fails', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: rejectedSovereignty,
-      capabilities: [dummyCapability],
-      semanticalDedupHash: null,
-      dedupOnMatch: null,
-    })
+    const result = compileDecisionGraph(makeGraphInput({ sovereignty: rejectedSovereignty }))
     expect(result.decision.outcome).toBe('rejected')
     expect(result.plan).toBeNull()
   })
 
   it('rejects when semantic dedup match rejects', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [dummyCapability],
+    const result = compileDecisionGraph(makeGraphInput({
       semanticalDedupHash: 'dup_hash_001',
       dedupOnMatch: 'reject',
-    })
+    }))
     expect(result.decision.outcome).toBe('rejected')
     expect(result.plan).toBeNull()
   })
 
   it('records semantical dedup hash when known but not rejected', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [dummyCapability],
+    const result = compileDecisionGraph(makeGraphInput({
       semanticalDedupHash: 'known_hash',
       dedupOnMatch: 'require_approval',
-    })
+    }))
     expect(result.decision.outcome).toBe('accepted')
     expect(result.decision.decisionGraph.find((n) => n.nodeType === 'semantic_dedup')!.reason).toContain('known_hash')
   })
 
   it('rejects when no capability matches', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [],
-      semanticalDedupHash: null,
-      dedupOnMatch: null,
-    })
+    const result = compileDecisionGraph(makeGraphInput({ capabilities: [] }))
     expect(result.decision.outcome).toBe('rejected')
     expect(result.plan).toBeNull()
   })
 
   it('returns deterministic decision graph with timestamps', () => {
-    const result = compileDecisionGraph({
-      intent: validIntent,
-      policy: DEFAULT_POLICY_BUNDLE_V1,
-      sovereignty: allowedSovereignty,
-      capabilities: [dummyCapability],
-      semanticalDedupHash: null,
-      dedupOnMatch: null,
-    })
+    const result = compileDecisionGraph(makeGraphInput())
     expect(result.decision.decisionGraph.length).toBeGreaterThan(0)
     for (const node of result.decision.decisionGraph) {
       expect(node.latencyMs).toBeGreaterThanOrEqual(0)
@@ -318,6 +299,7 @@ describe('SemanticNormalizerRegistry', () => {
       compensatable: true,
       minIntentVersion: 1,
       maxIntentVersion: 1,
+      ownedMutations: [],
       execute: async () => ({ success: true, executionLatencyMs: 0 }),
       semanticNormalizer: (p) => ({ ...p, amount: String(p.amount) }),
     }

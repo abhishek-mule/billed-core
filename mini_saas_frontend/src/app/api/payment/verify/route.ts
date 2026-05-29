@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { submitIntent } from '@/lib/authority/transport'
 
 interface VerifyRequest {
   razorpay_order_id: string
@@ -42,36 +43,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (invoiceId) {
+    if (invoiceId && tenantId) {
       try {
-        const { error: updateError } = await supabaseAdmin
-          .from('invoices')
-          .update({
-            status: 'paid',
-            paid_amount: amount || 0,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', invoiceId)
-
-        if (updateError) {
-          console.error('[VerifyPayment] Supabase update failed:', updateError)
-        } else {
-          const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
-          await writeOutboxEvent({
-            type: 'payment.completed',
-            entityId: invoiceId,
-            tenantId: tenantId || '',
+        const intentResult = await submitIntent(
+          {
+            intentId: crypto.randomUUID(),
+            intentType: 'invoice.mark_paid',
+            intentVersion: 1,
+            tenantId,
+            actor: 'payment-verify',
+            source: 'app',
+            timestamp: new Date().toISOString(),
+            causationId: null,
             correlationId: razorpay_order_id,
-            payload: {
-              amount: amount || 0,
-              provider: 'razorpay',
-              providerPaymentId: razorpay_payment_id,
-              razorpay_order_id,
-            },
-          })
+            payload: { invoiceId, status: 'paid', paidAmount: amount || 0 },
+            nonce: crypto.randomUUID(),
+          },
+          'app',
+        )
+
+        if (!intentResult.accepted) {
+          console.error('[VerifyPayment] Authority rejected mark_paid:', intentResult.error)
         }
+
+        const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
+        await writeOutboxEvent({
+          type: 'payment.completed',
+          entityId: invoiceId,
+          tenantId: tenantId || '',
+          correlationId: razorpay_order_id,
+          payload: {
+            amount: amount || 0,
+            provider: 'razorpay',
+            providerPaymentId: razorpay_payment_id,
+            razorpay_order_id,
+          },
+        })
       } catch (dbError) {
-        console.error('[VerifyPayment] DB update failed:', dbError)
+        console.error('[VerifyPayment] Authority submission failed:', dbError)
       }
     }
 

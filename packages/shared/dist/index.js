@@ -20,4 +20,7 @@ __exportStar(require("./calibration-types"), exports);
 __exportStar(require("./counterfactual-types"), exports);
 __exportStar(require("./orchestrator-types"), exports);
 __exportStar(require("./constants"), exports);
+__exportStar(require("./authority-config/index"), exports);
+__exportStar(require("./authority-transport/index"), exports);
+__exportStar(require("./sovereignty/classifications"), exports);
 //# sourceMappingURL=index.js.map

@@ -3,6 +3,7 @@ import { matchPaymentToInvoice, MATCHING_ALGORITHM_VERSION, type MatchResult, ty
 import { executeIdempotent, IdempotencyPatterns } from './idempotency'
 import { emitPaymentReconciled, emitPaymentCompleted } from './events'
 import { createQueueLogger } from '../../../lib/queue-logger'
+import type { InternalAuthorityClient } from '../../lib/authority/internal-authority'
 
 const logger = createQueueLogger('reconciliation-engine')
 
@@ -17,17 +18,18 @@ export interface PaymentReconciliationResult {
 export async function reconcilePayment(
   signal: PaymentSignal,
   tenantId: string,
+  authority?: InternalAuthorityClient,
 ): Promise<PaymentReconciliationResult> {
   if (signal.paymentLinkId) {
     const match = await matchByPaymentLink(signal.paymentLinkId, tenantId)
     if (match) {
-      return await finalizeReconciliation(signal, match, 'payment_link', tenantId)
+      return await finalizeReconciliation(signal, match, 'payment_link', tenantId, authority)
     }
   }
 
   const fuzzyMatch = await matchPaymentToInvoice(signal, tenantId)
   if (fuzzyMatch) {
-    return await finalizeReconciliation(signal, fuzzyMatch, fuzzyMatch.matchType, tenantId)
+    return await finalizeReconciliation(signal, fuzzyMatch, fuzzyMatch.matchType, tenantId, authority)
   }
 
   logger.warn({ amount: signal.amount, phone: signal.phone, providerPaymentId: signal.providerPaymentId }, 'No matching invoice found for payment')
@@ -77,24 +79,35 @@ async function finalizeReconciliation(
   match: { invoiceId: string; invoice: any },
   matchType: 'payment_link' | 'exact' | 'fuzzy',
   tenantId: string,
+  authority?: InternalAuthorityClient,
 ): Promise<PaymentReconciliationResult> {
   const { invoiceId, invoice } = match
   const invoiceTotal = invoice.total || signal.amount
 
-  const now = new Date().toISOString()
-  const { error: updateError } = await supabaseAdmin
-    .from('invoices')
-    .update({
-      status: 'paid',
-      paid_amount: invoiceTotal,
-      updated_at: now,
-      sync_status: 'pending',
-    })
-    .eq('id', invoiceId)
+  if (authority) {
+    const markPaidResult = await authority.submit({
+      intentType: 'invoice.mark_paid',
+      tenantId,
+      actor: 'reconciliation-worker',
+      payload: { invoiceId, status: 'paid', paidAmount: invoiceTotal },
+    }, 'trusted_sync')
 
-  if (updateError) {
-    logger.error({ invoiceId, tenantId, err: updateError }, 'Reconciliation update failed')
-    throw updateError
+    if (!markPaidResult.accepted) {
+      logger.error({ invoiceId, tenantId, err: markPaidResult.error }, 'Authority rejected mark_paid')
+      throw new Error(markPaidResult.error ?? 'Authority rejected mark_paid')
+    }
+  } else {
+    // authority:fallback invoice.mark_paid
+    const now = new Date().toISOString()
+    const { error: updateError } = await supabaseAdmin
+      .from('invoices')
+      .update({ status: 'paid', paid_amount: invoiceTotal, updated_at: now, sync_status: 'pending' })
+      .eq('id', invoiceId)
+
+    if (updateError) {
+      logger.error({ invoiceId, tenantId, err: updateError }, 'Reconciliation update failed')
+      throw updateError
+    }
   }
 
   await emitPaymentReconciled({
@@ -119,30 +132,65 @@ async function finalizeReconciliation(
 
   // Write immutable attribution log for replay determinism
   try {
-    const reasons = (match as any).reasons || []
-    await supabaseAdmin.from('payment_attribution_log').insert({
-      tenant_id: tenantId,
-      invoice_id: invoiceId,
-      provider: signal.provider,
-      provider_payment_id: signal.providerPaymentId,
-      match_type: matchType,
-      match_confidence: confidence,
-      matching_algorithm_version: MATCHING_ALGORITHM_VERSION,
-      signal_amount: signal.amount,
-      signal_currency: signal.currency,
-      signal_phone: signal.phone,
-      signal_upi_reference: signal.upiReference,
-      signal_customer_name: signal.customerName,
-      signal_payment_link_id: signal.paymentLinkId,
-      signal_timestamp: signal.timestamp,
-      invoice_total: invoiceTotal,
-      invoice_status: invoice.status,
-      invoice_customer_name: invoice.customer_name,
-      invoice_customer_phone: invoice.customer_phone,
-      invoice_created_at: invoice.created_at,
-      match_reasons: reasons,
-      raw_signal: signal.rawPayload,
-    })
+    if (authority) {
+      const attrResult = await authority.submit({
+        intentType: 'reconciliation.log_attribution',
+        tenantId,
+        actor: 'reconciliation-worker',
+        payload: {
+          invoiceId,
+          provider: signal.provider,
+          providerPaymentId: signal.providerPaymentId,
+          matchType,
+          matchConfidence: confidence,
+          matchingAlgorithmVersion: MATCHING_ALGORITHM_VERSION,
+          signalAmount: signal.amount,
+          signalCurrency: signal.currency,
+          signalPhone: signal.phone,
+          signalUpiReference: signal.upiReference,
+          signalCustomerName: signal.customerName,
+          signalPaymentLinkId: signal.paymentLinkId,
+          signalTimestamp: signal.timestamp,
+          invoiceTotal,
+          invoiceStatus: invoice.status,
+          invoiceCustomerName: invoice.customer_name,
+          invoiceCustomerPhone: invoice.customer_phone,
+          invoiceCreatedAt: invoice.created_at,
+          matchReasons: (match as any).reasons || [],
+          rawSignal: signal.rawPayload,
+        },
+      }, 'trusted_sync')
+
+      if (!attrResult.accepted) {
+        logger.error({ invoiceId, err: attrResult.error }, 'Authority rejected attribution log')
+      }
+    } else {
+      // authority:fallback reconciliation.log_attribution
+      const reasons = (match as any).reasons || []
+      await supabaseAdmin.from('payment_attribution_log').insert({
+        tenant_id: tenantId,
+        invoice_id: invoiceId,
+        provider: signal.provider,
+        provider_payment_id: signal.providerPaymentId,
+        match_type: matchType,
+        match_confidence: confidence,
+        matching_algorithm_version: MATCHING_ALGORITHM_VERSION,
+        signal_amount: signal.amount,
+        signal_currency: signal.currency,
+        signal_phone: signal.phone,
+        signal_upi_reference: signal.upiReference,
+        signal_customer_name: signal.customerName,
+        signal_payment_link_id: signal.paymentLinkId,
+        signal_timestamp: signal.timestamp,
+        invoice_total: invoiceTotal,
+        invoice_status: invoice.status,
+        invoice_customer_name: invoice.customer_name,
+        invoice_customer_phone: invoice.customer_phone,
+        invoice_created_at: invoice.created_at,
+        match_reasons: reasons,
+        raw_signal: signal.rawPayload,
+      })
+    }
   } catch (err: any) {
     logger.error({ invoiceId, err: err.message }, 'Failed to write payment attribution log')
   }

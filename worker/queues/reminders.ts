@@ -6,6 +6,7 @@ import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { createQueueLogger } from '../lib/queue-logger'
 import { EventType, DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
+import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { generateCorrelationId } from '../src/lib/billzo/idempotency'
 import { sendWhatsAppMessage, getEffectiveProvider } from '../lib/whatsapp-router'
 import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
@@ -113,7 +114,7 @@ interface ReminderJobData {
   stage: string
 }
 
-export function createRemindersWorker() {
+export function createRemindersWorker(authority?: InternalAuthorityClient) {
   const connection = createRedisConnection()
 
   const worker = new Worker<ReminderJobData>(
@@ -222,16 +223,34 @@ export function createRemindersWorker() {
 
         const nextStage = getNextStage(stage as ReminderStage)
 
-        // Recovery orchestration fields update (owned by recovery domain)
-        await supabaseAdmin.from('invoices').update({
-          last_whatsapp_status: eventStatus,
-          last_whatsapp_at: new Date().toISOString(),
-          recovery_stage: nextStage,
-          next_recovery_at: nextStage !== stage
-            ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-            : null,
-          sync_status: 'pending',
-        }).eq('id', invoiceId)
+        // Recovery orchestration fields update (governed by authority if available)
+        if (authority) {
+          await authority.submit({
+            intentType: 'reminder.advance_stage',
+            tenantId,
+            actor: 'reminder-worker',
+            payload: {
+              invoiceId,
+              lastWhatsappStatus: eventStatus,
+              lastWhatsappAt: new Date().toISOString(),
+              recoveryStage: nextStage,
+              nextRecoveryAt: nextStage !== stage
+                ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+                : null,
+            },
+          }, 'trusted_sync')
+        } else {
+          // authority:fallback reminder.advance_stage
+          await supabaseAdmin.from('invoices').update({
+            last_whatsapp_status: eventStatus,
+            last_whatsapp_at: new Date().toISOString(),
+            recovery_stage: nextStage,
+            next_recovery_at: nextStage !== stage
+              ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+              : null,
+            sync_status: 'pending',
+          }).eq('id', invoiceId)
+        }
 
         if (eventStatus !== 'failed') {
           await emitRecoveryReminderSent({
@@ -378,10 +397,23 @@ export function createRemindersWorker() {
 
             // Use orchestrator's cadence for next follow-up timing
             if (nextFollowUpDays !== 3) {
-              const cadenceUpdate: Record<string, any> = {
-                next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+              if (authority) {
+                await authority.submit({
+                  intentType: 'reminder.update_cadence',
+                  tenantId,
+                  actor: 'reminder-worker',
+                  payload: {
+                    invoiceId,
+                    nextRecoveryAt: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+                  },
+                }, 'trusted_sync')
+              } else {
+                // authority:fallback reminder.update_cadence
+                const cadenceUpdate: Record<string, any> = {
+                  next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+                }
+                await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
               }
-              await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
             }
           } catch (err) {
             logger.error({ invoiceId, err }, 'Orchestrator error')

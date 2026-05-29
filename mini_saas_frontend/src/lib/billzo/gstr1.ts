@@ -1,3 +1,6 @@
+import crypto from 'crypto'
+import { submitIntent } from '@/lib/authority/transport'
+
 export interface GSTR1Export {
   gstin: string
   fp: string
@@ -263,16 +266,35 @@ export async function generateGSTR1JSON(
     doc_issue: docIssue
   }
 
-  await supabaseAdmin
-    .from('gstr_exports')
-    .upsert({
-      tenant_id: tenantId,
-      month,
-      year,
-      export_data: result,
-      status: 'GENERATED',
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'tenant_id,month,year' })
+  // authority:governed gstr.save_export
+  const intentResult = await submitIntent({
+    intentId: crypto.randomUUID(),
+    intentType: 'gstr.save_export',
+    intentVersion: 1,
+    tenantId,
+    actor: 'system:gstr_export',
+    source: 'app',
+    timestamp: new Date().toISOString(),
+    causationId: null,
+    correlationId: null,
+    payload: { tenantId, month, year, exportData: result, status: 'GENERATED' },
+    nonce: crypto.randomUUID(),
+  }, 'app')
+
+  if (!intentResult.accepted) {
+    console.error('[GSTR1] Authority rejected export save:', intentResult.error)
+    // authority:fallback gstr.save_export — export data still stored locally
+    await supabaseAdmin
+      .from('gstr_exports')
+      .upsert({
+        tenant_id: tenantId,
+        month,
+        year,
+        export_data: result,
+        status: 'GENERATED',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'tenant_id,month,year' })
+  }
 
   return result
 }

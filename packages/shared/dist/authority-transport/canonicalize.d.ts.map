@@ -1,0 +1,1 @@
+{"version":3,"file":"canonicalize.d.ts","sourceRoot":"","sources":["../../src/authority-transport/canonicalize.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,sBAAsB,IAAI,CAAA;AAEvC,wBAAgB,aAAa,CAAC,KAAK,EAAE,OAAO,GAAG,MAAM,CAGpD;AA+DD,qBAAa,kBAAmB,SAAQ,KAAK;gBAC/B,OAAO,EAAE,MAAM;CAI5B"}

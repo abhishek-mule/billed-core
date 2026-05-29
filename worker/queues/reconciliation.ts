@@ -5,10 +5,11 @@ import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { createQueueLogger } from '../lib/queue-logger'
 import { reconcilePayment } from '../src/lib/billzo/reconciliation'
 import { executeIdempotent, IdempotencyPatterns } from '../src/lib/billzo/idempotency'
+import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 
 const logger = createQueueLogger('reconciliation')
 
-export function createReconciliationWorker() {
+export function createReconciliationWorker(authority?: InternalAuthorityClient) {
   const connection = createRedisConnection()
 
   const worker = new Worker(
@@ -43,7 +44,7 @@ export function createReconciliationWorker() {
             idempotencyKey,
             'payment_reconciliation',
             tenantId,
-            async () => reconcilePayment(signal, tenantId),
+            async () => reconcilePayment(signal, tenantId, authority),
           )
         })
 

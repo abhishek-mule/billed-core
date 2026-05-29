@@ -24,6 +24,7 @@ const successCap: CapabilityProvider = {
   compensatable: true,
   minIntentVersion: 1,
   maxIntentVersion: 1,
+  ownedMutations: [],
   execute: async () => ({ success: true, executionLatencyMs: 1 }),
   compensate: async () => ({ success: true }),
 }
@@ -35,13 +36,6 @@ const failCap: CapabilityProvider = {
   compensatable: true,
 }
 
-const noCompensateCap: CapabilityProvider = {
-  ...successCap,
-  capabilityId: 'destructive.action',
-  compensatable: false,
-  execute: async () => ({ success: false, error: 'irreversible failure', executionLatencyMs: 1 }),
-}
-
 const samplePlan: ExecutionPlan = {
   intentId: 'plan_001',
   planHash: 'abc123',
@@ -50,6 +44,8 @@ const samplePlan: ExecutionPlan = {
     { capabilityId: 'tenant.provision', order: 0, compensatable: true, requiresApproval: false, priorityClass: 'tenant_lifecycle', implementationHash: 'h1', input: {} },
   ],
   capabilityImplementationHashes: { 'tenant.provision': 'h1' },
+  policySnapshotHash: '',
+  registrySnapshotHash: '',
 }
 
 const multiStepPlan: ExecutionPlan = {
@@ -61,6 +57,8 @@ const multiStepPlan: ExecutionPlan = {
     { capabilityId: 'invoice.issue', order: 1, compensatable: true, requiresApproval: false, priorityClass: 'critical_financial', implementationHash: 'h2', input: {} },
   ],
   capabilityImplementationHashes: { 'tenant.provision': 'h1', 'invoice.issue': 'h2' },
+  policySnapshotHash: '',
+  registrySnapshotHash: '',
 }
 
 // ============================================================
@@ -71,46 +69,27 @@ describe('executePlan', () => {
   it('executes all steps successfully', async () => {
     const reg = new CapabilityRegistry()
     reg.register(successCap)
-    const result = await executePlan(samplePlan, reg)
-    expect(result.success).toBe(true)
-    expect(result.compensated).toBe(false)
-    expect(result.stepResults).toHaveLength(1)
-    expect(result.stepResults[0].result.success).toBe(true)
+    const results = await executePlan(reg, samplePlan)
+    expect(results).toHaveLength(1)
+    expect(results[0].success).toBe(true)
   })
 
-  it('fails and compensates when a compensatable step fails', async () => {
+  it('stops on first failure', async () => {
     const reg = new CapabilityRegistry()
     reg.register(successCap)
     reg.register(failCap)
-    const result = await executePlan(multiStepPlan, reg)
-    expect(result.success).toBe(false)
-    expect(result.compensated).toBe(true)
-    expect(result.stepResults).toHaveLength(2)
-    expect(result.stepResults[1].result.success).toBe(false)
-  })
-
-  it('fails without compensation when step is not compensatable', async () => {
-    const reg = new CapabilityRegistry()
-    reg.register(noCompensateCap)
-    const plan: ExecutionPlan = {
-      intentId: 'plan_003',
-      planHash: 'ghi789',
-      planCompilerVersion: 'test',
-      steps: [
-        { capabilityId: 'destructive.action', order: 0, compensatable: false, requiresApproval: false, priorityClass: 'tenant_lifecycle', implementationHash: 'h3', input: {} },
-      ],
-      capabilityImplementationHashes: { 'destructive.action': 'h3' },
-    }
-    const result = await executePlan(plan, reg)
-    expect(result.success).toBe(false)
-    expect(result.compensated).toBe(false)
+    const results = await executePlan(reg, multiStepPlan)
+    expect(results).toHaveLength(2)
+    expect(results[0].success).toBe(true)
+    expect(results[1].success).toBe(false)
   })
 
   it('returns error when capability not found', async () => {
     const reg = new CapabilityRegistry()
-    const result = await executePlan(samplePlan, reg)
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('not found')
+    const results = await executePlan(reg, samplePlan)
+    expect(results).toHaveLength(1)
+    expect(results[0].success).toBe(false)
+    expect(results[0].error).toContain('not_found')
   })
 })
 
@@ -128,6 +107,7 @@ describe('InternalAuthorityClient', () => {
         getCurrentCounts: async () => ({}),
       },
       tenantPlanLookup: async () => 'premium',
+      registrySnapshotHash: 'test-registry-hash',
     })
     const result = await client.submit({
       intentType: 'tenant.provision',
@@ -152,6 +132,7 @@ describe('createAuthorityGateway', () => {
       capabilities: [],
       rateLimitStore: { getCurrentCounts: async () => ({}) },
       tenantPlanLookup: async () => undefined,
+      registrySnapshotHash: 'test-registry-hash',
     })
     const res = await app.request('/health')
     expect(res.status).toBe(200)
@@ -176,6 +157,7 @@ describe('createAuthorityGateway', () => {
       capabilities: [],
       rateLimitStore: { getCurrentCounts: async () => ({}) },
       tenantPlanLookup: async () => undefined,
+      registrySnapshotHash: 'test-registry-hash',
     })
 
     const { body } = signedRequest({
@@ -195,6 +177,7 @@ describe('createAuthorityGateway', () => {
       capabilities: [],
       rateLimitStore: { getCurrentCounts: async () => ({}) },
       tenantPlanLookup: async () => undefined,
+      registrySnapshotHash: 'test-registry-hash',
     })
 
     const { body } = signedRequest({

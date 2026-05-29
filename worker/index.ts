@@ -3,12 +3,22 @@ import { Queue } from 'bullmq'
 import { createOutboxWorker } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
+import { createCognitionWorker, enqueueCognitionJobs } from './queues/cognition'
+import { createRetryWorker, enqueueDeadLetterRetries } from './queues/retry'
 import { supabaseAdmin } from './src/lib/billzo/supabase-admin'
 import { startBaileysSocket } from './lib/baileys-socket'
 import { sendPushNotification } from './src/lib/billzo/notifications'
 import { createRedisConnection } from './lib/redis'
 import { logWorkerEvent, logWorkerError } from './lib/logging'
 import { AuthorityRuntime } from './src/lib/authority/authority-runtime'
+import { invoiceCapabilities } from './src/lib/authority/invoice-capabilities'
+import { tenantCapabilities } from './src/lib/authority/tenant-capabilities'
+import { reconciliationCapabilities } from './src/lib/authority/reconciliation-capabilities'
+import { recoveryCapabilities } from './src/lib/authority/recovery-capabilities'
+import { gstrCapabilities } from './src/lib/authority/gstr-capabilities'
+import { MutationGate } from './src/lib/mutation-gate'
+import { TransportRegistry, BaileysAdapter, GupshupAdapter, SimulationAdapter } from './src/lib/transport'
+import { setTransportRegistry } from './lib/whatsapp-router'
 
 async function getQueueHealth() {
   const connection = createRedisConnection()
@@ -82,24 +92,64 @@ async function main() {
   const runtime = new AuthorityRuntime()
   await runtime.initialize({
     supabaseAdmin: supabaseAdmin as any,
-    redisRateLimitStore: null, // TODO: wire Redis rate limit store
+    redisRateLimitStore: null,
     tenantPlanLookup: async (tenantId: string) => {
       const { data } = await supabaseAdmin.from('tenants').select('plan').eq('id', tenantId).single()
       return data?.plan ?? undefined
     },
-    capabilityProviders: [], // TODO: register real capabilities
+    capabilityProviders: [
+      ...invoiceCapabilities,
+      ...tenantCapabilities,
+      ...reconciliationCapabilities,
+      ...recoveryCapabilities,
+      ...gstrCapabilities,
+    ],
     requiredCapabilities: [],
     bootstrapCreatedBy: 'worker',
+    databaseUrl: process.env.AUTHORITY_DATABASE_URL,
   })
   console.log(`[Worker] Authority initialized — phase: ${runtime.orchestrator.currentPhase}`)
+
+  // ---- MutationGate: shadow-mode observability layer (Step 1) ----
+  const mutationGate = new MutationGate({ mode: 'shadow' })
+
+  // ---- TransportRegistry: normalized channel abstraction ----
+  const transportRegistry = new TransportRegistry()
+  transportRegistry.register(new BaileysAdapter())
+  transportRegistry.register(new GupshupAdapter())
+  transportRegistry.register(new SimulationAdapter())
+  setTransportRegistry(transportRegistry)
+
+  function wrapWithGate(client: { submit: Function }): { submit: Function } {
+    const origSubmit = client.submit.bind(client)
+    return {
+      submit: async (intent: any, mode: string) => {
+        const result = await origSubmit(intent, mode)
+        mutationGate.submit({
+          idempotencyKey: intent.nonce ?? `${intent.intentType}:${intent.tenantId}:${Date.now()}`,
+          intentType: `${intent.intentType}.v1`,
+          tenantId: intent.tenantId,
+          entityType: intent.payload?.invoiceId ? 'invoice' : intent.payload?.customerId ? 'customer' : undefined,
+          entityId: intent.payload?.invoiceId ?? intent.payload?.customerId ?? undefined,
+          payload: intent.payload ?? {},
+          mode: 'sync',
+        }).catch((err: any) => console.warn('[mutation-gate] Shadow execution failed:', err.message))
+        return result
+      },
+    }
+  }
+
+  const gatedClient = wrapWithGate(runtime.internalClient)
 
   // ---- Health server (safe before queues, reports runtime phase) ----
   const healthServer = startHealthServer(runtime)
 
   // ---- Queue workers (start AFTER authority core is ready) ----
-  const outboxWorker = createOutboxWorker()
-  const remindersWorker = createRemindersWorker()
-  const reconciliationWorker = createReconciliationWorker()
+  const outboxWorker = createOutboxWorker(gatedClient)
+  const remindersWorker = createRemindersWorker(gatedClient)
+  const reconciliationWorker = createReconciliationWorker(gatedClient)
+  const cognitionWorker = createCognitionWorker()
+  const retryWorker = createRetryWorker()
   logWorkerEvent({ message: 'All queue workers started', level: 'info', timestamp: new Date().toISOString() })
 
   // ---- PHASE 4-6: Authority activation (queues → gateway → readiness → RUNNING) ----
@@ -141,6 +191,95 @@ async function main() {
   enqueueOverdue()
   const overdueInterval = setInterval(enqueueOverdue, 5 * 60 * 1000)
 
+  // Cognition pipeline — compute operational situations every 10 minutes
+  const enqueueCognition = async () => {
+    try {
+      const count = await enqueueCognitionJobs()
+      if (count > 0) console.log(`[Worker] Enqueued ${count} cognition jobs`)
+    } catch (err) {
+      console.error('[Worker] Failed to enqueue cognition jobs:', err)
+    }
+  }
+  enqueueCognition()
+  const cognitionInterval = setInterval(enqueueCognition, 10 * 60 * 1000)
+
+  // Health probe — check all active messaging channels every 5 minutes
+  const probeChannelHealth = async () => {
+    try {
+      const { data: channels } = await supabaseAdmin
+        .from('messaging_channels')
+        .select('id, provider, connection_state, consecutive_failures')
+        .eq('is_active', true)
+        .limit(100)
+
+      if (!channels) return
+
+      for (const ch of channels) {
+        try {
+          const health = await transportRegistry.getHealth(ch.id)
+          if (!health) continue
+
+          const newState = health.connectionState
+          const consecutiveFailures = newState === 'disconnected' || newState === 'degraded'
+            ? (ch.consecutive_failures || 0) + 1
+            : 0
+
+          await supabaseAdmin
+            .from('messaging_channels')
+            .update({
+              connection_state: newState,
+              last_health_check_at: new Date().toISOString(),
+              last_heartbeat_at: health.lastHeartbeatAt,
+              consecutive_failures: consecutiveFailures,
+              delivery_success_rate: health.deliverySuccessRate,
+              quality_score: health.qualityScore,
+            })
+            .eq('id', ch.id)
+
+          if (consecutiveFailures >= 3 && ch.consecutive_failures < 3) {
+            logWorkerEvent({
+              message: `Channel ${ch.id} degraded for ${consecutiveFailures} consecutive probes`,
+              level: 'warn',
+              timestamp: new Date().toISOString(),
+              channel_id: ch.id,
+              provider: ch.provider,
+            })
+            await sendPushNotification({
+              tenantId: ch.id.split('_')[0],
+              title: 'WhatsApp Channel Degraded',
+              body: `Your ${ch.provider} channel has been offline for ${consecutiveFailures} checks. Check your connection.`,
+              type: 'channel_alert',
+              url: '/settings/whatsapp',
+            }).catch(() => {})
+          }
+        } catch (err) {
+          logWorkerError(err instanceof Error ? err : new Error(String(err)), {
+            channel_id: ch.id,
+            context: 'health_probe',
+          })
+        }
+      }
+    } catch (err) {
+      logWorkerError(err instanceof Error ? err : new Error(String(err)), {
+        context: 'health_probe_top_level',
+      })
+    }
+  }
+  probeChannelHealth()
+  const healthProbeInterval = setInterval(probeChannelHealth, 5 * 60 * 1000)
+
+  // Dead letter retry — recover events that exhausted retries
+  const recoverDeadLetters = async () => {
+    try {
+      const count = await enqueueDeadLetterRetries()
+      if (count > 0) console.log(`[Worker] Enqueued ${count} dead letter events for retry`)
+    } catch (err) {
+      console.error('[Worker] Failed to enqueue dead letter retries:', err)
+    }
+  }
+  recoverDeadLetters()
+  const deadLetterInterval = setInterval(recoverDeadLetters, 5 * 60 * 1000)
+
   // Compute merchant reputation daily
   const computeReputation = async () => {
     try {
@@ -173,10 +312,13 @@ async function main() {
             (1 - failureRate) * 0.25 +
             (1 - volumeScore) * 0.20
 
-          await supabaseAdmin
-            .from('tenants')
-            .update({ whatsapp_reputation: Math.round(reputation * 100) / 100 })
-            .eq('id', t.id)
+          await gatedClient.submit({
+            intentType: 'tenant.update_operational_health',
+            intentVersion: 1,
+            tenantId: t.id,
+            actor: 'system:worker',
+            payload: { whatsappReputation: Math.round(reputation * 100) / 100 },
+          }, 'trusted_sync')
 
           if (reputation < 0.1) {
             logWorkerEvent({
@@ -218,6 +360,9 @@ async function main() {
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
+    clearInterval(cognitionInterval)
+    clearInterval(healthProbeInterval)
+    clearInterval(deadLetterInterval)
     clearInterval(reputationInterval)
 
     // Shutdown authority gateway first (stop accepting new intents)
@@ -229,6 +374,8 @@ async function main() {
       outboxWorker.close(),
       remindersWorker.close(),
       reconciliationWorker.close(),
+      cognitionWorker.close(),
+      retryWorker.close(),
     ])
     console.log('[Worker] All workers closed')
     process.exit(0)

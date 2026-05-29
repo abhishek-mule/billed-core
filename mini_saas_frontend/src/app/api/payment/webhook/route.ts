@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { type PlanType } from '@/lib/billzo/plan-limits'
 import { processRazorpayPaymentWebhook } from '@/lib/billzo/reconciliation'
+import { submitIntent } from '@/lib/authority/transport'
 
 const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
 
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     switch (event.event) {
       // ============================================================
-      // PAYMENT RECONCILIATION — Auto-match payments to invoices
+      // PAYMENT RECONCILIATION
       // ============================================================
       case 'payment_link.paid':
       case 'payment.captured': {
@@ -53,7 +54,6 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        // Extract tenantId from notes
         const tenantId = payment.notes?.tenantId
           || payment.notes?.tenant_id
           || (await resolveTenantFromPayment(payment))
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
 
       // ============================================================
-      // SUBSCRIPTION EVENTS
+      // SUBSCRIPTION EVENTS — governed via tenant.update_subscription
       // ============================================================
       case 'order.paid': {
         const order = event.payload.order
@@ -111,17 +111,24 @@ export async function POST(request: NextRequest) {
         const now = new Date().toISOString()
 
         if (existing) {
-          await supabaseAdmin
-            .from('tenants')
-            .update({
-              plan,
-              paywall_unlocked: true,
-              subscription_id: order.id,
-              subscription_status: 'active',
-              updated_at: now,
-            })
-            .eq('id', tenantId)
+          const result = await submitIntent({
+            intentId: crypto.randomUUID(),
+            intentType: 'tenant.update_subscription',
+            intentVersion: 1,
+            tenantId,
+            actor: 'system:razorpay_webhook',
+            source: 'app',
+            timestamp: now,
+            causationId: null,
+            correlationId: null,
+            payload: { plan, planStatus: 'active', subscriptionId: order.id, paywallUnlocked: true, updatedAt: now },
+            nonce: crypto.randomUUID(),
+          }, 'app')
+          if (!result.accepted) {
+            console.error('[Webhook] Authority rejected subscription update:', result.error)
+          }
         } else {
+          // authority:fallback tenant.create — bootstrap tenant creation on first subscription
           await supabaseAdmin
             .from('tenants')
             .insert({
@@ -147,19 +154,24 @@ export async function POST(request: NextRequest) {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
         const plan = (sub?.notes?.plan || 'pro') as PlanType
-
         if (!tenantId) break
 
-        await supabaseAdmin
-          .from('tenants')
-          .update({
-            plan,
-            paywall_unlocked: true,
-            subscription_id: sub?.id,
-            subscription_status: 'active',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', tenantId)
+        const result = await submitIntent({
+          intentId: crypto.randomUUID(),
+          intentType: 'tenant.update_subscription',
+          intentVersion: 1,
+          tenantId,
+          actor: 'system:razorpay_webhook',
+          source: 'app',
+          timestamp: new Date().toISOString(),
+          causationId: null,
+          correlationId: null,
+          payload: { plan, planStatus: 'active', subscriptionId: sub?.id, paywallUnlocked: true },
+          nonce: crypto.randomUUID(),
+        }, 'app')
+        if (!result.accepted) {
+          console.error('[Webhook] Authority rejected subscription activation:', result.error)
+        }
 
         console.log(`[Webhook] Subscription activated - tenant ${tenantId}`)
         break
@@ -172,19 +184,24 @@ export async function POST(request: NextRequest) {
       case 'subscription.cancelled': {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
-
         if (!tenantId) break
 
-        await supabaseAdmin
-          .from('tenants')
-          .update({
-            plan: 'starter' as PlanType,
-            paywall_unlocked: false,
-            subscription_status: 'cancelled',
-            cancelled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', tenantId)
+        const result = await submitIntent({
+          intentId: crypto.randomUUID(),
+          intentType: 'tenant.update_subscription',
+          intentVersion: 1,
+          tenantId,
+          actor: 'system:razorpay_webhook',
+          source: 'app',
+          timestamp: new Date().toISOString(),
+          causationId: null,
+          correlationId: null,
+          payload: { plan: 'starter', planStatus: 'cancelled', paywallUnlocked: false, cancelledAt: new Date().toISOString() },
+          nonce: crypto.randomUUID(),
+        }, 'app')
+        if (!result.accepted) {
+          console.error('[Webhook] Authority rejected subscription cancellation:', result.error)
+        }
 
         console.log(`[Webhook] Subscription cancelled - tenant ${tenantId}`)
         break
@@ -193,15 +210,23 @@ export async function POST(request: NextRequest) {
       case 'subscription.paused': {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
-
         if (tenantId) {
-          await supabaseAdmin
-            .from('tenants')
-            .update({
-              subscription_status: 'paused',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', tenantId)
+          const result = await submitIntent({
+            intentId: crypto.randomUUID(),
+            intentType: 'tenant.update_subscription',
+            intentVersion: 1,
+            tenantId,
+            actor: 'system:razorpay_webhook',
+            source: 'app',
+            timestamp: new Date().toISOString(),
+            causationId: null,
+            correlationId: null,
+            payload: { planStatus: 'paused' },
+            nonce: crypto.randomUUID(),
+          }, 'app')
+          if (!result.accepted) {
+            console.error('[Webhook] Authority rejected subscription pause:', result.error)
+          }
         }
         break
       }
@@ -209,15 +234,23 @@ export async function POST(request: NextRequest) {
       case 'subscription.resumed': {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
-
         if (tenantId) {
-          await supabaseAdmin
-            .from('tenants')
-            .update({
-              subscription_status: 'active',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', tenantId)
+          const result = await submitIntent({
+            intentId: crypto.randomUUID(),
+            intentType: 'tenant.update_subscription',
+            intentVersion: 1,
+            tenantId,
+            actor: 'system:razorpay_webhook',
+            source: 'app',
+            timestamp: new Date().toISOString(),
+            causationId: null,
+            correlationId: null,
+            payload: { planStatus: 'active' },
+            nonce: crypto.randomUUID(),
+          }, 'app')
+          if (!result.accepted) {
+            console.error('[Webhook] Authority rejected subscription resume:', result.error)
+          }
         }
         break
       }
@@ -233,13 +266,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Resolve tenantId from payment data when not in notes.
- * Tries to match via customer phone or payment link.
- */
 async function resolveTenantFromPayment(payment: any): Promise<string | null> {
   try {
-    // Try matching via payment_link_id
     if (payment.payment_link_id) {
       const { data: invoice } = await supabaseAdmin
         .from('invoices')
@@ -250,7 +278,6 @@ async function resolveTenantFromPayment(payment: any): Promise<string | null> {
       if (invoice?.tenant_id) return invoice.tenant_id
     }
 
-    // Try matching via customer phone
     if (payment.contact) {
       const { data: invoice } = await supabaseAdmin
         .from('invoices')
@@ -264,7 +291,6 @@ async function resolveTenantFromPayment(payment: any): Promise<string | null> {
       if (invoice?.tenant_id) return invoice.tenant_id
     }
   } catch {
-    // Ignore errors, return null
   }
 
   return null

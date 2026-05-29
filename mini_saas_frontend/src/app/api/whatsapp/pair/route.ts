@@ -33,18 +33,36 @@ export async function GET(request: NextRequest) {
 
   const redis = createRedisClient()
   try {
-    const [qr, exists] = await Promise.all([
+    const [qr, exists, stateRaw] = await Promise.all([
       redis.get(`baileys:qr:${tenantId}`),
       redis.exists(`baileys:auth:${tenantId}`),
+      redis.get(`baileys:state:${tenantId}`),
     ])
 
-    if (exists) {
-      return NextResponse.json({ status: 'connected' })
+    let connectionState = 'disconnected'
+    let health: Record<string, any> | null = null
+
+    if (stateRaw) {
+      try {
+        const parsed = JSON.parse(stateRaw)
+        connectionState = parsed.connectionState || connectionState
+        health = {
+          lastHeartbeatAt: parsed.lastHeartbeatAt || null,
+          lastConnectedAt: parsed.lastConnectedAt || null,
+          deliverySuccessRate: parsed.deliverySuccessRate || null,
+          error: parsed.error || null,
+        }
+      } catch {}
     }
+
+    if (exists && connectionState === 'disconnected') {
+      connectionState = 'connected'
+    }
+
     if (qr) {
-      return NextResponse.json({ status: 'awaiting_scan', qr })
+      return NextResponse.json({ status: 'awaiting_scan', qr, connectionState, health })
     }
-    return NextResponse.json({ status: 'waiting' })
+    return NextResponse.json({ status: connectionState === 'connected' ? 'connected' : 'waiting', connectionState, health })
   } finally {
     await redis.quit()
   }

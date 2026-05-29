@@ -1,3 +1,4 @@
+// authority:exempt idempotency_guard — processed_jobs tracking
 import { supabaseAdmin } from './supabase-admin'
 
 export interface IdempotencyResult {
