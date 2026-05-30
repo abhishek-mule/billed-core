@@ -1,4 +1,5 @@
 export * from './types'
+export * from './recovery-case'
 export * from './events'
 export * from './calibration-types'
 export * from './counterfactual-types'
