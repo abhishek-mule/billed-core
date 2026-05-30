@@ -6,7 +6,7 @@ import { Store, ArrowRight } from "lucide-react";
 import { UsagePill } from "@/components/billzo/UsagePill";
 import { Loader } from "@/components/billzo/Loader";
 import { getCookie } from "@/lib/cookies";
-import { QueueDashboard } from "@/components/recovery/QueueDashboard";
+import { QueueActionList } from "@/components/recovery/QueueActionList";
 
 function getTenantName() {
   const raw = getCookie("bz_tenant_name");
@@ -67,7 +67,7 @@ export default function DashboardPage() {
         <UsagePill />
       </div>
 
-      <QueueDashboard />
+      <QueueActionList />
     </div>
   );
 }

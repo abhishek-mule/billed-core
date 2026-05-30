@@ -60,6 +60,7 @@ export interface SignalEvent {
   deliveryStatus?: string | null
   failureCount?: number | null
   merchantAction?: string | null
+  snoozeDuration?: number | null
   occurredAt: string
 }
 
@@ -116,6 +117,12 @@ export function transitionCase(
       return handleMarkDisputed(base, signal, now)
     case 'merchant.mark_closed':
       return handleMarkClosed(base, signal, now)
+    case 'customer.called':
+      return handleCustomerCalled(base, signal, now)
+    case 'merchant.snoozed':
+      return handleMerchantSnoozed(base, signal, now)
+    case 'merchant.payment_reported':
+      return handlePaymentReported(base, signal, now)
     default:
       return null
   }
@@ -153,7 +160,13 @@ function buildTransition(
 
   // Derive next action
   next.nextActionType = deriveNextAction(next)
-  next.nextActionDueAt = deriveNextActionDueAt(next, now)
+
+  // Preserve explicit nextActionDueAt if set in updates (e.g. snooze)
+  if (updates.nextActionDueAt === undefined) {
+    next.nextActionDueAt = deriveNextActionDueAt(next, now)
+  } else {
+    next.nextActionDueAt = updates.nextActionDueAt
+  }
 
   const isFirstCase = !current.id
   const fromRecoveryState = isFirstCase ? null : (oldState !== newState ? oldState : undefined)
@@ -371,6 +384,47 @@ function handleMarkClosed(current: CurrentCase, signal: SignalEvent, now: string
   )
 }
 
+function handleCustomerCalled(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+  const updates: Partial<CurrentCase> = {}
+  if (current.engagementState === 'unseen') {
+    updates.engagementState = 'engaged'
+  }
+  return buildTransition(
+    current,
+    updates,
+    'transition',
+    'Customer called by merchant',
+    { signalId: signal.id, merchantAction: signal.merchantAction },
+    now,
+  )
+}
+
+function handleMerchantSnoozed(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+  const days = signal.snoozeDuration || 3
+  const dueAt = new Date(Date.now() + days * 86400000).toISOString()
+  return buildTransition(
+    current,
+    {
+      nextActionDueAt: dueAt,
+    },
+    'transition',
+    `Snoozed ${days} days by merchant`,
+    { signalId: signal.id, snoozeDays: days },
+    now,
+  )
+}
+
+function handlePaymentReported(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+  return buildTransition(
+    current,
+    {},
+    'transition',
+    'Customer claims payment made — awaiting confirmation',
+    { signalId: signal.id, merchantAction: signal.merchantAction },
+    now,
+  )
+}
+
 // ============================================================
 // Derive next action from state
 // ============================================================
@@ -386,7 +440,13 @@ function deriveNextAction(c: CurrentCase): NextActionType {
     return 'wait'
   }
 
-  if (c.recoveryState === 'overdue' || c.recoveryState === 'partial_payment') {
+  if (c.recoveryState === 'partial_payment') {
+    if (c.engagementState === 'ghosting') return 'follow_up_call'
+    if (c.engagementState === 'intent') return 'wait'
+    return 'review_payment'
+  }
+
+  if (c.recoveryState === 'overdue') {
     if (c.engagementState === 'ghosting') return 'follow_up_call'
     if (c.engagementState === 'intent') return 'wait'
     return 'send_reminder'
@@ -399,11 +459,8 @@ function deriveNextAction(c: CurrentCase): NextActionType {
 
 function deriveNextActionDueAt(c: CurrentCase, now: string): string | null {
   if (c.nextActionType === 'wait') return null
-  if (c.nextActionType === 'send_reminder') return now
-  if (c.nextActionType === 'follow_up_call') return now
   if (c.nextActionType === 'merchant_review') return now
-  if (c.nextActionType === 'review_payment') return now
-  return null
+  return now
 }
 
 // ============================================================

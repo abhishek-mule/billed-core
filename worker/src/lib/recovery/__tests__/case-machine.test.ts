@@ -144,6 +144,66 @@ describe('transitionCase', () => {
   })
 
   // ============================================================
+  // New merchant action transitions
+  // ============================================================
+
+  describe('customer.called', () => {
+    it('transitions unseen → engaged', () => {
+      const c = makeCase({ engagementState: 'unseen' })
+      const result = transitionCase(c, signal('customer.called'))
+      expect(result).not.toBeNull()
+      expect(result!.engagementState).toBe('engaged')
+      expect(result!.event.reason).toContain('Customer called')
+    })
+
+    it('does not change already engaged state', () => {
+      const c = makeCase({ engagementState: 'engaged' })
+      const result = transitionCase(c, signal('customer.called'))
+      expect(result).not.toBeNull()
+      expect(result!.engagementState).toBeUndefined()
+    })
+
+    it('does not change ghosting', () => {
+      const c = makeCase({ engagementState: 'ghosting' })
+      const result = transitionCase(c, signal('customer.called'))
+      expect(result).not.toBeNull()
+      expect(result!.engagementState).toBeUndefined()
+    })
+  })
+
+  describe('merchant.snoozed', () => {
+    it('bumps nextActionDueAt by default 3 days', () => {
+      const before = Date.now()
+      const c = makeCase({ nextActionDueAt: new Date(before).toISOString() })
+      const result = transitionCase(c, signal('merchant.snoozed'))
+      expect(result).not.toBeNull()
+      expect(result!.nextActionDueAt).not.toBeNull()
+      const after = new Date(result!.nextActionDueAt!).getTime()
+      expect(after).toBeGreaterThan(before)
+      expect(after - before).toBeGreaterThanOrEqual(2.5 * 86400000)
+    })
+
+    it('respects snoozeDuration override', () => {
+      const before = Date.now()
+      const c = makeCase()
+      const result = transitionCase(c, signal('merchant.snoozed', { snoozeDuration: 7 }))
+      expect(result).not.toBeNull()
+      const diff = new Date(result!.nextActionDueAt!).getTime() - before
+      expect(diff).toBeGreaterThanOrEqual(6.5 * 86400000)
+    })
+  })
+
+  describe('merchant.payment_reported', () => {
+    it('does not change recovery state', () => {
+      const c = makeCase({ recoveryState: 'overdue' })
+      const result = transitionCase(c, signal('merchant.payment_reported'))
+      expect(result).not.toBeNull()
+      expect(result!.recoveryState).toBeUndefined()
+      expect(result!.event.reason).toContain('awaiting confirmation')
+    })
+  })
+
+  // ============================================================
   // EngagementState transitions
   // ============================================================
 

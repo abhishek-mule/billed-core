@@ -324,18 +324,22 @@ const RECOVERY_STATE_EVENTS = new Set([
   'recovery.reminder.delivered',
   'recovery.reminder.failed',
   'whatsapp.status.updated',
+  'customer.called',
+  'merchant.snoozed',
+  'merchant.payment_reported',
 ])
 
 async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   if (!RECOVERY_STATE_EVENTS.has(event.type)) return
 
   const tenantId = event.tenantId
-  const invoiceId = event.entityId
-  if (!tenantId || !invoiceId) return
+  if (!tenantId) return
 
-  // 1. Resolve customer_id
+  // Resolve customer_id: from payload (merchant actions) or from invoice (system events)
   let customerId: string | undefined = event.payload?.customerId
-  if (!customerId && invoiceId) {
+  if (!customerId) {
+    const invoiceId = event.entityId
+    if (!invoiceId) return
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
       .select('customer_id')
@@ -389,6 +393,7 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   }
 
   // 4. Build signal event for the state machine
+  const invoiceId = event.entityId || null
   const signal: SignalEvent = {
     type: event.type,
     id: event.id,
@@ -402,6 +407,7 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
     deliveryStatus: event.payload?.deliveryStatus || event.payload?.status || null,
     failureCount: event.payload?.failureCount || event.payload?.consecutive_failures || null,
     merchantAction: event.payload?.merchantAction || event.payload?.reason || null,
+    snoozeDuration: event.payload?.snoozeDuration || null,
     occurredAt: event.created_at || new Date().toISOString(),
   }
 
@@ -493,6 +499,9 @@ const COGNITION_TRIGGER_EVENTS = new Set([
   'recovery.reminder.failed',
   'whatsapp.status.updated',
   'whatsapp.upi_clicked',
+  'customer.called',
+  'merchant.snoozed',
+  'merchant.payment_reported',
 ])
 
 async function tryHandleCognitionTrigger(event: any): Promise<void> {
