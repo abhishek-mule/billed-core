@@ -15,24 +15,23 @@ function getRedisUrl(): string {
   throw new Error('UPSTASH_REDIS_URL or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN not configured')
 }
 
+const REDIS_OPTIONS = {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+  lazyConnect: true,
+  connectTimeout: 5000,
+  retryStrategy: (times: number) => (times > 3 ? null : 1000),
+  tls: {},
+} as const
+
 export function createRedisClient(): Redis {
   if (client) return client
-  client = new Redis(getRedisUrl(), {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    tls: {},
-    lazyConnect: true,
-  })
+  client = new Redis(getRedisUrl(), REDIS_OPTIONS)
   return client
 }
 
 export function createRedisSubscriber(): Redis {
   if (subscriber) return subscriber
-  subscriber = new Redis(getRedisUrl(), {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    tls: {},
-    lazyConnect: true,
-  })
+  subscriber = new Redis(getRedisUrl(), REDIS_OPTIONS)
   return subscriber
 }
