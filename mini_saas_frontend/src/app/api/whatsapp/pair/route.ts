@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-async function tryRedisOp<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
+async function tryRedisOp<T>(fn: () => T | Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
   try {
     const value = await fn()
     return { ok: true, value }
