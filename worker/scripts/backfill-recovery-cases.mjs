@@ -1,51 +1,28 @@
 // ============================================================
-// Backfill Recovery Cases — One-time migration
+// Backfill Recovery Cases — Neon (postgres.js)
 // ============================================================
 // Groups invoices by (tenant_id, customer_id), computes aggregate
 // collection position, and upserts into recovery_cases with v2
-// state columns. Inserts a recovery_case_event (type: 'backfill')
-// for each case.
+// state columns. Inserts a recovery_case_event for each case.
 //
 // Usage:
-//   SUPABASE_URL=https://xxx.supabase.co \
-//   SUPABASE_SERVICE_ROLE_KEY=eyJ... \
-//   node scripts/backfill-recovery-cases.mjs
+//   DATABASE_URL=postgres://... node scripts/backfill-recovery-cases.mjs
 //
 // Options:
-//   BATCH=500          invoices per batch (default)
 //   TENANT_ID=xxx      backfill single tenant (optional)
 // ============================================================
 
-const SUPABASE_URL = process.env.SUPABASE_URL || ''
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const BATCH = parseInt(process.env.BATCH || '500', 10)
+import postgres from 'postgres'
+
+const DATABASE_URL = process.env.DATABASE_URL || ''
 const SINGLE_TENANT = process.env.TENANT_ID || null
 
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+if (!DATABASE_URL) {
+  console.error('Missing DATABASE_URL')
   process.exit(1)
 }
 
-const API = `${SUPABASE_URL}/rest/v1`
-const HEADERS = {
-  'apikey': SERVICE_KEY,
-  'Authorization': `Bearer ${SERVICE_KEY}`,
-  'Content-Type': 'application/json',
-  'Prefer': 'return=minimal',
-}
-
-// ============================================================
-// State precedence (mirrors deriveRecoveryState from shared)
-// ============================================================
-const PRECEDENCE = {
-  active: 0,
-  overdue: 1,
-  partial_payment: 2,
-  promised: 3,
-  disputed: 4,
-  recovered: 5,
-  closed: 6,
-}
+const sql = postgres(DATABASE_URL, { max: 1 })
 
 function deriveState(invoices) {
   let hasOverdue = false
@@ -54,10 +31,19 @@ function deriveState(invoices) {
 
   for (const inv of invoices) {
     const s = (inv.status || '').toLowerCase()
+    const ps = (inv.payment_status || '').toLowerCase()
+
     if (s === 'disputed') return 'disputed'
-    if (s === 'overdue') hasOverdue = true
-    else if (s === 'partial') hasPartial = true
-    else if (s === 'unpaid' || s === 'active') hasActive = true
+    if (ps === 'paid' || s === 'paid') continue
+
+    const isOverdue =
+      s === 'overdue' ||
+      (inv.due_date && new Date(inv.due_date) < new Date() &&
+       (s === 'finalized' || s === 'unpaid' || s === 'active'))
+
+    if (isOverdue) hasOverdue = true
+    else if (s === 'partial' || ps === 'partial') hasPartial = true
+    else if (s === 'unpaid' || s === 'active' || s === 'finalized') hasActive = true
   }
 
   if (hasOverdue) return 'overdue'
@@ -76,195 +62,149 @@ function computeAttentionScore(params) {
   return Math.max(0, score)
 }
 
-// ============================================================
-// Fetch invoices with pagination
-// ============================================================
-
-async function fetchInvoices(offset = 0) {
-  let filter = `status=neq.paid,and(status.neq.cancelled,and(status.neq.reconciled))`
-  let url = `${API}/invoices?select=id,tenant_id,customer_id,status,total,due_date,payment_status&offset=${offset}&limit=${BATCH}&order=tenant_id.asc,customer_id.asc`
-
-  if (SINGLE_TENANT) {
-    url += `&tenant_id=eq.${SINGLE_TENANT}`
-  }
-
-  const res = await fetch(url, { headers: HEADERS })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch invoices: ${res.status} ${await res.text()}`)
-  }
-  return res.json()
-}
-
-// ============================================================
-// Fetch existing recovery cases for merging
-// ============================================================
-
-async function fetchExistingCases(tenantId, customerIds) {
-  if (customerIds.length === 0) return {}
-  const ids = customerIds.map(c => `"${c}"`).join(',')
-  const url = `${API}/recovery_cases?select=id,tenant_id,customer_id,invoice_count,created_at&tenant_id=eq.${tenantId}&customer_id=in.(${ids})`
-  const res = await fetch(url, { headers: HEADERS })
-  if (!res.ok) return {}
-  const rows = await res.json()
-  const map = {}
-  for (const r of rows) map[r.customer_id] = r
-  return map
-}
-
-// ============================================================
-// Upsert recovery case
-// ============================================================
-
-async function upsertCase(row) {
-  const url = `${API}/recovery_cases`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...HEADERS,
-      'Prefer': 'resolution=merge-duplicates-duplicates',
-    },
-    body: JSON.stringify(row),
-  })
-  if (!res.ok) {
-    console.error(`  Failed to upsert case for customer ${row.customer_id}: ${res.status}`)
-  }
-}
-
-async function insertEvent(event) {
-  const url = `${API}/recovery_case_events`
-  await fetch(url, {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify(event),
-  }).catch(() => {})
-}
-
-// ============================================================
-// Main
-// ============================================================
-
 async function main() {
-  console.log(`\nRecoveryCase Backfill`)
-  console.log(`  Supabase: ${SUPABASE_URL}`)
-  console.log(`  Batch size: ${BATCH}`)
+  console.log(`\nRecoveryCase Backfill (Neon)`)
   if (SINGLE_TENANT) console.log(`  Tenant filter: ${SINGLE_TENANT}`)
   console.log('')
 
-  let offset = 0
-  let totalProcessed = 0
-  let totalCases = 0
-  let startTime = Date.now()
+  let tenantFilter = ''
+  if (SINGLE_TENANT) tenantFilter = sql`AND tenant_id = ${SINGLE_TENANT}`
 
-  while (true) {
-    const invoices = await fetchInvoices(offset)
-    if (invoices.length === 0) break
+  const invoices = await sql`
+    SELECT id, tenant_id, customer_id, customer_name, status, total, due_date, payment_status
+    FROM invoices
+    WHERE 1=1 ${sql.unsafe(tenantFilter)}
+      AND (status IS DISTINCT FROM 'PAID')
+      AND (payment_status IS DISTINCT FROM 'PAID')
+    ORDER BY tenant_id, customer_id
+  `
 
-    // Group by (tenant_id, customer_id)
-    const groups = {}
-    for (const inv of invoices) {
-      const key = `${inv.tenant_id}:${inv.customer_id}`
-      if (!groups[key]) {
-        groups[key] = { tenantId: inv.tenant_id, customerId: inv.customer_id, invoices: [] }
-      }
-      groups[key].invoices.push(inv)
-    }
-
-    const groupList = Object.values(groups)
-    console.log(`  Batch offset=${offset}: ${invoices.length} invoices, ${groupList.length} groups`)
-
-    // Fetch existing cases for these tenant+customer combinations to merge
-    const tenantGroups = {}
-    for (const g of groupList) {
-      if (!tenantGroups[g.tenantId]) tenantGroups[g.tenantId] = []
-      tenantGroups[g.tenantId].push(g.customerId)
-    }
-
-    const existingMap = {}
-    for (const [tenantId, customerIds] of Object.entries(tenantGroups)) {
-      const map = await fetchExistingCases(tenantId, customerIds)
-      Object.assign(existingMap, map)
-    }
-
-    // Process each group
-    for (const group of groupList) {
-      const { tenantId, customerId, invoices } = group
-      const now = new Date().toISOString()
-
-      // Compute aggregates
-      const totalOutstanding = invoices.reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0)
-      const openCount = invoices.filter(i => (i.status || '').toLowerCase() !== 'paid').length
-      const overdueCount = invoices.filter(i => {
-        const s = (i.status || '').toLowerCase()
-        return s === 'overdue' || (s === 'unpaid' && i.due_date && new Date(i.due_date) < new Date())
-      }).length
-      const disputedCount = invoices.filter(i => (i.status || '').toLowerCase() === 'disputed').length
-      const totalOverdue = invoices
-        .filter(i => (i.status || '').toLowerCase() === 'overdue')
-        .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0)
-
-      const state = deriveState(invoices)
-      const engagement = 'unseen'
-      const nextAction = state === 'overdue' || state === 'partial_payment' ? 'send_reminder' : 'wait'
-
-      // Attention score
-      const oldestOverdue = invoices
-        .filter(i => i.due_date && new Date(i.due_date) < new Date())
-        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0]
-      const overdueDays = oldestOverdue
-        ? Math.floor((Date.now() - new Date(oldestOverdue.due_date).getTime()) / 86400000)
-        : 0
-      const attentionScore = computeAttentionScore({ overdueDays, totalOverdue })
-
-      // Existing case (for idempotency / version)
-      const existing = existingMap[customerId]
-      const caseId = existing?.id || crypto.randomUUID()
-
-      // Upsert
-      await upsertCase({
-        id: caseId,
-        tenant_id: tenantId,
-        customer_id: customerId,
-        recovery_state_v2: state,
-        engagement_state_v2: engagement,
-        next_action_type: nextAction,
-        attention_score: attentionScore,
-        version: 1,
-        invoice_count: invoices.length,
-        open_invoice_count: openCount,
-        overdue_invoice_count: overdueCount,
-        disputed_invoice_count: disputedCount,
-        promised_invoice_count: 0,
-        total_outstanding: totalOutstanding,
-        total_overdue: totalOverdue,
-        last_activity_at: now,
-        updated_at: now,
-      })
-
-      // Insert backfill event
-      await insertEvent({
-        case_id: caseId,
-        event_type: 'backfill',
-        to_recovery_state: state,
-        to_engagement_state: engagement,
-        reason: `Backfill: ${invoices.length} invoice(s), ₹${totalOutstanding} outstanding, state=${state}`,
-        trigger: { invoiceCount: invoices.length, totalOutstanding, batchOffset: offset },
-      })
-
-      totalCases++
-    }
-
-    totalProcessed += invoices.length
-    offset += BATCH
-
-    // Progress
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-    console.log(`  Progress: ${totalProcessed} invoices, ${totalCases} cases (${elapsed}s)`)
+  console.log(`  Fetched ${invoices.length} unpaid invoices`)
+  if (invoices.length === 0) {
+    console.log('\nNothing to backfill.')
+    await sql.end()
+    return
   }
 
-  console.log(`\nDone: ${totalCases} recovery cases backfilled from ${totalProcessed} invoices`)
+  // Group by (tenant_id, customer_id)
+  const groups = {}
+  for (const inv of invoices) {
+    const key = `${inv.tenant_id}:${inv.customer_id}`
+    if (!groups[key]) {
+      groups[key] = { tenantId: inv.tenant_id, customerId: inv.customer_id, invoices: [] }
+    }
+    groups[key].invoices.push(inv)
+  }
+
+  const groupList = Object.values(groups)
+  console.log(`  Groups: ${groupList.length}\n`)
+
+  let totalCases = 0
+  const startTime = Date.now()
+
+  for (const group of groupList) {
+    const { tenantId, customerId, invoices } = group
+    const now = new Date()
+
+    // Compute aggregates
+    const totalOutstanding = invoices.reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0)
+    const openCount = invoices.length
+    const overdueCount = invoices.filter(i => {
+      const s = (i.status || '').toLowerCase()
+      const ps = (i.payment_status || '').toLowerCase()
+      if (ps === 'paid' || s === 'paid') return false
+      return s === 'overdue' || (i.due_date && new Date(i.due_date) < now)
+    }).length
+    const disputedCount = invoices.filter(i => (i.status || '').toLowerCase() === 'disputed').length
+    const totalOverdue = invoices
+      .filter(i => {
+        const s = (i.status || '').toLowerCase()
+        const ps = (i.payment_status || '').toLowerCase()
+        if (ps === 'paid' || s === 'paid') return false
+        return s === 'overdue' || (i.due_date && new Date(i.due_date) < now)
+      })
+      .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0)
+
+    const state = deriveState(invoices)
+    const engagement = 'unseen'
+    const nextAction = state === 'overdue' || state === 'partial_payment' ? 'send_reminder' : 'wait'
+
+    // Attention score
+    const oldestDue = invoices
+      .filter(i => i.due_date && new Date(i.due_date) < now)
+      .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0]
+    const overdueDays = oldestDue
+      ? Math.floor((now.getTime() - new Date(oldestDue.due_date).getTime()) / 86400000)
+      : 0
+    const attentionScore = computeAttentionScore({ overdueDays, totalOverdue })
+
+    const caseId = crypto.randomUUID()
+    const nowISO = now.toISOString()
+    const customerNames = [...new Set(invoices.map(i => i.customer_name).filter(Boolean))].join(', ')
+
+    await sql.begin(async (tx) => {
+      await tx`
+        INSERT INTO recovery_cases (
+          id, tenant_id, customer_id, status,
+          recovery_state_v2, engagement_state_v2, next_action_type, attention_score,
+          version, invoice_count, open_invoice_count, overdue_invoice_count,
+          disputed_invoice_count, promised_invoice_count,
+          total_outstanding, total_overdue,
+          last_activity_at, updated_at
+        ) VALUES (
+          ${caseId}, ${tenantId}, ${customerId}, ${state},
+          ${sql.unsafe(`'${state}'::recovery_state_v2`)},
+          ${sql.unsafe(`'${engagement}'::engagement_state_v2`)},
+          ${sql.unsafe(`'${nextAction}'::recovery_next_action`)},
+          ${attentionScore},
+          1, ${invoices.length}, ${openCount}, ${overdueCount},
+          ${disputedCount}, 0,
+          ${totalOutstanding}, ${totalOverdue},
+          ${nowISO}, ${nowISO}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          tenant_id = EXCLUDED.tenant_id,
+          customer_id = EXCLUDED.customer_id,
+          recovery_state_v2 = EXCLUDED.recovery_state_v2,
+          engagement_state_v2 = EXCLUDED.engagement_state_v2,
+          next_action_type = EXCLUDED.next_action_type,
+          attention_score = EXCLUDED.attention_score,
+          invoice_count = EXCLUDED.invoice_count,
+          open_invoice_count = EXCLUDED.open_invoice_count,
+          overdue_invoice_count = EXCLUDED.overdue_invoice_count,
+          disputed_invoice_count = EXCLUDED.disputed_invoice_count,
+          total_outstanding = EXCLUDED.total_outstanding,
+          total_overdue = EXCLUDED.total_overdue,
+          updated_at = EXCLUDED.updated_at
+      `
+
+      // Insert backfill event
+      await tx`
+        INSERT INTO recovery_case_events (
+          case_id, event_type, to_recovery_state, to_engagement_state,
+          reason, trigger
+        ) VALUES (
+          ${caseId}, 'backfill',
+          ${sql.unsafe(`'${state}'::recovery_state_v2`)},
+          ${sql.unsafe(`'${engagement}'::engagement_state_v2`)},
+          ${`Backfill: ${invoices.length} invoice(s), ₹${totalOutstanding} outstanding, state=${state}, customers: ${customerNames}`},
+          ${sql.json({ invoiceCount: invoices.length, totalOutstanding })}
+        )
+      `
+    })
+
+    const customerLabel = customerNames || customerId
+    console.log(`  [${state.padEnd(16)}] ${tenantId.slice(0,12)}... | ${customerLabel.slice(0,24).padEnd(24)} | ₹${totalOutstanding.toString().padStart(8)} | ${invoices.length} invoice(s)`)
+    totalCases++
+  }
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log(`\nDone: ${totalCases} recovery cases backfilled in ${elapsed}s`)
 }
 
-main().catch(err => {
-  console.error('Backfill failed:', err)
-  process.exit(1)
-})
+main()
+  .catch(err => {
+    console.error('Backfill failed:', err)
+    process.exit(1)
+  })
+  .finally(() => sql.end().catch(() => {}))
