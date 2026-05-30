@@ -25,26 +25,43 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
+async function tryRedisOp<T>(fn: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
+  try {
+    const value = await fn()
+    return { ok: true, value }
+  } catch {
+    return { ok: false }
+  }
+}
+
 export async function GET(request: NextRequest) {
   const tenantId = request.nextUrl.searchParams.get('tenantId')
   if (!tenantId) {
     return NextResponse.json({ error: 'tenantId required' }, { status: 400 })
   }
 
-  const redis = createRedisClient()
+  const redisResult = await tryRedisOp(() => {
+    const r = createRedisClient()
+    return r
+  })
+  if (!redisResult.ok) {
+    return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null })
+  }
+
+  const redis = redisResult.value
   try {
     const [qr, exists, stateRaw] = await Promise.all([
-      redis.get(`baileys:qr:${tenantId}`),
-      redis.exists(`baileys:auth:${tenantId}`),
-      redis.get(`baileys:state:${tenantId}`),
+      tryRedisOp(() => redis.get(`baileys:qr:${tenantId}`)),
+      tryRedisOp(() => redis.exists(`baileys:auth:${tenantId}`)),
+      tryRedisOp(() => redis.get(`baileys:state:${tenantId}`)),
     ])
 
     let connectionState = 'disconnected'
     let health: Record<string, any> | null = null
 
-    if (stateRaw) {
+    if (stateRaw.ok && stateRaw.value) {
       try {
-        const parsed = JSON.parse(stateRaw)
+        const parsed = JSON.parse(stateRaw.value)
         connectionState = parsed.connectionState || connectionState
         health = {
           lastHeartbeatAt: parsed.lastHeartbeatAt || null,
@@ -55,16 +72,16 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
-    if (exists && connectionState === 'disconnected') {
+    if (exists.ok && exists.value && connectionState === 'disconnected') {
       connectionState = 'connected'
     }
 
-    if (qr) {
-      return NextResponse.json({ status: 'awaiting_scan', qr, connectionState, health })
+    if (qr.ok && qr.value) {
+      return NextResponse.json({ status: 'awaiting_scan', qr: qr.value, connectionState, health })
     }
     return NextResponse.json({ status: connectionState === 'connected' ? 'connected' : 'waiting', connectionState, health })
   } finally {
-    await redis.quit()
+    await redis.quit().catch(() => {})
   }
 }
 
