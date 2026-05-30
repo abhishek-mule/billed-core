@@ -14,6 +14,8 @@ import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelt
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 import { enqueueCognitionJob } from './cognition'
+import { transitionCase } from '../src/lib/recovery/case-machine'
+import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
@@ -118,7 +120,7 @@ export function createOutboxWorker(authority?: InternalAuthorityClient) {
   return worker
 }
 
-type HandlerLane = 'transport' | 'behavior' | 'cognition' | 'attribution' | 'notification'
+type HandlerLane = 'transport' | 'behavior' | 'recovery' | 'cognition' | 'attribution' | 'notification'
 
 interface LaneHandler {
   lane: HandlerLane
@@ -139,6 +141,9 @@ const HANDLER_LANES: LaneHandler[] = [
   { lane: 'behavior', priority: 2, name: 'tryHandleBehavioralMaterializer', handle: tryHandleBehavioralMaterializer },
   { lane: 'behavior', priority: 3, name: 'tryHandleRecoveryCaseProjection', handle: tryHandleRecoveryCaseProjection },
 
+  // RECOVERY LANE — Canonical state machine for customer collection position
+  { lane: 'recovery', priority: 1, name: 'tryHandleRecoveryCaseStateMachine', handle: tryHandleRecoveryCaseStateMachine },
+
   // COGNITION LANE — Trigger attention pipeline recompute on relevant events
   { lane: 'cognition', priority: 1, name: 'tryHandleCognitionTrigger', handle: tryHandleCognitionTrigger },
 
@@ -155,7 +160,7 @@ const HANDLER_LANES: LaneHandler[] = [
 async function processOutboxEvent(event: any): Promise<void> {
   // Execute handlers in lane order (transport → behavior → attribution → notification)
   // Each handler catches its own errors — a failure in one concern does not block others.
-  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'cognition', 'attribution', 'notification']
+  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'cognition', 'attribution', 'notification']
 
   for (const lane of laneOrder) {
     const laneHandlers = HANDLER_LANES
@@ -297,6 +302,181 @@ async function tryHandleBaileysLifecycle(event: any): Promise<void> {
   if (event.type === 'whatsapp.unpaired') {
     await handleWhatsAppUnpaired(event)
   }
+}
+
+// ============================================================
+// RECOVERY CASE STATE MACHINE — Canonical collection position
+// ============================================================
+// Drives the RecoveryCase truth spine from domain events.
+// Runs AFTER behavioral materialization (engagement computed)
+// but BEFORE cognition (pipeline reads fresh RecoveryCase state).
+//
+// Idempotency: every source event is tracked in
+// recovery_case_event_consumptions. Duplicate events are silently
+// skipped.
+
+const RECOVERY_STATE_EVENTS = new Set([
+  'invoice.created',
+  'invoice.overdue',
+  'payment.completed',
+  'payment.reconciled',
+  'recovery.reminder.sent',
+  'recovery.reminder.delivered',
+  'recovery.reminder.failed',
+  'whatsapp.status.updated',
+])
+
+async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
+  if (!RECOVERY_STATE_EVENTS.has(event.type)) return
+
+  const tenantId = event.tenantId
+  const invoiceId = event.entityId
+  if (!tenantId || !invoiceId) return
+
+  // 1. Resolve customer_id
+  let customerId: string | undefined = event.payload?.customerId
+  if (!customerId && invoiceId) {
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('customer_id')
+      .eq('id', invoiceId)
+      .single()
+    customerId = invoice?.customer_id
+  }
+  if (!customerId) return
+
+  // 2. Read current RecoveryCase for this (tenant, customer)
+  const { data: existing } = await supabaseAdmin
+    .from('recovery_cases')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', customerId)
+    .limit(1)
+    .single()
+
+  const current: CurrentCase | null = existing
+    ? {
+        id: existing.id,
+        tenantId: existing.tenant_id,
+        customerId: existing.customer_id,
+        invoiceCount: existing.invoice_count || 0,
+        openInvoiceCount: existing.open_invoice_count || 0,
+        overdueInvoiceCount: existing.overdue_invoice_count || 0,
+        disputedInvoiceCount: existing.disputed_invoice_count || 0,
+        promisedInvoiceCount: existing.promised_invoice_count || 0,
+        totalOutstanding: existing.total_outstanding || 0,
+        totalOverdue: existing.total_overdue || 0,
+        recoveryState: existing.recovery_state_v2 || 'active',
+        engagementState: existing.engagement_state_v2 || 'unseen',
+        nextActionType: existing.next_action_type || null,
+        nextActionDueAt: existing.next_action_due_at || null,
+        lastActivityAt: existing.last_activity_at || null,
+        promiseToPayDate: existing.promise_to_pay_date || null,
+        attentionScore: existing.attention_score || 0,
+        version: existing.version || 1,
+      }
+    : null
+
+  // 3. Check idempotency
+  if (current?.id) {
+    const { data: consumed } = await supabaseAdmin
+      .from('recovery_case_event_consumptions')
+      .select('processed_at')
+      .eq('source_event_id', event.id)
+      .eq('case_id', current.id)
+      .single()
+    if (consumed) return // already processed
+  }
+
+  // 4. Build signal event for the state machine
+  const signal: SignalEvent = {
+    type: event.type,
+    id: event.id,
+    tenantId,
+    customerId,
+    invoiceId,
+    amount: event.payload?.amount || event.payload?.total || null,
+    invoiceStatus: event.payload?.status || null,
+    dueDate: event.payload?.due_date || null,
+    reminderStage: event.payload?.reminderStage || event.payload?.stage || null,
+    deliveryStatus: event.payload?.deliveryStatus || event.payload?.status || null,
+    failureCount: event.payload?.failureCount || event.payload?.consecutive_failures || null,
+    merchantAction: event.payload?.merchantAction || event.payload?.reason || null,
+    occurredAt: event.created_at || new Date().toISOString(),
+  }
+
+  // 5. Compute transition
+  const result = transitionCase(current, signal)
+  if (!result) {
+    // No-op transition (e.g., first/second reminder failure)
+    // Still record consumption if there's a case to prevent re-processing
+    if (current?.id) {
+      await supabaseAdmin
+        .from('recovery_case_event_consumptions')
+        .insert({ source_event_id: event.id, case_id: current.id })
+        .then(() => {}, () => {})
+    }
+    return
+  }
+
+  // 6. Upsert case row with new state
+  const caseId = current?.id || crypto.randomUUID()
+  const now = new Date().toISOString()
+
+  const { error: upsertError } = await supabaseAdmin
+    .from('recovery_cases')
+    .upsert({
+      id: caseId,
+      tenant_id: tenantId,
+      customer_id: customerId,
+      // v2 state columns
+      recovery_state_v2: result.recoveryState || current?.recoveryState || 'active',
+      engagement_state_v2: result.engagementState || current?.engagementState || 'unseen',
+      next_action_type: result.nextActionType || null,
+      next_action_due_at: result.nextActionDueAt || null,
+      attention_score: result.attentionScore ?? current?.attentionScore ?? 0,
+      version: result.version,
+      // Counts from current (updated by backfill/migration, maintained here)
+      invoice_count: current?.invoiceCount || 1,
+      open_invoice_count: current?.openInvoiceCount || 1,
+      overdue_invoice_count: current?.overdueInvoiceCount || 0,
+      disputed_invoice_count: current?.disputedInvoiceCount || 0,
+      promised_invoice_count: current?.promisedInvoiceCount || 0,
+      total_outstanding: current?.totalOutstanding || signal.amount || 0,
+      total_overdue: current?.totalOverdue || 0,
+      // Activity
+      last_activity_at: now,
+      updated_at: now,
+    }, { onConflict: 'id' })
+
+  if (upsertError) {
+    logger.error({ tenantId, caseId, err: upsertError.message }, 'Failed to upsert recovery case')
+    return
+  }
+
+  // 7. Insert recovery_case_event (append-only decision log)
+  const { error: eventError } = await supabaseAdmin
+    .from('recovery_case_events')
+    .insert({
+      case_id: caseId,
+      event_type: result.event.eventType,
+      from_recovery_state: result.event.fromRecoveryState,
+      to_recovery_state: result.event.toRecoveryState,
+      from_engagement_state: result.event.fromEngagementState,
+      to_engagement_state: result.event.toEngagementState,
+      reason: result.event.reason,
+      trigger: result.event.trigger,
+    })
+
+  if (eventError) {
+    logger.error({ tenantId, caseId, err: eventError.message }, 'Failed to insert recovery case event')
+  }
+
+  // 8. Record idempotency
+  await supabaseAdmin
+    .from('recovery_case_event_consumptions')
+    .insert({ source_event_id: event.id, case_id: caseId })
+    .then(() => {}, () => {})
 }
 
 // ============================================================

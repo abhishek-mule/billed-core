@@ -186,7 +186,7 @@ function buildTransition(
 // Event Handlers
 // ============================================================
 
-function handleInvoiceCreated(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+function handleInvoiceCreated(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition | null {
   const amount = signal.amount || 0
   return buildTransition(
     current,
@@ -280,7 +280,7 @@ function handleReminderDelivered(current: CurrentCase, signal: SignalEvent, now:
   )
 }
 
-function handleReminderFailed(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+function handleReminderFailed(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition | null {
   const failures = signal.failureCount || 1
   const updates: Partial<CurrentCase> = {}
   if (failures >= 3 && current.engagementState !== 'ghosting') {
