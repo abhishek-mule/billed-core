@@ -1,416 +1,265 @@
-# Billed - Mini SaaS Platform for Indian merchants 
+# BillZo — WhatsApp-Native Recovery & Billing OS for Indian Merchants
 
-A multi-tenant GST billing SaaS for Indian retailers, powered by **Next.js + n8n + Frappe/ERPNext**.
+**First-recovered-rupee engineering.** BillZo helps Indian merchants recover outstanding payments through automated WhatsApp reminders, intelligent collection workflows, and real-time payment reconciliation.
 
-## Architecture  
+## Core Identity
+
+> "BillZo tells me where my money is stuck and what to do next."
+
+BillZo's competitor is not Tally, Zoho, or Vyapar. It is the merchant's memory, WhatsApp chats, handwritten follow-ups, and "kal yaad dilana hai" notes.
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│           NEXT.JS FRONTEND (Port 3000)          │
-│  3-Step Onboarding Wizard → /api/onboard        │
-└─────────────────────┬───────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│            N8N ORCHESTRATOR (Port 5678)         │
-│  Webhook → GSTIN Validation → Payment → Frappe   │
-└─────────────────────┬───────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│          FRAPPE DOCKER STACK                    │
-│  backend:8000 | frontend:80 | websocket:9000    │
-│  data/sites/ (per-customer sites)               │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                   NEXT.JS FRONTEND (Vercel)                      │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────┐  ┌────────┐  ┌───────────────┐   │
+│  │  Dashboard   │  │ Cashflow │  │  Pulse  │  │  Settings     │   │
+│  │  (Queue)     │  │(Receivbl)│  │(Paymnts)│  │  (WhatsApp)   │   │
+│  └──────┬───────┘  └────┬─────┘  └───┬────┘  └───────┬───────┘   │
+│         │               │           │              │            │
+│         └───────────────┴───────────┴──────────────┴────────────┘
+│                              │                                        │
+│                    Supabase SDK  │  Dexie (IndexedDB)                  │
+└──────────────────────────────┼────────────────────────────────────────┘
+                               │
+                ┌──────────────┴──────────────┐
+                │                             │
+                ▼                             ▼
+┌──────────────────────────┐   ┌──────────────────────────────┐
+│     SUPABASE (Auth +     │   │  POSTGRES / NEON (Business   │
+│   Outbox + Realtime)     │   │  Data: invoices, customers,  │
+│                          │   │  payments, recovery_cases)    │
+│  - Auth (magic link/OTP) │   │                              │
+│  - Outbox event store    │   │  Authority ORM               │
+│  - Device tokens         │   │  Recovery state machine      │
+│  - Realtime subscriptions │   │  Cognition pipeline          │
+└──────────────────────────┘   └──────────────┬───────────────┘
+                                               │
+                                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     WORKER (Fly.io/Render)                        │
+│                                                                  │
+│  ┌────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────────┐      │
+│  │ Outbox │ │Reminders │ │Reconciliation│ │  Cognition    │      │
+│  │ Queue  │ │  Queue   │ │    Queue     │ │   Queue      │      │
+│  └────────┘ └──────────┘ └──────────────┘ └──────────────┘      │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Transport Layer (Baileys WhatsApp Web / Gupshup API)   │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Authority Gateway: Policy Engine + Mutation Gate       │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     REDIS (Upstash)                               │
+│                                                                  │
+│  - BullMQ queue scheduling                                       │
+│  - Baileys auth credentials (30d TTL)                            │
+│  - Baileys QR codes (120s TTL)                                   │
+│  - Connection state per tenant                                   │
+│  - Distributed locks                                             │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+## Stack
 
-### 1. Start the Stack
-
-```bash
-cd infra
-docker compose up -d
-```
-
-This starts:
-- Frappe backend + frontend
-- n8n orchestrator
-
-### 2. Access Services
-
-| Service | URL |
-|---------|-----|
-| Frappe Dashboard | http://client.localhost |
-| n8n Workflows | http://n8n.localhost:5678 |
-| Next.js Frontend | http://localhost:3000 |
-
-### 3. Import n8n Workflow
-
-1. Open n8n at http://n8n.localhost:5678
-2. Import workflow from: `n8n_workflows/workflows/setup-shop.json`
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 14.2 (React 18), TypeScript, Tailwind CSS |
+| **Backend (worker)** | Node.js 20, TypeScript, postgres.js |
+| **Database** | PostgreSQL (Supabase + Neon) — consolidation in progress |
+| **Auth** | Supabase Auth (magic link, OTP) |
+| **Queue** | BullMQ + Redis (Upstash) |
+| **WhatsApp** | Baileys (WhatsApp Web, free) + Gupshup API (paid fallback) |
+| **State machine** | Pure TypeScript (RecoveryCase) |
+| **Policy engine** | Authority Gateway (Hono HTTP server) |
+| **Push notifications** | Firebase Cloud Messaging |
+| **Payments** | Razorpay |
+| **Deployment** | Frontend: Vercel / Worker: Fly.io or Render |
+| **CI** | GitHub Actions (typecheck + test) |
 
 ## Project Structure
 
 ```
 mini_saas/
-├── frappe_docker/           # Frappe/ERPNext backend
-├── mini_saas_frontend/      # Next.js landing page
-├── n8n_workflows/           # n8n automation workflows
-│   └── workflows/
-│       └── setup-shop.json  # Main onboarding workflow
-└── infra/                   # Docker compose + configs
-    ├── docker-compose.yml
-    └── .env
+├── mini_saas_frontend/        # Next.js 14 PWA (port 3000)
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (app)/         # Authenticated pages (dashboard, cashflow, pulse, etc.)
+│   │   │   ├── api/           # 25+ API route directories
+│   │   │   └── auth/          # Authentication pages
+│   │   ├── lib/
+│   │   │   ├── billzo/        # Business logic (54 files)
+│   │   │   ├── recovery/      # Recovery queue service
+│   │   │   └── authority/     # Authority transport
+│   │   └── components/
+│   │       ├── billzo/        # 18 UI components
+│   │       ├── recovery/      # Queue action list, timeline
+│   │       └── attention-feed/# Situation cards
+│   └── migrations/            # 30 SQL migration files
+│
+├── worker/                    # Background worker (port 10000)
+│   ├── index.ts               # Bootstrap (queues, health server, periodics)
+│   ├── queues/                # 5 BullMQ queues
+│   │   ├── outbox.ts          # Core event processor (1006 lines, 6 lanes)
+│   │   ├── reminders.ts       # WhatsApp reminder scheduling
+│   │   ├── reconciliation.ts  # Payment matching
+│   │   ├── cognition.ts       # Operational intelligence pipeline
+│   │   └── retry.ts           # Dead letter retry (exp backoff)
+│   ├── lib/                   # Baileys sockets, WhatsApp router, Redis, locks
+│   ├── stores/                # Baileys auth/QR/state (Redis-backed)
+│   ├── src/lib/
+│   │   ├── authority/         # Policy engine (27 files)
+│   │   ├── recovery/          # RecoveryCase state machine
+│   │   ├── transport/         # Transport adapter abstraction
+│   │   ├── cognition/         # Attention scoring pipeline
+│   │   ├── mutation-gate/     # Governed mutation layer
+│   │   └── billzo/            # Core business logic (24 files)
+│   ├── scripts/               # Backfill, lint, inspection
+│   ├── Dockerfile             # Fly.io multi-stage build
+│   └── fly.toml               # Fly.io deployment config
+│
+├── packages/shared/           # Shared types, events, recovery models
+│   └── src/
+│       ├── types.ts           # 400+ lines of shared types
+│       ├── recovery-case.ts   # RecoveryCase V2 + attention score
+│       ├── events.ts          # 40+ event type taxonomy
+│       └── authority-*/       # Config, transport schemas
+│
+├── billed-core/               # Python provisioning API (FastAPI)
+│   └── api/provisioning_api.py # Frappe site lifecycle management
+│
+├── infra/                     # Docker stack (Frappe/ERPNext dev)
+├── production/                # Production Docker stack
+├── frappe_docker/             # Frappe Docker toolkit
+├── n8n_workflows/             # n8n automation workflows
+└── ocr_backend/               # Python OCR service
 ```
 
-## Onboarding Flow
+## Key Modules
 
-```
-User Browser
-     │
-     ▼
-┌─────────────────────────────────────────────┐
-│  STEP 1: Shop Details (Name + Category)    │
-└─────────────────────┬───────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│  STEP 2: Identity (GSTIN/Aadhar + Contact) │
-└─────────────────────┬───────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│  STEP 3: Plan Selection + Payment          │
-│                                             │
-│  ┌─────┐  ┌─────────┐  ┌─────────┐        │
-│  │Free │  │Starter  │  │  Pro   │         │
-│  │ ₹0  │  │ ₹499/mo │  │₹999/mo │         │
-│  └─────┘  └────┬────┘  └────┬────┘        │
-│                │            │               │
-│                ▼            ▼               │
-│         ┌─────────────────────────┐         │
-│         │   Razorpay Checkout    │         │
-│         │   (Popup + Payment)    │         │
-│         └───────────┬─────────────┘         │
-└─────────────────────┼───────────────────────┘
-                      │
-                      ▼ POST /api/onboard
-┌─────────────────────────────────────────────┐
-│           N8N WEBHOOK RECEIVER             │
-│                                             │
-│  1. Verify Razorpay signature              │
-│  2. Check payment.captured event          │
-│  3. Extract order notes (plan, shopName)   │
-└─────────────────────┬───────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│        FRAPPE SITE CREATION                │
-│                                             │
-│  bench new-site {slug}.localhost \          │
-│    --install-app erpnext \                 │
-│    --install-app india_compliance \        │
-│    --install-app electrical_trader_pack    │
-└─────────────────────┬───────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────┐
-│         SEND CREDENTIALS                   │
-│                                             │
-│  📧 Email: Login URL + Credentials         │
-│  💬 WhatsApp: Welcome message              │
-└─────────────────────────────────────────────┘
-```
+### 1. Recovery State Machine (`worker/src/lib/recovery/case-machine.ts`)
+Pure function that handles 14+ event types — no database access. Transitions between:
+- **RecoveryStateV2** (FACT): active, overdue, partial_payment, promised, recovered, disputed, closed
+- **EngagementStateV2** (BELIEF): unseen, engaged, intent, likely_to_pay, ghosting
+- **NextActionType**: send_reminder, review_payment, follow_up_call, wait, merchant_review
 
-## Payment Flow
+### 2. Transport Abstraction (`worker/src/lib/transport/`)
+Provider-agnostic messaging layer. Same recovery code works with:
+- **BaileysAdapter**: WhatsApp Web (free, QR pairing, merchant-controlled)
+- **GupshupAdapter**: WhatsApp Business API (paid, for scale)
+- **SimulationAdapter**: Dev/testing with no real messages
 
-| Step | Description |
-|------|-------------|
-| 1 | User selects paid plan (Starter/Pro) |
-| 2 | Frontend calls `/api/create-order` |
-| 3 | Backend creates Razorpay order |
-| 4 | Razorpay popup appears |
-| 5 | User completes payment |
-| 6 | Frontend receives `razorpay_payment_id` |
-| 7 | Frontend calls `/api/onboard` with payment ID |
-| 8 | n8n creates Frappe site |
+Future: Meta Cloud API, Interakt — plug in via `TransportAdapter` interface.
 
-## Environment Variables
+### 3. Cognition Pipeline (`worker/src/lib/cognition/`)
+5-stage pipeline that runs every 10 minutes per tenant:
+1. **Scorer** — compute attention items from DB signals
+2. **Correlation** — group related items
+3. **Clusterer** — cluster into situation candidates (max 7)
+4. **Prioritizer** — rank by urgency/impact
+5. **Synthesizer** — generate merchant-readable narratives
 
-### mini_saas_frontend/.env.local
+### 4. Authority Gateway (`worker/src/lib/authority/`)
+Policy enforcement engine inspired by AWS IAM / OPA. Every state mutation is an "intent" evaluated against sovereignty rules before execution. Uses HMAC-signed transport, nonce replay protection, and phased rollout (shadow → dual-write → active).
+
+### 5. WhatsApp Pairing (Baileys)
+- Merchant opens Settings → WhatsApp → "Connect WhatsApp"
+- Worker generates QR code → stored in Redis → frontend polls and displays
+- Merchant scans with phone → Baileys session established
+- Auth credentials persisted in Redis (30-day TTL)
+- No Meta approval needed, no BSP fees — works like WhatsApp Web
+
+## Queue System (BullMQ)
+
+| Queue | Frequency | Purpose |
+|-------|-----------|---------|
+| **outbox** | Event-driven | Core event processor — 6 lanes: transport, behavior, recovery, cognition, attribution, notification |
+| **reminders** | 5 min cron | Sends staged WhatsApp payment reminders (t0_soft → t5_warning) |
+| **reconciliation** | Event-driven | Matches payments to invoices |
+| **cognition** | 10 min cron | Computes operational situations per tenant |
+| **retry** | 5 min cron | Dead letter recovery with exponential backoff (1m, 5m, 15m) |
+
+## The Single Metric
+
+**Recovered Cash Attributed To BillZo** — daily, per merchant, per reminder ladder stage. Everything else (migrations, backfills, queue rendering) is setup, not progress.
+
+## Deployment
+
+### Frontend (Vercel)
 ```bash
-# n8n
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/setup-shop
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# Razorpay (Get from https://dashboard.razorpay.com/app/keys)
-NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_XXXXXXXXXX
-RAZORPAY_KEY_ID=rzp_test_XXXXXXXXXX
-RAZORPAY_KEY_SECRET=XXXXXXXXXXXXXXXX
+cd mini_saas_frontend
+vercel --prod
 ```
 
-## Razorpay Setup
-
-1. Create account at https://dashboard.razorpay.com
-2. Go to Settings → API Keys
-3. Copy Test Key ID and Secret
-4. Add to `.env.local`
-5. Set webhook URL: `https://your-domain.com/webhook/razorpay-webhook`
-
-## Phase 4: Frappe Site Provisioning
-
-### Docker Socket Access (Already Configured)
-n8n has access to Docker socket for running `docker exec` commands:
-```yaml
-# infra/docker-compose.yml
-n8n:
-  user: "0:0"  # Root access
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-```
-
-### Provisioning Flow
-
-```
-┌────────────────────────────────────────────────────────────┐
-│                   SITE PROVISIONING                         │
-├────────────────────────────────────────────────────────────┤
-│                                                            │
-│  1. Generate Slug + Password                               │
-│     "Sharma Electronics" → "sharma-electronics"            │
-│                                                            │
-│  2. Check Duplicate                                        │
-│     Verify site doesn't exist                              │
-│                                                            │
-│  3. Create Site                                           │
-│     docker exec bench new-site {slug}.localhost            │
-│                                                            │
-│  4. Wait for Database (60s)                               │
-│     Frappe needs time to cook                            │
-│                                                            │
-│  5. Install Apps                                           │
-│     - india_compliance                                    │
-│     - electrical_trader_pack                              │
-│                                                            │
-│  6. Create User                                            │
-│     - Create user with email                              │
-│     - Add System Manager role                             │
-│                                                            │
-│  7. Configure Company                                      │
-│     - Execute setup_company API                           │
-│     - Create default warehouses                           │
-│     - Create chart of accounts                            │
-│                                                            │
-│  8. Send Credentials                                       │
-│     - Email with login details                           │
-│     - WhatsApp notification                              │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
-
-### Manual Site Creation (Shell Script)
-
+### Worker (Fly.io)
 ```bash
-cd frappe_docker
-
-# Run provisioning script
-./scripts/provision-site.sh \
-    "Sharma Electronics" \
-    "sharma@email.com" \
-    "9876543210" \
-    "Ramesh Sharma" \
-    "starter" \
-    "SecurePass123"
+cd worker
+fly launch --dockerfile Dockerfile
+fly secrets set UPSTASH_REDIS_URL="rediss://..." NEXT_PUBLIC_SUPABASE_URL="..." SUPABASE_SERVICE_ROLE_KEY="..."
+fly deploy
 ```
 
-### n8n Workflows
+### Environment Variables
+See `mini_saas_frontend/.env.example` for the full list. Key vars:
+- `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — Supabase auth + outbox
+- `DATABASE_URL` — Postgres (Neon) for business data
+- `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_REST_URL` + `TOKEN` — Redis for queues + Baileys
+- `NEXT_PUBLIC_RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — Payment processing
+- `JWT_SECRET` / `SESSION_SECRET` — Auth tokens
+- `GUPSHUP_API_KEY` / `GUPSHUP_APP_NAME` — WhatsApp fallback provider
+- `NEXT_PUBLIC_FIREBASE_*` — Push notifications
 
-| Workflow | Purpose |
-|----------|---------|
-| `setup-shop.json` | Basic onboarding (no payment) |
-| `razorpay-webhook.json` | Payment verification |
-| `frappe-site-provisioning.json` | Complete site provisioning |
+## Migration History (30 files)
 
-### API Functions (electrical_trader_pack)
+| Range | Focus |
+|-------|-------|
+| 001-010 | Core schema (invoices, payments, reminders, ledger, compliance) |
+| 011-016 | Outbox hardening, WhatsApp events, behavioral memory |
+| 017-022 | Recovery cases, projections, Authority gateway, execution leases |
+| 023-025 | Mutation gate, messaging channels, cognition layer |
+| 027-029 | RecoveryCase v2 state, FK fixes, Supabase missing tables |
 
-```python
-# Create company + defaults
-frappe.get_doc({
-    "doctype": "Company",
-    "company_name": "Sharma Electronics"
-}).insert()
+## Roadmap
 
-# Execute via bench
-bench --site {slug}.localhost execute electrical_trader_pack.api.setup_company \
-    --kwargs '{"company_name": "Sharma Electronics", "plan": "starter"}'
-```
+### Phase A — First Recovered Rupee (NOW)
+- [x] Migration 028 (RecoveryCase v2 FK fix, event tables)
+- [x] Backfill recovery cases from invoices
+- [x] WhatsApp pair route with graceful Redis fallback
+- [ ] Worker deployed (Fly.io/Railway)
+- [ ] Supabase missing tables created (migration 029)
+- [ ] Test WhatsApp pairing with real merchant
+- [ ] Send one real reminder
+- [ ] Observe payment → RecoveryCase resolved
 
-## Phase 6: Aadhaar Verification (KYC)
+### Phase B — Validate
+- Queue reads from Neon (frontend API routes → postgres.js)
+- Backfill RecoveryCases on production data
+- Show real collectible amounts in queue
+- Send reminders from queue UI
 
-### Trust Factor
-KYC verification builds trust and enables:
-- Fraud prevention
-- KYC compliance for future payment features
-- BNPL (Buy Now Pay Later) eligibility
+### Phase C — Database Consolidation
+- Move all BillZo data to Supabase
+- Remove Neon dependency
+- Single source of truth
 
-### Mock Verification Flow
+### Phase D — Scale
+- Gupshup / Interakt BSP (100+ merchants)
+- Meta Cloud API (1000+ merchants)
 
-```
-┌─────────────────────────────────────────────────────┐
-│              AADHAAR VERIFICATION                    │
-├─────────────────────────────────────────────────────┤
-│                                                      │
-│  1. User enters 12-digit Aadhaar                   │
-│  2. API generates reference_id                       │
-│  3. OTP sent to registered mobile                   │
-│  4. User enters 6-digit OTP                        │
-│  5. On success: Name + Address returned           │
-│                                                      │
-└─────────────────────────────────────────────────────┘
-```
+## Philosophy
 
-### Test Credentials
-
-| OTP | Result |
-|-----|--------|
-| `123456` | Success - Returns mock user data |
-| `000000` | Failure - Shows error |
-| Any other | Invalid OTP error |
-
-### API Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/verify-aadhaar` | POST | Initiate verification, send OTP |
-| `/api/verify-aadhaar-otp` | POST | Verify OTP, get user details |
-
-### Files
-
-- `src/lib/aadhaar.ts` - Client-side helpers
-- `src/components/AadhaarVerification.tsx` - UI component
-- `n8n_workflows/workflows/aadhaar-verification.json` - n8n workflow
-
-### Real Provider Integration
-
-When ready, integrate with:
-- **SurePass** - https://www.surepass.io
-- **Cashfree** - https://www.cashfree.com
-- **DigiO** - https://www.digio.in
-
-## Phase 7: WhatsApp Integration
-
-### Why WhatsApp?
-Indian retailers check WhatsApp more than email. Sending credentials via WhatsApp:
-- Faster delivery (instant)
-- Higher open rate (90%+)
-- Better user experience
-- Competitive advantage over Tally/Zoho
-
-### WhatsApp Templates
-
-| Template | Purpose | Params |
-|----------|---------|--------|
-| `welcome` | New shop activation | ownerName, shopName, siteUrl, email |
-| `credentials` | Login details | siteUrl, email, password |
-| `dailySummary` | Sales report | shopName, totalSales, invoiceCount, topItem |
-| `lowStock` | Stock alert | shopName, itemName, currentStock, reorderLevel |
-| `planExpiry` | Renewal reminder | shopName, planName, expiryDate |
-
-### Sample Messages
-
-**Welcome Message:**
-```
-Namaste Rajesh! 🎉
-
-Aapki shop "Sharma Electronics" 
-Billed par live hai!
-
-🌐 URL: https://sharma-electronics.billed.in
-📧 Email: rajesh@email.com
-
-Start billing now!
-```
-
-**Low Stock Alert:**
-```
-⚠️ Low Stock Alert - Sharma Electronics
-
-📦 Item: Bajaj 48" Fan
-📊 Current Stock: 3
-🔔 Reorder Level: 10
-
-Reorder now to avoid stockouts!
-```
-
-### API Usage
-
-```typescript
-import { useWhatsApp } from '@/lib/useWhatsApp'
-
-const { sendWelcome } = useWhatsApp()
-await sendWelcome('9876543210', 'Rajesh', 'Sharma Electronics', 'https://...', 'rajesh@email.com')
-```
-
-### Gupshup Setup
-
-1. Create account at https://www.gupshup.io
-2. Create WhatsApp Business account
-3. Get API key from Settings
-4. Add templates for approval (takes 24-48 hours)
-5. Add to `.env.local`:
-   ```
-   WHATSAPP_PROVIDER=gupshup
-   GUPSHUP_API_KEY=your_api_key
-   ```
-
-### Files
-
-- `src/lib/whatsapp.ts` - WhatsApp client library
-- `src/lib/useWhatsApp.ts` - React hook
-- `src/app/api/whatsapp/send/route.ts` - Send API
-- `n8n_workflows/whatsapp-notifications.json` - n8n workflow
-
-## n8n Workflows
-
-| Workflow | Purpose |
-|----------|---------|
-| `setup-shop.json` | Basic onboarding (no payment) |
-| `razorpay-webhook.json` | Payment verification |
-| `frappe-site-provisioning.json` | Complete site provisioning |
-| `aadhaar-verification.json` | KYC verification |
-| `whatsapp-notifications.json` | WhatsApp alerts |
-
-## TODO
-
-- [x] Add Razorpay integration for paid plans
-- [x] Create Frappe site provisioning function
-- [x] Create n8n provisioning workflow
-- [x] Aadhaar verification (mock)
-- [x] WhatsApp notification (mock)
-- [x] Frontend polish (Quiet Ledger design)
-- [ ] Real Aadhaar API integration (SurePass/Cashfree)
-- [ ] Set up wildcard SSL + subdomain routing (Traefik)
-- [ ] WhatsApp templates approval (Gupshup)
-- [ ] Add monitoring (Grafana/Prometheus)
-
-## Frontend Design - "Quiet Ledger" Style
-
-Premium dark mode design with:
-
-- **Zinc-based palette** - Subtle backgrounds, refined borders
-- **Typography** - Clean sans-serif, proper tracking
-- **Card system** - Subtle shadows, hover states
-- **Table design** - Clean, uncluttered layouts
-- **Sidebar navigation** - Fixed position, icon + text
-
-### Preview
-
-Dashboard available at: `http://localhost:3000/dashboard`
-
-Features:
-- Stats cards with trend indicators
-- Recent invoices table
-- Top selling items
-- Quick action cards
-- User profile in sidebar
+1. **RecoveryCase is aggregate root** — Customer Collection Position, not a container of invoice IDs
+2. **Facts vs beliefs** — RecoveryState (what's true) never mixes with EngagementState (what we infer)
+3. **Deterministic before intelligent** — arithmetic ranking before ML, fixed ladders before adaptive timing
+4. **Anti-cleverness** — Predictable > Intelligent, Visible > Magical, Reversible > Autonomous
+5. **Append-only decisions** — recovery_case_events stores system decisions, never updated in place
+6. **90-second merchant session** — ranked queue → one CTA → action → next. No dashboards, no graphs, no decision trees
+7. **Max 7 situations** — human cognition collapses beyond 7. Any more is noise
+8. **The first recovered rupee is the only milestone that matters**
