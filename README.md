@@ -1,4 +1,4 @@
-# BillZo — WhatsApp-Native Recovery & Billing OS for Indian Merchants 
+# BillZo — WhatsApp-Native Recovery & Billing OS for Indian Merchants  
 
 **First-recovered-rupee engineering.** BillZo helps Indian merchants recover outstanding payments through automated WhatsApp reminders, intelligent collection workflows, and real-time payment reconciliation.
 
