@@ -8,7 +8,7 @@
 
 BillZo's competitor is not Tally, Zoho, or Vyapar. It is the merchant's memory, WhatsApp chats, handwritten follow-ups, and "kal yaad dilana hai" notes.
 
-## Architecture 
+## Architecture  
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
