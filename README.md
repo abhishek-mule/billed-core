@@ -3,7 +3,7 @@
 **First-recovered-rupee engineering.** BillZo helps Indian merchants recover outstanding payments through automated WhatsApp reminders, intelligent collection workflows, and real-time payment reconciliation.
 
 ## Core Identity
-
+ 
 > "BillZo tells me where my money is stuck and what to do next."
 
 BillZo's competitor is not Tally, Zoho, or Vyapar. It is the merchant's memory, WhatsApp chats, handwritten follow-ups, and "kal yaad dilana hai" notes.
