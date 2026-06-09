@@ -6,7 +6,7 @@ export interface WorkerLogEntry {
   causation_id?: string | null
   queue_name?: string
   attempt?: number
-  status?: 'success' | 'failed' | 'pending' | 'retry'
+  status?: 'success' | 'failed' | 'pending' | 'retry' | 'skipped'
   duration_ms?: number
   timestamp: string
   level: 'info' | 'warn' | 'error'
