@@ -11,6 +11,7 @@ import { sendPushNotification } from './src/lib/billzo/notifications'
 import { createRedisConnection } from './lib/redis'
 import { logWorkerEvent, logWorkerError } from './lib/logging'
 import { AuthorityRuntime } from './src/lib/authority/authority-runtime'
+import { spineDiagnostics } from './src/lib/spine-diagnostics'
 import { invoiceCapabilities } from './src/lib/authority/invoice-capabilities'
 import { tenantCapabilities } from './src/lib/authority/tenant-capabilities'
 import { reconciliationCapabilities } from './src/lib/authority/reconciliation-capabilities'
@@ -54,6 +55,15 @@ function startHealthServer(runtime: AuthorityRuntime) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok' }))
       }
+    } else if (req.url === '/metrics') {
+      const diag = spineDiagnostics.snapshot()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        spine: diag.counters,
+        lastViolation: diag.lastViolation,
+        uptimeSeconds: diag.uptimeSeconds,
+        startedAt: diag.startedAt,
+      }))
     } else {
       res.writeHead(200)
       res.end('BillZo Worker')
@@ -144,8 +154,27 @@ async function main() {
   // ---- Health server (safe before queues, reports runtime phase) ----
   const healthServer = startHealthServer(runtime)
 
-  // ---- Queue workers (start AFTER authority core is ready) ----
+  // Outbox worker — poll Supabase for events and process them
   const outboxWorker = createOutboxWorker(gatedClient as any)
+  
+  const enqueueOutbox = async () => {
+    const connection = createRedisConnection()
+    const queue = new Queue('outbox', { connection })
+    try {
+      await queue.add('poll', {}, {
+        repeat: { every: 10000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      })
+      console.log('[Worker] Outbox polling job scheduled (every 10s)')
+    } catch (err) {
+      console.error('[Worker] Failed to schedule outbox polling:', err)
+    } finally {
+      await queue.close()
+      await connection.quit()
+    }
+  }
+  enqueueOutbox()
   const remindersWorker = createRemindersWorker(gatedClient as any)
   const reconciliationWorker = createReconciliationWorker(gatedClient as any)
   const cognitionWorker = createCognitionWorker()
@@ -202,6 +231,13 @@ async function main() {
   }
   enqueueCognition()
   const cognitionInterval = setInterval(enqueueCognition, 10 * 60 * 1000)
+
+  // Phase 0: Spine diagnostics log — periodic snapshot of invariant violations
+  const logSpineDiagnostics = async () => {
+    spineDiagnostics.log()
+  }
+  logSpineDiagnostics()
+  const spineDiagInterval = setInterval(logSpineDiagnostics, 5 * 60 * 1000)
 
   // Health probe — check all active messaging channels every 5 minutes
   const probeChannelHealth = async () => {
@@ -361,6 +397,7 @@ async function main() {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
     clearInterval(cognitionInterval)
+    clearInterval(spineDiagInterval)
     clearInterval(healthProbeInterval)
     clearInterval(deadLetterInterval)
     clearInterval(reputationInterval)

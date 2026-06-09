@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase-admin'
 import { emitRecoveryCompleted } from './events'
 import type { InternalAuthorityClient } from '../authority/internal-authority'
+import { spineDiagnostics } from '../spine-diagnostics'
 
 export const ATTRIBUTION_VERSION = '1.0.0'
 
@@ -37,20 +38,48 @@ export async function attributeRecovery(
   const paymentDate = new Date(paymentTimestamp)
   const windowStart = new Date(paymentDate.getTime() - attributionWindowHours * 60 * 60 * 1000)
 
+  // Phase 0 probe: attribution window is time-bound but uses Date.now() indirectly
+  spineDiagnostics.dateNowInDomain('attribution:getWindowStart')
+
+  console.log('[Attribution] Lookup start', {
+    tenantId,
+    invoiceId,
+    paymentDate: paymentDate.toISOString(),
+    windowStart: windowStart.toISOString(),
+  })
+
   // Find the most recent reminder sent within the attribution window
   const { data: reminderEvents, error } = await supabaseAdmin
     .from('outbox')
     .select('*')
     .eq('tenant_id', tenantId)
     .eq('entity_id', invoiceId)
-    .eq('type', 'recovery.reminder.sent')
+    .eq('type', 'whatsapp.sent')
     .gte('created_at', windowStart.toISOString())
     .lte('created_at', paymentDate.toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
 
+  console.log('[Attribution] Reminder lookup result', {
+    tenantId,
+    invoiceId,
+    count: reminderEvents?.length ?? 0,
+    error: error?.message,
+    events: reminderEvents?.map(e => ({
+      type: e.type,
+      created_at: e.created_at,
+      entity_id: e.entity_id,
+    })),
+  })
+
   if (error || !reminderEvents || reminderEvents.length === 0) {
     // No reminder found within attribution window
+    console.log('[Attribution] Exit', {
+      invoiceId,
+      tenantId,
+      attributed: false,
+      reason: 'no_reminder_found'
+    })
     return {
       attributed: false,
       reminderEventId: null,
@@ -111,8 +140,15 @@ export async function attributeRecovery(
     }
   }
 
+  console.log('[Attribution] Finalizing attribution for:', {
+    invoiceId,
+    reminderEventId: reminder.id,
+    attributionType: 'last_touch',
+    confidenceScore,
+  })
+
   // Emit recovery completed event
-  await emitRecoveryCompleted({
+  const emitResult = await emitRecoveryCompleted({
     invoiceId,
     tenantId,
     amount: 0, // Will be updated by caller
@@ -122,12 +158,7 @@ export async function attributeRecovery(
     causationId: reminder.causation_id,
   })
 
-  console.log('[Attribution] Recovery attributed to reminder:', {
-    invoiceId,
-    reminderEventId: reminder.id,
-    hoursBetween,
-    confidenceScore,
-  })
+  console.log('[Attribution] emitRecoveryCompleted called, result:', emitResult)
 
   return {
     attributed: true,
@@ -152,6 +183,7 @@ export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<{
     .select('*')
     .eq('entity_id', invoiceId)
     .in('type', [
+      'invoice.created', // ADDED
       'recovery.reminder.sent',
       'recovery.reminder.delivered',
       'recovery.reminder.failed',

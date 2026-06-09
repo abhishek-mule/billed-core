@@ -1,5 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
-import { createRedisConnection } from '../lib/redis'
+import { getRedis, createRedisConnection } from '../lib/redis'
 import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
@@ -10,6 +10,7 @@ import { sendPushNotification } from '../src/lib/billzo/notifications'
 import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
 import { interpretProjectionDelta } from '../src/lib/billzo/observation-interpreter'
 import { materializeObservation } from '../src/lib/billzo/behavioral-materializer'
+import { attributeRecovery } from '../src/lib/billzo/attribution'
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
@@ -17,9 +18,13 @@ import { enqueueCognitionJob } from './cognition'
 import { transitionCase } from '../src/lib/recovery/case-machine'
 import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
+import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
+
+// Phase 0 probe: per-entity last-seen sequence number for out-of-order detection
+const lastEntitySequence = new Map<string, number>()
 
 let _authorityClient: InternalAuthorityClient | null = null
 
@@ -158,6 +163,30 @@ const HANDLER_LANES: LaneHandler[] = [
 ]
 
 async function processOutboxEvent(event: any): Promise<void> {
+  // Phase 0 probe: detect missing causation_id
+  if (!event.causationId && event.type !== 'invoice.created') {
+    spineDiagnostics.missingCausationId(event.type)
+  }
+
+  // Phase 0 probe: detect missing external references
+  if (event.type?.startsWith('whatsapp.') || event.type?.startsWith('payment.')) {
+    const payload = event.payload || {}
+    if (!payload.providerMessageId && !payload.providerPaymentId && !payload.billzoMessageId) {
+      spineDiagnostics.missingExternalRefs(event.type, event.entityId)
+    }
+  }
+
+  // Phase 0 probe: detect out-of-order events via sequence tracking
+  if (event.entityId) {
+    const lastSeq = lastEntitySequence.get(event.entityId)
+    if (lastSeq !== undefined && event.sequence_no !== undefined && event.sequence_no <= lastSeq) {
+      spineDiagnostics.outOfOrderEvent(event.entityId, lastSeq + 1, event.sequence_no)
+    }
+    if (event.sequence_no !== undefined) {
+      lastEntitySequence.set(event.entityId, event.sequence_no)
+    }
+  }
+
   // Execute handlers in lane order (transport → behavior → attribution → notification)
   // Each handler catches its own errors — a failure in one concern does not block others.
   const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'cognition', 'attribution', 'notification']
@@ -214,6 +243,7 @@ async function tryHandleRecoveryCaseProjection(event: any): Promise<void> {
     }
 
     // authority:fallback recovery.upsert_case
+    spineDiagnostics.dualWrite('outbox:tryHandleRecoveryCaseProjection', 'recovery_cases')
     const now = new Date().toISOString()
     const { data: existing } = await supabaseAdmin
       .from('recovery_cases')
@@ -327,10 +357,15 @@ const RECOVERY_STATE_EVENTS = new Set([
   'customer.called',
   'merchant.snoozed',
   'merchant.payment_reported',
+  'recovery.completed',
 ])
 
 async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
-  if (!RECOVERY_STATE_EVENTS.has(event.type)) return
+  console.log('[StateMachine] Ingesting event:', event.type, event.entityId);
+  if (!RECOVERY_STATE_EVENTS.has(event.type)) {
+    console.log('[StateMachine] Event type ignored:', event.type);
+    return;
+  }
 
   const tenantId = event.tenantId
   if (!tenantId) return
@@ -412,7 +447,18 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   }
 
   // 5. Compute transition
+  // Phase 0 probe: detect non-deterministic states (handleMerchantSnoozed uses Date.now())
+  if (event.type === 'merchant.snoozed') {
+    spineDiagnostics.dateNowInDomain('case-machine:handleMerchantSnoozed')
+    spineDiagnostics.nonDeterministicUuid('case-machine:handleMerchantSnoozed')
+  }
   const result = transitionCase(current, signal)
+  console.log('[StateMachine] Transition result:', { 
+    type: signal.type, 
+    resultExists: !!result, 
+    recoveryState: result?.recoveryState 
+  });
+  
   if (!result) {
     // No-op transition (e.g., first/second reminder failure)
     // Still record consumption if there's a case to prevent re-processing
@@ -428,6 +474,8 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   // 6. Upsert case row with new state
   const caseId = current?.id || crypto.randomUUID()
   const now = new Date().toISOString()
+  
+  console.log('[StateMachine] Upserting case:', caseId, 'to state:', result.recoveryState || current?.recoveryState);
 
   const { error: upsertError } = await supabaseAdmin
     .from('recovery_cases')
@@ -458,6 +506,8 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   if (upsertError) {
     logger.error({ tenantId, caseId, err: upsertError.message }, 'Failed to upsert recovery case')
     return
+  } else {
+    console.log('[StateMachine] Upsert successful for case:', caseId);
   }
 
   // 7. Insert recovery_case_event (append-only decision log)
@@ -502,6 +552,7 @@ const COGNITION_TRIGGER_EVENTS = new Set([
   'customer.called',
   'merchant.snoozed',
   'merchant.payment_reported',
+  'recovery.completed',
 ])
 
 async function tryHandleCognitionTrigger(event: any): Promise<void> {
@@ -567,17 +618,14 @@ async function tryHandleRedisPublish(event: any): Promise<void> {
 
 async function publishToRedis(tenantId: string, type: string, data: any): Promise<void> {
   try {
-    const pub = createRedisConnection()
+    const pub = getRedis()
     await pub.publish(`events:${tenantId}`, JSON.stringify({ type, data, timestamp: Date.now() }))
-    pub.disconnect()
   } catch {
     // non-critical
   }
 }
 
 async function handlePaymentEvent(event: any): Promise<void> {
-  const { attributeRecovery } = await import('../src/lib/billzo/attribution')
-
   const invoiceId = event.entityId
   const tenantId = event.tenantId
 
@@ -918,6 +966,7 @@ async function handleUpiClicked(event: any): Promise<void> {
       }
     } else {
       // authority:fallback invoice.update_recovery_state
+      spineDiagnostics.dualWrite('outbox:handleUpiClicked', 'invoices')
       const now = new Date().toISOString()
       await supabaseAdmin
         .from('invoices')
@@ -950,6 +999,7 @@ async function handleEscalationSuggested(event: any): Promise<void> {
     }
   } else {
     // authority:fallback invoice.update_recovery_state
+    spineDiagnostics.dualWrite('outbox:handleEscalationSuggested', 'invoices')
     await supabaseAdmin
       .from('invoices')
       .update({ recovery_flag: 'call_customer' })

@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { writeOutboxEvent, type OutboxWriteOptions } from './outbox'
 import { generateCorrelationId } from './idempotency'
 import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
+import { spineDiagnostics } from '../spine-diagnostics'
 
 // ============================================================
 // EVENT EMISSION
@@ -22,6 +23,18 @@ import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
  *   })
  */
 export async function emitEvent(event: Omit<BillzoEvent, 'version'>): Promise<string> {
+  // Phase 0 probe: detect missing causationId (unless root event)
+  if (!event.causationId && event.type !== EventType.INVOICE_CREATED && event.type !== EventType.WHATSAPP_PAIR_REQUESTED) {
+    spineDiagnostics.missingCausationId(event.type)
+  }
+
+  // Phase 0 probe: detect events without external identity references
+  const transportPayloadKeys = ['providerMessageId', 'providerPaymentId', 'billzoMessageId', 'whatsapp_message_id']
+  const hasExternalRef = transportPayloadKeys.some(k => event.payload && event.payload[k] != null)
+  if (!hasExternalRef && (event.type.startsWith('whatsapp.') || event.type.startsWith('payment.'))) {
+    spineDiagnostics.missingExternalRefs(event.type, event.entityId)
+  }
+
   const options: OutboxWriteOptions = {
     type: event.type,
     tenantId: event.tenantId,

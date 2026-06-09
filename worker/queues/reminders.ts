@@ -1,5 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
-import { createRedisConnection } from '../lib/redis'
+import { createRedisConnection, getRedis } from '../lib/redis'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
@@ -13,6 +13,7 @@ import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
 import { signUpiToken } from '../lib/crypto'
 import { buildRecommendation, buildRecommendationFull } from '../src/lib/billzo/orchestrator'
 import { emitOrchestrationSnapshot } from '../src/lib/billzo/orchestration-snapshot'
+import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import {
   REMINDER_STAGES,
   STAGE_LABELS,
@@ -67,7 +68,7 @@ const WARMUP_DAYS = 3
 
 async function checkRateLimit(tenantId: string, provider: WhatsAppProvider): Promise<boolean> {
   try {
-    const redis = createRedisConnection()
+    const redis = getRedis()
     const hourKey = `rate:${tenantId}:${new Date().toISOString().slice(0, 13).replace(/[^0-9]/g, '')}`
     const count = await redis.incr(hourKey)
     if (count === 1) await redis.expire(hourKey, 3700)
@@ -81,27 +82,17 @@ async function checkRateLimit(tenantId: string, provider: WhatsAppProvider): Pro
           const dailyKey = `rate:daily:${tenantId}:${new Date().toISOString().slice(0, 10)}`
           const dailyCount = await redis.incr(dailyKey)
           if (dailyCount === 1) await redis.expire(dailyKey, 90000)
-          if (dailyCount > BAILEYS_DAILY_WARMUP) {
-            redis.disconnect()
-            return false
-          }
+          if (dailyCount > BAILEYS_DAILY_WARMUP) return false
         }
       } else {
         await redis.set(warmupKey, Date.now().toString(), 'EX', 7 * 24 * 3600)
       }
 
-      if (count > BAILEYS_HOURLY_LIMIT) {
-        redis.disconnect()
-        return false
-      }
+      if (count > BAILEYS_HOURLY_LIMIT) return false
     } else {
-      if (count > GUPSHUP_HOURLY_LIMIT) {
-        redis.disconnect()
-        return false
-      }
+      if (count > GUPSHUP_HOURLY_LIMIT) return false
     }
 
-    redis.disconnect()
     return true
   } catch {
     return true
@@ -128,21 +119,54 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         logger.info({ invoiceId, stage }, 'Sending reminder')
 
         const [invoiceResult, tenantResult] = await Promise.all([
-          supabaseAdmin.from('invoices').select('*, customers!inner(*)').eq('id', invoiceId).single(),
-          supabaseAdmin.from('tenants').select('name, upi_id, whatsapp_config').eq('id', tenantId).single(),
+          supabaseAdmin.from('invoices').select('*').eq('id', invoiceId).single(),
+          supabaseAdmin.from('tenants').select('company_name, upi_id, whatsapp_config').eq('id', tenantId).single(),
         ])
 
         if (invoiceResult.error || !invoiceResult.data) {
           throw new Error(`Invoice not found: ${invoiceResult.error?.message || invoiceId}`)
         }
+        
+        const customerResult = await supabaseAdmin.from('customers').select('*').eq('id', invoiceResult.data.customer_id).single()
+        
         if (tenantResult.error || !tenantResult.data) {
           throw new Error(`Tenant not found: ${tenantResult.error?.message || tenantId}`)
         }
 
         const invoice = invoiceResult.data
-        const customer = invoice.customers as any
+        const customer = customerResult.data
         const tenant = tenantResult.data
         const config = (tenant.whatsapp_config || {}) as Record<string, any>
+
+        // Check automation mode — respect merchant's per-customer control
+        const automationMode = customer?.automation_mode || 'full_auto'
+        if (automationMode === 'muted') {
+          logger.info({ customerId: customer?.id, invoiceId }, 'Customer is muted, skipping reminder')
+          return { skipped: true, reason: 'muted', invoiceId, stage }
+        }
+        if (automationMode === 'manual') {
+          logger.info({ customerId: customer?.id, invoiceId }, 'Customer is manual, sending pending approval event')
+          // Emit a pending_approval event for the UI to display
+          await emitEvent({
+            type: EventType.REMINDER_PENDING_APPROVAL,
+            tenantId,
+            entityId: invoiceId,
+            payload: {
+              customerId: customer?.id,
+              customerName: customer?.customer_name,
+              amount: invoice.total || 0,
+              stage,
+              invoiceId,
+              message: buildMessage(stage as ReminderStage, customer?.customer_name || 'Customer', invoice.total || 0, tenant.company_name || 'BillZo', tenant.upi_id, tenantId, invoiceId),
+              },
+              causationId: null,
+              correlationId: `reminder:${invoiceId}`,
+              producer: 'worker',
+              idempotencyKey: `rem:${invoiceId}:${stage}`,
+              retentionDays: 30,
+              })
+          return { skipped: true, reason: 'manual_approval', invoiceId, stage }
+        }
 
         const phoneNumber = customer?.whatsapp_number || customer?.phone
         if (!phoneNumber) {
@@ -168,7 +192,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           return { skipped: true, reason: 'rate_limited', invoiceId, stage }
         }
 
-        const message = buildMessage(stage as ReminderStage, customer?.name || 'Customer', invoice.total || 0, tenant.name || 'BillZo', upiId, tenantId, invoiceId)
+        const message = buildMessage(stage as ReminderStage, customer?.customer_name || 'Customer', invoice.total || 0, tenant.company_name || 'BillZo', upiId, tenantId, invoiceId)
 
         if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
           logger.info({ tenantId }, 'Starting Baileys socket')
@@ -224,6 +248,8 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         const nextStage = getNextStage(stage as ReminderStage)
 
         // Recovery orchestration fields update (governed by authority if available)
+        // Phase 0 probe: Date.now() used for nextRecoveryAt calculation
+        spineDiagnostics.dateNowInDomain('reminders:advanceStage-nextRecoveryAt')
         if (authority) {
           await authority.submit({
             intentType: 'reminder.advance_stage',
@@ -241,6 +267,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           }, 'trusted_sync')
         } else {
           // authority:fallback reminder.advance_stage
+          spineDiagnostics.dualWrite('reminders:advanceStage', 'invoices')
           await supabaseAdmin.from('invoices').update({
             last_whatsapp_status: eventStatus,
             last_whatsapp_at: new Date().toISOString(),
@@ -386,7 +413,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                 type: EventType.RECOVERY_ESCALATION_SUGGESTED,
                 tenantId,
                 entityId: invoiceId,
-                payload: { amount: invoice.total, customerName: customer?.name, ignoreCount, amountRatio },
+                payload: { amount: invoice.total, customerName: customer?.customer_name, ignoreCount, amountRatio },
                 causationId: null,
                 correlationId: generateCorrelationId(invoiceId),
                 producer: 'worker',
@@ -395,7 +422,9 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
               })
             }
 
-            // Use orchestrator's cadence for next follow-up timing
+                // Phase 0 probe: Date.now() in domain logic
+                spineDiagnostics.dateNowInDomain('reminders:cadenceUpdate')
+                // Use orchestrator's cadence for next follow-up timing
             if (nextFollowUpDays !== 3) {
               if (authority) {
                 await authority.submit({
@@ -409,6 +438,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                 }, 'trusted_sync')
               } else {
                 // authority:fallback reminder.update_cadence
+                spineDiagnostics.dualWrite('reminders:updateCadence', 'invoices')
                 const cadenceUpdate: Record<string, any> = {
                   next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
                 }
@@ -438,11 +468,11 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         entity_id: invoiceId,
         queue_name: 'reminders',
         attempt: job.attemptsMade,
-        status: 'success',
+        status: result.skipped ? 'skipped' : 'success',
         duration_ms: duration,
         timestamp: new Date().toISOString(),
-        level: 'info',
-        message: `Reminder sent: ${stage}`,
+        level: result.skipped ? 'warn' : 'info',
+        message: result.skipped ? `Reminder skipped: ${result.reason}` : `Reminder sent: ${stage}`,
       })
 
       return result
@@ -472,10 +502,18 @@ export function createReminderQueue() {
 export async function enqueueOverdueReminders(): Promise<number> {
   const now = new Date().toISOString()
   let enqueued = 0
+  let skippedMuted = 0
+  let skippedManual = 0
 
   const { data: invoices, error } = await supabaseAdmin
     .from('invoices')
-    .select('id, tenant_id, recovery_stage, next_recovery_at')
+    .select(`
+      id,
+      tenant_id,
+      recovery_stage,
+      next_recovery_at,
+      customer_id
+    `)
     .in('status', ['unpaid', 'overdue'])
     .lte('next_recovery_at', now)
     .limit(200)
@@ -485,10 +523,36 @@ export async function enqueueOverdueReminders(): Promise<number> {
     return 0
   }
 
+  // Collect unique customer IDs and fetch their automation modes
+  const customerIds = [...new Set(invoices.map(i => i.customer_id).filter(Boolean))]
+  const customerModeMap = new Map<string, string>()
+  if (customerIds.length > 0) {
+    const { data: customers } = await supabaseAdmin
+      .from('customers')
+      .select('id, automation_mode')
+      .in('id', customerIds)
+    if (customers) {
+      for (const c of customers) {
+        customerModeMap.set(c.id, c.automation_mode || 'full_auto')
+      }
+    }
+  }
+
   const queue = createReminderQueue()
   for (const inv of invoices) {
     const stage = normalizeStage(inv.recovery_stage)
     if (!REMINDER_STAGES.includes(stage)) continue
+
+    const mode = customerModeMap.get(inv.customer_id) || 'full_auto'
+    if (mode === 'muted') {
+      skippedMuted++
+      continue
+    }
+    if (mode === 'manual') {
+      skippedManual++
+      // Don't auto-enqueue; merchant must approve from dashboard
+      continue
+    }
 
     await queue.add(`reminder:${inv.id}:${stage}`, {
       invoiceId: inv.id,
@@ -503,6 +567,6 @@ export async function enqueueOverdueReminders(): Promise<number> {
   }
 
   await queue.close()
-  logger.info({ enqueued }, 'Enqueued overdue reminder jobs')
+  logger.info({ enqueued, skippedMuted, skippedManual }, 'Enqueued overdue reminder jobs')
   return enqueued
 }

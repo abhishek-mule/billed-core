@@ -1,6 +1,8 @@
 import {
   makeWASocket,
   DisconnectReason,
+  initAuthCreds,
+  fetchLatestBaileysVersion,
   type WASocket,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
@@ -10,6 +12,43 @@ import { setBaileysState, clearBaileysState } from '../stores/baileys-state'
 import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
+import { spineDiagnostics } from '../src/lib/spine-diagnostics'
+
+function createInMemoryKeyStore() {
+  const store = new Map<string, any>()
+  return {
+    get: async (type: string, ids: string[]) => {
+      const data: Record<string, any> = {}
+      for (const id of ids) {
+        const key = `${type}:${id}`
+        const val = store.get(key)
+        if (val !== undefined) data[id] = val
+      }
+      return data
+    },
+    set: async (data: Record<string, Record<string, any>>) => {
+      for (const [type, entries] of Object.entries(data)) {
+        for (const [id, value] of Object.entries(entries)) {
+          store.set(`${type}:${id}`, value)
+        }
+      }
+    },
+    has: async (type: string, ids: string[]) => {
+      const result: Record<string, boolean> = {}
+      for (const id of ids) {
+        result[id] = store.has(`${type}:${id}`)
+      }
+      return result
+    },
+    delete: async (ids: string[]) => {
+      for (const id of ids) {
+        for (const key of store.keys()) {
+          if (key.endsWith(`:${id}`)) store.delete(key)
+        }
+      }
+    },
+  }
+}
 
 interface SocketEntry {
   socket: WASocket
@@ -18,6 +57,7 @@ interface SocketEntry {
 }
 
 const sockets = new Map<string, SocketEntry>()
+const intentionallyDisconnecting = new Set<string>()
 let logger: ReturnType<typeof pino>
 
 function getLogger() {
@@ -28,31 +68,92 @@ function getLogger() {
 }
 
 export async function startBaileysSocket(tenantId: string): Promise<void> {
+  console.log(`[Baileys] startBaileysSocket called for tenant: ${tenantId}`)
   if (sockets.has(tenantId)) {
     console.log(`[Baileys] Socket already exists for tenant ${tenantId}`)
     return
   }
 
   // Distributed lock — prevents multiple workers starting sockets for the same tenant
-  const hasLock = await acquireSocketLock(tenantId)
+  const lockMaxRetries = 12
+  let hasLock = false
+  for (let i = 0; i < lockMaxRetries; i++) {
+    console.log(`[Baileys] Attempting to acquire socket lock for ${tenantId} (attempt ${i + 1}/${lockMaxRetries})...`)
+    hasLock = await acquireSocketLock(tenantId)
+    if (hasLock) break
+    await new Promise(r => setTimeout(r, 5000))
+  }
   if (!hasLock) {
-    console.log(`[Baileys] Socket lock held by another worker for tenant ${tenantId}, skipping`)
+    console.log(`[Baileys] Could not acquire socket lock for ${tenantId} after ${lockMaxRetries} attempts, skipping`)
     return
   }
+  console.log(`[Baileys] Lock acquired for ${tenantId}`)
 
   let authState: any
   try {
+    console.log(`[Baileys] Loading auth state for ${tenantId}...`)
     const loaded = await getBaileysAuthState(tenantId)
-    authState = loaded || { creds: {} as any, keys: {} as any }
+    if (loaded) {
+      const storeMethods = createInMemoryKeyStore();
+      // If loaded.keys.get is missing, it's a deserialized plain object. 
+      // We need to re-attach the methods and populate the underlying map.
+      if (typeof loaded.keys.get !== 'function') {
+        console.log(`[Baileys] Reconstructing KeyStore methods for ${tenantId}`);
+        const data = loaded.keys;
+        // In the plain object case, loaded.keys might just be the data Map converted to an object
+        // We need to populate our fresh storeMethods map with that data.
+        // Actually, looking at how it's saved, JSON.stringify/parse on a Map 
+        // usually converts it to an array or object depending on implementation.
+        // The safest path is to just initialize a fresh store if methods are missing
+        // and let Baileys re-authenticate if necessary, to avoid partial state corruption.
+        console.warn(`[Baileys] Keys store broken for ${tenantId}, discarding state.`);
+        await deleteBaileysAuthState(tenantId);
+        authState = {
+          creds: loaded.creds,
+          keys: storeMethods,
+        };
+      } else {
+        authState = loaded;
+      }
+      console.log(`[Baileys] Auth state loaded for ${tenantId} (hasCreds: ${!!authState.creds})`);
+    } else {
+      authState = {
+        creds: initAuthCreds(),
+        keys: createInMemoryKeyStore(),
+      }
+      console.log(`[Baileys] Initialized fresh auth state for ${tenantId}`)
+    }
   } catch (err) {
     console.error(`[Baileys] Failed to load auth for tenant ${tenantId}, releasing lock:`, err)
     await releaseSocketLock(tenantId)
     return
   }
 
+  console.log(`[Baileys] Creating WASocket for ${tenantId}...`)
+  let version: [number, number, number] = [2, 3000, 1019707846]
+  try {
+    const latest = await fetchLatestBaileysVersion()
+    version = latest.version as [number, number, number]
+    console.log(`[Baileys] Using version ${version.join('.')} for ${tenantId}`)
+  } catch {
+    console.warn(`[Baileys] Failed to fetch latest version, using default`)
+  }
+  const rawStore = createInMemoryKeyStore()
   const sock = makeWASocket({
-    auth: authState,
-    printQRInTerminal: true,
+    auth: {
+      creds: authState.creds,
+      keys: new Proxy(rawStore, {
+        get: (target, prop) => {
+          if (prop === 'get') return target.get
+          if (prop === 'set') return target.set
+          if (prop === 'has') return target.has
+          if (prop === 'delete') return target.delete
+          return (target as any)[prop]
+        }
+      }) as any
+    },
+    version,
+    printQRInTerminal: false,
     logger: getLogger(),
     browser: ['BillZo', 'Chrome', '4.0.0'],
   })
@@ -64,16 +165,19 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
   startLockRenewal(tenantId)
 
   sock.ev.on('creds.update', async () => {
+    console.log(`[Baileys] Creds updated for ${tenantId}`)
     await saveBaileysAuthState(tenantId, { creds: authState.creds, keys: authState.keys })
   })
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
+    console.log(`[Baileys] Connection update for ${tenantId}:`, { connection, hasQr: !!qr, lastDisconnect })
 
     if (qr) {
-      console.log(`[Baileys] QR generated for tenant ${tenantId}`)
+      console.log(`[Baileys] QR generated for tenant ${tenantId}. Storing in Redis...`)
       await storeQrCode(tenantId, qr)
       await setBaileysState(tenantId, { connectionState: 'connecting', qrGeneratedAt: new Date().toISOString() })
+      console.log(`[Baileys] QR stored for ${tenantId}`)
     }
 
     if (qr === undefined && connection !== 'open') {
@@ -90,9 +194,22 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
 
     if (connection === 'close') {
       entry.connected = false
+      const isIntentional = intentionallyDisconnecting.has(tenantId)
+      intentionallyDisconnecting.delete(tenantId)
+
+      if (isIntentional) {
+        await releaseSocketLock(tenantId)
+        sockets.delete(tenantId)
+        console.log(`[Baileys] Intentional disconnect for tenant ${tenantId}, not reconnecting`)
+        return
+      }
+
       await releaseSocketLock(tenantId)
-      const isLoggedOut = (lastDisconnect?.error as Boom)?.output?.statusCode === DisconnectReason.loggedOut
-      console.log(`[Baileys] Disconnected for tenant ${tenantId}, reconnecting: ${!isLoggedOut}`)
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+      const errorMessage = (lastDisconnect?.error as Error)?.message || ''
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut
+      const isQrRefsExhausted = statusCode === DisconnectReason.badSession || errorMessage.includes('QR refs')
+      console.log(`[Baileys] Disconnected for tenant ${tenantId}: loggedOut=${isLoggedOut} qrExhausted=${isQrRefsExhausted} statusCode=${statusCode}`)
 
       if (isLoggedOut) {
         await setBaileysState(tenantId, { connectionState: 'auth_expired', error: 'logged_out' })
@@ -100,6 +217,11 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
         await clearBaileysState(tenantId)
         sockets.delete(tenantId)
         console.log(`[Baileys] Logged out for tenant ${tenantId}, auth cleared`)
+      } else if (isQrRefsExhausted) {
+        console.log(`[Baileys] QR refs exhausted for ${tenantId}, stopping auto-reconnect`)
+        await clearQrCode(tenantId)
+        await setBaileysState(tenantId, { connectionState: 'disconnected', error: 'qr_refs_exhausted' })
+        sockets.delete(tenantId)
       } else {
         await setBaileysState(tenantId, { connectionState: 'reconnecting', error: 'connection_closed' })
         setTimeout(() => {
@@ -140,6 +262,9 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       if (!ourStatus) continue
 
       try {
+        // Phase 0 probe: detect missing billzoMessageId on status callback
+        spineDiagnostics.missingExternalRefs('whatsapp.status.updated', key.id ?? null)
+        spineDiagnostics.nonDeterministicUuid('baileys-socket:status-update')
         // Emit status update event via outbox (transport projector will record to whatsapp_events)
         await emitWhatsAppStatusUpdated({
           billzoMessageId: null,
@@ -175,14 +300,18 @@ export async function isBaileysPaired(tenantId: string): Promise<boolean> {
 export async function stopBaileysSocket(tenantId: string): Promise<void> {
   const entry = sockets.get(tenantId)
   if (entry) {
+    intentionallyDisconnecting.add(tenantId)
     entry.socket.end(undefined)
     sockets.delete(tenantId)
   }
 }
 
 export async function disconnectBaileys(tenantId: string): Promise<void> {
+  intentionallyDisconnecting.add(tenantId)
   await stopBaileysSocket(tenantId)
   await deleteBaileysAuthState(tenantId)
+  await releaseSocketLock(tenantId)
+  await clearBaileysState(tenantId)
 }
 
 export async function sendViaBaileys(
