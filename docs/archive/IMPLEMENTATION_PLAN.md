@@ -7,7 +7,7 @@
 
 | Phase | Status | Started | Completed | Owner |
 |-------|--------|---------|-----------|-------|
-| 0 — Measurement | 🔴 Not Started | — | — | — |
+| 0 — Measurement | ✅ Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 1 — Invariants | 🔴 Not Started | — | — | — |
 | 2 — Ordering | 🔴 Not Started | — | — | — |
 | 3 — Identity | 🔴 Not Started | — | — | — |
@@ -26,12 +26,12 @@ No tasks in progress.
 
 ## Phase 0 — Measurement Tasks
 
-- [ ] 0.1 Add runtime metrics for `Date.now()` in domain logic
-- [ ] 0.2 Add runtime metrics for out-of-order events
-- [ ] 0.3 Add runtime metrics for missing `external_refs`
-- [ ] 0.4 Add runtime metrics for dual-write paths
-- [ ] 0.5 Publish metrics endpoint
-- [ ] 0.6 Document baseline violation rates
+- [x] 0.1 Add runtime metrics for `Date.now()` in domain logic
+- [x] 0.2 Add runtime metrics for out-of-order events
+- [x] 0.3 Add runtime metrics for missing `external_refs`
+- [x] 0.4 Add runtime metrics for dual-write paths
+- [x] 0.5 Publish metrics endpoint
+- [ ] 0.6 Document baseline violation rates (after 24h of runtime data)
 
 ## Phase 1 — Event Spine Invariants
 
@@ -117,6 +117,7 @@ No tasks in progress.
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-06-09 | Phase 0: observational only — no behavioral changes. All probes are no-op when disabled. | Establish baseline before any enforcement. If we measure zero violations, we skip Phases 1-8 and go straight to Phase 9. |
 | — | — | — |
 
 ## Blockers
