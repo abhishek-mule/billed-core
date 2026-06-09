@@ -100,6 +100,7 @@ export interface SpineWriteResult {
   event_id?: string
   sequence_no?: number
   error?: string
+  quarantined?: boolean
 }
 
 // ----------------------------------------------------------

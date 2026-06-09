@@ -13,6 +13,7 @@ import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
+import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 
 function createInMemoryKeyStore() {
   const store = new Map<string, any>()
@@ -262,13 +263,26 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       if (!ourStatus) continue
 
       try {
-        // Phase 0 probe: detect missing billzoMessageId on status callback
-        spineDiagnostics.missingExternalRefs('whatsapp.status.updated', key.id ?? null)
-        spineDiagnostics.nonDeterministicUuid('baileys-socket:status-update')
-        // Emit status update event via outbox (transport projector will record to whatsapp_events)
+        // Phase 3: resolve billzoMessageId and invoiceId from provider_message_id
+        let resolvedBillzoMessageId: string | null = null
+        let resolvedInvoiceId: string | null = null
+        if (msgId) {
+          const { data: msg } = await supabaseAdmin
+            .from('whatsapp_events')
+            .select('billzo_message_id, invoice_id')
+            .or(`provider_message_id.eq.${msgId},billzo_message_id.eq.${msgId}`)
+            .limit(1)
+            .maybeSingle()
+          if (msg) {
+            resolvedBillzoMessageId = msg.billzo_message_id
+            resolvedInvoiceId = msg.invoice_id
+          }
+        }
+
+        // Emit status update event with resolved identity
         await emitWhatsAppStatusUpdated({
-          billzoMessageId: null,
-          invoiceId: null,
+          billzoMessageId: resolvedBillzoMessageId,
+          invoiceId: resolvedInvoiceId,
           tenantId,
           status: ourStatus,
           provider: 'baileys',

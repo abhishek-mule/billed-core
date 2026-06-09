@@ -10,7 +10,7 @@
 | 0 — Measurement | ✅ Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 1 — Invariants | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 2 — Ordering | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
-| 3 — Identity | 🔴 Not Started | — | — | — |
+| 3 — Identity | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 4 — Execution Boundaries | 🔴 Not Started | — | — | — |
 | 5 — Mutation Gate | 🔴 Not Started | — | — | — |
 | 6 — Outbox | 🔴 Not Started | — | — | — |
@@ -52,12 +52,12 @@ Phase 2 complete. Ready for Phase 3 (Identity Propagation).
 
 ## Phase 3 — Identity Propagation
 
-- [ ] 3.1 Define `external_refs` in `SpineEvent`
-- [ ] 3.2 Audit all event producers
-- [ ] 3.3 Fix Baileys status emission chain
-- [ ] 3.4 Write `resolveExternalRef()` function
-- [ ] 3.5 Add CI lint rule for external refs
-- [ ] 3.6 Implement identity quarantine
+- [x] 3.1 Define `external_refs` in `SpineEvent` (done in Phase 1: `ExternalRefs` interface)
+- [x] 3.2 Audit all event producers — audit complete, 1 broken call site found (baileys-socket.ts:270)
+- [x] 3.3 Fix Baileys status emission chain — lookup `provider_message_id` → `billzoMessageId` + `invoiceId` via `whatsapp_events` table
+- [x] 3.4 Write `resolveExternalRef()` function — query spine `events` table by `external_refs` JSONB
+- [ ] 3.5 Add CI lint rule for external refs (deferred — needs CI infra)
+- [x] 3.6 Identity quarantine in SpineWriter — transport/payment events without `external_refs` written to `spine_quarantine` table
 
 ## Phase 4 — Execution Boundaries
 

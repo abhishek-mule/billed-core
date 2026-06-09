@@ -1,7 +1,6 @@
 import { supabaseAdmin } from '../billzo/supabase-admin'
 import { spineDiagnostics } from '../spine-diagnostics'
 import {
-  type SpineEvent,
   type SpineEventInput,
   type SpineWriteResult,
   type SpineValidationError,
@@ -38,14 +37,19 @@ export class SpineWriter {
       }
     }
 
+    // Phase 3: identity quarantine — transport/payment events without
+    // external_refs get quarantined for review but still pass through
+    let quarantined = false
+    if (!input.external_refs && (entityType === 'whatsapp_message' || entityType === 'payment')) {
+      spineDiagnostics.missingExternalRefs(entityType, input.entity_id)
+      await this.quarantine(input, 'Missing external_refs for transport/payment event')
+      quarantined = true
+    }
+
     const { sequenceNo } = await this.sequenceGenerator.next(entityType, input.entity_id)
 
     const now = new Date().toISOString()
     const eventId = uuidv7()
-
-    if (!input.external_refs && (entityType === 'whatsapp_message' || entityType === 'payment')) {
-      spineDiagnostics.missingExternalRefs(entityType, input.entity_id)
-    }
 
     const event = {
       event_id: eventId,
@@ -75,10 +79,29 @@ export class SpineWriter {
       accepted: true,
       event_id: eventId,
       sequence_no: sequenceNo,
+      quarantined,
     }
   }
 
   async appendBatch(inputs: SpineEventInput[]): Promise<SpineWriteResult[]> {
     return Promise.all(inputs.map(i => this.append(i)))
+  }
+
+  private async quarantine(input: SpineEventInput, reason: string): Promise<void> {
+    const { error } = await supabaseAdmin
+      .from('spine_quarantine')
+      .insert({
+        event_id: uuidv7(),
+        entity_type: input.entity_type,
+        entity_id: input.entity_id,
+        source_system: input.source_system,
+        idempotency_key: input.idempotency_key,
+        payload: input.payload ?? {},
+        reason,
+        tenant_id: input.tenant_id ?? null,
+      })
+    if (error) {
+      console.error(`[SpineWriter] Quarantine write failed: ${error.message}`)
+    }
   }
 }

@@ -40,6 +40,7 @@ export interface SpineWriteResult {
     event_id?: string;
     sequence_no?: number;
     error?: string;
+    quarantined?: boolean;
 }
 export declare const VALID_ENTITY_TYPES: SpineEntityType[];
 export declare const VALID_SOURCE_SYSTEMS: SpineSourceSystem[];
