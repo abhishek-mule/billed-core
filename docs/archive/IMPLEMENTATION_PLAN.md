@@ -8,7 +8,7 @@
 | Phase | Status | Started | Completed | Owner |
 |-------|--------|---------|-----------|-------|
 | 0 — Measurement | ✅ Complete | 2026-06-09 | 2026-06-09 | Julfi |
-| 1 — Invariants | 🔴 Not Started | — | — | — |
+| 1 — Invariants | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 2 — Ordering | 🔴 Not Started | — | — | — |
 | 3 — Identity | 🔴 Not Started | — | — | — |
 | 4 — Execution Boundaries | 🔴 Not Started | — | — | — |
@@ -35,11 +35,11 @@ No tasks in progress.
 
 ## Phase 1 — Event Spine Invariants
 
-- [ ] 1.1 Define `SpineEvent` in shared types
-- [ ] 1.2 Write `SpineWriter.append()` runtime guard
-- [ ] 1.3 Write Supabase CHECK constraint
-- [ ] 1.4 Migrate existing events table
-- [ ] 1.5 Write unit tests
+- [x] 1.1 Define `SpineEvent` in shared types
+- [x] 1.2 Write `SpineWriter.append()` runtime guard
+- [x] 1.3 Write Supabase CHECK constraint — `migrations/035_event_spine.sql`
+- [x] 1.4 Migrate existing events table — `migrations/035_event_spine.sql`
+- [x] 1.5 Write unit tests (20 tests for spine.ts)
 
 ## Phase 2 — Per-Entity Monotonic Ordering
 

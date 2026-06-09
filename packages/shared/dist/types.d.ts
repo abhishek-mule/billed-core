@@ -7,6 +7,7 @@ export type WhatsAppStatus = 'queued' | 'sent' | 'server_ack' | 'delivered' | 'r
 export type ProjectionTransportState = 'queued' | 'sent' | 'server_ack' | 'delivered' | 'received' | 'read' | 'failed_terminal';
 export type ProjectionDeliveryHealth = 'healthy' | 'retrying' | 'degraded';
 export type WhatsAppProvider = 'gupshup' | 'baileys';
+export type AutomationMode = 'full_auto' | 'manual' | 'muted';
 export declare const MESSAGE_ORIGINS: readonly ["automation", "manual", "webhook", "system"];
 export type MessageOrigin = (typeof MESSAGE_ORIGINS)[number];
 export interface MessageIdentity {
@@ -19,18 +20,7 @@ export interface MessageIdentity {
     attemptNumber: number;
     reminderStage: string | null;
 }
-/**
- * Generate a canonical billzo_message_id using Snowflake-style encoding.
- * Combines Date.now() (shifted left 12 bits) with hrtime low 12 bits
- * for intra-millisecond uniqueness without shared mutable state.
- *
- * Format: bmsg_{base36(snowflake)}
- */
 export declare function generateBillzoMessageId(): string;
-/**
- * Generate a monotonic event sequence value using the same Snowflake scheme.
- * Sortable by wall-clock order, unique per-call without atomics.
- */
 export declare function generateEventSequence(): bigint;
 /**
  * Compute a transport-level message hash for dedup and reconciliation.

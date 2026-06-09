@@ -56,20 +56,16 @@ const crypto_1 = __importDefault(require("crypto"));
  *
  * Format: bmsg_{base36(snowflake)}
  */
+let _seqCounter = 0n;
 function generateBillzoMessageId() {
     const ts = BigInt(Date.now()) << 12n;
-    const nano = process.hrtime.bigint() & 0xfffn;
-    const combined = ts | nano;
-    return `bmsg_${combined.toString(36)}`;
+    const counter = (_seqCounter++ & 0xfffn);
+    return `bmsg_${(ts | counter).toString(36)}`;
 }
-/**
- * Generate a monotonic event sequence value using the same Snowflake scheme.
- * Sortable by wall-clock order, unique per-call without atomics.
- */
 function generateEventSequence() {
     const ts = BigInt(Date.now()) << 12n;
-    const nano = process.hrtime.bigint() & 0xfffn;
-    return ts | nano;
+    const counter = (_seqCounter++ & 0xfffn);
+    return ts | counter;
 }
 /**
  * Compute a transport-level message hash for dedup and reconciliation.

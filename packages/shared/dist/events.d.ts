@@ -22,6 +22,7 @@ export declare const EventType: {
     readonly CUSTOMER_CREATED: "customer.created";
     readonly CUSTOMER_UPDATED: "customer.updated";
     readonly CUSTOMER_OPT_IN: "customer.opt_in";
+    readonly CUSTOMER_UPDATE_AUTOMATION: "customer.update_automation";
     readonly WHATSAPP_SENT: "whatsapp.sent";
     readonly WHATSAPP_DELIVERED: "whatsapp.delivered";
     readonly WHATSAPP_FAILED: "whatsapp.failed";
@@ -38,6 +39,7 @@ export declare const EventType: {
     readonly WHATSAPP_CIRCUIT_OPEN: "whatsapp.circuit_open";
     readonly WHATSAPP_UPI_CLICKED: "whatsapp.upi_clicked";
     readonly RECOVERY_ESCALATION_SUGGESTED: "recovery.escalation.suggested";
+    readonly REMINDER_PENDING_APPROVAL: "reminder.pending_approval";
     readonly ANALYTICS_SNAPSHOT_GENERATED: "analytics.snapshot.generated";
     readonly EXPERIMENT_ASSIGNED: "experiment.assigned";
     readonly EXPERIMENT_COMPLETED: "experiment.completed";

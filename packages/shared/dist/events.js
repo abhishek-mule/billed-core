@@ -33,6 +33,7 @@ exports.EventType = {
     CUSTOMER_CREATED: 'customer.created',
     CUSTOMER_UPDATED: 'customer.updated',
     CUSTOMER_OPT_IN: 'customer.opt_in',
+    CUSTOMER_UPDATE_AUTOMATION: 'customer.update_automation',
     // Messaging
     WHATSAPP_SENT: 'whatsapp.sent',
     WHATSAPP_DELIVERED: 'whatsapp.delivered',
@@ -53,6 +54,7 @@ exports.EventType = {
     WHATSAPP_UPI_CLICKED: 'whatsapp.upi_clicked',
     // Recovery
     RECOVERY_ESCALATION_SUGGESTED: 'recovery.escalation.suggested',
+    REMINDER_PENDING_APPROVAL: 'reminder.pending_approval',
     // Analytics
     ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
     // Experiments
