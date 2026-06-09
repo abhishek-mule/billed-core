@@ -2,7 +2,55 @@ import crypto from 'crypto'
 import { writeOutboxEvent, type OutboxWriteOptions } from './outbox'
 import { generateCorrelationId } from './idempotency'
 import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
+import { SpineWriter } from '../spine/spine-writer'
+import type { SpineEventInput } from '@billzo/shared'
 import { spineDiagnostics } from '../spine-diagnostics'
+
+const spineWriter = new SpineWriter()
+
+function billzoEventToSpineInput(event: Omit<BillzoEvent, 'version'>): SpineEventInput {
+  const entityType = event.type.startsWith('invoice.') ? 'invoice'
+    : event.type.startsWith('payment.') ? 'payment'
+    : event.type.startsWith('recovery.') ? 'recovery_case'
+    : event.type.startsWith('customer.') ? 'customer'
+    : event.type.startsWith('whatsapp.') ? 'whatsapp_message'
+    : event.type.startsWith('send_message.') ? 'whatsapp_message'
+    : event.type.startsWith('projection.') || event.type.startsWith('behavioral.') || event.type.startsWith('profile.') ? 'whatsapp_message'
+    : event.type.startsWith('orchestration.') ? 'tenant'
+    : event.type.startsWith('inventory.') ? 'product'
+    : event.type.startsWith('experiment.') ? 'tenant'
+    : event.type.startsWith('sync.') ? 'tenant'
+    : event.type.startsWith('analytics.') ? 'tenant'
+    : event.type.startsWith('reminder.') ? 'recovery_case'
+    : 'unknown'
+
+  const sourceSystem = event.producer === 'api' ? 'api'
+    : event.producer === 'worker' ? 'worker'
+    : event.producer === 'webhook' ? 'webhook'
+    : event.producer === 'cron' ? 'cron'
+    : event.producer === 'client' ? 'client'
+    : 'system'
+
+  const externalRefs: Record<string, string | null> = {}
+  if (event.payload) {
+    if (event.payload['providerPaymentId']) externalRefs['razorpay_payment_id'] = event.payload['providerPaymentId'] as string
+    if (event.payload['providerMessageId']) externalRefs['provider_message_id'] = event.payload['providerMessageId'] as string
+    if (event.payload['billzoMessageId']) externalRefs['whatsapp_message_id'] = event.payload['billzoMessageId'] as string
+    if (event.payload['messageId']) externalRefs['whatsapp_message_id'] = event.payload['messageId'] as string
+  }
+
+  return {
+    entity_type: entityType,
+    entity_id: event.entityId ?? event.tenantId,
+    causal_id: event.causationId,
+    correlation_id: event.correlationId,
+    source_system: sourceSystem,
+    idempotency_key: event.idempotencyKey ?? `auto:${event.type}:${event.entityId ?? event.tenantId}:${Date.now()}`,
+    tenant_id: event.tenantId,
+    payload: event.payload ?? {},
+    external_refs: Object.keys(externalRefs).length > 0 ? externalRefs : undefined,
+  }
+}
 
 // ============================================================
 // EVENT EMISSION
@@ -35,12 +83,19 @@ export async function emitEvent(event: Omit<BillzoEvent, 'version'>): Promise<st
     spineDiagnostics.missingExternalRefs(event.type, event.entityId)
   }
 
+  // Phase 2: dual-write — spine first, then outbox
+  const spineInput = billzoEventToSpineInput(event)
+  const spineResult = await spineWriter.append(spineInput)
+  if (!spineResult.accepted) {
+    spineDiagnostics.dateNowInDomain(`spine-writer:rejected:${event.type}`)
+  }
+
   const options: OutboxWriteOptions = {
     type: event.type,
     tenantId: event.tenantId,
     entityId: event.entityId,
     payload: event.payload,
-    causationId: event.causationId,
+    causationId: spineResult.accepted ? spineResult.event_id : event.causationId,
     correlationId: event.correlationId,
     idempotencyKey: event.idempotencyKey,
     version: 1,
@@ -48,9 +103,9 @@ export async function emitEvent(event: Omit<BillzoEvent, 'version'>): Promise<st
 
   const eventId = await writeOutboxEvent(options)
 
-  // Structured log
   logStructuredEvent({
     eventId,
+    spineEventId: spineResult.accepted ? spineResult.event_id : undefined,
     type: event.type,
     tenantId: event.tenantId,
     entityId: event.entityId,
@@ -200,6 +255,7 @@ export async function emitPaymentReconciled(params: {
 
 interface StructuredLogEntry {
   eventId: string
+  spineEventId?: string
   type: string
   tenantId: string
   entityId: string | null

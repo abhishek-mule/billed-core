@@ -9,7 +9,7 @@
 |-------|--------|---------|-----------|-------|
 | 0 — Measurement | ✅ Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 1 — Invariants | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
-| 2 — Ordering | 🔴 Not Started | — | — | — |
+| 2 — Ordering | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 3 — Identity | 🔴 Not Started | — | — | — |
 | 4 — Execution Boundaries | 🔴 Not Started | — | — | — |
 | 5 — Mutation Gate | 🔴 Not Started | — | — | — |
@@ -21,7 +21,7 @@
 ## Active Tasks
 
 ```
-No tasks in progress.
+Phase 2 complete. Ready for Phase 3 (Identity Propagation).
 ```
 
 ## Phase 0 — Measurement Tasks
@@ -43,12 +43,12 @@ No tasks in progress.
 
 ## Phase 2 — Per-Entity Monotonic Ordering
 
-- [ ] 2.1 Add `sequence_no` column + unique constraint
-- [ ] 2.2 Implement `SequenceGenerator`
-- [ ] 2.3 Wire `SpineWriter` to auto-assign `sequence_no`
-- [ ] 2.4 Add DB trigger for out-of-order rejection
-- [ ] 2.5 Replace polling with LISTEN/NOTIFY
-- [ ] 2.6 Migrate all producers to `SpineWriter`
+- [x] 2.1 Add `sequence_no` column + unique constraint (migration 035 covers column + entity_sequences table)
+- [x] 2.2 Extract `SequenceGenerator` class from inline nextSequence() — worker/src/lib/spine/sequence-generator.ts, 3 unit tests
+- [x] 2.3 Wire `SpineWriter` to auto-assign `sequence_no` (done in Phase 1)
+- [x] 2.4 Add UNIQUE constraint on `(entity_type, entity_id, sequence_no)` + out-of-order DB trigger — migration 036
+- [ ] 2.5 (deferred to Phase 6 — Push-Based Outbox covers LISTEN/NOTIFY)
+- [x] 2.6 Dual-write `emitEvent()` through `SpineWriter.append()` + outbox
 
 ## Phase 3 — Identity Propagation
 

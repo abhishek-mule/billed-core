@@ -19,10 +19,11 @@ function uuidv7() {
     const ms = Date.now();
     const tsHex = ms.toString(16).padStart(12, '0');
     const rand1 = Math.floor(Math.random() * 0x1000);
-    const rand2 = Math.floor(Math.random() * 0x4000);
-    const rand3lo = Math.floor(Math.random() * 0x100000000);
-    const rand3hi = Math.floor(Math.random() * 0x10000);
-    const rand3 = ((rand3hi * 0x100000000 + rand3lo) >>> 0).toString(16).padStart(12, '0');
+    const rand2 = Math.floor(Math.random() * 0x1000);
+    const rand3hi = Math.floor(Math.random() * 0x100000000);
+    const rand3lo = Math.floor(Math.random() * 0x10000);
+    const rand3 = ((rand3hi >>> 0).toString(16).padStart(8, '0')
+        + (rand3lo >>> 0).toString(16).padStart(4, '0'));
     return `${tsHex.slice(0, 8)}-${tsHex.slice(8, 12)}-7${rand1.toString(16).padStart(3, '0')}-8${rand2.toString(16).padStart(3, '0')}-${rand3}`;
 }
 function uuidv7Timestamp(uuid) {

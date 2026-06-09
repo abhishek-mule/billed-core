@@ -19,6 +19,7 @@ export interface SpineEvent {
     readonly ingested_at: string;
     readonly source_system: SpineSourceSystem;
     readonly idempotency_key: string;
+    readonly tenant_id?: string;
     readonly payload: Record<string, unknown>;
     readonly external_refs?: ExternalRefs;
 }
@@ -30,6 +31,7 @@ export interface SpineEventInput {
     occurred_at?: string;
     source_system: SpineSourceSystem;
     idempotency_key: string;
+    tenant_id?: string;
     payload?: Record<string, unknown>;
     external_refs?: ExternalRefs;
 }
