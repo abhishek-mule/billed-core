@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, ShieldAlert, Banknote } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
@@ -44,6 +44,13 @@ export default function InvoiceDetailPage() {
   const [overrideWarning, setOverrideWarning] = useState('');
   const [overrideRequiresAck, setOverrideRequiresAck] = useState(false);
   const [overrideSuccess, setOverrideSuccess] = useState(false);
+  const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false);
+  const [recordAmount, setRecordAmount] = useState('');
+  const [recordSource, setRecordSource] = useState('cash');
+  const [recordNotes, setRecordNotes] = useState('');
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [recordPaymentError, setRecordPaymentError] = useState('');
+  const [recordPaymentSuccess, setRecordPaymentSuccess] = useState(false);
 
   const id = params.id as string;
 
@@ -227,6 +234,45 @@ export default function InvoiceDetailPage() {
     }
   }
 
+  const handleRecordPayment = async () => {
+    const amount = parseFloat(recordAmount);
+    if (!amount || amount <= 0) {
+      setRecordPaymentError('Enter a valid amount');
+      return;
+    }
+    setRecordingPayment(true);
+    setRecordPaymentError('');
+    try {
+      const res = await fetch('/api/recovery/record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoiceId: id,
+          amount,
+          source: recordSource,
+          notes: recordNotes.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to record payment');
+      setRecordPaymentSuccess(true);
+      loadInvoice();
+      loadRecoveryData();
+      setTimeout(() => {
+        setShowRecordPaymentModal(false);
+        setRecordPaymentSuccess(false);
+        setRecordAmount('');
+        setRecordNotes('');
+        setRecordSource('cash');
+      }, 2000);
+    } catch (err: any) {
+      setRecordPaymentError(err.message);
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -352,6 +398,14 @@ export default function InvoiceDetailPage() {
               {paymentLink || invoice?.paymentLinkUrl ? 'Copy Link' : 'Payment Link'}
             </button>
           )}
+
+          <button
+            onClick={() => setShowRecordPaymentModal(true)}
+            className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <Banknote className="h-4 w-4" />
+            Record Payment
+          </button>
         </div>
 
         {(paymentLink || invoice?.paymentLinkUrl) && (
@@ -582,6 +636,88 @@ export default function InvoiceDetailPage() {
                         : overrideRequiresAck
                           ? 'Yes, I Accept the Risk'
                           : 'Override & Send'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {showRecordPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-bold text-lg">Record Payment</h2>
+              <button onClick={() => { setShowRecordPaymentModal(false); setRecordPaymentError(''); }} className="p-2 rounded-lg hover:bg-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {recordPaymentSuccess ? (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="text-xs text-green-700 font-medium">Payment recorded! Outstanding amount updated.</span>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={recordAmount}
+                      onChange={e => setRecordAmount(e.target.value)}
+                      placeholder="1000"
+                      min="1"
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Payment Source</label>
+                    <select
+                      value={recordSource}
+                      onChange={e => setRecordSource(e.target.value)}
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="upi">UPI</option>
+                      <option value="adjustment">Adjustment</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notes (optional)</label>
+                    <textarea
+                      value={recordNotes}
+                      onChange={e => setRecordNotes(e.target.value)}
+                      rows={2}
+                      placeholder="e.g. Customer paid in person"
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                    />
+                  </div>
+                  {recordPaymentError && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {recordPaymentError}
+                    </div>
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => { setShowRecordPaymentModal(false); setRecordPaymentError(''); }}
+                      className="flex-1 h-11 rounded-xl border-2 border-border bg-card font-bold text-sm hover:bg-muted transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleRecordPayment}
+                      disabled={recordingPayment || !recordAmount || parseFloat(recordAmount) <= 0}
+                      className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white flex items-center justify-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {recordingPayment && <Loader className="h-4 w-4 animate-spin" />}
+                      {recordingPayment ? 'Recording...' : 'Record Payment'}
                     </button>
                   </div>
                 </>

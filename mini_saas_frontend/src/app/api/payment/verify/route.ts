@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { submitIntent } from '@/lib/authority/transport'
+import { recordPayment } from '@/lib/billzo/record-payment'
 
 interface VerifyRequest {
   razorpay_order_id: string
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (invoiceId && tenantId) {
+      const pmtAmount = amount || 0
+
       try {
         const intentResult = await submitIntent(
           {
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
             timestamp: new Date().toISOString(),
             causationId: null,
             correlationId: razorpay_order_id,
-            payload: { invoiceId, status: 'paid', paidAmount: amount || 0 },
+            payload: { invoiceId, status: 'paid', paidAmount: pmtAmount },
             nonce: crypto.randomUUID(),
           },
           'app',
@@ -66,6 +69,19 @@ export async function POST(request: NextRequest) {
           console.error('[VerifyPayment] Authority rejected mark_paid:', intentResult.error)
         }
 
+        // Record payment in unified ledger — trigger auto-maintains outstanding_amount
+        await recordPayment({
+          tenantId,
+          invoiceId,
+          amount: pmtAmount,
+          source: 'razorpay',
+          actor: 'customer',
+          evidence: {
+            razorpayPaymentId: razorpay_payment_id,
+            razorpayOrderId: razorpay_order_id,
+          },
+        })
+
         const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
         await writeOutboxEvent({
           type: 'payment.completed',
@@ -73,7 +89,7 @@ export async function POST(request: NextRequest) {
           tenantId: tenantId || '',
           correlationId: razorpay_order_id,
           payload: {
-            amount: amount || 0,
+            amount: pmtAmount,
             provider: 'razorpay',
             providerPaymentId: razorpay_payment_id,
             razorpay_order_id,

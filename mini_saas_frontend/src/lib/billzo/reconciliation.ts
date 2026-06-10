@@ -192,6 +192,27 @@ async function finalizeReconciliation(
     throw new Error(intentResult.error || 'Authority rejected reconciliation')
   }
 
+  // Record payment in unified ledger — trigger auto-maintains outstanding_amount
+  try {
+    const { recordPayment } = await import('./record-payment')
+    const rawPayload = signal.rawPayload as any
+    await recordPayment({
+      tenantId,
+      invoiceId,
+      amount: signal.amount,
+      source: signal.provider === 'razorpay' ? 'razorpay' : 'cash',
+      actor: 'customer',
+      evidence: {
+        razorpayPaymentId: signal.providerPaymentId,
+        razorpayOrderId: rawPayload?.payment?.entity?.order_id,
+        utr: signal.upiReference || undefined,
+        notes: `Auto-reconciled via ${signal.provider} (${matchType})`,
+      },
+    })
+  } catch (err: any) {
+    console.error('[Reconciliation] Failed to record payment in ledger:', err.message)
+  }
+
   // Emit payment reconciled event
   await emitPaymentReconciled({
     invoiceId,

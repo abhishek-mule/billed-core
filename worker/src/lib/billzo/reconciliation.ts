@@ -110,6 +110,30 @@ async function finalizeReconciliation(
     }
   }
 
+  // Record payment in unified ledger — trigger auto-maintains outstanding_amount
+  try {
+    const { recordPayment } = await import('../recovery/payment-handler')
+    const rawPayload = signal.rawPayload as any
+    const result = await recordPayment({
+      tenantId,
+      invoiceId,
+      amount: signal.amount,
+      source: signal.provider === 'razorpay' ? 'razorpay' : 'cash',
+      actor: 'customer',
+      evidence: {
+        razorpayPaymentId: signal.providerPaymentId,
+        razorpayOrderId: rawPayload?.payment?.entity?.order_id,
+        utr: signal.upiReference || undefined,
+        notes: `Auto-reconciled via ${signal.provider} (${matchType})`,
+      },
+    })
+    if ('error' in result) {
+      logger.error({ invoiceId, err: result.error }, 'Failed to record payment in ledger')
+    }
+  } catch (err: any) {
+    logger.error({ invoiceId, err: err.message }, 'Failed to record payment in ledger')
+  }
+
   await emitPaymentReconciled({
     invoiceId,
     tenantId,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCookie } from '@/lib/cookies'
 import { createClient } from '@supabase/supabase-js'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
+import { recordPayment } from '@/lib/billzo/record-payment'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +19,7 @@ const ACTIONS_WITH_OUTBOX_EVENT: Record<string, string> = {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = getCookie('bz_tenant')
+  const tenantId = request.cookies.get('bz_tenant')?.value
   if (!tenantId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -56,35 +56,25 @@ export async function POST(request: NextRequest) {
     // ── record_payment: creates real payment record + emits payment.completed ──
     if (action === 'record_payment') {
       const amount = payload?.amount
-      const method = payload?.method || 'cash'
+      const source = payload?.source || 'cash'
 
       if (!amount || amount <= 0) {
         return NextResponse.json({ error: 'Valid amount required for record_payment' }, { status: 400 })
       }
 
-      const { error: pmtErr } = await supabase.from('payments').insert({
-        tenant_id: tenantId,
-        invoice_id: null,
-        amount,
-        method,
-        status: 'success',
-      })
-
-      if (pmtErr) {
-        return NextResponse.json({ error: pmtErr.message }, { status: 500 })
-      }
-
-      await writeOutboxEvent({
-        type: 'payment.completed',
+      const pmtResult = await recordPayment({
         tenantId,
-        entityId: caseId,
-        payload: {
-          amount,
-          customerId: recoveryCase.customer_id,
-          method,
-          source: 'merchant_recorded',
-        },
+        invoiceId: payload?.invoiceId || caseId,
+        amount,
+        source,
+        actor: 'merchant',
+        evidence: { notes: payload?.notes || 'Recorded from recovery queue' },
+        notes: payload?.notes,
       })
+
+      if ('error' in pmtResult) {
+        return NextResponse.json({ error: pmtResult.error }, { status: 500 })
+      }
     }
 
     // ── Standard outbox actions ──
