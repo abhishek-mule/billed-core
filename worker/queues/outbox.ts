@@ -162,7 +162,7 @@ const HANDLER_LANES: LaneHandler[] = [
   { lane: 'notification', priority: 3, name: 'tryHandleRedisPublish', handle: tryHandleRedisPublish },
 ]
 
-async function processOutboxEvent(event: any): Promise<void> {
+export async function processOutboxEvent(event: any): Promise<void> {
   // Phase 0 probe: detect missing causation_id
   if (!event.causationId && event.type !== 'invoice.created') {
     spineDiagnostics.missingCausationId(event.type)
@@ -636,6 +636,12 @@ async function handlePaymentEvent(event: any): Promise<void> {
     tenantId,
     paymentId: event.payload?.paymentId,
     paymentTimestamp: event.createdAt,
+  })
+
+  // Re-run decision engine with fresh outstanding — trigger has already updated the invoice
+  const { rerunDecisionEngine } = await import('../src/lib/recovery/rerun-engine')
+  await rerunDecisionEngine(invoiceId, tenantId).catch((err: any) => {
+    logger.error({ invoiceId, tenantId, err: err.message }, 'Failed to re-run decision engine after payment')
   })
 
   await publishToRedis(tenantId, 'payment.completed', {

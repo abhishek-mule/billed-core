@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../billzo/supabase-admin'
 import { emitEvent } from '../billzo/events'
 import { EventType } from '@billzo/shared'
 import type { PaymentSource, PaymentEvidence, PaymentActor } from '@billzo/shared'
+import { rerunDecisionEngine } from './rerun-engine'
 import crypto from 'crypto'
 
 export interface RecordPaymentInput {
@@ -56,6 +57,11 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ paymen
     producer: 'worker',
     idempotencyKey: `payment:recorded:${paymentId}`,
     retentionDays: 365,
+  })
+
+  // Re-run decision engine with fresh outstanding — trigger has already updated the invoice
+  await rerunDecisionEngine(input.invoiceId, input.tenantId).catch((err: any) => {
+    console.error('[PaymentHandler] Failed to re-run decision engine:', err.message)
   })
 
   return { paymentId, invoiceId: input.invoiceId }
