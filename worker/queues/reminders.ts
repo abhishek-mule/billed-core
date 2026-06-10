@@ -193,7 +193,32 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           rules_checked: decisionResult.rules,
           rules_snapshot: decisionResult.rulesSnapshot,
           context_snapshot: { stage, recoveryStage: invoice.recovery_stage },
+          next_review_at: decisionResult.nextReviewAt,
         }).maybeSingle()
+
+        // Emit RECOVERY_RECOMMENDATION event — machine suggests, merchant decides
+        const blockedBy = decisionResult.rules.find(r => !r.passed)
+        await emitEvent({
+          type: EventType.RECOVERY_RECOMMENDATION,
+          tenantId,
+          entityId: invoiceId,
+          payload: {
+            allowed: decisionResult.allowed,
+            decision: decisionResult.decision,
+            reason: decisionResult.reason,
+            checksPassed: decisionResult.checksPassed,
+            totalChecks: decisionResult.totalChecks,
+            confidence: decisionResult.confidence,
+            nextReviewAt: decisionResult.nextReviewAt,
+            blockedBy: blockedBy?.rule || null,
+            rules: decisionResult.rules.map(r => ({ rule: r.rule, passed: r.passed })),
+          },
+          causationId: null,
+          correlationId: `reminder:${invoiceId}`,
+          producer: 'worker',
+          idempotencyKey: null,
+          retentionDays: 90,
+        })
 
         if (!decisionResult.allowed) {
           logger.warn({ invoiceId, reason: decisionResult.reason }, 'Decision engine blocked reminder')

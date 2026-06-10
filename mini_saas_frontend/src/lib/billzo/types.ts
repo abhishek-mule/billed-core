@@ -63,6 +63,7 @@ export type Tenant = {
   subscriptionStatus?: string
   cancelledAt?: string
   whatsappConfig?: TenantWhatsAppConfig
+  allowNegativeStock?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -73,6 +74,24 @@ export type DeviceToken = {
   fcmToken: string
   deviceType: 'android' | 'ios' | 'web'
   createdAt: string
+}
+
+export type AutomationMode = 'full_auto' | 'manual' | 'muted'
+
+export type PromiseStatus = 'active' | 'fulfilled' | 'broken'
+
+export type CustomerPromise = {
+  id: string
+  tenantId: string
+  customerId: string
+  invoiceIds: string[]
+  amount: number
+  dueDate: string
+  status: PromiseStatus
+  note?: string
+  fulfilledAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type Customer = {
@@ -89,6 +108,7 @@ export type Customer = {
   address?: string
   email?: string
   notes?: string
+  automationMode?: AutomationMode
   lastUsedAt: string
   invoiceCount: number
   createdAt: string
@@ -164,6 +184,8 @@ export type Invoice = {
   paymentLinkId?: string
   paymentLinkUrl?: string
   paymentLinkExpiry?: string
+  isSnoozed?: boolean
+  snoozeUntil?: string
   version: number
 }
 
@@ -195,10 +217,16 @@ export type Payment = {
   id: string
   tenantId: string
   invoiceId?: string
+  customerId?: string
   provider: 'cash' | 'upi' | 'razorpay_test'
   providerPaymentId?: string
+  razorpayOrderId?: string
   amount: number
   status: 'success' | 'failed' | 'pending'
+  collectedVia?: 'manual' | 'auto'
+  platformFee?: number
+  notes?: string
+  paidAt?: string
   createdAt: string
   updatedAt: string
   syncStatus: SyncStatus
@@ -262,6 +290,7 @@ export type QueueItem = {
     | 'payment'
     | 'whatsapp_event'
     | 'recovery_attempt'
+    | 'promise'
   entityId: string
   action: 'upsert' | 'delete' | 'send_whatsapp' | 'razorpay_test'
   payload: unknown

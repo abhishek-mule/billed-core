@@ -59,6 +59,9 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
         overrideReason: input.invoice.overrideReason || undefined,
       }],
       rulesSnapshot: { merchant_override: true },
+      checksPassed: 1,
+      totalChecks: 1,
+      nextReviewAt: null,
     }
   }
 
@@ -191,6 +194,26 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
   const failingCount = rules.filter(r => !r.passed).length
   const confidence = allPassed ? 1.0 : Math.max(0.1, 1.0 - failingCount * 0.15)
 
+  const passedCount = rules.filter(r => r.passed).length
+  const totalCount = rules.length
+
+  // Compute next review date from the first failing rule
+  const firstBlocking = rules.find(r => !r.passed)
+  let nextReviewAt: string | null = null
+  if (firstBlocking) {
+    switch (firstBlocking.rule) {
+      case 'no_active_promise':
+        nextReviewAt = input.activePromiseDate || null
+        break
+      case 'cooldown_expired':
+        nextReviewAt = input.invoice.nextRecoveryAt
+        break
+      case 'not_snoozed':
+        nextReviewAt = input.invoice.snoozeUntil
+        break
+    }
+  }
+
   const rulesSnapshot: Record<string, boolean> = {
     merchant_override: false,
   }
@@ -205,5 +228,8 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
     confidence,
     rules,
     rulesSnapshot,
+    checksPassed: passedCount,
+    totalChecks: totalCount,
+    nextReviewAt,
   }
 }

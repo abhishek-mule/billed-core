@@ -58,6 +58,9 @@ export interface CanSendReminderOutput {
   confidence: number
   rules: DecisionRuleResult[]
   rulesSnapshot: Record<string, boolean>
+  checksPassed: number
+  totalChecks: number
+  nextReviewAt: string | null
 }
 
 // ============================================================

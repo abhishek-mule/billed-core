@@ -4,18 +4,37 @@
 import { createClient } from '@supabase/supabase-js'
 import { db, notifyChanged } from './db'
 import { getTenantId } from './tenant'
-import type { QueueItem } from './types'
+import type { QueueItem, Invoice, Payment } from './types'
 
 const MAX_DELAY_MS = 10 * 60 * 1000
+const RECONCILE_TABLES = ['invoices', 'payments', 'customers'] as const
+const RECONCILE_CACHE_KEY = 'billzo_last_reconciled_at'
 
 function backoffMs(attempts: number) {
   const jitter = Math.floor(Math.random() * 750)
   return Math.min(1000 * 2 ** attempts + jitter, MAX_DELAY_MS)
 }
 
+/** Track the most recent server timestamp we've reconciled against. */
+function getLastReconciledAt(): string {
+  if (typeof window === 'undefined') return new Date(0).toISOString()
+  return localStorage.getItem(RECONCILE_CACHE_KEY) || new Date(0).toISOString()
+}
+
+function setLastReconciledAt(ts: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(RECONCILE_CACHE_KEY, ts)
+  }
+}
+
 export function scheduleBackgroundSync(delay = 250) {
   if (typeof window === 'undefined') return
-  window.setTimeout(syncPendingQueue, delay)
+  window.setTimeout(syncAndReconcile, delay)
+}
+
+export async function syncAndReconcile() {
+  await syncPendingQueue()
+  await reconcileFromServer()
 }
 
 function tableFor(item: QueueItem) {
@@ -30,6 +49,7 @@ function tableFor(item: QueueItem) {
     payment: 'payments',
     whatsapp_event: 'whatsapp_events',
     recovery_attempt: 'recovery_attempts',
+    promise: 'promises',
   }
   return tables[item.entity]
 }
@@ -61,7 +81,7 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         stock_quantity: payload.stock ?? 0,
         low_stock_at: payload.lowStockAt ?? 10,
         rate: payload.salePrice ?? 0,
-        standard_rate: payload.purchasePrice ?? 0,
+        purchase_rate: payload.purchasePrice ?? 0,
         unit: payload.unit ?? null,
         created_at: payload.createdAt,
         updated_at: payload.updatedAt,
@@ -116,10 +136,18 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         id: payload.id,
         tenant_id: payload.tenantId,
         invoice_id: payload.invoiceId ?? null,
+        customer_id: payload.customerId ?? null,
         amount: payload.amount ?? 0,
         payment_mode: payload.provider ?? 'cash',
+        status: payload.status === 'success' ? 'paid' : (payload.status ?? 'pending'),
         razorpay_payment_id: payload.providerPaymentId ?? null,
+        razorpay_order_id: payload.razorpayOrderId ?? null,
+        collected_via: payload.collectedVia ?? 'manual',
+        platform_fee: payload.platformFee ?? 0,
+        notes: payload.notes ?? null,
+        paid_at: payload.paidAt ?? null,
         created_at: payload.createdAt,
+        updated_at: payload.updatedAt,
       }
     default:
       return normalizePayload(payload) as Record<string, unknown>
@@ -164,7 +192,13 @@ export async function syncPendingQueue() {
       await db().queue.update(item.id, { status: 'syncing', attempts: current.attempts + 1, updatedAt: new Date().toISOString() })
 
       if (item.action === 'send_whatsapp') {
-        await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
+        const { error: waError } = await supabase.from('recovery_attempts').upsert(serializeQueuePayload(item) as Record<string, unknown>, { onConflict: 'id' })
+        if (!waError) {
+          await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
+        } else {
+          const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
+          await db().queue.update(item.id, { status: 'failed', lastError: waError.message, nextAttemptAt, updatedAt: new Date().toISOString() })
+        }
         continue
       }
 
@@ -187,6 +221,125 @@ export async function syncPendingQueue() {
     notifyChanged()
   } finally {
     ;(window as any).__billzoSyncing = false
+  }
+}
+
+/**
+ * Pull latest invoice/payment state from Supabase and overwrite Dexie
+ * when the server has a newer `updated_at` and no local changes are in flight.
+ *
+ * This closes the gap where server-side webhooks (Razorpay, WhatsApp status)
+ * modify data while the client is offline.
+ */
+async function reconcileFromServer() {
+  const tenantId = getTenantId()
+  if (!tenantId) return
+  if ((navigator as any).onLine === false) return
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) return
+
+  const supabase = createClient(url, key)
+  const since = getLastReconciledAt()
+  let newestTs = since
+
+  // Check if an entity has pending local changes — if so, skip server update
+  const hasPendingLocalChange = async (entityType: string, entityId: string): Promise<boolean> => {
+    const pending = await db()
+      .queue.where('[tenantId+status]')
+      .anyOf([tenantId, 'pending'], [tenantId, 'failed'], [tenantId, 'conflict'])
+      .filter((item) => item.entity === entityType && item.entityId === entityId)
+      .count()
+    return pending > 0
+  }
+
+  for (const table of RECONCILE_TABLES) {
+    const { data: rows, error } = await supabase
+      .from(table)
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .gt('updated_at', since)
+      .order('updated_at', { ascending: true })
+
+    if (error || !rows || rows.length === 0) continue
+
+    for (const row of rows) {
+      if (row.updated_at > newestTs) newestTs = row.updated_at
+
+      const entityType = table === 'invoices' ? 'invoice' : table === 'payments' ? 'payment' : 'customer'
+      if (await hasPendingLocalChange(entityType, row.id)) {
+        continue
+      }
+
+      const dexieTable = table === 'invoices' ? db().invoices : table === 'payments' ? db().payments : db().customers
+      const existing = await dexieTable.get(row.id)
+      if (existing && existing.updatedAt >= row.updated_at) continue
+
+      if (table === 'invoices') {
+        await db().invoices.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          customerId: row.customer_id || '',
+          customerName: row.customer_name || '',
+          customerPhone: row.customer_phone || '',
+          total: Number(row.total) || 0,
+          paidAmount: Number(row.paid_amount) || 0,
+          status: row.status === 'PAID' ? 'paid' : row.paid_amount > 0 ? 'partial' : row.status?.toLowerCase() === 'overdue' ? 'overdue' : 'unpaid',
+          dueAt: row.due_date || new Date().toISOString(),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          syncStatus: 'synced',
+          recoveryStage: (existing as Invoice)?.recoveryStage || 't0_soft',
+          nextRecoveryAt: (existing as Invoice)?.nextRecoveryAt || row.due_date || new Date().toISOString(),
+          lastWhatsAppStatus: (existing as Invoice)?.lastWhatsAppStatus || 'queued',
+          reminderCount: (existing as Invoice)?.reminderCount || 0,
+          pdfUrl: (existing as Invoice)?.pdfUrl || `/invoice/${row.id}`,
+          version: (existing as Invoice)?.version || 1,
+        } satisfies Invoice)
+      } else if (table === 'payments') {
+        await db().payments.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          invoiceId: row.invoice_id || undefined,
+          customerId: row.customer_id || undefined,
+          provider: (row.payment_mode as Payment['provider']) || 'cash',
+          providerPaymentId: row.razorpay_payment_id || undefined,
+          razorpayOrderId: row.razorpay_order_id || undefined,
+          amount: Number(row.amount) || 0,
+          status: row.status === 'paid' ? 'success' : row.status === 'failed' ? 'failed' : 'pending',
+          collectedVia: row.collected_via || 'manual',
+          platformFee: Number(row.platform_fee) || 0,
+          notes: row.notes || undefined,
+          paidAt: row.paid_at || undefined,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          syncStatus: 'synced',
+        } satisfies Payment)
+      } else if (table === 'customers') {
+        await db().customers.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          name: row.customer_name || row.name || '',
+          phone: row.phone || '',
+          gstin: row.gstin || undefined,
+          email: row.email || undefined,
+          address: row.billing_address || row.address || undefined,
+          automationMode: row.automation_mode || 'full_auto',
+          defaultTone: 'english',
+          opt_in: true,
+          lastUsedAt: row.updated_at,
+          invoiceCount: 0,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        })
+      }
+    }
+  }
+
+  if (newestTs > since) {
+    setLastReconciledAt(newestTs)
+    notifyChanged()
   }
 }
 

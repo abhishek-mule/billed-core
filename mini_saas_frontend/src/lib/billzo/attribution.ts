@@ -147,6 +147,7 @@ export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<{
       'decision.engine.allowed',
       'recovery.override.approved',
       'recovery.override.rejected',
+      'recovery.recommendation',
     ])
     .order('created_at', { ascending: true })
 

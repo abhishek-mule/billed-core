@@ -62,6 +62,7 @@ export const EventType = {
   // Recovery
   RECOVERY_ESCALATION_SUGGESTED: 'recovery.escalation.suggested',
   REMINDER_PENDING_APPROVAL: 'reminder.pending_approval',
+  RECOVERY_RECOMMENDATION: 'recovery.recommendation',
 
   // Analytics
   ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',

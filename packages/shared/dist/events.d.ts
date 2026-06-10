@@ -41,6 +41,7 @@ export declare const EventType: {
     readonly WHATSAPP_UPI_CLICKED: "whatsapp.upi_clicked";
     readonly RECOVERY_ESCALATION_SUGGESTED: "recovery.escalation.suggested";
     readonly REMINDER_PENDING_APPROVAL: "reminder.pending_approval";
+    readonly RECOVERY_RECOMMENDATION: "recovery.recommendation";
     readonly ANALYTICS_SNAPSHOT_GENERATED: "analytics.snapshot.generated";
     readonly EXPERIMENT_ASSIGNED: "experiment.assigned";
     readonly EXPERIMENT_COMPLETED: "experiment.completed";
