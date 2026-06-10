@@ -638,11 +638,24 @@ async function handlePaymentEvent(event: any): Promise<void> {
     paymentTimestamp: event.createdAt,
   })
 
-  // Re-run decision engine with fresh outstanding — trigger has already updated the invoice
+  // Re-run decision engine with fresh outstanding
   const { rerunDecisionEngine } = await import('../src/lib/recovery/rerun-engine')
   await rerunDecisionEngine(invoiceId, tenantId).catch((err: any) => {
     logger.error({ invoiceId, tenantId, err: err.message }, 'Failed to re-run decision engine after payment')
   })
+
+  // Update customer reputation + auto-assign tier
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('customer_id')
+    .eq('id', invoiceId)
+    .single()
+  if (invoice?.customer_id) {
+    const { computeCustomerReputation } = await import('../src/lib/recovery/reputation')
+    await computeCustomerReputation(tenantId, invoice.customer_id).catch((err: any) => {
+      logger.error({ tenantId, customerId: invoice.customer_id, err: err.message }, 'Failed to compute reputation')
+    })
+  }
 
   await publishToRedis(tenantId, 'payment.completed', {
     invoiceId,

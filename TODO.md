@@ -30,26 +30,28 @@
 | ✓ | Migration 042 (`next_review_at`) applied |
 | ✓ | "X/8 checks passed" + "Next review" in timeline |
 | ✓ | Timeline filters: Type + Blocked Reason |
-| ✓ | Recommendation events rendered |
 
 ## Sprint E — Money Truth Engine ✓
 
 | Status | Task |
 |--------|------|
-| ✓ | Migration 043: trigger-maintained outstanding, PaymentSource enum, evidence fields |
+| ✓ | Migration 043: trigger-maintained outstanding, PaymentSource enum |
 | ✓ | `PaymentSource` types in shared package |
-| ✓ | Worker `recordPayment()` — inserts into payments, emits event |
-| ✓ | Reconciliation engine inserts into payments (both worker + frontend) |
-| ✓ | Razorpay verify endpoint inserts into payments |
-| ✓ | Frontend Record Payment modal (amount, source, notes) |
-| ✓ | Re-run decision engine after every payment (synchronous + outbox) |
-| ✓ | E2E verification: trigger, API, all payment sources |
-| ✓ | 527 tests passing, `pnpm -r build` clean |
+| ✓ | Worker `recordPayment()` — inserts into payments |
+| ✓ | Reconciliation engine inserts into payments (both copies) |
+| ✓ | Razorpay verify + webhook insert into payments |
+| ✓ | Frontend Record Payment modal |
+| ✓ | Re-run decision engine after every payment |
 
-## Sprint F — Relationship Intelligence (Backlog)
+## Sprint F — Relationship Intelligence ✓
 
 | Status | Task |
 |--------|------|
-| | Reputation score computation from behavioral metrics |
-| | Customer tier auto-calculation |
-| | Message strategy engine (tier-based tone/urgency) |
+| ✓ | `computeCustomerReputation()` — 0-100 from behavioral metrics |
+| ✓ | `autoAssignTier()` — vip/regular/risky/blacklisted from reputation + signals |
+| ✓ | Reputation + tier computed on every `payment.completed` (via outbox) |
+| ✓ | Daily batch cron for all customer reputations (every 6h) |
+| ✓ | `customerTier` + `reputationScore` in `OrchestrationInput` |
+| ✓ | Tier-aware tone: VIP → soft, blacklisted → firm, risky → urgent faster |
+| ✓ | Tier-aware escalation: VIP escalates after 2 ignores, blacklisted never escalates |
+| ✓ | 527 tests passing, `pnpm -r build` clean |

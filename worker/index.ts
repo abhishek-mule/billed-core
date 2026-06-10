@@ -448,6 +448,19 @@ async function main() {
   computeReputation()
   const reputationInterval = setInterval(computeReputation, 60 * 60 * 1000)
 
+  // Compute customer reputations every 6 hours
+  const computeCustomerReputations = async () => {
+    try {
+      const { computeAllCustomerReputations } = await import('./src/lib/recovery/reputation')
+      const count = await computeAllCustomerReputations()
+      if (count > 0) console.log(`[Worker] Computed reputations for ${count} customers`)
+    } catch (err) {
+      console.error('[Worker] Failed to compute customer reputations:', err)
+    }
+  }
+  computeCustomerReputations()
+  const customerReputationInterval = setInterval(computeCustomerReputations, 6 * 60 * 60 * 1000)
+
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
@@ -456,6 +469,7 @@ async function main() {
     clearInterval(healthProbeInterval)
     clearInterval(deadLetterInterval)
     clearInterval(reputationInterval)
+    clearInterval(customerReputationInterval)
 
     // Shutdown authority gateway first (stop accepting new intents)
     await runtime.shutdown()

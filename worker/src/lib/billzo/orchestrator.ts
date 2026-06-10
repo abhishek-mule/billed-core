@@ -129,11 +129,12 @@ export function computeDecisionConfidence(
 export function decideSendTiming(
   input: OrchestrationInput,
   traces?: DecisionRuleTrace[],
+  now?: Date,
 ): SendTiming {
   const { context, invoice, operatingHours } = input
-  const now = new Date()
-  const currentHour = now.getHours()
-  const currentWeekday = now.getDay()
+  const currentTime = now ?? new Date()
+  const currentHour = currentTime.getHours()
+  const currentWeekday = currentTime.getDay()
   const isOperating = isWithinOperatingHours(currentHour, currentWeekday, operatingHours)
 
   const temporalRegularity = context.traits.temporalRegularity.value
@@ -254,13 +255,23 @@ export function decideContentTone(
   const daysOverdue = invoice.daysOverdue
   const amountRatio = invoice.amountRatio
   const stage = invoice.currentStage
+  const tier = input.customerTier
+  const reputation = input.reputationScore ?? 50
 
   let tone: MessageTone
   let effectiveStage = stage
 
-  if (disputeRisk > 0.5) {
+  if (tier === 'blacklisted') {
+    tone = 'firm'
+    effectiveStage = 't5_warning'
+    traces?.push(tr('content.tone.blacklisted', { reputation }, true, undefined, 1.0))
+  } else if (disputeRisk > 0.5) {
     tone = 'soft'
     traces?.push(tr('content.tone.dispute_high', { disputeRisk }, true, 0.5, 1.0))
+  } else if (tier === 'vip') {
+    tone = 'soft'
+    effectiveStage = stage === 't5_warning' ? 't72_strong' : stage
+    traces?.push(tr('content.tone.vip', { reputation }, true, undefined, 0.9))
   } else if (daysOverdue > 15 && amountRatio > 2.0) {
     tone = 'urgent'
     effectiveStage = 't5_warning'
@@ -345,12 +356,34 @@ export function decideEscalation(
   const ignoreCount = invoice.ignoreCount
   const amountRatio = invoice.amountRatio
   const hasEnoughData = context.observationCount >= MIN_OBSERVATIONS_FOR_BEHAVIORAL
+  const tier = input.customerTier
+  const reputation = input.reputationScore ?? 50
 
-  if (ignoreCount >= FORCE_ESCALATION_IGNORE) {
-    traces?.push(tr('escalation.force', { ignoreCount }, true, FORCE_ESCALATION_IGNORE, 1.0))
+  // VIP: escalate faster — protect relationship
+  if (tier === 'vip' && ignoreCount >= 2) {
+    traces?.push(tr('escalation.vip_ignore', { ignoreCount }, true, 2, 1.0))
     return {
       shouldEscalate: true,
-      reason: `Customer has ignored ${ignoreCount} consecutive reminders`,
+      reason: `VIP customer ignored ${ignoreCount} reminders — escalate to protect relationship`,
+    }
+  }
+
+  // Blacklisted: never escalate (already at terminal state)
+  if (tier === 'blacklisted') {
+    traces?.push(tr('escalation.blacklisted', { ignoreCount }, true, undefined, 0.0))
+    return { shouldEscalate: false, reason: null }
+  }
+
+  // Low reputation: escalate sooner
+  const effectiveIgnoreThreshold = tier === 'risky' || reputation < 40
+    ? 2
+    : FORCE_ESCALATION_IGNORE
+
+  if (ignoreCount >= effectiveIgnoreThreshold) {
+    traces?.push(tr('escalation.force', { ignoreCount }, true, effectiveIgnoreThreshold, 1.0))
+    return {
+      shouldEscalate: true,
+      reason: `Customer has ignored ${ignoreCount} consecutive reminders${reputation < 40 ? ' (low reputation)' : ''}`,
     }
   }
 

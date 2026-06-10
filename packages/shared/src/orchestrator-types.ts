@@ -107,6 +107,8 @@ export interface OrchestrationInput {
   invoice: InvoiceOrchestrationState
   operatingHours: OperatingHoursConfig
   transportConfidence?: number  // 0-1, computed from recent telemetry completeness; defaults to 0.5
+  customerTier?: string         // vip | regular | risky | blacklisted — for tier-aware tone/escalation
+  reputationScore?: number      // 0-100 — from computeCustomerReputation
 }
 
 // ============================================================

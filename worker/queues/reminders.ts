@@ -459,6 +459,8 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                 invoice: invoiceOrchInput,
                 operatingHours: (config.operatingHours || DEFAULT_OPERATING_HOURS),
                 transportConfidence,
+                customerTier: customer?.customer_tier || 'regular',
+                reputationScore: customer?.reputation_score ?? 50,
               }
 
               const { recommendation, confidence } = buildRecommendationFull(orchInput)
