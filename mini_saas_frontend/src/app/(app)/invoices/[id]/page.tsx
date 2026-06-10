@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
@@ -11,6 +11,7 @@ import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline";
 import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
 import { formatINR } from "@/lib/utils";
 import { getCookie } from "@/lib/cookies";
+import { scheduleBackgroundSync } from "@/lib/billzo/sync";
 
 const statusStyle: Record<string, string> = {
   synced: "bg-green-100 text-green-700",
@@ -29,11 +30,20 @@ export default function InvoiceDetailPage() {
   const [waSuccess, setWaSuccess] = useState(false);
   const [showWAModal, setShowWAModal] = useState(false);
   const [personalNote, setPersonalNote] = useState('');
+  const [missingPhone, setMissingPhone] = useState('');
   const [genLinkLoading, setGenLinkLoading] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
   const [recoveryTimeline, setRecoveryTimeline] = useState<any[]>([]);
   const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideBlockedReason, setOverrideBlockedReason] = useState('');
+  const [overriding, setOverriding] = useState(false);
+  const [overrideError, setOverrideError] = useState('');
+  const [overrideWarning, setOverrideWarning] = useState('');
+  const [overrideRequiresAck, setOverrideRequiresAck] = useState(false);
+  const [overrideSuccess, setOverrideSuccess] = useState(false);
 
   const id = params.id as string;
 
@@ -81,8 +91,9 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const sendWhatsApp = async () => {
-    if (!invoice?.customerPhone) return
+  const sendWhatsApp = async (phoneOverride?: string) => {
+    const phone = phoneOverride || invoice?.customerPhone;
+    if (!phone) return
     setSendingWA(true)
     setWaError('')
     try {
@@ -93,11 +104,12 @@ export default function InvoiceDetailPage() {
         body: JSON.stringify({
           customerId: invoice.customerId,
           invoiceId: invoice.id,
+          customerPhone: phone,
           templateKey: paid ? 'receipt' : 'invoice',
           vars: {
             '1': invoice.customerName,
             '2': formatINR(total),
-            '3': invoice.id?.slice(-8) || '',
+            '3': invoice.invoiceNumber || invoice.id?.slice(-8) || '',
             '4': invoice.paymentLinkUrl || '',
           },
           personalNote: personalNote.trim() || undefined,
@@ -107,6 +119,7 @@ export default function InvoiceDetailPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to send')
       setWaSuccess(true)
       setShowWAModal(false)
+      setMissingPhone('')
       setPersonalNote('')
       loadRecoveryData()
       setTimeout(() => setWaSuccess(false), 3000)
@@ -116,6 +129,27 @@ export default function InvoiceDetailPage() {
       setSendingWA(false)
     }
   }
+
+  const savePhoneAndSend = async () => {
+    const phone = missingPhone.trim();
+    if (!phone) return;
+    setSendingWA(true);
+    setWaError('');
+    try {
+      const now = new Date().toISOString();
+      await db().invoices.update(invoice.id, { customerPhone: phone, updatedAt: now });
+      if (invoice.customerId) {
+        await db().customers.update(invoice.customerId, { phone, updatedAt: now });
+      }
+      setInvoice((prev: any) => prev ? { ...prev, customerPhone: phone } : prev);
+      scheduleBackgroundSync();
+    } catch (err: any) {
+      setWaError(err.message);
+      setSendingWA(false);
+      return;
+    }
+    await sendWhatsApp(phone);
+  };
 
   const generatePaymentLink = async () => {
     if (!invoice || invoice.status === 'paid') return
@@ -130,7 +164,7 @@ export default function InvoiceDetailPage() {
           amount: total,
           customerName: invoice.customerName,
           customerPhone: invoice.customerPhone,
-          purpose: `Invoice #${invoice.id?.slice(-8)} payment`,
+          purpose: `Invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)} payment`,
         }),
       })
       const data = await res.json()
@@ -141,6 +175,55 @@ export default function InvoiceDetailPage() {
       setWaError(err.message)
     } finally {
       setGenLinkLoading(false)
+    }
+  }
+
+  const handleOverride = (blockedReason: string) => {
+    setOverrideBlockedReason(blockedReason)
+    setOverrideReason('')
+    setOverrideError('')
+    setOverrideWarning('')
+    setOverrideRequiresAck(false)
+    setOverrideSuccess(false)
+    setShowOverrideModal(true)
+  }
+
+  const handleOverrideConfirm = async () => {
+    setOverriding(true)
+    setOverrideError('')
+    try {
+      const res = await fetch('/api/recovery/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoiceId: id,
+          reason: overrideReason.trim() || `Merchant override: ${overrideBlockedReason}`,
+          warningAcked: overrideRequiresAck || false,
+        }),
+      })
+      const data = await res.json()
+
+      if (data.requiresAck) {
+        setOverrideWarning(data.warning || '')
+        setOverrideRequiresAck(true)
+        return
+      }
+
+      if (data.applied) {
+        setOverrideSuccess(true)
+        loadRecoveryData()
+        setTimeout(() => {
+          setShowOverrideModal(false)
+          setOverrideSuccess(false)
+        }, 2000)
+      } else {
+        setOverrideError(data.error || 'Override failed')
+      }
+    } catch (err: any) {
+      setOverrideError(err.message)
+    } finally {
+      setOverriding(false)
     }
   }
 
@@ -183,7 +266,7 @@ export default function InvoiceDetailPage() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-              <Receipt className="h-3.5 w-3.5" /> {invoice.id?.slice(0, 8)}
+              <Receipt className="h-3.5 w-3.5" /> {invoice.invoiceNumber || invoice.id?.slice(0, 8)}
             </div>
             <div className="mt-1 text-3xl lg:text-4xl font-bold">{formatINR(total)}</div>
             <div className="mt-2 inline-flex items-center gap-2 flex-wrap">
@@ -297,48 +380,87 @@ export default function InvoiceDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
             <div className="flex items-center justify-between p-5 border-b">
-              <h2 className="font-bold text-lg">Send via WhatsApp</h2>
-              <button onClick={() => { setShowWAModal(false); setWaError('') }} className="p-2 rounded-lg hover:bg-slate-100">
+              <h2 className="font-bold text-lg">{invoice.customerPhone ? 'Send via WhatsApp' : 'Add phone number'}</h2>
+              <button onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }} className="p-2 rounded-lg hover:bg-slate-100">
                 ✕
               </button>
             </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground mb-1">Preview</div>
-                <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 leading-relaxed">
-                  {paid
-                    ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
-                    : `Hello ${invoice.customerName}, your invoice for ₹${total} is ready. Pay now: ${invoice.paymentLinkUrl || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
+            {invoice.customerPhone ? (
+              <>
+                <div className="p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">Preview</div>
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 leading-relaxed">
+                      {paid
+                        ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
+                        : `Hello ${invoice.customerName}, your invoice for ₹${total} is ready. Pay now: ${invoice.paymentLinkUrl || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Personal Note (optional)</label>
+                    <textarea
+                      value={personalNote}
+                      onChange={e => setPersonalNote(e.target.value)}
+                      rows={2}
+                      placeholder="Add a personal note..."
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                    />
+                  </div>
+                  {waError && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {waError}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Personal Note (optional)</label>
-                <textarea
-                  value={personalNote}
-                  onChange={e => setPersonalNote(e.target.value)}
-                  rows={2}
-                  placeholder="Add a personal note..."
-                  className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                />
-              </div>
-              {waError && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  {waError}
+                <div className="flex gap-3 p-5 border-t bg-slate-50">
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError('') }}>Cancel</Button>
+                  <button
+                    onClick={() => sendWhatsApp()}
+                    disabled={sendingWA}
+                    className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
+                    {sendingWA ? 'Sending...' : 'Send Message'}
+                  </button>
                 </div>
-              )}
-            </div>
-            <div className="flex gap-3 p-5 border-t bg-slate-50">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError('') }}>Cancel</Button>
-              <button
-                onClick={sendWhatsApp}
-                disabled={sendingWA}
-                className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
-                {sendingWA ? 'Sending...' : 'Send Message'}
-              </button>
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Customer Phone</label>
+                    <input
+                      value={missingPhone}
+                      onChange={e => setMissingPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      type="tel"
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A phone number is required to send WhatsApp reminders.
+                  </p>
+                  {waError && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {waError}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-3 p-5 border-t bg-slate-50">
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }}>Cancel</Button>
+                  <button
+                    onClick={savePhoneAndSend}
+                    disabled={sendingWA || !missingPhone.trim()}
+                    className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
+                    {sendingWA ? 'Saving & Sending...' : 'Save Phone & Send'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -381,7 +503,92 @@ export default function InvoiceDetailPage() {
         <RecoveryTimeline
           events={recoveryTimeline}
           recoveredAmount={paid && recoveryAttribution?.attributed ? total : 0}
+          onOverride={handleOverride}
         />
+      )}
+
+      {/* Override Modal */}
+      {showOverrideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-bold text-lg">Override Decision Engine</h2>
+              <button onClick={() => { setShowOverrideModal(false); setOverrideError(''); setOverrideWarning(''); }} className="p-2 rounded-lg hover:bg-slate-100">
+                ✕
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {overrideSuccess ? (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="text-xs text-green-700 font-medium">Override applied! Worker will send the reminder on next cycle.</span>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">Blocked Reason</div>
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                      {overrideBlockedReason}
+                    </div>
+                  </div>
+
+                  {overrideWarning && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                      <div className="font-semibold mb-1">Risk Warning</div>
+                      <p>{overrideWarning}</p>
+                      <p className="mt-2 text-xs text-red-600">
+                        This may damage the customer relationship. Only proceed if you are certain.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground mb-1 block">Your Reason (optional)</label>
+                    <textarea
+                      value={overrideReason}
+                      onChange={e => setOverrideReason(e.target.value)}
+                      rows={2}
+                      placeholder="Why are you overriding? This will be logged."
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                    />
+                  </div>
+
+                  {overrideError && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      {overrideError}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => { setShowOverrideModal(false); setOverrideError(''); setOverrideWarning(''); }}
+                      className="flex-1 h-11 rounded-xl border-2 border-border bg-card font-bold text-sm hover:bg-muted transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleOverrideConfirm}
+                      disabled={overriding || (overrideRequiresAck && !overrideWarning)}
+                      className={`flex-1 h-11 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-colors ${
+                        overrideRequiresAck
+                          ? 'bg-red-600 hover:bg-red-700'
+                          : 'bg-amber-600 hover:bg-amber-700'
+                      } disabled:opacity-50`}
+                    >
+                      {overriding && <Loader className="h-4 w-4 animate-spin" />}
+                      {overriding
+                        ? 'Applying...'
+                        : overrideRequiresAck
+                          ? 'Yes, I Accept the Risk'
+                          : 'Override & Send'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="text-center text-[11px] text-muted-foreground pt-4">

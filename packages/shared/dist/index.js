@@ -25,4 +25,5 @@ __exportStar(require("./constants"), exports);
 __exportStar(require("./authority-config/index"), exports);
 __exportStar(require("./authority-transport/index"), exports);
 __exportStar(require("./sovereignty/classifications"), exports);
+__exportStar(require("./decision-engine-types"), exports);
 //# sourceMappingURL=index.js.map

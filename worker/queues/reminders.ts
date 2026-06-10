@@ -24,6 +24,7 @@ import {
   type BehavioralRecommendationContext,
   type CustomerBehavioralMetrics,
 } from '@billzo/shared'
+import { canSendReminder } from '../src/lib/recovery/decision-engine'
 
 const logger = createQueueLogger('reminders')
 
@@ -138,43 +139,85 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         const tenant = tenantResult.data
         const config = (tenant.whatsapp_config || {}) as Record<string, any>
 
-        // Check automation mode — respect merchant's per-customer control
+        // ── Decision Engine: Pre-Send Checklist ──
         const automationMode = customer?.automation_mode || 'full_auto'
         if (automationMode === 'muted') {
           logger.info({ customerId: customer?.id, invoiceId }, 'Customer is muted, skipping reminder')
           return { skipped: true, reason: 'muted', invoiceId, stage }
         }
-        if (automationMode === 'manual') {
-          logger.info({ customerId: customer?.id, invoiceId }, 'Customer is manual, sending pending approval event')
-          // Emit a pending_approval event for the UI to display
+
+        const { data: activePromise } = await supabaseAdmin
+          .from('payment_promises')
+          .select('promise_date')
+          .eq('invoice_id', invoiceId)
+          .eq('status', 'active')
+          .gte('promise_date', new Date().toISOString())
+          .limit(1)
+          .maybeSingle()
+
+        const decisionResult = canSendReminder({
+          invoice: {
+            id: invoiceId,
+            total: invoice.total || 0,
+            outstanding: invoice.outstanding_amount ?? invoice.total ?? 0,
+            recoveryStage: invoice.recovery_stage || 't0_soft',
+            nextRecoveryAt: invoice.next_recovery_at || null,
+            isSnoozed: invoice.is_snoozed || false,
+            snoozeUntil: invoice.snooze_until || null,
+            isDisputed: invoice.is_disputed || false,
+            manualInteractionAt: invoice.manual_interaction_at || null,
+            overrideSend: invoice.override_send || false,
+            overrideAt: invoice.override_at || null,
+            overrideReason: invoice.override_reason || null,
+          },
+          customer: {
+            id: customer?.id || '',
+            phone: customer?.phone || null,
+            customerTier: customer?.customer_tier || 'regular',
+            automationMode,
+            phoneVerification: customer?.phone_verification || 'unknown',
+            reputationScore: customer?.reputation_score ?? 50,
+          },
+          activePromiseDate: activePromise?.promise_date || null,
+        })
+
+        // Log decision to audit table
+        // authority:exempt append_only_observability — recovery_decisions is append-only audit log, not business state
+        await supabaseAdmin.from('recovery_decisions').insert({
+          invoice_id: invoiceId,
+          tenant_id: tenantId,
+          customer_id: customer?.id || '',
+          decision: decisionResult.decision,
+          reason: decisionResult.reason,
+          confidence: decisionResult.confidence,
+          rules_checked: decisionResult.rules,
+          rules_snapshot: decisionResult.rulesSnapshot,
+          context_snapshot: { stage, recoveryStage: invoice.recovery_stage },
+        }).maybeSingle()
+
+        if (!decisionResult.allowed) {
+          logger.warn({ invoiceId, reason: decisionResult.reason }, 'Decision engine blocked reminder')
           await emitEvent({
-            type: EventType.REMINDER_PENDING_APPROVAL,
+            type: EventType.DECISION_ENGINE_BLOCKED,
             tenantId,
             entityId: invoiceId,
             payload: {
-              customerId: customer?.id,
-              customerName: customer?.customer_name,
-              amount: invoice.total || 0,
+              reason: decisionResult.reason,
+              decision: decisionResult.decision,
+              rules: decisionResult.rules,
               stage,
-              invoiceId,
-              message: buildMessage(stage as ReminderStage, customer?.customer_name || 'Customer', invoice.total || 0, tenant.company_name || 'BillZo', tenant.upi_id, tenantId, invoiceId),
-              },
-              causationId: null,
-              correlationId: `reminder:${invoiceId}`,
-              producer: 'worker',
-              idempotencyKey: `rem:${invoiceId}:${stage}`,
-              retentionDays: 30,
-              })
-          return { skipped: true, reason: 'manual_approval', invoiceId, stage }
+            },
+            causationId: null,
+            correlationId: `reminder:${invoiceId}`,
+            producer: 'worker',
+            idempotencyKey: null,
+            retentionDays: 30,
+          })
+          return { skipped: true, reason: `decision_engine:${decisionResult.reason}`, invoiceId, stage }
         }
 
         const phoneNumber = customer?.whatsapp_number || customer?.phone
-        if (!phoneNumber) {
-          logger.warn({ customerId: customer?.id, invoiceId }, 'No phone for customer, skipping')
-          return { skipped: true, reason: 'no_phone', invoiceId, stage }
-        }
-
-        const cleanPhone = phoneNumber.replace(/\D/g, '')
+        const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, '') : ''
         const upiId = tenant.upi_id || config.upiId
         const effectiveProvider: WhatsAppProvider = config.whatsappProvider === 'baileys' ? 'baileys' : 'gupshup'
 
@@ -437,11 +480,11 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                   },
                 }, 'trusted_sync')
               } else {
-                // authority:fallback reminder.update_cadence
                 spineDiagnostics.dualWrite('reminders:updateCadence', 'invoices')
                 const cadenceUpdate: Record<string, any> = {
                   next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
                 }
+                // authority:fallback reminder.update_cadence
                 await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
               }
             }
@@ -455,6 +498,13 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         }
 
         logger.info({ invoiceId, stage, cleanPhone, provider: sendResult.provider }, 'Reminder sent')
+
+        // Clear merchant override after successful send
+        if (invoice.override_send) {
+          const { clearOverride } = await import('../src/lib/recovery/override-handler')
+          await clearOverride(invoiceId).catch(() => {})
+        }
+
         return { sent: true, invoiceId, stage, status: eventStatus, messageId: identity.billzoMessageId, provider: sendResult.provider }
       })
 

@@ -9,4 +9,5 @@ export * from './constants';
 export * from './authority-config/index';
 export * from './authority-transport/index';
 export * from './sovereignty/classifications';
+export * from './decision-engine-types';
 //# sourceMappingURL=index.d.ts.map

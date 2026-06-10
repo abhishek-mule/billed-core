@@ -8,6 +8,7 @@ export declare const EventType: {
     readonly PAYMENT_FAILED: "payment.failed";
     readonly PAYMENT_COMPLETED: "payment.completed";
     readonly PAYMENT_LINK_GENERATED: "payment.link.generated";
+    readonly PAYMENT_LINK_CLICKED: "payment.link.clicked";
     readonly PAYMENT_RECONCILED: "payment.reconciled";
     readonly RECOVERY_STARTED: "recovery.started";
     readonly RECOVERY_REMINDER_SENT: "recovery.reminder.sent";
@@ -47,6 +48,10 @@ export declare const EventType: {
     readonly BEHAVIORAL_OBSERVATION: "behavioral.observation";
     readonly PROFILE_CHANGED: "profile.changed";
     readonly ORCHESTRATION_DECISION_MADE: "orchestration.decision.made";
+    readonly DECISION_ENGINE_BLOCKED: "decision.engine.blocked";
+    readonly DECISION_ENGINE_ALLOWED: "decision.engine.allowed";
+    readonly RECOVERY_OVERRIDE_APPROVED: "recovery.override.approved";
+    readonly RECOVERY_OVERRIDE_REJECTED: "recovery.override.rejected";
 };
 export type EventType = (typeof EventType)[keyof typeof EventType];
 export type EventProducer = 'api' | 'worker' | 'webhook' | 'cron' | 'client';

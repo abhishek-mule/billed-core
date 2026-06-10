@@ -11,7 +11,7 @@
 | 1 — Invariants | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 2 — Ordering | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
 | 3 — Identity | ✅ Phase Complete | 2026-06-09 | 2026-06-09 | Julfi |
-| 4 — Execution Boundaries | 🔴 Not Started | — | — | — |
+| 4 — Execution Boundaries | 🟡 In Progress | 2026-06-09 | — | Julfi |
 | 5 — Mutation Gate | 🔴 Not Started | — | — | — |
 | 6 — Outbox | 🔴 Not Started | — | — | — |
 | 7 — Baileys Persistence | 🔴 Not Started | — | — | — |
@@ -61,13 +61,15 @@ Phase 2 complete. Ready for Phase 3 (Identity Propagation).
 
 ## Phase 4 — Execution Boundaries
 
-- [ ] 4.1 Create `DomainContext` type
-- [ ] 4.2 Fix `handleMerchantSnoozed` determinism
-- [ ] 4.3 Audit `recovery/` for non-deterministic calls
-- [ ] 4.4 Audit `billzo/` for non-deterministic calls
-- [ ] 4.5 Replace `crypto.randomUUID` with v7 UUID
-- [ ] 4.6 Add CI lint rules
-- [ ] 4.7 Add runtime `DomainContext` guard
+- [ ] 4.1 Create `DomainContext` type with injectable `clock`
+- [ ] 4.2 Fix `handleMerchantSnoozed` — use `ctx.clock.now()` instead of `Date.now()`
+- [ ] 4.3 Fix `transitionCase` timestamp fallback — use `ctx.clock.now()`
+- [ ] 4.4 Fix `behavioral-materializer.ts` — EMA decay `daysBetween` now-reference + `emitProfileChanged` occurredAt
+- [ ] 4.5 Fix `counterfactual.ts` — `assignedAt` uses `ctx.clock.now()`
+- [ ] 4.6 Fix `matching.ts` — invoice age scoring uses `ctx.clock.now()`
+- [ ] 4.7 Fix `observation-interpreter.ts` — `occurredAt` timestamps use `ctx.clock.now()`
+- [ ] 4.8 Fix `orchestrator.ts` — `decideSendTiming` uses `ctx.clock.now()`
+- [ ] 4.9 CI lint rule for domain determinism (deferred)
 
 ## Phase 5 — Mutation Gate Enforcement
 

@@ -1,6 +1,6 @@
 import http from 'node:http'
 import { Queue } from 'bullmq'
-import { createOutboxWorker } from './queues/outbox'
+import { createOutboxWorker, processOutboxEvent } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { createReconciliationWorker } from './queues/reconciliation'
 import { createCognitionWorker, enqueueCognitionJobs } from './queues/cognition'
@@ -18,8 +18,10 @@ import { reconciliationCapabilities } from './src/lib/authority/reconciliation-c
 import { recoveryCapabilities } from './src/lib/authority/recovery-capabilities'
 import { gstrCapabilities } from './src/lib/authority/gstr-capabilities'
 import { MutationGate } from './src/lib/mutation-gate'
+import { OutboxListener } from './src/lib/spine/outbox-listener'
 import { TransportRegistry, BaileysAdapter, GupshupAdapter, SimulationAdapter } from './src/lib/transport'
 import { setTransportRegistry } from './lib/whatsapp-router'
+import { applyOverride } from './src/lib/recovery/override-handler'
 
 async function getQueueHealth() {
   const connection = createRedisConnection()
@@ -64,6 +66,40 @@ function startHealthServer(runtime: AuthorityRuntime) {
         uptimeSeconds: diag.uptimeSeconds,
         startedAt: diag.startedAt,
       }))
+    } else if (req.method === 'POST' && req.url === '/api/v1/recovery/override') {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body)
+          const result = await applyOverride({
+            invoiceId: payload.invoiceId,
+            tenantId: payload.tenantId,
+            reason: payload.reason || 'Merchant override',
+            warningAcked: payload.warningAcked || false,
+          })
+          res.writeHead(result.applied ? 200 : 400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } catch (e: any) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ applied: false, error: e.message }))
+        }
+      })
+    } else if (req.method === 'POST' && req.url === '/api/v1/recovery/clear-override') {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body)
+          const { clearOverride } = await import('./src/lib/recovery/override-handler')
+          await clearOverride(payload.invoiceId)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ applied: true }))
+        } catch (e: any) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ applied: false, error: e.message }))
+        }
+      })
     } else {
       res.writeHead(200)
       res.end('BillZo Worker')
@@ -120,8 +156,11 @@ async function main() {
   })
   console.log(`[Worker] Authority initialized — phase: ${runtime.orchestrator.currentPhase}`)
 
-  // ---- MutationGate: shadow-mode observability layer (Step 1) ----
-  const mutationGate = new MutationGate({ mode: 'shadow' })
+  // ---- MutationGate: per-domain enforcement layer (Phase 5) ----
+  const mutationGate = new MutationGate({
+    mode: 'shadow',
+    databaseUrl: process.env.AUTHORITY_DATABASE_URL,
+  })
 
   // ---- TransportRegistry: normalized channel abstraction ----
   const transportRegistry = new TransportRegistry()
@@ -134,10 +173,18 @@ async function main() {
     const origSubmit = client.submit.bind(client)
     return {
       submit: async (intent: any, mode: string) => {
+        const intentType = `${intent.intentType}.v1`
+        const { block, domain } = await mutationGate.shouldBlock(intentType)
+        if (block) {
+          console.warn(`[mutation-gate] BLOCKED ${intentType} — domain '${domain}' is in block mode`)
+          throw new Error(`Gate blocked: domain '${domain}' in block mode — ${intentType} rejected`)
+        }
+
         const result = await origSubmit(intent, mode)
+
         mutationGate.submit({
           idempotencyKey: intent.nonce ?? `${intent.intentType}:${intent.tenantId}:${Date.now()}`,
-          intentType: `${intent.intentType}.v1`,
+          intentType,
           tenantId: intent.tenantId,
           entityType: intent.payload?.invoiceId ? 'invoice' : intent.payload?.customerId ? 'customer' : undefined,
           entityId: intent.payload?.invoiceId ?? intent.payload?.customerId ?? undefined,
@@ -154,19 +201,27 @@ async function main() {
   // ---- Health server (safe before queues, reports runtime phase) ----
   const healthServer = startHealthServer(runtime)
 
-  // Outbox worker — poll Supabase for events and process them
+  // ---- Phase 6: Outbox listener — push-based via LISTEN/NOTIFY ----
+  const outboxListener = new OutboxListener()
+  if (process.env.AUTHORITY_DATABASE_URL) {
+    outboxListener.start(process.env.AUTHORITY_DATABASE_URL, processOutboxEvent)
+      .then(() => console.log('[Worker] Outbox listener started (push-based)'))
+      .catch((err) => console.warn('[Worker] Outbox listener failed to start, polling fallback active:', err.message))
+  }
+
+  // Outbox worker — polling fallback (reduced to 60s, listener is primary)
   const outboxWorker = createOutboxWorker(gatedClient as any)
-  
+
   const enqueueOutbox = async () => {
     const connection = createRedisConnection()
     const queue = new Queue('outbox', { connection })
     try {
       await queue.add('poll', {}, {
-        repeat: { every: 10000 },
+        repeat: { every: 60000 },
         removeOnComplete: true,
         removeOnFail: true,
       })
-      console.log('[Worker] Outbox polling job scheduled (every 10s)')
+      console.log('[Worker] Outbox polling job scheduled (every 60s, fallback)')
     } catch (err) {
       console.error('[Worker] Failed to schedule outbox polling:', err)
     } finally {
@@ -409,6 +464,7 @@ async function main() {
     healthServer.close()
     await Promise.all([
       outboxWorker.close(),
+      outboxListener.stop(),
       remindersWorker.close(),
       reconciliationWorker.close(),
       cognitionWorker.close(),

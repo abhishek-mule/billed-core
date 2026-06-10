@@ -15,6 +15,7 @@ export const EventType = {
   PAYMENT_FAILED: 'payment.failed',
   PAYMENT_COMPLETED: 'payment.completed',
   PAYMENT_LINK_GENERATED: 'payment.link.generated',
+  PAYMENT_LINK_CLICKED: 'payment.link.clicked',
   PAYMENT_RECONCILED: 'payment.reconciled',
 
   // Recovery
@@ -35,6 +36,7 @@ export const EventType = {
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
   CUSTOMER_OPT_IN: 'customer.opt_in',
+  CUSTOMER_UPDATE_AUTOMATION: 'customer.update_automation',
 
   // Messaging
   WHATSAPP_SENT: 'whatsapp.sent',
@@ -59,6 +61,7 @@ export const EventType = {
 
   // Recovery
   RECOVERY_ESCALATION_SUGGESTED: 'recovery.escalation.suggested',
+  REMINDER_PENDING_APPROVAL: 'reminder.pending_approval',
 
   // Analytics
   ANALYTICS_SNAPSHOT_GENERATED: 'analytics.snapshot.generated',
@@ -74,6 +77,14 @@ export const EventType = {
 
   // Orchestration
   ORCHESTRATION_DECISION_MADE: 'orchestration.decision.made',
+
+  // Decision Engine
+  DECISION_ENGINE_BLOCKED: 'decision.engine.blocked',
+  DECISION_ENGINE_ALLOWED: 'decision.engine.allowed',
+
+  // Merchant Override
+  RECOVERY_OVERRIDE_APPROVED: 'recovery.override.approved',
+  RECOVERY_OVERRIDE_REJECTED: 'recovery.override.rejected',
 } as const
 
 export type EventType = (typeof EventType)[keyof typeof EventType]

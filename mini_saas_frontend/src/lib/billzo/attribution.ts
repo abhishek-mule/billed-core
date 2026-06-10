@@ -143,10 +143,46 @@ export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<{
       'payment.completed',
       'payment.reconciled',
       'recovery.completed',
+      'decision.engine.blocked',
+      'decision.engine.allowed',
+      'recovery.override.approved',
+      'recovery.override.rejected',
     ])
     .order('created_at', { ascending: true })
 
   if (error || !events) return { events: [], attributions: [] }
+
+  // Get recovery decision events for this invoice
+  const { data: decisions } = await supabaseAdmin
+    .from('recovery_decisions')
+    .select('*')
+    .eq('invoice_id', invoiceId)
+    .order('created_at', { ascending: true })
+
+  // Merge outbox events with decision engine events
+  const merged: Array<{ id: string; type: string; timestamp: string; payload: Record<string, unknown> | null }> = [
+    ...events.map((e) => ({
+      id: e.id,
+      type: e.type,
+      timestamp: e.created_at,
+      payload: e.payload,
+    })),
+    ...(decisions || []).map((d) => ({
+      id: d.id,
+      type: d.allowed ? 'decision.engine.allowed' : 'decision.engine.blocked',
+      timestamp: d.created_at,
+      payload: {
+        reason: d.reason,
+        decision: d.decision,
+        rules_snapshot: d.rules_snapshot,
+        confidence: d.confidence,
+        override: d.rules_snapshot?.merchant_override || false,
+      },
+    })),
+  ]
+
+  // Sort all events by timestamp
+  merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
   // Get attributions for this invoice
   const { data: attributions } = await supabaseAdmin
@@ -155,12 +191,7 @@ export async function getInvoiceRecoveryTimeline(invoiceId: string): Promise<{
     .eq('invoice_id', invoiceId)
 
   return {
-    events: events.map((e) => ({
-      id: e.id,
-      type: e.type,
-      timestamp: e.created_at,
-      payload: e.payload,
-    })),
+    events: merged,
     attributions: attributions || [],
   }
 }

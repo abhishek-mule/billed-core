@@ -17,29 +17,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
     }
 
-    // Verify invoice belongs to tenant
-    const { data: invoice } = await supabaseAdmin
-      .from('invoices')
-      .select('id, tenant_id')
-      .eq('id', invoiceId)
-      .eq('tenant_id', tenantId)
-      .single()
+    // Verify invoice belongs to tenant (Dexie-only invoices won't be in Supabase)
+    let invoiceExists = true
+    try {
+      const { data: invoice } = await supabaseAdmin
+        .from('invoices')
+        .select('id, tenant_id')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .single()
+      if (!invoice) invoiceExists = false
+    } catch {
+      invoiceExists = false
+    }
 
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    if (!invoiceExists) {
+      return NextResponse.json({ events: [], attribution: null })
     }
 
     // Get recovery timeline
     const timeline = await getInvoiceRecoveryTimeline(invoiceId)
 
     // Get attribution for this invoice
-    const { data: attribution } = await supabaseAdmin
-      .from('recovery_attributions')
-      .select('*')
-      .eq('invoice_id', invoiceId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    let attribution = null
+    try {
+      const { data: attr } = await supabaseAdmin
+        .from('recovery_attributions')
+        .select('*')
+        .eq('invoice_id', invoiceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      attribution = attr
+    } catch {
+      attribution = null
+    }
 
     return NextResponse.json({
       events: timeline.events || [],
