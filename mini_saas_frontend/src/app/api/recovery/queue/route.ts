@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
       customersRes,
       vipRes,
       blockedRes,
+      eventsRes,
     ] = await Promise.all([
       supabase
         .from('recovery_cases')
@@ -105,6 +106,12 @@ export async function GET(request: NextRequest) {
         .eq('tenant_id', tenantId)
         .eq('decision', 'block')
         .gte('created_at', fmt(todayStart)),
+      supabase
+        .from('recovery_case_events')
+        .select(`reason, event_type, occurred_at, recovery_cases!inner(tenant_id)`)
+        .eq('recovery_cases.tenant_id', tenantId)
+        .order('occurred_at', { ascending: false })
+        .limit(5),
     ])
 
     // ── Process results ──
@@ -153,6 +160,13 @@ export async function GET(request: NextRequest) {
     // ── Blocked reminders today ──
     const blockedRemindersToday = blockedRes.data?.length ?? 0
 
+    // ── Recent events ──
+    const recentEvents = (eventsRes.data || []).map((e: any) => ({
+      reason: e.reason,
+      eventType: e.event_type,
+      occurredAt: e.occurred_at,
+    }))
+
     // ── Summary ──
     const outstanding = activeCases.reduce(
       (s: number, c: any) => s + (parseFloat(c.total_outstanding) || 0), 0
@@ -167,6 +181,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       items: queue.items,
       recoveredToday: attributedAmounts.today,
+      recentEvents,
       summary: {
         collectibleToday: queue.summary.collectibleToday,
         outstanding,

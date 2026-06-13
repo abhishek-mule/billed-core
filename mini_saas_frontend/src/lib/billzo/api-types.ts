@@ -88,9 +88,16 @@ export interface QueueApiSummary {
   blockedRemindersToday: number
 }
 
+export interface RecentEvent {
+  reason: string
+  eventType: string
+  occurredAt: string
+}
+
 export interface QueueApiResponse {
   items: QueueApiItem[]
   summary: QueueApiSummary
+  recentEvents: RecentEvent[]
 }
 
 export interface RecoveryActionResponse {
