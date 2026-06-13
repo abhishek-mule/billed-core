@@ -1,227 +1,697 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, AlertTriangle, Clock, Search, Loader2, ArrowUpRight, CreditCard, Banknote, Smartphone } from "lucide-react";
-import { Button } from "@/components/billzo/Button";
-import { EmptyState } from "@/components/billzo/EmptyState";
-import { db } from "@/lib/billzo/db";
-import { formatINR } from "@/lib/utils";
-import { getCookie } from "@/lib/cookies";
+import { useState, useEffect, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Search, Loader2, CreditCard, Smartphone, Banknote,
+  AlertCircle, RefreshCw, X, ChevronRight, Plus,
+  TrendingUp, Wallet, RotateCcw, Check, ArrowRight,
+} from "lucide-react"
+import { db, uuid, notifyChanged } from "@/lib/billzo/db"
+import { formatINR } from "@/lib/utils"
+import { getCookie } from "@/lib/cookies"
+import type { Customer, Invoice } from "@/lib/billzo/types"
 
-const providerIcons: Record<string, React.ReactNode> = {
+// ── helpers ──
+const providerIcon: Record<string, React.ReactNode> = {
   cash: <Banknote className="h-4 w-4" />,
   upi: <Smartphone className="h-4 w-4" />,
   razorpay_test: <CreditCard className="h-4 w-4" />,
-};
-
-const statusBadge: Record<string, string> = {
-  success: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
-  pending: "bg-yellow-100 text-yellow-700",
-};
-
-function formatTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
-function isToday(dateStr: string): boolean {
-  const d = new Date(dateStr);
-  const t = new Date();
-  return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+const methodOptions = [
+  { id: "cash", label: "Cash", icon: <Banknote className="h-5 w-5" /> },
+  { id: "upi", label: "UPI", icon: <Smartphone className="h-5 w-5" /> },
+  { id: "razorpay_test", label: "Card / Online", icon: <CreditCard className="h-5 w-5" /> },
+]
+
+const reversalReasons = ["Wrong amount", "Duplicate entry", "Customer dispute", "Payment failed later", "Other"]
+
+function fmtAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return "just now"
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
 }
 
-function isYesterday(dateStr: string): boolean {
-  const d = new Date(dateStr);
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  return d.getDate() === y.getDate() && d.getMonth() === y.getMonth() && d.getFullYear() === y.getFullYear();
+function isToday(s: string) {
+  const d = new Date(s)
+  const t = new Date()
+  return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear()
 }
 
+function isYesterday(s: string) {
+  const d = new Date(s)
+  const y = new Date()
+  y.setDate(y.getDate() - 1)
+  return d.getDate() === y.getDate() && d.getMonth() === y.getMonth() && d.getFullYear() === y.getFullYear()
+}
+
+function getOutstanding(inv: any): number {
+  return (inv.total || 0) - (inv.paidAmount || 0)
+}
+
+// ── component ──
 export default function PulsePage() {
-  const router = useRouter();
-  const [payments, setPayments] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const router = useRouter()
+  const [payments, setPayments] = useState<any[]>([])
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadData();
-    loadAnomalies();
-  }, []);
+  // modals
+  const [selectedPmt, setSelectedPmt] = useState<any | null>(null)
+  const [showRecord, setShowRecord] = useState(false)
+  const [showReverse, setShowReverse] = useState(false)
+  const [reverseReason, setReverseReason] = useState("")
+  const [recordStep, setRecordStep] = useState(1)
+  const [partyQ, setPartyQ] = useState("")
+  const [selectedCust, setSelectedCust] = useState<Customer | null>(null)
+  const [pmtAmount, setPmtAmount] = useState("")
+  const [selectedMethod, setSelectedMethod] = useState("cash")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     try {
-      const tenantId = getCookie("bz_tenant");
-      if (!tenantId) { router.push("/auth"); return; }
+      setError(null)
+      const tenantId = getCookie("bz_tenant")
+      if (!tenantId) { router.push("/auth"); return }
 
-      const [pmtData, invData] = await Promise.all([
+      const [pmtData, invData, custData] = await Promise.all([
         db().payments.where("tenantId").equals(tenantId).toArray(),
         db().invoices.where("tenantId").equals(tenantId).toArray(),
-      ]);
+        db().customers.where("tenantId").equals(tenantId).toArray(),
+      ])
 
-      setPayments(pmtData.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      setInvoices(invData);
+      setPayments(pmtData.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+      setInvoices(invData)
+      setCustomers(custData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load")
+      console.error("Failed to load pulse:", err)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  const loadAnomalies = async () => {
-    try {
-      const res = await fetch("/api/situations?state=active&category=payment_anomaly&limit=5", {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAnomalies(data.situations || []);
-      }
-    } catch {}
-  };
-
-  const invMap = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const inv of invoices) map.set(inv.id, inv);
-    return map;
-  }, [invoices]);
-
-  const todayPayments = useMemo(() => payments.filter(p => isToday(p.createdAt) && p.status === "success"), [payments]);
-  const todayTotal = useMemo(() => todayPayments.reduce((s, p) => s + (p.amount || 0), 0), [todayPayments]);
-
-  const groupedPayments = useMemo(() => {
-    const groups: { label: string; payments: any[] }[] = [];
-    const today: any[] = [];
-    const yesterday: any[] = [];
-    const older: any[] = [];
-
-    for (const p of payments) {
-      if (isToday(p.createdAt)) today.push(p);
-      else if (isYesterday(p.createdAt)) yesterday.push(p);
-      else older.push(p);
-    }
-
-    if (today.length) groups.push({ label: "Today", payments: today });
-    if (yesterday.length) groups.push({ label: "Yesterday", payments: yesterday });
-    if (older.length) groups.push({ label: "Earlier", payments: older });
-
-    return groups;
-  }, [payments]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
   }
 
-  return (
-    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-4xl mx-auto space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold">Payment Pulse</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {payments.length} payments tracked · {formatINR(todayTotal)} received today
-        </p>
-      </div>
+  // ── derived ──
+  const invMap = useMemo(() => {
+    const m = new Map<string, Invoice>()
+    for (const inv of invoices) m.set(inv.id, inv)
+    return m
+  }, [invoices])
 
-      {/* Today's summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-          <div className="text-[11px] font-semibold text-green-600 uppercase tracking-wider">Received today</div>
-          <div className="mt-1 text-xl font-bold text-green-700">{formatINR(todayTotal)}</div>
-          <div className="text-[11px] text-green-600 mt-0.5">{todayPayments.length} payment{todayPayments.length !== 1 ? "s" : ""}</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total received</div>
-          <div className="mt-1 text-xl font-bold">{formatINR(payments.filter(p => p.status === "success").reduce((s, p) => s + (p.amount || 0), 0))}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{payments.filter(p => p.status === "success").length} successful</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Failed</div>
-          <div className="mt-1 text-xl font-bold text-red-600">{payments.filter(p => p.status === "failed").length}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{payments.filter(p => p.status === "pending").length} pending</div>
-        </div>
-      </div>
+  const successPmts = useMemo(() => payments.filter(p => p.status === "success"), [payments])
 
-      {/* Anomaly alerts from cognition */}
-      {anomalies.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anomalies</p>
-          {anomalies.map(a => (
-            <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-amber-800">{a.headline}</p>
-                <p className="text-xs text-amber-700 mt-0.5">{a.narrative}</p>
+  const todayCollected = useMemo(
+    () => successPmts.filter(p => isToday(p.createdAt)).reduce((s, p) => s + (p.amount || 0), 0),
+    [successPmts]
+  )
+
+  const monthCollected = useMemo(() => {
+    const ms = new Date(); ms.setDate(1); ms.setHours(0, 0, 0, 0)
+    return successPmts.filter(p => new Date(p.createdAt) >= ms).reduce((s, p) => s + (p.amount || 0), 0)
+  }, [successPmts])
+
+  const pendingUdhaari = useMemo(
+    () => invoices.filter(i => i.status === "overdue" || i.status === "partial")
+      .reduce((s, inv) => s + getOutstanding(inv), 0),
+    [invoices]
+  )
+
+  const grouped = useMemo(() => {
+    const gs: { label: string; payments: any[] }[] = []
+    const t: any[] = [], y: any[] = [], o: any[] = []
+    for (const p of successPmts) {
+      if (isToday(p.createdAt)) t.push(p)
+      else if (isYesterday(p.createdAt)) y.push(p)
+      else o.push(p)
+    }
+    if (t.length) gs.push({ label: "Today", payments: t })
+    if (y.length) gs.push({ label: "Yesterday", payments: y })
+    if (o.length) gs.push({ label: "Earlier", payments: o })
+    return gs
+  }, [successPmts])
+
+  // outstanding per customer (for record payment step 1)
+  const custOutstanding = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const inv of invoices) {
+      const o = getOutstanding(inv)
+      if (o > 0) m.set(inv.customerId, (m.get(inv.customerId) || 0) + o)
+    }
+    return m
+  }, [invoices])
+
+  const filteredCusts = useMemo(() => {
+    if (!partyQ) return customers.slice(0, 20)
+    const q = partyQ.toLowerCase()
+    return customers.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q)).slice(0, 20)
+  }, [customers, partyQ])
+
+  // ── record payment ──
+  const resetRecord = () => {
+    setRecordStep(1); setPartyQ(""); setSelectedCust(null); setPmtAmount(""); setSelectedMethod("cash")
+  }
+
+  const submitPayment = async () => {
+    if (!selectedCust || !pmtAmount) return
+    setSaving(true)
+    try {
+      const tenantId = getCookie("bz_tenant")!
+      const pid = uuid()
+      const inv = invoices.find(i => i.customerId === selectedCust.id && getOutstanding(i) > 0)
+      await db().payments.add({
+        id: pid,
+        tenantId,
+        invoiceId: inv?.id,
+        customerId: selectedCust.id,
+        provider: selectedMethod,
+        amount: parseFloat(pmtAmount),
+        status: "success",
+        collectedVia: "manual",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        syncStatus: "pending",
+      } as any)
+
+      // update invoice paidAmount
+      if (inv) {
+        const newPaid = (inv.paidAmount || 0) + parseFloat(pmtAmount)
+        const newStatus = newPaid >= inv.total ? "paid" : inv.status
+        await db().invoices.update(inv.id, { paidAmount: newPaid, status: newStatus, updatedAt: new Date().toISOString() })
+      }
+
+      notifyChanged()
+      setShowRecord(false)
+      resetRecord()
+      await loadData()
+    } catch (err) {
+      console.error("Failed to record payment:", err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── reverse payment ──
+  const submitReverse = async () => {
+    if (!selectedPmt || !reverseReason) return
+    setSaving(true)
+    try {
+      const tenantId = getCookie("bz_tenant")!
+      // create reversal entry
+      await db().payments.add({
+        id: uuid(),
+        tenantId,
+        invoiceId: selectedPmt.invoiceId,
+        customerId: selectedPmt.customerId,
+        provider: selectedPmt.provider,
+        amount: -Math.abs(selectedPmt.amount),
+        status: "success",
+        collectedVia: "manual",
+        notes: `Reverse of ${selectedPmt.id}: ${reverseReason}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        syncStatus: "pending",
+      } as any)
+
+      // adjust invoice
+      const inv = invMap.get(selectedPmt.invoiceId)
+      if (inv) {
+        const newPaid = Math.max(0, (inv.paidAmount || 0) - selectedPmt.amount)
+        await db().invoices.update(inv.id, { paidAmount: newPaid, updatedAt: new Date().toISOString() })
+      }
+
+      notifyChanged()
+      setShowReverse(false)
+      setSelectedPmt(null)
+      setReverseReason("")
+      await loadData()
+    } catch (err) {
+      console.error("Failed to reverse payment:", err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── loading ──
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+          <div className="h-6 bg-slate-100 animate-pulse rounded w-48" />
+          <div className="grid grid-cols-3 gap-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-2">
+                <div className="h-3 bg-slate-100 animate-pulse rounded w-20" />
+                <div className="h-7 bg-slate-100 animate-pulse rounded w-24" />
               </div>
+            ))}
+          </div>
+          <div className="h-12 bg-slate-100 animate-pulse rounded-lg" />
+          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-100 animate-pulse rounded-lg" />)}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
+          <div className="border border-red-200 rounded-lg p-8 text-center bg-white">
+            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
+            <p className="text-xs text-red-600 mb-4">{error}</p>
+            <button onClick={() => { setError(null); setLoading(true); loadData() }}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-red-700">
+              <RefreshCw className="h-4 w-4" /> Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── render ──
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
+      <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+
+        {/* ═══════════════════════════
+           HEADER
+           ═══════════════════════════ */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-900">Payments</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {successPmts.length} collected &middot; {formatINR(todayCollected)} today
+            </p>
+          </div>
+          <button
+            onClick={() => { setShowRecord(true); resetRecord() }}
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
+          >
+            <Plus className="h-3.5 w-3.5" /> Record Payment
+          </button>
+        </div>
+
+        {/* ═══════════════════════════
+           COLLECTION CARDS
+           ═══════════════════════════ */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-slate-500 font-medium">Today collected</p>
+            <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+              {formatINR(todayCollected)}
+            </p>
+            <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-0.5">
+              <TrendingUp className="h-3 w-3" /> {successPmts.filter(p => isToday(p.createdAt)).length} payments
+            </p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-slate-500 font-medium">This month</p>
+            <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+              {formatINR(monthCollected)}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{successPmts.length} total collections</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-slate-500 font-medium">Pending UDHARI</p>
+            <p className="text-xl font-bold tabular-nums tracking-tight text-amber-700 mt-0.5">
+              {formatINR(pendingUdhaari)}
+            </p>
+            <p className="text-[10px] text-amber-600 mt-0.5">
+              {invoices.filter(i => i.status === "overdue" || i.status === "partial").length} overdue invoices
+            </p>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════
+           PAYMENT STREAM (only success)
+           ═══════════════════════════ */}
+        {successPmts.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-lg px-5 py-10 text-center">
+            <Wallet className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-900">No payments recorded yet</p>
+            <p className="text-xs text-slate-500 mt-1 mb-5">Get started by creating an invoice or recording a payment manually</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => router.push("/pos")}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Create invoice
+              </button>
+              <button
+                onClick={() => { setShowRecord(true); resetRecord() }}
+                className="px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
+              >
+                Record payment
+              </button>
             </div>
-          ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {grouped.map(group => (
+              <div key={group.label}>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 px-0.5">
+                  {group.label} &middot; {group.payments.length} payment{group.payments.length !== 1 ? "s" : ""}
+                </p>
+                <div className="space-y-1">
+                  {group.payments.map(p => {
+                    const inv = invMap.get(p.invoiceId)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelectedPmt(p)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-center gap-3 hover:border-slate-300 transition-colors text-left"
+                      >
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600">
+                          {providerIcon[p.provider] || <CreditCard className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold tabular-nums tracking-tight text-slate-900">
+                              {p.amount < 0 ? `- ${formatINR(Math.abs(p.amount))}` : formatINR(p.amount)}
+                            </span>
+                            {p.amount < 0 && (
+                              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Reversal</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {inv ? inv.customerName : "Unknown"} &middot; {fmtAgo(p.createdAt)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded capitalize">
+                            {p.provider?.replace("_", " ")}
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ══════════════════════════════════════
+         FAB — mobile only
+         ══════════════════════════════════════ */}
+      <button
+        onClick={() => { setShowRecord(true); resetRecord() }}
+        className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center hover:bg-slate-800 active:scale-95 transition-all"
+        aria-label="Record payment"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* ══════════════════════════════════════
+         MODAL: Payment Detail
+         ══════════════════════════════════════ */}
+      {selectedPmt && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setSelectedPmt(null)}>
+          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">Payment Details</p>
+              <button onClick={() => setSelectedPmt(null)} className="p-1 rounded-md hover:bg-slate-100">
+                <X className="h-4 w-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="text-center py-3">
+              <p className={`text-2xl font-bold tabular-nums tracking-tight ${selectedPmt.amount < 0 ? "text-red-600" : "text-slate-900"}`}>
+                {selectedPmt.amount < 0 ? `- ${formatINR(Math.abs(selectedPmt.amount))}` : formatINR(selectedPmt.amount)}
+              </p>
+            </div>
+
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Customer</span>
+                <span className="font-medium text-slate-900">{invMap.get(selectedPmt.invoiceId)?.customerName || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Method</span>
+                <span className="font-medium text-slate-900 capitalize">{selectedPmt.provider?.replace("_", " ")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Time</span>
+                <span className="font-medium text-slate-900">{new Date(selectedPmt.createdAt).toLocaleString("en-IN")}</span>
+              </div>
+              {selectedPmt.notes && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Notes</span>
+                  <span className="font-medium text-slate-900 text-right max-w-[60%]">{selectedPmt.notes}</span>
+                </div>
+              )}
+              {selectedPmt.providerPaymentId && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Ref ID</span>
+                  <span className="font-medium text-slate-900 text-[10px]">{selectedPmt.providerPaymentId}</span>
+                </div>
+              )}
+            </div>
+
+            {selectedPmt.amount > 0 && (
+              <button
+                onClick={() => { setShowReverse(true); setReverseReason("") }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-red-200 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Reverse Payment
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Payment stream */}
-      {payments.length === 0 ? (
-        <EmptyState
-          icon={<CreditCard className="h-10 w-10" />}
-          title="No payments yet"
-          description="Payments from your customers will appear here in real time"
-        />
-      ) : (
-        <div className="space-y-6">
-          {groupedPayments.map(group => (
-            <div key={group.label}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {group.label} · {group.payments.length} payment{group.payments.length !== 1 ? "s" : ""}
-              </p>
-              <div className="space-y-1">
-                {group.payments.map(p => {
-                  const inv = invMap.get(p.invoiceId);
-                  return (
-                    <div
-                      key={p.id}
-                      className="rounded-xl border border-border bg-card p-4 flex items-center gap-3 hover:border-primary/30 transition-colors"
-                    >
-                      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                        p.status === "success" ? "bg-green-100 text-green-600"
-                        : p.status === "failed" ? "bg-red-100 text-red-600"
-                        : "bg-yellow-100 text-yellow-600"
-                      }`}>
-                        {providerIcons[p.provider] || <CreditCard className="h-4 w-4" />}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold">{formatINR(p.amount)}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge[p.status] || statusBadge.pending}`}>
-                            {p.status}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {inv ? inv.customerName || "Unknown" : "Unknown customer"} · {formatTimeAgo(p.createdAt)}
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <div className="text-[11px] font-medium capitalize text-muted-foreground">{p.provider?.replace("_", " ")}</div>
-                        {p.providerPaymentId && (
-                          <div className="text-[10px] text-muted-foreground/60 mt-0.5">ID: {p.providerPaymentId.slice(0, 8)}</div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* ══════════════════════════════════════
+         MODAL: Reverse Reason
+         ══════════════════════════════════════ */}
+      {showReverse && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setShowReverse(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">Reverse Payment</p>
+              <button onClick={() => setShowReverse(false)} className="p-1 rounded-md hover:bg-slate-100">
+                <X className="h-4 w-4 text-slate-500" />
+              </button>
             </div>
-          ))}
+            <p className="text-xs text-slate-500">Why are you reversing this payment?</p>
+            <div className="space-y-1">
+              {reversalReasons.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setReverseReason(r)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors ${
+                    reverseReason === r ? "bg-slate-100 text-slate-900 font-semibold" : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={submitReverse}
+              disabled={!reverseReason || saving}
+              className="w-full py-2.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              Confirm Reversal
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+         MODAL: Record Payment (3-step)
+         ══════════════════════════════════════ */}
+      {showRecord && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setShowRecord(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {[1, 2, 3].map(s => (
+                  <div key={s} className={`h-2 w-2 rounded-full ${recordStep >= s ? "bg-slate-900" : "bg-slate-200"}`} />
+                ))}
+                <span className="text-[11px] text-slate-400 ml-1">
+                  Step {recordStep}/3
+                </span>
+              </div>
+              <button onClick={() => setShowRecord(false)} className="p-1 rounded-md hover:bg-slate-100">
+                <X className="h-4 w-4 text-slate-500" />
+              </button>
+            </div>
+
+            {/* Step 1: Select Party */}
+            {recordStep === 1 && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-900">Select party</p>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    value={partyQ}
+                    onChange={e => setPartyQ(e.target.value)}
+                    placeholder="Search by name or phone..."
+                    className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1 max-h-52 overflow-y-auto">
+                  {filteredCusts.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-4">No customers found</p>
+                  ) : filteredCusts.map(c => {
+                    const due = custOutstanding.get(c.id)
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => { setSelectedCust(c); setRecordStep(2) }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left"
+                      >
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                          {c.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{c.name}</p>
+                          <p className="text-[11px] text-slate-500">{c.phone}</p>
+                        </div>
+                        {due !== undefined && (
+                          <div className="text-right shrink-0">
+                            <p className="text-xs font-semibold tabular-nums text-amber-600">{formatINR(due)}</p>
+                            <p className="text-[10px] text-slate-400">outstanding</p>
+                          </div>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Enter Amount */}
+            {recordStep === 2 && selectedCust && (
+              <div className="space-y-4">
+                <p className="text-sm font-semibold text-slate-900">Enter amount</p>
+
+                <div className="bg-slate-50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">{selectedCust.name}</span>
+                  {custOutstanding.has(selectedCust.id) && (
+                    <span className="font-medium text-slate-700">
+                      Outstanding: {formatINR(custOutstanding.get(selectedCust.id)!)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">₹</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={pmtAmount}
+                    onChange={e => setPmtAmount(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-14 rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-xl font-bold tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    autoFocus
+                  />
+                </div>
+
+                {custOutstanding.has(selectedCust.id) && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPmtAmount(String(custOutstanding.get(selectedCust.id)!))}
+                      className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Full amount
+                    </button>
+                    <button
+                      onClick={() => setPmtAmount(String(Math.round(custOutstanding.get(selectedCust.id)! / 2)))}
+                      className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Half
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setRecordStep(1)}
+                    className="flex-1 py-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => pmtAmount && parseFloat(pmtAmount) > 0 && setRecordStep(3)}
+                    disabled={!pmtAmount || parseFloat(pmtAmount) <= 0}
+                    className="flex-1 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Select Method */}
+            {recordStep === 3 && (
+              <div className="space-y-4">
+                <p className="text-sm font-semibold text-slate-900">Payment method</p>
+
+                <div className="bg-slate-50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">{selectedCust?.name}</span>
+                  <span className="font-semibold tabular-nums text-slate-900">{formatINR(parseFloat(pmtAmount || "0"))}</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {methodOptions.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => setSelectedMethod(m.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg border transition-colors text-left ${
+                        selectedMethod === m.id
+                          ? "border-slate-900 bg-slate-50"
+                          : "border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="text-slate-600">{m.icon}</div>
+                      <span className="text-sm font-medium text-slate-900">{m.label}</span>
+                      {selectedMethod === m.id && <Check className="h-4 w-4 text-slate-900 ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setRecordStep(2)}
+                    className="flex-1 py-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={submitPayment}
+                    disabled={saving}
+                    className="flex-1 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <><Check className="h-4 w-4" /> Record Payment</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
-  );
+  )
 }
