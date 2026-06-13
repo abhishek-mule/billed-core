@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Send, Search, Loader2, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, Send, Search, Loader2, Users, AlertCircle, RefreshCw, Clock, CheckCircle2, XCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { EmptyState } from "@/components/billzo/EmptyState";
 import { db } from "@/lib/billzo/db";
@@ -54,6 +54,7 @@ export default function CashflowPage() {
   const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState(searchParams.get("q") || "");
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [actingInvoice, setActingInvoice] = useState<string | null>(null);
@@ -64,10 +65,15 @@ export default function CashflowPage() {
 
   const loadInvoices = async () => {
     try {
+      setError(null);
       const tenantId = getCookie("bz_tenant");
       if (!tenantId) { router.push("/auth"); return; }
       const data = await db().invoices.where("tenantId").equals(tenantId).toArray();
       setInvoices(data);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to load cashflow data";
+      console.error("Failed to load invoices:", err);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -140,18 +146,29 @@ export default function CashflowPage() {
     return buckets;
   }, [groups]);
 
-  const handleSendReminder = async (invoiceId: string, e: React.MouseEvent) => {
+  const handleSendReminder = async (inv: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActingInvoice(invoiceId);
+    setActingInvoice(inv.id);
     try {
-      await fetch("/api/invoices/remind", {
+      await fetch("/api/whatsapp/send", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId }),
+        body: JSON.stringify({
+          invoiceId: inv.id,
+          customerId: inv.customerId,
+          customerName: inv.customerName,
+          customerPhone: inv.customerPhone,
+          amount: getOutstanding(inv),
+          templateKey: inv.recoveryStage || 'invoice',
+          vars: {
+            '1': inv.customerName,
+            '2': String(getOutstanding(inv)),
+          },
+        }),
       });
-    } catch {
-      // silent
+    } catch (err) {
+      console.error("Failed to send reminder:", err);
     } finally {
       setActingInvoice(null);
     }
@@ -159,8 +176,43 @@ export default function CashflowPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-5">
+        <div className="h-7 bg-muted animate-pulse rounded w-48" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border p-3 space-y-2">
+              <div className="h-3 bg-muted animate-pulse rounded w-16" />
+              <div className="h-6 bg-muted animate-pulse rounded w-24" />
+              <div className="h-3 bg-muted animate-pulse rounded w-32" />
+            </div>
+          ))}
+        </div>
+        <div className="h-11 bg-muted animate-pulse rounded-xl w-full" />
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto">
+        <div className="flex flex-col items-center justify-center min-h-[30vh] rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+          <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+          <h2 className="text-lg font-semibold text-red-700 mb-1">Failed to load cashflow</h2>
+          <p className="text-sm text-red-600 mb-4 max-w-md">{error}</p>
+          <Button
+            onClick={() => { setLoading(true); loadInvoices(); }}
+            variant="secondary"
+            className="gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -270,6 +322,17 @@ export default function CashflowPage() {
                         <div className="text-[10px] text-muted-foreground">of {formatINR(inv.total)}</div>
                       </div>
 
+                      <div className="flex items-center gap-2 text-[10px] min-w-[140px]">
+                        <div className="flex items-center gap-1 text-muted-foreground" title={inv.lastReminderAt ? new Date(inv.lastReminderAt).toLocaleString() : "No reminder sent yet"}>
+                          {getReminderStatusIcon(inv.lastWhatsAppStatus || "queued")}
+                          <span>{formatReminderTime(inv.lastReminderAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-muted-foreground" title={inv.nextRecoveryAt ? new Date(inv.nextRecoveryAt).toLocaleString() : "Not scheduled"}>
+                          <Clock className="h-3 w-3" />
+                          <span>{formatReminderTime(inv.nextRecoveryAt)}</span>
+                        </div>
+                      </div>
+
                       <div className="flex items-center gap-1">
                         <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                           {stageLabels[inv.recoveryStage] || inv.recoveryStage || "—"}
@@ -279,7 +342,7 @@ export default function CashflowPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={e => handleSendReminder(inv.id, e)}
+                        onClick={e => handleSendReminder(inv, e)}
                         disabled={actingInvoice === inv.id}
                       >
                         {actingInvoice === inv.id ? (
@@ -293,7 +356,13 @@ export default function CashflowPage() {
 
                   {/* Group actions */}
                   <div className="flex items-center gap-2 px-5 py-3 bg-muted/20">
-                    <Button size="sm" variant="secondary">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        group.invoices.forEach(inv => handleSendReminder(inv, new MouseEvent('click') as unknown as React.MouseEvent))
+                      }}
+                    >
                       <Send className="h-3.5 w-3.5" /> Remind all
                     </Button>
                   </div>
@@ -313,5 +382,40 @@ function getAgingBadge(bucket: AgingBucket): string {
     case "8-15": return "bg-orange-100 text-orange-700";
     case "16-30": return "bg-red-100 text-red-700";
     case "30+": return "bg-red-200 text-red-800";
+  }
+}
+
+function formatReminderTime(dateStr: string | undefined): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffMins = Math.round(diffMs / 60000);
+  const diffHours = Math.round(diffMs / 3600000);
+  const diffDays = Math.round(diffMs / 86400000);
+
+  if (diffMs < 0) {
+    if (diffHours > -24) return `${Math.abs(diffHours)}h ago`;
+    return `${Math.abs(diffDays)}d ago`;
+  }
+  if (diffMins < 60) return `in ${diffMins}m`;
+  if (diffHours < 24) return `in ${diffHours}h`;
+  return `in ${diffDays}d`;
+}
+
+function getReminderStatusIcon(status: string) {
+  switch (status) {
+    case "delivered":
+    case "read":
+    case "clicked_upi":
+      return <span title="Delivered"><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /></span>;
+    case "sent":
+    case "server_ack":
+      return <span title="Sent"><MessageCircle className="h-3.5 w-3.5 text-blue-500" /></span>;
+    case "failed":
+    case "rate_limited":
+      return <span title="Failed"><XCircle className="h-3.5 w-3.5 text-red-500" /></span>;
+    default:
+      return <span title="Queued"><Clock className="h-3.5 w-3.5 text-muted-foreground" /></span>;
   }
 }

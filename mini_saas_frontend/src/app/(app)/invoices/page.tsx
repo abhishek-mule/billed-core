@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, AlertTriangle, RefreshCw, Plus, Filter, Loader2, Download, FileSpreadsheet, FileText, Receipt } from "lucide-react";
+import { Search, AlertTriangle, RefreshCw, Plus, Loader2, FileSpreadsheet, FileText, Receipt } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { EmptyState } from '@/components/billzo/EmptyState';
 import { db } from "@/lib/billzo/db";
@@ -12,6 +12,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatINR } from "@/lib/utils";
 import { getCookie } from "@/lib/cookies";
+import { scheduleBackgroundSync } from "@/lib/billzo/sync";
+import type { Invoice } from "@/lib/billzo/types";
 
 const tabs = ["All", "Synced", "Pending", "Failed"] as const;
 type Tab = typeof tabs[number];
@@ -26,8 +28,9 @@ export default function InvoicesPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("All");
   const [q, setQ] = useState("");
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoices();
@@ -35,15 +38,20 @@ export default function InvoicesPage() {
 
   const loadInvoices = async () => {
     try {
+      setError(null);
+      setLoading(true);
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
         return;
       }
-      const data = await db().invoices.where("tenantId").equals(tenantId).toArray();
+      const data = await db().invoices.where("tenantId").equals(tenantId).reverse().sortBy('createdAt');
       setInvoices(data);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to load invoices';
       console.error("Failed to load invoices:", error);
+      setError(errorMsg);
+      setInvoices([]);
     } finally {
       setLoading(false);
     }
@@ -51,7 +59,11 @@ export default function InvoicesPage() {
 
   const filtered = invoices.filter((i) => {
     const matchTab = tab === "All" || i.syncStatus === tab.toLowerCase();
-    const matchQ = !q || i.customerName?.toLowerCase().includes(q.toLowerCase()) || i.id?.toLowerCase().includes(q.toLowerCase());
+    const query = q.toLowerCase().trim();
+    const matchQ = !query ||
+      i.customerName?.toLowerCase().includes(query) ||
+      i.invoiceNumber?.toLowerCase().includes(query) ||
+      i.id?.toLowerCase().includes(query);
     return matchTab && matchQ;
   });
   const PAGE_SIZE = 25;
@@ -63,9 +75,26 @@ export default function InvoicesPage() {
 
   const failedCount = invoices.filter((i) => i.syncStatus === "failed").length;
 
+  const retryFailedInvoices = useCallback(async (invoiceId?: string) => {
+    try {
+      const failed = invoiceId
+        ? invoices.filter(i => i.id === invoiceId && i.syncStatus === "failed")
+        : invoices.filter(i => i.syncStatus === "failed");
+      if (failed.length === 0) return;
+      const now = new Date().toISOString();
+      await Promise.all(failed.map(i => db().invoices.update(i.id, { syncStatus: "pending", updatedAt: now })));
+      setInvoices(prev => prev.map(i =>
+        failed.some(f => f.id === i.id) ? { ...i, syncStatus: "pending", updatedAt: now } : i
+      ));
+      scheduleBackgroundSync();
+    } catch (error) {
+      console.error("Failed to retry sync:", error);
+    }
+  }, [invoices]);
+
   const exportExcel = () => {
     const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
-      ID: i.id,
+      ID: i.invoiceNumber || i.id.slice(0, 8),
       Date: new Date(i.createdAt).toLocaleString(),
       Customer: i.customerName,
       Phone: i.customerPhone,
@@ -86,7 +115,7 @@ export default function InvoicesPage() {
       startY: 20,
       head: [["ID", "Date", "Customer", "Amount", "Status"]],
       body: filtered.map(i => [
-        i.id.slice(0, 8),
+        i.invoiceNumber || i.id.slice(0, 8),
         new Date(i.createdAt).toLocaleDateString(),
         i.customerName,
         formatINR(i.total),
@@ -99,8 +128,34 @@ export default function InvoicesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-4">
+        <div className="flex gap-3">
+          <div className="flex-1 h-11 bg-muted animate-pulse rounded-xl" />
+          <div className="w-24 h-11 bg-muted animate-pulse rounded-xl" />
+          <div className="w-20 h-11 bg-muted animate-pulse rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
+        <div className="rounded-xl border border-red-300 bg-red-50 p-4 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-red-700">{error}</p>
+            <p className="text-sm text-red-600 mt-1">Please try again or contact support.</p>
+          </div>
+          <Button onClick={loadInvoices} size="sm" variant="outline">
+            <RefreshCw className="h-3.5 w-3.5" /> Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -114,7 +169,7 @@ export default function InvoicesPage() {
             <span className="font-semibold text-yellow-700">{failedCount} invoices failed to sync.</span>
             <span className="text-muted-foreground ml-1">Retry anytime — your data is safe.</span>
           </div>
-          <Button size="sm" onClick={() => console.log("Retrying sync…")}>
+          <Button size="sm" onClick={() => retryFailedInvoices()}>
             <RefreshCw className="h-3.5 w-3.5" /> Retry all
           </Button>
         </div>
@@ -161,8 +216,8 @@ export default function InvoicesPage() {
         />
       ) : (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="hidden md:grid grid-cols-[1fr_1fr_120px_120px_100px] gap-4 px-5 py-3 border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <span>Party</span><span>Invoice</span><span>Method</span><span className="text-right">Amount</span><span className="text-right">Status</span>
+          <div className="hidden md:grid grid-cols-[1fr_1fr_100px_100px_100px] gap-4 px-5 py-3 border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <span>Party</span><span>Invoice</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Sync</span>
           </div>
           <ul className="divide-y divide-border">
             {filtered.length === 0 ? (
@@ -174,7 +229,7 @@ export default function InvoicesPage() {
               >
                 <Link
                   href={`/invoices/${inv.id}`}
-                  className="md:grid md:grid-cols-[1fr_1fr_120px_120px_100px] md:gap-4 md:items-center px-5 py-4 block"
+                  className="md:grid md:grid-cols-[1fr_1fr_100px_100px_100px] md:gap-4 md:items-center px-5 py-4 block"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold">
@@ -182,18 +237,19 @@ export default function InvoicesPage() {
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold text-sm truncate">{inv.customerName}</div>
-                      <div className="text-xs text-muted-foreground md:hidden">{inv.id?.slice(0, 8)} • {new Date(inv.createdAt).toLocaleDateString()}</div>
+                      <div className="text-xs text-muted-foreground md:hidden">{inv.invoiceNumber || inv.id?.slice(0, 8)} • {new Date(inv.createdAt).toLocaleDateString()}</div>
                     </div>
                   </div>
                   <div className="hidden md:block text-sm">
-                    <div className="font-medium">{inv.id?.slice(0, 8)}</div>
+                    <div className="font-medium">{inv.invoiceNumber || inv.id?.slice(0, 8)}</div>
                     <div className="text-xs text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString()}</div>
                   </div>
-                  <div className="hidden md:block text-sm capitalize text-muted-foreground">{inv.status}</div>
-                  <div className="md:text-right mt-2 md:mt-0 flex md:block justify-between items-center">
+                  <div className="md:text-right">
                     <span className="text-sm font-bold">{formatINR(inv.total)}</span>
-                    <span className={`md:hidden ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${statusStyle[inv.syncStatus] || statusStyle.pending}`}>
-                      {inv.syncStatus || "pending"}
+                  </div>
+                  <div className="hidden md:block">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${inv.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      {inv.status}
                     </span>
                   </div>
                   <div className="hidden md:flex justify-end items-center gap-2">
@@ -201,7 +257,7 @@ export default function InvoicesPage() {
                       {inv.syncStatus || "pending"}
                     </span>
                     {inv.syncStatus === "failed" && (
-                      <button onClick={(e) => { e.preventDefault(); console.log("Retrying…"); }} className="grid h-7 w-7 place-items-center rounded-md text-yellow-600 hover:bg-yellow-100">
+                      <button onClick={(e) => { e.preventDefault(); retryFailedInvoices(inv.id); }} className="grid h-7 w-7 place-items-center rounded-md text-yellow-600 hover:bg-yellow-100">
                         <RefreshCw className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -222,7 +278,7 @@ export default function InvoicesPage() {
 
       <Link
         href="/pos"
-        className="fixed bottom-24 right-5 lg:bottom-8 lg:right-8 z-30 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:scale-110 transition-transform"
+        className="fixed bottom-32 right-5 lg:bottom-8 lg:right-8 z-30 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:scale-110 transition-transform"
       >
         <Plus className="h-6 w-6" />
       </Link>

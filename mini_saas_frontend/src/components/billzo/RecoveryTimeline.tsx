@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { CheckCircle2, MessageCircle, AlertCircle, CreditCard, Clock, ArrowRight, FileText, ShieldBan, ShieldCheck, UserCheck, UserX, ChevronDown, ChevronUp, Sparkles, Filter } from "lucide-react";
+import { CheckCircle2, MessageCircle, AlertCircle, CreditCard, Clock, FileText, ShieldBan, ShieldCheck, UserCheck, UserX, ChevronDown, ChevronUp, Sparkles, Filter } from "lucide-react";
 
 const eventIcons: Record<string, React.ReactNode> = {
   "invoice.created": <FileText className="h-4 w-4" />,
@@ -292,7 +292,7 @@ export function RecoveryTimeline({ events, recoveredAmount, onOverride }: Recove
                           className="mt-1 text-[11px] font-medium text-amber-600 hover:text-amber-800 flex items-center gap-1"
                         >
                           {expandedDecisions.has(event.id) ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          {expandedDecisions.has(event.id) ? 'Hide rules' : 'Show all 9 rules'}
+                          {expandedDecisions.has(event.id) ? 'Hide rules' : 'Show all rules'}
                         </button>
                         {expandedDecisions.has(event.id) && (
                           <div className="mt-1.5 grid grid-cols-2 gap-1">

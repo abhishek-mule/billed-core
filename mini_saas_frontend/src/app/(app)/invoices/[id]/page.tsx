@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, ShieldAlert, Banknote } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
@@ -36,6 +36,7 @@ export default function InvoiceDetailPage() {
   const [recoveryTimeline, setRecoveryTimeline] = useState<any[]>([]);
   const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideBlockedReason, setOverrideBlockedReason] = useState('');
@@ -51,6 +52,7 @@ export default function InvoiceDetailPage() {
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [recordPaymentError, setRecordPaymentError] = useState('');
   const [recordPaymentSuccess, setRecordPaymentSuccess] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
 
   const id = params.id as string;
 
@@ -61,6 +63,7 @@ export default function InvoiceDetailPage() {
 
   const loadInvoice = async () => {
     try {
+      setInvoiceError(null);
       const tenantId = getCookie('bz_tenant');
       if (!tenantId) {
         router.push("/auth");
@@ -72,9 +75,13 @@ export default function InvoiceDetailPage() {
         setInvoice(invoiceData);
         const itemData = await db().invoiceItems.where("invoiceId").equals(id).toArray();
         setItems(itemData);
+      } else {
+        setInvoiceError('Invoice not found');
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to load invoice';
       console.error("Failed to load invoice:", error);
+      setInvoiceError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -83,16 +90,27 @@ export default function InvoiceDetailPage() {
   const loadRecoveryData = async () => {
     try {
       setTimelineLoading(true);
+      setTimelineError(null);
       const res = await fetch(`/api/recovery/timeline?invoiceId=${id}`, {
         credentials: 'include',
       });
-      if (res.ok) {
-        const data = await res.json();
-        setRecoveryTimeline(data.events || []);
-        setRecoveryAttribution(data.attribution);
+      
+      if (!res.ok) {
+        let errorMsg = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
       }
+      
+      const data = await res.json();
+      setRecoveryTimeline(data.events || []);
+      setRecoveryAttribution(data.attribution);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to load recovery data';
       console.error("Failed to load recovery data:", error);
+      setTimelineError(errorMsg);
     } finally {
       setTimelineLoading(false);
     }
@@ -217,7 +235,7 @@ export default function InvoiceDetailPage() {
         return
       }
 
-      if (data.applied) {
+      if (data.applied || data.success) {
         setOverrideSuccess(true)
         loadRecoveryData()
         setTimeout(() => {
@@ -390,7 +408,14 @@ export default function InvoiceDetailPage() {
             </div>
           ) : (
             <button
-              onClick={generatePaymentLink}
+              onClick={() => {
+                const link = paymentLink || invoice?.paymentLinkUrl
+                if (link) {
+                  navigator.clipboard.writeText(link)
+                } else {
+                  generatePaymentLink()
+                }
+              }}
               disabled={genLinkLoading}
               className="flex items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
             >

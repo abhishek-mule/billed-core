@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  Bell, Search, Home, ScanLine, Receipt, TrendingUp, Activity,
+  Bell, Search, Home, ShoppingCart, Receipt, TrendingUp, Activity,
   Users, Package, BarChart3, Settings,
   MoreHorizontal, Menu, LogOut,
 } from 'lucide-react'
@@ -14,24 +14,28 @@ import '@/styles/app-shell.css'
 
 const NAV_WORKSPACE = [
   { href: '/dashboard', label: 'Home',       icon: Home        },
-  { href: '/pulse',     label: 'Pulse',      icon: Activity    },
   { href: '/cashflow',  label: 'Cashflow',   icon: TrendingUp  },
+  { href: '/pulse',     label: 'Payments',   icon: Activity    },
   { href: '/invoices',  label: 'Invoices',   icon: Receipt     },
-  { href: '/parties',   label: 'Customers',  icon: Users       },
-  { href: '/products',  label: 'Products',   icon: Package     },
+  { href: '/pos',       label: 'POS',        icon: ShoppingCart },
+]
+
+const NAV_MANAGE = [
+  { href: '/parties',   label: 'Parties',  icon: Users       },
+  { href: '/products',  label: 'Products', icon: Package     },
+  { href: '/reports',   label: 'Reports',  icon: BarChart3   },
 ]
 
 const NAV_SYSTEM = [
-  { href: '/reports',  label: 'Reports',  icon: BarChart3 },
-  { href: '/settings', label: 'Settings', icon: Settings  },
+  { href: '/settings', label: 'Settings', icon: Settings    },
 ]
 
 const MOBILE_NAV = [
-  { href: '/dashboard', label: 'Home',  icon: Home,           primary: false },
-  { href: '/invoices',  label: 'Bills', icon: Receipt,        primary: false },
-  { href: '/pos',       label: 'POS',   icon: ScanLine,       primary: true  },
-  { href: '/products',  label: 'Stock', icon: Package,        primary: false },
-  { href: '/more',      label: 'More',  icon: MoreHorizontal, primary: false },
+  { href: '/dashboard', label: 'Home',     icon: Home,           primary: false },
+  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp,     primary: false },
+  { href: '/pos',       label: 'POS',      icon: ShoppingCart,   primary: true  },
+  { href: '/invoices',  label: 'Invoices', icon: Receipt,        primary: false },
+  { href: '/more',      label: 'More',     icon: MoreHorizontal, primary: false },
 ]
 
 function getCookie(name: string) {
@@ -97,6 +101,25 @@ function Sidebar({
               className={cn('nav-item', active && 'nav-item--active')}
               aria-current={active ? 'page' : undefined}
             >
+              <span className="nav-icon"><Icon size={18} strokeWidth={2} /></span>
+              <span className="nav-label">{label}</span>
+              <span className="nav-tooltip" aria-hidden="true">{label}</span>
+            </Link>
+          )
+        })}
+
+        <span className="nav-section-label nav-section-label--spaced">Manage</span>
+
+        {NAV_MANAGE.map(({ href, label, icon: Icon }, i) => {
+          const active = pathname.startsWith(href)
+          return (
+            <Link
+              key={href}
+              href={href}
+              style={{ '--i': i + NAV_WORKSPACE.length } as React.CSSProperties}
+              className={cn('nav-item', active && 'nav-item--active')}
+              aria-current={active ? 'page' : undefined}
+            >
               <span className="nav-icon"><Icon size={15} strokeWidth={1.8} /></span>
               <span className="nav-label">{label}</span>
               <span className="nav-tooltip" aria-hidden="true">{label}</span>
@@ -112,7 +135,7 @@ function Sidebar({
             <Link
               key={href}
               href={href}
-              style={{ '--i': i + NAV_WORKSPACE.length } as React.CSSProperties}
+              style={{ '--i': i + NAV_WORKSPACE.length + NAV_MANAGE.length } as React.CSSProperties}
               className={cn('nav-item', active && 'nav-item--active')}
               aria-current={active ? 'page' : undefined}
             >
@@ -157,18 +180,18 @@ function TopBar({
 
   return (
     <header className="topbar">
-      <div className="topbar-left lg-hidden">
+      <div className="topbar-left lg:hidden">
         <button className="mobile-ham" onClick={onMobileMenu} aria-label="Open menu">
           <Menu size={16} />
         </button>
         <span className="topbar-title">{title || 'BillZo'}</span>
       </div>
 
-      <span className="topbar-title desktop-only">{title || 'BillZo'}</span>
+      <span className="topbar-title hidden lg:block">{title || 'BillZo'}</span>
 
       <div className="topbar-right">
         <div className={cn('search-wrap', focused && 'search-wrap--focused')}>
-          <Search size={13} className="search-icon" />
+          <Search size={14} className="search-icon" />
           <input
             className="search-input"
             placeholder="Search…"
@@ -179,10 +202,9 @@ function TopBar({
           <kbd className="search-kbd">⌘K</kbd>
         </div>
 
-        <button className="icon-btn" aria-label="Notifications" style={{ position: 'relative' }}>
-          <Bell size={15} />
-          <span className="notif-dot" />
-        </button>
+        <Link href="/pulse" className="icon-btn" aria-label="View payments">
+          <Bell size={18} />
+        </Link>
 
         <img
           src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(userName || 'guest')}`}
@@ -209,7 +231,7 @@ function MobileDrawer({
     return () => { document.body.style.overflow = '' }
   }, [open])
 
-  const allNav = [...NAV_WORKSPACE, ...NAV_SYSTEM]
+  const allNav = [...NAV_WORKSPACE, ...NAV_MANAGE, ...NAV_SYSTEM]
 
   return (
     <div
@@ -264,7 +286,7 @@ function MobileDrawer({
 
 function BottomNav({ pathname }: { pathname: string }) {
   return (
-    <nav className="bottom-nav lg-hidden">
+    <nav className="bottom-nav lg:hidden">
       {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
         const active = pathname.startsWith(href)
         return (
@@ -302,22 +324,21 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [userData, setUserData] = useState<{ userName?: string; userEmail?: string }>({})
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   useEffect(() => {
     setIsOnline(navigator.onLine)
-    const goOnline = () => setIsOnline(true)
+    const goOnline = () => {
+      setIsOnline(true)
+      import('@/lib/billzo/sync').then(m => m.scheduleBackgroundSync())
+    }
     const goOffline = () => setIsOnline(false)
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
-    return () => {
-      window.removeEventListener('online', goOnline)
-      window.removeEventListener('offline', goOffline)
-    }
-  }, [])
-
-  const { userName, userEmail } = (() => {
+    
+    // Get user data on mount
     const name = getCookie('bz_tenant_name')
     let email: string | undefined
     try {
@@ -327,11 +348,18 @@ export function AppShell({
         email = payload.email
       }
     } catch {}
-    return {
+    setUserData({
       userName: name ? decodeURIComponent(name) : undefined,
       userEmail: email,
+    })
+
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
     }
-  })()
+  }, [])
+
+  const { userName, userEmail } = userData
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
@@ -341,7 +369,7 @@ export function AppShell({
         const token = document.cookie.match(/(?:^|;\s*)bz_access=([^;]+)/)?.[1]
         if (!token) return
 
-        const payload = JSON.parse(atob(token.split('.')[0]))
+        const payload = JSON.parse(atob(token.split('.')[1]))
         const exp = payload.exp
         const now = Math.floor(Date.now() / 1000)
         const ttl = exp - now
@@ -408,7 +436,7 @@ export function AppShell({
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowLogoutConfirm(false)}>
           <div className="w-full max-w-sm mx-4 rounded-2xl bg-card p-6 shadow-xl border border-border" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">Sign out of BillZo?</h3>
+            <h3 className="text-lg font-semibold">Sign out of BillZo?</h3>
             <p className="mt-1 text-sm text-muted-foreground">Your local data will remain on this device. You can sign back in anytime.</p>
             <div className="flex gap-3 mt-5">
               <Button variant="outline" onClick={() => setShowLogoutConfirm(false)} className="flex-1">
