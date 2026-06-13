@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import {
   Bell, Search, Home, ShoppingCart, Receipt, TrendingUp, Activity,
   Users, Package, BarChart3, Settings,
-  MoreHorizontal, Menu, LogOut,
+  MoreHorizontal, Menu, LogOut, PanelLeftClose, PanelLeft,
 } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
@@ -80,11 +80,11 @@ function Sidebar({
         </Link>
 
         <button
-          className={cn('ham-btn', collapsed && 'ham-btn--collapsed')}
+          className="ham-btn"
           onClick={onToggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <span /><span /><span />
+          {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
 
@@ -187,7 +187,7 @@ function TopBar({
         <span className="topbar-title">{title || 'BillZo'}</span>
       </div>
 
-      <span className="topbar-title hidden lg:block">{title || 'BillZo'}</span>
+      {title && <span className="topbar-title hidden lg:block">{title}</span>}
 
       <div className="topbar-right">
         <div className={cn('search-wrap', focused && 'search-wrap--focused')}>
