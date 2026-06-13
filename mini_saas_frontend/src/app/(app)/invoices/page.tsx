@@ -1,287 +1,432 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Search, AlertTriangle, RefreshCw, Plus, Loader2, FileSpreadsheet, FileText, Receipt } from "lucide-react";
-import { Button } from "@/components/billzo/Button";
-import { EmptyState } from '@/components/billzo/EmptyState';
-import { db } from "@/lib/billzo/db";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { formatINR } from "@/lib/utils";
-import { getCookie } from "@/lib/cookies";
-import { scheduleBackgroundSync } from "@/lib/billzo/sync";
-import type { Invoice } from "@/lib/billzo/types";
+import { useState, useEffect, useMemo, useRef } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import {
+  Search, Plus, ChevronRight,
+  TrendingUp, AlertCircle, ArrowRight, Download, FileSpreadsheet,
+  FileText, Receipt,
+} from "lucide-react"
+import { db } from "@/lib/billzo/db"
+import { formatINR } from "@/lib/utils"
+import { getCookie } from "@/lib/cookies"
+import type { Invoice } from "@/lib/billzo/types"
 
-const tabs = ["All", "Synced", "Pending", "Failed"] as const;
-type Tab = typeof tabs[number];
+// ── helpers ──
+function daysSince(s: string): number {
+  return Math.floor((Date.now() - new Date(s).getTime()) / (1000 * 60 * 60 * 24))
+}
 
-const statusStyle: Record<string, string> = {
-  synced: "bg-green-100 text-green-700",
-  pending: "bg-yellow-100 text-yellow-700",
-  failed: "bg-red-100 text-red-700",
-};
+function getOutstanding(inv: Invoice): number {
+  return (inv.total || 0) - (inv.paidAmount || 0)
+}
 
+function getStatusBadge(inv: Invoice) {
+  if (inv.status === "paid") return { label: "Paid", cls: "bg-emerald-100 text-emerald-700" }
+  if (inv.status === "overdue") return { label: "Overdue", cls: "bg-rose-100 text-rose-700" }
+  if (inv.status === "partial") return { label: "Partial", cls: "bg-amber-100 text-amber-700" }
+  return { label: inv.status, cls: "bg-slate-100 text-slate-600" }
+}
+
+function getRisk(inv: Invoice): { label: string; cls: string } | null {
+  if (inv.status !== "overdue" && inv.status !== "partial") return null
+  const d = daysSince(inv.dueAt)
+  if (d > 30) return { label: "High Risk", cls: "text-rose-600 bg-rose-50" }
+  if (d > 15) return { label: "Medium Risk", cls: "text-amber-600 bg-amber-50" }
+  if (d > 7) return { label: "At Risk", cls: "text-orange-600 bg-orange-50" }
+  return null
+}
+
+// ── component ──
 export default function InvoicesPage() {
-  const router = useRouter();
-  const [tab, setTab] = useState<Tab>("All");
-  const [q, setQ] = useState("");
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [q, setQ] = useState("")
+  const [visibleCount, setVisibleCount] = useState(25)
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
+
+  const PAGE_SIZE = 25
 
   useEffect(() => {
-    loadInvoices();
-  }, []);
+    loadInvoices()
+    const handler = (e: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setActionsOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const loadInvoices = async () => {
     try {
-      setError(null);
-      setLoading(true);
-      const tenantId = getCookie('bz_tenant');
-      if (!tenantId) {
-        router.push("/auth");
-        return;
-      }
-      const data = await db().invoices.where("tenantId").equals(tenantId).reverse().sortBy('createdAt');
-      setInvoices(data);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to load invoices';
-      console.error("Failed to load invoices:", error);
-      setError(errorMsg);
-      setInvoices([]);
+      setError(null)
+      setLoading(true)
+      const tenantId = getCookie("bz_tenant")
+      if (!tenantId) { router.push("/auth"); return }
+      const data = await db().invoices.where("tenantId").equals(tenantId).reverse().sortBy("createdAt")
+      setInvoices(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load invoices")
+      setInvoices([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const filtered = invoices.filter((i) => {
-    const matchTab = tab === "All" || i.syncStatus === tab.toLowerCase();
-    const query = q.toLowerCase().trim();
-    const matchQ = !query ||
+  const filtered = useMemo(() => {
+    const query = q.toLowerCase().trim()
+    if (!query) return invoices
+    return invoices.filter(i =>
       i.customerName?.toLowerCase().includes(query) ||
       i.invoiceNumber?.toLowerCase().includes(query) ||
-      i.id?.toLowerCase().includes(query);
-    return matchTab && matchQ;
-  });
-  const PAGE_SIZE = 25;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const visibleInvoices = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
+      i.id?.toLowerCase().includes(query)
+    )
+  }, [invoices, q])
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q, tab]);
+  const visible = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
 
-  const failedCount = invoices.filter((i) => i.syncStatus === "failed").length;
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q])
 
-  const retryFailedInvoices = useCallback(async (invoiceId?: string) => {
-    try {
-      const failed = invoiceId
-        ? invoices.filter(i => i.id === invoiceId && i.syncStatus === "failed")
-        : invoices.filter(i => i.syncStatus === "failed");
-      if (failed.length === 0) return;
-      const now = new Date().toISOString();
-      await Promise.all(failed.map(i => db().invoices.update(i.id, { syncStatus: "pending", updatedAt: now })));
-      setInvoices(prev => prev.map(i =>
-        failed.some(f => f.id === i.id) ? { ...i, syncStatus: "pending", updatedAt: now } : i
-      ));
-      scheduleBackgroundSync();
-    } catch (error) {
-      console.error("Failed to retry sync:", error);
-    }
-  }, [invoices]);
+  // ── revenue dashboard metrics ──
+  const todaySales = useMemo(() => {
+    const t = new Date(); t.setHours(0, 0, 0, 0)
+    return invoices
+      .filter(i => new Date(i.createdAt) >= t)
+      .reduce((s, i) => s + i.total, 0)
+  }, [invoices])
 
+  const monthSales = useMemo(() => {
+    const m = new Date(); m.setDate(1); m.setHours(0, 0, 0, 0)
+    return invoices
+      .filter(i => new Date(i.createdAt) >= m)
+      .reduce((s, i) => s + i.total, 0)
+  }, [invoices])
+
+  const collectionStats = useMemo(() => {
+    const total = invoices.reduce((s, i) => s + i.total, 0)
+    const paidAmt = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total, 0)
+    const overdueAmt = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + getOutstanding(i), 0)
+    const partialAmt = invoices.filter(i => i.status === "partial").reduce((s, i) => s + getOutstanding(i), 0)
+    return { total, paidAmt, overdueAmt, partialAmt }
+  }, [invoices])
+
+  const attentionInvs = useMemo(() =>
+    invoices.filter(i => i.status === "overdue").sort((a, b) => daysSince(b.dueAt) - daysSince(a.dueAt)),
+    [invoices]
+  )
+
+  // ── export (moved to secondary actions) ──
   const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
-      ID: i.invoiceNumber || i.id.slice(0, 8),
-      Date: new Date(i.createdAt).toLocaleString(),
-      Customer: i.customerName,
-      Phone: i.customerPhone,
-      Amount: i.total,
-      Status: i.status,
-      SyncStatus: i.syncStatus
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Invoices");
-    XLSX.writeFile(wb, "Invoices_Export.xlsx");
-  };
+    import("xlsx").then(XLSX => {
+      const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
+        ID: i.invoiceNumber || i.id.slice(0, 8),
+        Date: new Date(i.createdAt).toLocaleDateString(),
+        Customer: i.customerName,
+        Phone: i.customerPhone,
+        Amount: i.total,
+        Status: i.status,
+      })))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Invoices")
+      XLSX.writeFile(wb, "Invoices_Export.xlsx")
+    })
+    setActionsOpen(false)
+  }
 
   const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Invoices Report", 14, 15);
-    
-    autoTable(doc, {
-      startY: 20,
-      head: [["ID", "Date", "Customer", "Amount", "Status"]],
-      body: filtered.map(i => [
-        i.invoiceNumber || i.id.slice(0, 8),
-        new Date(i.createdAt).toLocaleDateString(),
-        i.customerName,
-        formatINR(i.total),
-        i.status
-      ]),
-    });
-    
-    doc.save("Invoices_Export.pdf");
-  };
+    import("jspdf").then(({ default: JSPDF }) => {
+      import("jspdf-autotable").then(({ default: autoTable }) => {
+        const doc = new JSPDF()
+        doc.text("Invoices Report", 14, 15)
+        autoTable(doc, {
+          startY: 20,
+          head: [["ID", "Date", "Customer", "Amount", "Status"]],
+          body: filtered.map(i => [
+            i.invoiceNumber || i.id.slice(0, 8),
+            new Date(i.createdAt).toLocaleDateString(),
+            i.customerName,
+            formatINR(i.total),
+            i.status,
+          ]),
+        })
+        doc.save("Invoices_Export.pdf")
+      })
+    })
+    setActionsOpen(false)
+  }
 
+  // ── loading ──
   if (loading) {
     return (
-      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-4">
-        <div className="flex gap-3">
-          <div className="flex-1 h-11 bg-muted animate-pulse rounded-xl" />
-          <div className="w-24 h-11 bg-muted animate-pulse rounded-xl" />
-          <div className="w-20 h-11 bg-muted animate-pulse rounded-xl" />
-        </div>
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
-          ))}
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+          <div className="h-6 bg-slate-100 animate-pulse rounded w-48" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-100 animate-pulse rounded-lg" />)}
+          </div>
+          <div className="h-10 bg-slate-100 animate-pulse rounded-lg" />
+          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-100 animate-pulse rounded-lg" />)}</div>
         </div>
       </div>
-    );
+    )
   }
 
   if (error) {
     return (
-      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
-        <div className="rounded-xl border border-red-300 bg-red-50 p-4 flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
-          <div className="flex-1">
-            <p className="font-semibold text-red-700">{error}</p>
-            <p className="text-sm text-red-600 mt-1">Please try again or contact support.</p>
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
+          <div className="border border-red-200 rounded-lg p-8 text-center bg-white">
+            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
+            <p className="text-xs text-red-600 mb-4">{error}</p>
+            <button onClick={loadInvoices} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">Retry</button>
           </div>
-          <Button onClick={loadInvoices} size="sm" variant="outline">
-            <RefreshCw className="h-3.5 w-3.5" /> Retry
-          </Button>
         </div>
       </div>
-    );
+    )
   }
 
+  // ── render ──
   return (
-    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto space-y-4">
-      {failedCount > 0 && (
-        <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-4 flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 text-yellow-600 shrink-0" />
-          <div className="flex-1 text-sm">
-            <span className="font-semibold text-yellow-700">{failedCount} invoices failed to sync.</span>
-            <span className="text-muted-foreground ml-1">Retry anytime — your data is safe.</span>
+    <div className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
+      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+
+        {/* ═══════════════════════════
+           HEADER
+           ═══════════════════════════ */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-900">Invoices</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {invoices.length} total &middot; {formatINR(monthSales)} this month
+            </p>
           </div>
-          <Button size="sm" onClick={() => retryFailedInvoices()}>
-            <RefreshCw className="h-3.5 w-3.5" /> Retry all
-          </Button>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by party or invoice #"
-            className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <Button variant="outline" size="sm" onClick={exportExcel}>
-          <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel
-        </Button>
-        <Button variant="outline" size="sm" onClick={exportPDF}>
-          <FileText className="h-4 w-4 text-red-600" /> PDF
-        </Button>
-      </div>
-
-      <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-            }`}
+          <Link
+            href="/pos"
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
           >
-            {t}
-          </button>
-        ))}
-      </div>
+            <Plus className="h-3.5 w-3.5" /> Create Invoice
+          </Link>
+        </div>
 
-      {invoices.length === 0 ? (
-        <EmptyState
-          icon={<Receipt className="h-12 w-12" />}
-          title="No invoices yet"
-          description="Create your first invoice from POS"
-          action={<Link href="/pos"><Button><Plus className="h-4 w-4" /> Create Invoice</Button></Link>}
-        />
-      ) : (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="hidden md:grid grid-cols-[1fr_1fr_100px_100px_100px] gap-4 px-5 py-3 border-b border-border bg-secondary/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <span>Party</span><span>Invoice</span><span className="text-right">Amount</span><span>Status</span><span className="text-right">Sync</span>
+        {/* ═══════════════════════════
+           REVENUE DASHBOARD (Hero)
+           ═══════════════════════════ */}
+        <div className="bg-white border border-slate-200 rounded-lg">
+          {/* Top row: KPIs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="px-4 py-3">
+              <p className="text-[11px] text-slate-500 font-medium">Today&apos;s sales</p>
+              <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+                {formatINR(todaySales)}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {invoices.filter(i => new Date(i.createdAt) >= new Date(new Date().setHours(0, 0, 0, 0))).length} invoices
+              </p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[11px] text-slate-500 font-medium">This month</p>
+              <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+                {formatINR(monthSales)}
+              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-0.5">
+                <TrendingUp className="h-3 w-3 text-emerald-500" /> {invoices.filter(i => new Date(i.createdAt) >= new Date(new Date().setDate(1))).length} invoices
+              </p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[11px] text-slate-500 font-medium">Collection rate</p>
+              <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+                {collectionStats.total > 0 ? Math.round((collectionStats.paidAmt / collectionStats.total) * 100) : 0}%
+              </p>
+              <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full bg-emerald-500" style={{
+                  width: `${collectionStats.total > 0 ? (collectionStats.paidAmt / collectionStats.total) * 100 : 0}%`
+                }} />
+              </div>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[11px] text-slate-500 font-medium">Attention required</p>
+              <p className="text-lg font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+                {attentionInvs.length}
+              </p>
+              <p className="text-[10px] text-rose-600 mt-0.5">
+                {formatINR(attentionInvs.reduce((s, i) => s + getOutstanding(i), 0))} overdue
+              </p>
+            </div>
           </div>
-          <ul className="divide-y divide-border">
-            {filtered.length === 0 ? (
-              <li className="p-12 text-center text-sm text-muted-foreground">No invoices match.</li>
-            ) : visibleInvoices.map((inv) => (
-              <li
-                key={inv.id}
-                className={`hover:bg-muted/40 transition-colors ${inv.syncStatus === "failed" ? "bg-red-50" : ""}`}
+
+          {/* Bottom row: Collection status bars + Action */}
+          <div className="grid lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+            <div className="px-4 py-3 space-y-1.5">
+              <p className="text-[11px] font-medium text-slate-500">Collection breakdown</p>
+              <div className="space-y-1">
+                {[
+                  { label: "Paid", amt: collectionStats.paidAmt, cls: "bg-emerald-500" },
+                  { label: "Overdue", amt: collectionStats.overdueAmt, cls: "bg-rose-500" },
+                  { label: "Partial", amt: collectionStats.partialAmt, cls: "bg-amber-500" },
+                ].map(b => {
+                  const pct = collectionStats.total > 0 ? (b.amt / collectionStats.total) * 100 : 0
+                  if (pct === 0) return null
+                  return (
+                    <div key={b.label} className="flex items-center gap-2 text-xs">
+                      <span className="w-14 text-slate-500">{b.label}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div className={`h-full rounded-full ${b.cls}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="w-20 text-right font-medium tabular-nums text-slate-700">{pct.toFixed(0)}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-rose-700">
+                  {attentionInvs.length} overdue invoice{attentionInvs.length !== 1 ? "s" : ""}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {formatINR(attentionInvs.reduce((s, i) => s + getOutstanding(i), 0))} collectable
+                </p>
+              </div>
+              <Link
+                href="/cashflow"
+                className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
               >
+                Open Recovery <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════════════════
+           TOOLBAR
+           ═══════════════════════════ */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search by party or invoice #"
+              className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+          </div>
+          <div className="relative" ref={actionsRef}>
+            <button
+              onClick={() => setActionsOpen(!actionsOpen)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50"
+            >
+              <Download className="h-3.5 w-3.5" /> Actions
+            </button>
+            {actionsOpen && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-sm z-20 py-1">
+                <button onClick={exportExcel} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export Excel
+                </button>
+                <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                  <FileText className="h-3.5 w-3.5 text-red-600" /> Export PDF
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ═══════════════════════════
+           INVOICE EXPLORER (card list)
+           ═══════════════════════════ */}
+        {filtered.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-lg px-5 py-10 text-center">
+            <Receipt className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-900">
+              {q ? "No invoices match" : "No invoices yet"}
+            </p>
+            <p className="text-xs text-slate-500 mt-1 mb-5">
+              {q ? "Try a different search term" : "Create your first invoice to get started"}
+            </p>
+            {!q && (
+              <Link
+                href="/pos"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
+              >
+                <Plus className="h-3.5 w-3.5" /> Create Invoice
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {visible.map(inv => {
+              const badge = getStatusBadge(inv)
+              const risk = getRisk(inv)
+              const outstanding = getOutstanding(inv)
+              return (
                 <Link
+                  key={inv.id}
                   href={`/invoices/${inv.id}`}
-                  className="md:grid md:grid-cols-[1fr_1fr_100px_100px_100px] md:gap-4 md:items-center px-5 py-4 block"
+                  className="bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-center gap-3 hover:border-slate-300 transition-colors group"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold">
-                      {inv.customerName?.charAt(0)}
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                    {inv.customerName?.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900 truncate">{inv.customerName}</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                      {risk && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${risk.cls}`}>
+                          {risk.label}
+                        </span>
+                      )}
                     </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm truncate">{inv.customerName}</div>
-                      <div className="text-xs text-muted-foreground md:hidden">{inv.invoiceNumber || inv.id?.slice(0, 8)} • {new Date(inv.createdAt).toLocaleDateString()}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-slate-500">{inv.invoiceNumber || inv.id.slice(0, 8)}</span>
+                      <span className="text-[10px] text-slate-300">&middot;</span>
+                      <span className="text-[11px] text-slate-500">Due {new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                      {inv.status !== "paid" && outstanding !== inv.total && (
+                        <>
+                          <span className="text-[10px] text-slate-300">&middot;</span>
+                          <span className="text-[11px] text-amber-600 font-medium tabular-nums">{formatINR(outstanding)} due</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="hidden md:block text-sm">
-                    <div className="font-medium">{inv.invoiceNumber || inv.id?.slice(0, 8)}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(inv.createdAt).toLocaleDateString()}</div>
-                  </div>
-                  <div className="md:text-right">
-                    <span className="text-sm font-bold">{formatINR(inv.total)}</span>
-                  </div>
-                  <div className="hidden md:block">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${inv.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {inv.status}
-                    </span>
-                  </div>
-                  <div className="hidden md:flex justify-end items-center gap-2">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${statusStyle[inv.syncStatus] || statusStyle.pending}`}>
-                      {inv.syncStatus || "pending"}
-                    </span>
-                    {inv.syncStatus === "failed" && (
-                      <button onClick={(e) => { e.preventDefault(); retryFailedInvoices(inv.id); }} className="grid h-7 w-7 place-items-center rounded-md text-yellow-600 hover:bg-yellow-100">
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                  <div className="text-right shrink-0 flex items-center gap-2">
+                    <span className="text-base font-bold tabular-nums tracking-tight text-slate-900">{formatINR(inv.total)}</span>
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
                   </div>
                 </Link>
-              </li>
-            ))}
-            {hasMore && (
-              <li className="p-4 text-center border-t border-border">
-                <Button variant="ghost" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
-                  Show more ({filtered.length - visibleCount} remaining)
-                </Button>
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
+              )
+            })}
 
-      <Link
-        href="/pos"
-        className="fixed bottom-32 right-5 lg:bottom-8 lg:right-8 z-30 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg hover:scale-110 transition-transform"
-      >
-        <Plus className="h-6 w-6" />
-      </Link>
+            {hasMore && (
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Show more ({filtered.length - visibleCount} remaining)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════
+           FAB — mobile
+           ═══════════════════════════ */}
+        <Link
+          href="/pos"
+          className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center hover:bg-slate-800 active:scale-95 transition-all"
+          aria-label="Create invoice"
+        >
+          <Plus className="h-6 w-6" />
+        </Link>
+      </div>
     </div>
-  );
+  )
 }
