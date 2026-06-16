@@ -1,101 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
-import { db } from '@/lib/billzo/db'
-import { isPaywallBlocked } from '@/lib/billzo/plan-limits'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { getPlan } from '@/lib/billzo/plan-limits'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const tenantId = getVerifiedTenantIdFromRequest(request)
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    const tenant = await db().tenants.get(tenantId)
-    if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    const { data: tenant, error: tenantErr } = await supabaseAdmin
+      .from('tenants')
+      .select('plan, created_at')
+      .eq('id', tenantId)
+      .single()
 
-    const plan = tenant.plan || 'starter'
-    const { blocked, type } = isPaywallBlocked(tenant.invoiceCount || 0, tenant.reminderCount || 0, plan)
+    if (tenantErr || !tenant) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+
+    const plan = getPlan(tenant.plan)
+
+    // Lightweight overdue aggregate — no eligible-customer scan
+    const { data: invoiceAgg } = await supabaseAdmin
+      .from('invoices')
+      .select('outstanding_amount')
+      .eq('tenant_id', tenantId)
+      .gt('outstanding_amount', 0)
+
+    const overdueAmount = (invoiceAgg || []).reduce(
+      (sum: number, r: any) => sum + (parseFloat(r.outstanding_amount) || 0),
+      0,
+    )
+    const overdueCount = (invoiceAgg || []).length
+
+    // Trial availability — quick existence check only
+    let trialAvailable = false
+    if (plan === 'starter') {
+      const daysSinceSignup = Math.floor(
+        (Date.now() - new Date(tenant.created_at).getTime()) / (1000 * 60 * 60 * 24),
+      )
+      if (daysSinceSignup <= 14) {
+        const { data: existing } = await supabaseAdmin
+          .from('feature_trials')
+          .select('status')
+          .eq('tenant_id', tenantId)
+          .eq('feature', 'free_recovery_trial')
+          .single()
+
+        trialAvailable = !existing || existing.status !== 'completed'
+      }
+    }
 
     return NextResponse.json({
-      allowed: !blocked,
       plan,
-      usage: {
-        invoicesCreated: tenant.invoiceCount || 0,
-        remindersSent: tenant.reminderCount || 0,
-      },
-      limits: {
-        maxInvoices: plan === 'starter' ? 3 : Infinity,
-        maxReminders: plan === 'starter' ? 3 : Infinity,
-        autoRecovery: plan !== 'starter',
-      },
-      showPaywallAt: {
-        invoicesCreated: 3,
-        remindersSent: 3,
-      },
-      showUpsellBanner: (tenant.invoiceCount || 0) >= 2 || (tenant.reminderCount || 0) >= 2,
-      upsellMessage: blocked
-        ? `You've reached your ${type} limit. Upgrade to Pro for unlimited access.`
-        : `You've recovered using BillZo. Unlock unlimited recovery.`,
+      overdue: { totalAmount: overdueAmount, count: overdueCount },
+      trial: { available: trialAvailable },
+      features: [
+        { id: 'auto_recovery', available: plan !== 'starter', upgradeTo: 'pro' },
+        { id: 'recovery_queue', available: plan !== 'starter', upgradeTo: 'pro' },
+        { id: 'promise_tracking', available: plan !== 'starter', upgradeTo: 'pro' },
+        { id: 'cashflow_forecast', available: plan !== 'starter', upgradeTo: 'pro' },
+      ],
     })
   } catch (err: any) {
     console.error('[PaywallEnforce] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const tenantId = getVerifiedTenantIdFromRequest(request)
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const body = await request.json()
-    const { action }: { action: 'invoice' | 'reminder' } = body
-
-    if (!action || !['invoice', 'reminder'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-    }
-
-    const tenant = await db().tenants.get(tenantId)
-    if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
-
-    const plan = tenant.plan || 'starter'
-    const invoiceCount = tenant.invoiceCount || 0
-    const reminderCount = tenant.reminderCount || 0
-
-    const { blocked, type } = isPaywallBlocked(
-      action === 'invoice' ? invoiceCount + 1 : invoiceCount,
-      action === 'reminder' ? reminderCount + 1 : reminderCount,
-      plan
-    )
-
-    if (blocked) {
-      return NextResponse.json({
-        allowed: false,
-        reason: `You've reached your ${type} limit on the ${plan} plan. Upgrade to Pro for unlimited access.`,
-        plan,
-        usage: {
-          invoicesCreated: invoiceCount,
-          remindersSent: reminderCount,
-        },
-      }, { status: 403 })
-    }
-
-    const updates: Record<string, number> = {}
-    if (action === 'invoice') updates.invoiceCount = invoiceCount + 1
-    if (action === 'reminder') updates.reminderCount = reminderCount + 1
-
-    await db().tenants.update(tenantId, updates)
-
-    return NextResponse.json({
-      allowed: true,
-      plan,
-      usage: {
-        invoicesCreated: updates.invoiceCount ?? invoiceCount,
-        remindersSent: updates.reminderCount ?? reminderCount,
-      },
-    })
-  } catch (err: any) {
-    console.error('[PaywallEnforce] POST Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

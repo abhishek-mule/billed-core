@@ -4,10 +4,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { db, notifyChanged } from './db'
 import { getTenantId } from './tenant'
-import type { QueueItem, Invoice, Payment } from './types'
+import type { QueueItem, Invoice, Payment, WhatsAppEvent, RecoveryCase, RecoveryAttribution } from './types'
 
 const MAX_DELAY_MS = 10 * 60 * 1000
-const RECONCILE_TABLES = ['invoices', 'payments', 'customers'] as const
+const RECONCILE_TABLES = ['invoices', 'payments', 'customers', 'whatsapp_events', 'recovery_cases', 'recovery_attributions'] as const
 const RECONCILE_CACHE_KEY = 'billzo_last_reconciled_at'
 
 function backoffMs(attempts: number) {
@@ -90,7 +90,6 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
       return {
         id: payload.id,
         tenant_id: payload.tenantId,
-        invoice_number: payload.id,
         customer_id: payload.customerId || null,
         customer_name: payload.customerName,
         customer_phone: payload.customerPhone || null,
@@ -98,9 +97,12 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         total: payload.total,
         grand_total: payload.total,
         payment_mode: payload.paymentMode ?? (payload.paidAmount > 0 ? 'cash' : 'udhar'),
-        payment_status: payload.status === 'paid' ? 'PAID' : payload.paidAmount > 0 ? 'PARTIAL' : 'PENDING',
-        status: payload.status?.toUpperCase?.() || 'ACTIVE',
+        payment_status: payload.status === 'paid' ? 'paid' : payload.paidAmount > 0 ? 'partial' : 'unpaid',
+        status: payload.status?.toLowerCase() || 'unpaid',
+        invoice_number: payload.invoiceNumber || payload.id,
         due_date: payload.dueAt ? String(payload.dueAt).slice(0, 10) : null,
+        recovery_stage: payload.recoveryStage || 't0_soft',
+        next_recovery_at: payload.nextRecoveryAt || null,
         is_pos: !payload.customerId,
         created_at: payload.createdAt,
         updated_at: payload.updatedAt,
@@ -165,7 +167,7 @@ export async function syncPendingQueue() {
     if (!tenantId) return
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     const due = new Date().toISOString()
     const pending = await db()
       .queue.where('[tenantId+status]')
@@ -267,14 +269,14 @@ async function reconcileFromServer() {
     for (const row of rows) {
       if (row.updated_at > newestTs) newestTs = row.updated_at
 
-      const entityType = table === 'invoices' ? 'invoice' : table === 'payments' ? 'payment' : 'customer'
+      const entityType = table === 'invoices' ? 'invoice' : table === 'payments' ? 'payment' : table === 'customers' ? 'customer' : table === 'whatsapp_events' ? 'whatsapp_event' : table === 'recovery_cases' ? 'recovery_case' : 'recovery_attribution'
       if (await hasPendingLocalChange(entityType, row.id)) {
         continue
       }
 
-      const dexieTable = table === 'invoices' ? db().invoices : table === 'payments' ? db().payments : db().customers
+      const dexieTable = table === 'invoices' ? db().invoices : table === 'payments' ? db().payments : table === 'customers' ? db().customers : table === 'whatsapp_events' ? db().whatsappEvents : table === 'recovery_cases' ? db().recoveryCases : db().recoveryAttributions
       const existing = await dexieTable.get(row.id)
-      if (existing && existing.updatedAt >= row.updated_at) continue
+      if (existing && 'updatedAt' in existing && (existing as any).updatedAt >= row.updated_at) continue
 
       if (table === 'invoices') {
         await db().invoices.put({
@@ -292,7 +294,9 @@ async function reconcileFromServer() {
           syncStatus: 'synced',
           recoveryStage: (existing as Invoice)?.recoveryStage || 't0_soft',
           nextRecoveryAt: (existing as Invoice)?.nextRecoveryAt || row.due_date || new Date().toISOString(),
+          paymentMode: row.payment_mode || (existing as Invoice)?.paymentMode || undefined,
           lastWhatsAppStatus: (existing as Invoice)?.lastWhatsAppStatus || 'queued',
+          lastReminderAt: (existing as Invoice)?.lastReminderAt || row.last_reminder_at || null,
           reminderCount: (existing as Invoice)?.reminderCount || 0,
           pdfUrl: (existing as Invoice)?.pdfUrl || `/invoice/${row.id}`,
           version: (existing as Invoice)?.version || 1,
@@ -322,6 +326,7 @@ async function reconcileFromServer() {
           tenantId: row.tenant_id,
           name: row.customer_name || row.name || '',
           phone: row.phone || '',
+          whatsapp_number: (existing as any)?.whatsapp_number || row.phone || undefined,
           gstin: row.gstin || undefined,
           email: row.email || undefined,
           address: row.billing_address || row.address || undefined,
@@ -333,6 +338,60 @@ async function reconcileFromServer() {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         })
+      } else if (table === 'whatsapp_events') {
+        await db().whatsappEvents.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          invoiceId: row.invoice_id || undefined,
+          customerId: row.customer_id || undefined,
+          phone: row.phone || undefined,
+          direction: row.direction || 'outbound',
+          status: row.status || 'queued',
+          template: row.template || undefined,
+          recoveryStage: row.recovery_stage || undefined,
+          metadata: row.metadata || undefined,
+          providerMessageId: row.provider_message_id || undefined,
+          correlationId: row.correlation_id || undefined,
+          serverAckAt: row.server_ack_at || undefined,
+          deliveredAt: row.delivered_at || undefined,
+          readAt: row.read_at || undefined,
+          clickedAt: row.clicked_at || undefined,
+          rateLimitedAt: row.rate_limited_at || undefined,
+          timeToClickSeconds: row.time_to_click_seconds || undefined,
+          occurredAt: row.occurred_at,
+          createdAt: row.created_at,
+        } satisfies WhatsAppEvent)
+      } else if (table === 'recovery_cases') {
+        await db().recoveryCases.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          customerId: row.customer_id,
+          customerName: row.customers?.customer_name || undefined,
+          totalOutstanding: Number(row.total_outstanding) || 0,
+          totalOverdue: Number(row.total_overdue) || 0,
+          openInvoiceCount: row.open_invoice_count || 0,
+          overdueInvoiceCount: row.overdue_invoice_count || 0,
+          recoveryStateV2: row.recovery_state_v2 || 'active',
+          engagementStateV2: row.engagement_state_v2 || undefined,
+          nextActionType: row.next_action_type || undefined,
+          nextActionDueAt: row.next_action_due_at || undefined,
+          attentionScore: row.attention_score || 0,
+          lastActivityAt: row.last_activity_at || undefined,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        } satisfies RecoveryCase)
+      } else if (table === 'recovery_attributions') {
+        await db().recoveryAttributions.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          invoiceId: row.invoice_id || undefined,
+          paymentId: row.payment_id || undefined,
+          amount: Number(row.amount) || 0,
+          attributedAmount: Number(row.attributed_amount) || undefined,
+          attributionType: row.attribution_type || 'last_touch',
+          confidenceScore: Number(row.confidence_score) || 1.0,
+          createdAt: row.created_at,
+        } satisfies RecoveryAttribution)
       }
     }
   }

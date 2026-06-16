@@ -4,7 +4,7 @@ import { db, notifyChanged, uuid, loadSampleData } from './db'
 import { createRecoveryAttempt, nextRecoveryAt, nextRecoveryStage } from './recovery'
 import { scheduleBackgroundSync, syncPendingQueue } from './sync'
 import { getActiveSession, getTenantId } from './tenant'
-import { isPaywallBlocked, type PlanType } from './plan-limits'
+
 import { trackEvent, events } from './analytics'
 import { triggerWhatsAppNotification, triggerPushNotification } from './automation'
 import type { RecoveryAttempt } from './types'
@@ -12,6 +12,7 @@ import type {
   Activity,
   BillzoSnapshot,
   Customer,
+  CustomerPromise,
   Invoice,
   InvoiceItem,
   InventoryMovement,
@@ -32,8 +33,6 @@ export interface ActionResult<T = void> {
   success: boolean
   data?: T extends void ? never : T
   error?: string
-  blocked?: 'paywall'
-  blockType?: 'invoice' | 'reminder'
 }
 
 function getSession() {
@@ -72,37 +71,6 @@ function enqueue(entity: QueueItem['entity'], entityId: string, action: QueueIte
     idempotencyKey,
     conflictPolicy: entity === 'payment' || entity === 'whatsapp_event' ? 'server_authority' : 'latest_write_wins',
   })
-}
-
-export async function checkPaywallAccess(action: 'invoice' | 'reminder'): Promise<ActionResult> {
-  const tenantId = getTenantIdLocal()
-  if (!tenantId) {
-    return { success: true }
-  }
-
-  try {
-    const tenant = await db().tenants.get(tenantId)
-    if (!tenant) {
-      return { success: true }
-    }
-
-    const plan = (tenant.plan || 'starter') as PlanType
-    const paywall = isPaywallBlocked(tenant.invoiceCount || 0, tenant.reminderCount || 0, plan)
-
-    if (paywall.blocked && paywall.type) {
-      return {
-        success: false,
-        blocked: 'paywall',
-        blockType: paywall.type,
-        error: `You've reached your ${paywall.type} limit. Upgrade to Pro for unlimited access.`,
-      }
-    }
-
-    return { success: true }
-  } catch (error) {
-    console.error('Paywall check failed:', error)
-    return { success: false, error: 'Paywall check failed. Please try again.', blocked: 'paywall' }
-  }
 }
 
 export async function ensureBillzoReady() {
@@ -152,7 +120,7 @@ export async function getBillzoState() {
 
   const snapshot: BillzoSnapshot = {
     pendingAmount: invoices.filter((i) => i.status !== 'paid').reduce((sum, i) => sum + i.total - i.paidAmount, 0),
-    overdueCount: invoices.filter((i) => i.status === 'overdue').length,
+    overdueCount: invoices.filter((i) => i.status !== 'paid' && new Date(i.dueAt) < new Date()).length,
     lowStockCount: products.filter((p) => p.stock <= p.lowStockAt).length,
     collectedToday: payments
       .filter((payment) => payment.status === 'success' && payment.createdAt.startsWith(todayKey()))
@@ -184,11 +152,6 @@ export async function getBillzoState() {
 export async function createQuickInvoice(customer: Customer, product: Product, qty = 1): Promise<ActionResult<InvoiceWithItems | undefined>> {
   if (!product) {
     return { success: false, error: 'No products found. Please add a product first.' }
-  }
-
-  const paywallCheck = await checkPaywallAccess('invoice')
-  if (!paywallCheck.success && paywallCheck.blocked === 'paywall') {
-    return { success: false, error: paywallCheck.error, blocked: 'paywall', blockType: paywallCheck.blockType }
   }
 
   const session = getSession()
@@ -260,12 +223,6 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
         await db().products.update(product.id, { stock: stockAfter, updatedAt: current })
         await db().customers.update(customer.id, { lastUsedAt: current, invoiceCount: (customer.invoiceCount || 0) + 1, updatedAt: current })
         await db().inventoryMovements.add(movement)
-        if (tenantId && currentTenant) {
-          await db().tenants.update(tenantId, {
-            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
-            updatedAt: current,
-          })
-        }
         await enqueue('invoice', invoice.id, 'upsert', invoice)
         await enqueue('invoice_item', item.id, 'upsert', item)
         await enqueue('product', product.id, 'upsert', { ...latestProduct, stock: stockAfter, updatedAt: current })
@@ -306,7 +263,7 @@ export async function repeatLastInvoice(): Promise<ActionResult> {
 
   const result = await createQuickInvoice(customer, product, last?.items[0]?.qty || 1)
   if (!result.success) {
-    return { success: false, error: result.error, blocked: result.blocked, blockType: result.blockType }
+    return { success: false, error: result.error }
   }
   return { success: true }
 }
@@ -353,11 +310,6 @@ export async function markPaid(invoice: Invoice, amount = invoice.total - invoic
 }
 
 export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
-  const paywallCheck = await checkPaywallAccess('reminder')
-  if (!paywallCheck.success && paywallCheck.blocked === 'paywall') {
-    return paywallCheck
-  }
-
   const current = now()
   let attempt: RecoveryAttempt
 
@@ -376,11 +328,16 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
     id: uuid(),
     tenantId: invoice.tenantId,
     invoiceId: invoice.id,
+    customerId: invoice.customerId,
     recoveryAttemptId: attempt.id,
     providerMessageId: `wamid.test.${attempt.id}`,
     status: 'sent' as const,
+    direction: 'outbound' as const,
+    messageType: 'reminder',
+    reminderStage: invoice.recoveryStage,
     occurredAt: current,
     createdAt: current,
+    updatedAt: current,
   }
   const nextStage = nextRecoveryStage(invoice.recoveryStage)
   const nextAt = nextRecoveryAt(invoice.recoveryStage, 'sent')
@@ -403,12 +360,6 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
           syncStatus: 'pending',
           version: invoice.version + 1,
         })
-        if (tenantId && currentTenant) {
-          await db().tenants.update(tenantId, {
-            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
-            updatedAt: current,
-          })
-        }
         await enqueue('recovery_attempt', attempt.id, 'send_whatsapp', attempt)
         await enqueue('whatsapp_event', event.id, 'upsert', event)
         await log(`WhatsApp sent to ${invoice.customerName}`, invoice.total - invoice.paidAmount, 'Collect')
@@ -469,15 +420,11 @@ export async function handlePOSInvoice(
   cart: POSCartItem[],
   customerName: string,
   customerPhone: string,
-  method: 'upi' | 'cash' | 'udhar'
+  method: 'upi' | 'cash' | 'udhar',
+  customerId?: string
 ): Promise<ActionResult> {
   if (cart.length === 0) {
     return { success: false, error: 'Cart is empty. Add items before billing.' }
-  }
-
-  const paywallCheck = await checkPaywallAccess('invoice')
-  if (!paywallCheck.success && paywallCheck.blocked === 'paywall') {
-    return { success: false, error: paywallCheck.error, blocked: 'paywall', blockType: paywallCheck.blockType }
   }
 
   const session = getSession()
@@ -499,7 +446,7 @@ export async function handlePOSInvoice(
   const invoice: Invoice & { paymentMode?: string } = {
     id: invoiceId,
     tenantId: session.tenantId,
-    customerId: '',
+    customerId: customerId || '',
     customerName: customerName || 'Walk-in Customer',
     customerPhone: customerPhone || '',
     total,
@@ -565,13 +512,18 @@ export async function handlePOSInvoice(
           await db().payments.add(payment)
         }
 
+        const allowNegative = currentTenant?.allowNegativeStock !== false
+
         for (const cartItem of cart) {
           const latestProduct = await db().products.get(cartItem.id)
           if (!latestProduct) {
             throw new Error(`${cartItem.name} is no longer available.`)
           }
-          if (latestProduct.stock < cartItem.qty) {
+          if (!allowNegative && latestProduct.stock < cartItem.qty) {
             throw new Error(`Not enough stock for ${latestProduct.name}. Only ${latestProduct.stock} left.`)
+          }
+          if (latestProduct.stock < cartItem.qty) {
+            console.warn(`[POS] Selling ${cartItem.name} despite low stock (${latestProduct.stock} < ${cartItem.qty})`)
           }
 
           const movement: InventoryMovement = {
@@ -593,7 +545,6 @@ export async function handlePOSInvoice(
 
         if (tenantId && currentTenant) {
           await db().tenants.update(tenantId, {
-            invoiceCount: (currentTenant.invoiceCount || 0) + 1,
             invoiceNumberCounter: nextCounter,
             updatedAt: current,
           })
@@ -662,8 +613,69 @@ export async function handlePOSInvoice(
 
     return { success: true, data: { ...invoice, items } as any }
   } catch (error) {
-    console.error('Failed to create POS invoice:', error)
-    return { success: false, error: 'Failed to create invoice. Please try again.' }
+    const msg = error instanceof Error ? error.message : 'Failed to create invoice. Please try again.'
+    console.error('Failed to create POS invoice:', msg)
+    return { success: false, error: msg }
+  }
+}
+
+export async function recordPromise(
+  customerId: string,
+  invoiceIds: string[],
+  amount: number,
+  dueDate: string,
+  note?: string,
+): Promise<ActionResult> {
+  const current = now()
+  const tenantId = getTenantIdLocal()
+  if (!tenantId) return { success: false, error: 'Tenant not found. Please login again.' }
+
+  const promise: CustomerPromise = {
+    id: uuid(),
+    tenantId,
+    customerId,
+    invoiceIds,
+    amount,
+    dueDate,
+    status: 'active',
+    note,
+    createdAt: current,
+    updatedAt: current,
+  }
+
+  try {
+    await db().transaction('rw', [db().promises, db().queue, db().activity], async () => {
+      await db().promises.add(promise)
+      await enqueue('promise', promise.id, 'upsert', promise)
+      await log(`Promise recorded: ₹${amount} by ${dueDate}`, amount, 'Collect')
+    })
+    notifyChanged()
+    scheduleBackgroundSync()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to record promise:', error)
+    return { success: false, error: 'Failed to record promise. Please try again.' }
+  }
+}
+
+export async function fulfillPromise(promiseId: string): Promise<ActionResult> {
+  const current = now()
+  try {
+    await db().transaction('rw', [db().promises, db().queue, db().activity], async () => {
+      await db().promises.update(promiseId, {
+        status: 'fulfilled',
+        fulfilledAt: current,
+        updatedAt: current,
+      })
+      await enqueue('promise', promiseId, 'upsert', { status: 'fulfilled' })
+      await log('Promise fulfilled', undefined, undefined)
+    })
+    notifyChanged()
+    scheduleBackgroundSync()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to fulfill promise:', error)
+    return { success: false, error: 'Failed to fulfill promise.' }
   }
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/billzo/db'
 import { getTokenFromRequest, verifyAccessToken } from '@/lib/billzo/auth-jwt'
-import { getLimits, type PlanType } from '@/lib/billzo/plan-limits'
+import { getPlan, type PlanType } from '@/lib/billzo/plan-limits'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json(
         { state: 'UNAUTHORIZED', error: 'User not authenticated' },
-        { status: 401 }
+        { status: 401 },
       )
     }
 
@@ -26,19 +26,13 @@ export async function GET(request: NextRequest) {
     if (!tenant) {
       return NextResponse.json({
         state: 'NO_TENANT',
-        usage: { invoices: 0, reminders: 0 },
-        limits: getLimits('starter'),
-        paywall: { blocked: false, upgradeNeeded: false },
+        plan: 'starter',
       })
     }
 
-    const plan = (tenant.plan || 'starter') as PlanType
-    const limits = getLimits(plan)
+    const plan = getPlan(tenant.plan)
     const invoiceCount = tenant.invoiceCount || 0
     const reminderCount = tenant.reminderCount || 0
-
-    const invoiceBlocked = invoiceCount >= limits.invoices && limits.invoices !== Infinity
-    const reminderBlocked = reminderCount >= limits.reminders && limits.reminders !== Infinity
 
     const hasUsedProduct = invoiceCount > 0 || reminderCount > 0
 
@@ -50,26 +44,13 @@ export async function GET(request: NextRequest) {
         plan,
         phone: tenant.phone || '',
       },
-      usage: {
-        invoices: invoiceCount,
-        reminders: reminderCount,
-      },
-      limits: {
-        invoices: limits.invoices === Infinity ? 'unlimited' : limits.invoices,
-        reminders: limits.reminders === Infinity ? 'unlimited' : limits.reminders,
-        autoRecovery: limits.autoRecovery,
-      },
-      paywall: {
-        blocked: invoiceBlocked || reminderBlocked,
-        type: invoiceBlocked ? 'invoice' : reminderBlocked ? 'reminder' : undefined,
-        upgradeNeeded: invoiceBlocked || reminderBlocked,
-      },
+      plan,
     })
   } catch (error) {
     console.error('Onboarding check error:', error)
     return NextResponse.json(
-      { state: 'NO_TENANT', error: 'Server error - redirecting to onboarding', usage: { invoices: 0, reminders: 0 }, limits: getLimits('starter'), paywall: { blocked: false, upgradeNeeded: false } },
-      { status: 200 }
+      { state: 'NO_TENANT', plan: 'starter', error: 'Server error' },
+      { status: 200 },
     )
   }
 }

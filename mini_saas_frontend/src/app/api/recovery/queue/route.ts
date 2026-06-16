@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { buildQueueItems } from '@/lib/recovery/queue-service'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
+import { fetchPriorityCases } from '@/lib/recovery/priority-query'
+import { requireFeature } from '@/lib/auth/feature-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +34,12 @@ const zeroSummary = () => ({
   totalCustomers: 0,
   vipCustomers: 0,
   blockedRemindersToday: 0,
+  // NEW fields
+  stuckMoneyTotal: 0,
+  customersNeedingAction: 0,
+  collectedAfterFollowup: 0,
+  casesResolvedThisMonth: 0,
+  priorityCases: [],
 })
 
 export async function GET(request: NextRequest) {
@@ -38,6 +47,45 @@ export async function GET(request: NextRequest) {
     const auth = await verifyRequest(request)
     if (auth.response) return auth.response
     const { tenantId } = auth
+
+    // Feature gate — paid plan gets full queue, starter gets preview
+    const gate = await requireFeature(tenantId!, 'recovery_queue', 'GET')
+    if (!gate.allowed) {
+      const { data: previewData } = await supabaseAdmin
+        .from('invoices')
+        .select('outstanding_amount, due_at, customer_id, customers!inner(customer_name)')
+        .eq('tenant_id', tenantId!)
+        .gt('outstanding_amount', 0)
+        .order('due_at', { ascending: true })
+
+      const totalOverdue = (previewData || []).reduce(
+        (s: number, r: any) => s + (parseFloat(r.outstanding_amount) || 0), 0,
+      )
+      const overdueCount = (previewData || []).length
+      const now = new Date()
+      const oldestDue = (previewData || []).reduce((oldest: number, r: any) => {
+        const d = r.due_at ? new Date(r.due_at).getTime() : now.getTime()
+        return d < oldest ? d : oldest
+      }, now.getTime())
+
+      const samples = (previewData || []).slice(0, 3).map((r: any, i: number) => ({
+        customer: `Customer ${String.fromCharCode(65 + i)}`,
+        amount: parseFloat(r.outstanding_amount) || 0,
+        daysOverdue: r.due_at
+          ? Math.floor((now.getTime() - new Date(r.due_at).getTime()) / (1000 * 60 * 60 * 24))
+          : 0,
+      }))
+
+      return NextResponse.json({
+        access: 'preview',
+        data: {
+          totalOverdue,
+          overdueCount,
+          oldestDueDays: Math.floor((now.getTime() - oldestDue) / (1000 * 60 * 60 * 24)),
+          samples,
+        },
+      })
+    }
 
     const supabase = getSupabase()
     if (!supabase) {
@@ -53,6 +101,7 @@ export async function GET(request: NextRequest) {
     // ── Run all Supabase queries in parallel ──
     const [
       activeCasesRes,
+      unpaidInvoicesRes,
       attributedRes,
       allPaymentsRes,
       salesRes,
@@ -64,11 +113,17 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       supabase
         .from('recovery_cases')
-        .select(`*, customers(customer_name, phone, customer_tier)`)
+        .select(`*, customers(id, customer_name, phone, customer_tier)`)
         .eq('tenant_id', tenantId)
         .gt('total_outstanding', 0)
         .order('attention_score', { ascending: false })
         .limit(50),
+      supabase
+        .from('invoices')
+        .select('*, customers(id, customer_name, phone, customer_tier)')
+        .eq('tenant_id', tenantId)
+        .in('status', ['unpaid', 'overdue', 'partial'])
+        .order('created_at', { ascending: false }),
       supabase
         .from('recovery_attributions')
         .select('amount, attributed_amount, created_at')
@@ -116,11 +171,45 @@ export async function GET(request: NextRequest) {
 
     // ── Process results ──
     const activeCases = activeCasesRes.data || []
-    if (activeCasesRes.error) {
-      console.warn('[RecoveryQueue] Failed to fetch active cases:', activeCasesRes.error.message)
+    const rawInvoices = unpaidInvoicesRes.data || []
+    
+    // Synthesize cases for customers who have unpaid invoices but NO active recovery_case
+    const existingCustIds = new Set(activeCases.map(c => c.customer_id))
+    const synthesizedCases: any[] = []
+    
+    // Group raw invoices by customer
+    const groupedInvoices = new Map<string, any[]>()
+    for (const inv of rawInvoices) {
+      if (!groupedInvoices.has(inv.customer_id)) groupedInvoices.set(inv.customer_id, [])
+      groupedInvoices.get(inv.customer_id)!.push(inv)
+    }
+    
+    for (const [custId, invs] of groupedInvoices.entries()) {
+      if (!existingCustIds.has(custId)) {
+        const first = invs[0]
+        const total = invs.reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
+        const overdue = invs.filter(i => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+          .reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
+        
+        synthesizedCases.push({
+          id: `virtual-${custId}`,
+          tenant_id: tenantId,
+          customer_id: custId,
+          status: 'open',
+          total_outstanding: total,
+          total_overdue: overdue,
+          recovery_state_v2: overdue > 0 ? 'overdue' : 'active',
+          engagement_state_v2: 'unseen',
+          reminder_count: invs.reduce((s, i) => s + (i.reminder_count || 0), 0),
+          last_activity_at: first.created_at,
+          attention_score: overdue > 0 ? 50 : 10,
+          customers: first.customers,
+        })
+      }
     }
 
-    const queue = buildQueueItems(activeCases)
+    const allCases = [...activeCases, ...synthesizedCases]
+    const queue = buildQueueItems(allCases)
 
     // ── Attribution metrics ──
     const attributedAmounts = { today: 0, week: 0, month: 0, total: 0 }
@@ -167,18 +256,53 @@ export async function GET(request: NextRequest) {
       occurredAt: e.occurred_at,
     }))
 
+    // ── NEW: Fetch priority cases ──
+    const priorityCases = await fetchPriorityCases(tenantId!, 5)
+
     // ── Summary ──
-    const outstanding = activeCases.reduce(
+    const outstanding = allCases.reduce(
       (s: number, c: any) => s + (parseFloat(c.total_outstanding) || 0), 0
     )
 
-    const dueToday = activeCases.filter((c: any) => {
+    const stuckMoneyTotal = allCases.reduce(
+      (s: number, c: any) => s + (parseFloat(c.total_overdue) || 0), 0
+    )
+
+    const customersNeedingAction = allCases.filter((c: any) => 
+      ['send_reminder', 'call', 'follow_up_call'].includes(c.next_action_type)
+    ).length
+
+    const dueToday = allCases.filter((c: any) => {
       if (!c.promise_to_pay_date) return false
       const d = new Date(c.promise_to_pay_date)
       return d <= now
     }).reduce((s: number, c: any) => s + (parseFloat(c.total_overdue) || 0), 0)
 
+    // Calculate collected after followup (payments where case had reminders)
+    const { data: followupPayments } = await supabaseAdmin
+      .from('payments')
+      .select('amount')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'paid')
+      .gte('created_at', fmt(monthStart))
+
+    let collectedAfterFollowup = 0
+    if (followupPayments) {
+      const caseIds = allCases.map(c => c.id).filter(id => !id.startsWith('virtual-'))
+      // This is approximate - would need exact attribution for precision
+      collectedAfterFollowup = followupPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+    }
+
+    // Cases resolved this month
+    const { count: casesResolvedThisMonth } = await supabaseAdmin
+      .from('recovery_cases')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('recovery_state_v2', 'recovered')
+      .gte('updated_at', fmt(monthStart))
+
     return NextResponse.json({
+      access: 'full',
       items: queue.items,
       recoveredToday: attributedAmounts.today,
       recentEvents,
@@ -199,6 +323,26 @@ export async function GET(request: NextRequest) {
         totalCustomers: totalCustomers || 0,
         vipCustomers: vipCustomers || 0,
         blockedRemindersToday,
+        // NEW fields
+        stuckMoneyTotal,
+        customersNeedingAction,
+        collectedAfterFollowup,
+        casesResolvedThisMonth: casesResolvedThisMonth || 0,
+        priorityCases: priorityCases.map(pc => ({
+          caseId: pc.caseId,
+          customerId: pc.customerId,
+          customerName: pc.customerName,
+          phone: pc.phone,
+          totalOverdue: pc.totalOverdue,
+          oldestOverdueDays: pc.oldestOverdueDays,
+          attentionScore: pc.attentionScore,
+          nextActionType: pc.nextActionType,
+          promiseToPayDate: pc.promiseToPayDate,
+          ignoredReminders: pc.ignoredReminders,
+          brokenPromises: pc.brokenPromises,
+          openInvoiceCount: pc.openInvoiceCount,
+          automationMode: pc.automationMode,
+        })),
       },
     })
   } catch (err: any) {

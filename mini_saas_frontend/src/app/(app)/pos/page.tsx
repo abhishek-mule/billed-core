@@ -1,23 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2, Package } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2, Package, Phone } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
-import { getUsageLimits } from "@/lib/billzo/usage";
-import { PaywallModal } from "@/components/billzo/PaywallModal";
+
 import { downloadInvoicePDF, getWhatsAppShareLink } from "@/lib/billzo/pdf";
-import { BarcodeScanner } from "@/components/billzo/BarcodeScanner";
+// Barcode scanning removed in V2
 import { EmptyState } from '@/components/billzo/EmptyState';
-import { handlePOSInvoice } from "@/lib/billzo/actions";
+import { handlePOSInvoice, scheduleBackgroundSync } from "@/lib/billzo/actions";
 import { retryProductSync } from "@/lib/billzo/products-service";
 import { useSyncHealth } from "@/lib/billzo/sync-health";
 import { useLiveQueryState } from "@/lib/billzo/use-live-query";
 import { toast } from "sonner";
 import { formatINR } from "@/lib/utils";
 import { getCookie } from "@/lib/cookies";
+import type { POSSuccessResult } from "@/lib/billzo/api-types";
+import type { Product, Tenant } from "@/lib/billzo/types";
 
 type CartItem = {
   id: string;
@@ -33,20 +34,22 @@ type CartItem = {
 
 export default function POSPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<string>("Walk-in Customer");
+  const [customerId, setCustomerId] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPay, setShowPay] = useState(false);
-  const [success, setSuccess] = useState<any>(null);
-  const [usageLimits, setUsageLimits] = useState<any>(null);
-  const [showPaywall, setShowPaywall] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  const [success, setSuccess] = useState<POSSuccessResult | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
-  const [usageLoading, setUsageLoading] = useState(true);
-  const [tenantData, setTenantData] = useState<any>(null);
+  const [tenantData, setTenantData] = useState<Tenant | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const activeTenantId = getTenantId();
@@ -56,38 +59,15 @@ export default function POSPage() {
     }
 
     setTenantId(activeTenantId);
-    db().tenants.get(activeTenantId).then(t => setTenantData(t));
+    db().tenants.get(activeTenantId).then(t => setTenantData(t ?? null));
   }, []);
-
-  useEffect(() => {
-    if (!tenantId) return;
-
-    let active = true;
-
-    const loadUsage = async () => {
-      setUsageLoading(true);
-      try {
-        const usage = await getUsageLimits(tenantId);
-        if (active) setUsageLimits(usage);
-      } catch (error) {
-        console.error("Failed to load usage:", error);
-      } finally {
-        if (active) setUsageLoading(false);
-      }
-    };
-
-    loadUsage();
-    return () => {
-      active = false;
-    };
-  }, [tenantId]);
 
   const { data: products, loading: productsLoading, error: productsError } = useLiveQueryState<any[]>(
     async () => {
       if (!tenantId) return [];
       return db().products.where("tenantId").equals(tenantId).toArray();
     },
-    [tenantId],
+    [tenantId, retryCount],
     [],
   );
   const { data: customers, loading: customersLoading, error: customersError } = useLiveQueryState<any[]>(
@@ -95,11 +75,25 @@ export default function POSPage() {
       if (!tenantId) return [];
       return db().customers.where("tenantId").equals(tenantId).toArray();
     },
-    [tenantId],
+    [tenantId, retryCount],
     [],
   );
   const { data: syncHealth } = useSyncHealth(tenantId);
-  const loading = productsLoading || customersLoading || usageLoading;
+
+  // Auto-select customer from URL param
+  useEffect(() => {
+    const customerId = searchParams.get('customerId')
+    if (customerId && customers.length > 0) {
+      const match = customers.find((c: any) => c.id === customerId)
+      if (match) {
+        setCustomer(match.name)
+        setCustomerId(match.id)
+        setCustomerPhone(match.phone?.replace(/\s/g, '') || '')
+      }
+    }
+  }, [searchParams, customers])
+
+  const loading = productsLoading || customersLoading;
   const loadError = productsError || customersError;
 
   const filtered = useMemo(
@@ -117,7 +111,7 @@ export default function POSPage() {
   const tax = itemTaxDetails.reduce((s, i) => s + i.gstAmount, 0);
   const total = totalMrp;
 
-  const addToCart = (p: any) => {
+  const addToCart = (p: Product) => {
     setCart((c) => {
       const ex = c.find((i) => i.id === p.id);
       if (ex) return c.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
@@ -139,38 +133,63 @@ export default function POSPage() {
   };
 
   const handlePay = async (method: "upi" | "cash" | "udhar") => {
+    if (submitting) return;
+    setSubmitting(true);
     setShowPay(false);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
-    console.log('[POS] handlePay called:', { method, cartItems: cart.length, customer, customerPhone, tenantId })
-
-    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method);
-
-    console.log('[POS] handlePOSInvoice result:', result)
+    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId);
 
     if (!result.success) {
-      if (result.blocked === 'paywall') {
-        setShowPaywall(true);
-        return;
-      }
-      console.error('POS invoice failed:', result.error);
+      setSubmitting(false);
+      toast.error(result.error || "Failed to create invoice", {
+        description: "Please check stock levels or try again.",
+        duration: 4000,
+      });
       return;
     }
 
-    const inv: any = {
-      id: (result.data as any)?.id,
-      number: (result.data as any)?.invoiceNumber || (result.data as any)?.id?.slice(0, 8).toUpperCase(),
+    const invoiceId = (result.data as any)?.id;
+    const invoiceTotal = Math.round(totalMrp);
+
+    // Immediately create recovery case so it appears in the queue
+    if (invoiceId && customerId && method === 'udhar') {
+      fetch('/api/recovery/case', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoiceId,
+          customerId,
+          amount: invoiceTotal,
+          customerName: customer,
+          customerPhone: customerPhone || '',
+        }),
+      }).catch((err) => console.warn('[POS] Recovery case error:', err));
+    }
+
+    const inv: POSSuccessResult = {
+      id: invoiceId,
+      number: (result.data as any)?.invoiceNumber || invoiceId?.slice(0, 8).toUpperCase(),
       party: customer,
       partyPhone: customerPhone,
-      amount: Math.round(totalMrp),
+      amount: invoiceTotal,
       status: "synced",
       date: "Just now",
       method,
-      items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gst: c.gstRate })),
+      items: cart.map((c) => ({ name: c.name, hsn: c.hsn, qty: c.qty, price: c.salePrice, gstRate: c.gstRate })),
     };
-    const newLimits = await getUsageLimits(tenantId || getCookie('bz_tenant') || '');
-    if (newLimits) setUsageLimits(newLimits);
 
+    // Emit event so dashboard knows to refresh queue
+    window.dispatchEvent(new CustomEvent('billzo:invoice-created', {
+      detail: { invoiceId, method, amount: invoiceTotal }
+    }));
+
+    // Navigate to invoice communication screen
+    if (invoiceId) {
+      router.push(`/send/${invoiceId}`)
+      return
+    }
     setSuccess(inv);
   };
 
@@ -178,13 +197,27 @@ export default function POSPage() {
     setSuccess(null);
     setCart([]);
     setCustomer("Walk-in Customer");
+    setCustomerId("");
     setCustomerPhone(undefined);
+    setSubmitting(false);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
+        <div className="flex gap-2 mb-6">
+          <div className="flex-1 h-14 bg-muted animate-pulse rounded-xl" />
+          <div className="w-[88px] h-14 bg-muted animate-pulse rounded-xl" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border bg-card p-4 space-y-3">
+              <div className="h-4 bg-muted animate-pulse rounded w-3/4" />
+              <div className="h-8 bg-muted animate-pulse rounded w-1/2" />
+              <div className="h-3 bg-muted animate-pulse rounded w-1/4" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -192,8 +225,11 @@ export default function POSPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
       {loadError && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {loadError}
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+          <span>{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => setRetryCount(c => c + 1)}>
+            Retry
+          </Button>
         </div>
       )}
       {(syncHealth.failedCount > 0 || syncHealth.conflictCount > 0) && (
@@ -291,13 +327,29 @@ export default function POSPage() {
       {cart.length > 0 && (
         <div className="lg:hidden fixed bottom-20 left-0 right-0 z-30 px-4 animate-in slide-in-from-bottom">
           <button
-            onClick={() => setShowPay(true)}
+            onClick={() => setShowCart(true)}
             className="w-full rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground p-4 shadow-lg flex items-center justify-between"
           >
             <span className="text-sm font-medium">{cart.reduce((s, i) => s + i.qty, 0)} items</span>
             <span className="text-lg font-bold">{formatINR(total)} →</span>
           </button>
         </div>
+      )}
+
+      {showCart && (
+        <Sheet onClose={() => setShowCart(false)} title="Cart">
+          <CartPanel
+            cart={cart}
+            customer={customer}
+            onCustomer={() => setShowCustomer(true)}
+            onQty={updateQty}
+            onClear={() => { setCart([]); setShowCart(false) }}
+            subtotal={subtotal}
+            tax={tax}
+            total={total}
+            onPay={() => { setShowCart(false); setShowPay(true) }}
+          />
+        </Sheet>
       )}
 
       {showPay && (
@@ -312,7 +364,22 @@ export default function POSPage() {
                 <User className="h-3 w-3" /> {customer}
               </button>
             </div>
-            {([
+            <div className="flex items-center gap-2 rounded-xl border border-input px-4 py-2.5">
+              <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+              <input
+                value={customerPhone || ''}
+                onChange={e => setCustomerPhone(e.target.value)}
+                placeholder="Phone (optional — for WhatsApp invoice)"
+                type="tel"
+                className="flex-1 bg-transparent text-sm focus:outline-none"
+              />
+            </div>
+            {submitting ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Creating invoice...</span>
+              </div>
+            ) : ([
               { l: "UPI", desc: "QR / link to customer", method: "upi" as const },
               { l: "Cash", desc: "Mark as paid", method: "cash" as const },
               { l: "Udhar (Credit)", desc: "Add to ledger", method: "udhar" as const },
@@ -339,6 +406,7 @@ export default function POSPage() {
             <button
               onClick={() => {
                 setCustomer("Walk-in Customer");
+                setCustomerId("");
                 setCustomerPhone(undefined);
                 setShowCustomer(false);
               }}
@@ -352,6 +420,7 @@ export default function POSPage() {
                 key={p.id}
                 onClick={() => {
                   setCustomer(p.name);
+                  setCustomerId(p.id);
                   setCustomerPhone(p.phone.replace(/\s/g, ""));
                   setShowCustomer(false);
                 }}
@@ -382,17 +451,45 @@ export default function POSPage() {
               </div>
               <h2 className="mt-3 text-xl font-bold">Invoice {success.number}</h2>
               <div className="text-3xl font-bold mt-1">{formatINR(success.amount)}</div>
+              {success.method === 'udhar' && (
+                <div className="mt-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
+                  ✓ Added to recovery queue
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-border p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm font-medium truncate">{success.party}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <input
+                  value={success.partyPhone || ''}
+                  onChange={e => setSuccess({ ...success, partyPhone: e.target.value })}
+                  placeholder="Add phone for WhatsApp"
+                  type="tel"
+                  className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+                />
+              </div>
             </div>
 
             <div className="mt-4 flex gap-2">
               <button 
                 onClick={async () => {
-                  const itemsForPdf = (success.items || []).map((i: any) => {
+                  if (success.partyPhone) {
+                    await db().invoices.update(success.id, { customerPhone: success.partyPhone })
+                    scheduleBackgroundSync()
+                  }
+                  const itemsForPdf = (success.items || []).map((i) => {
                     const lineTotal = i.price * i.qty;
                     const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
-                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst, taxable };
+                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gstRate, taxable };
                   });
-                  const pdfSubtotal = itemsForPdf.reduce((s: number, i: any) => s + i.taxable, 0);
+                  const pdfSubtotal = itemsForPdf.reduce((s, i) => s + i.taxable, 0);
                   const pdfTax = success.amount - pdfSubtotal;
                   const pdfData = {
                     invoiceNumber: success.number,
@@ -422,14 +519,22 @@ export default function POSPage() {
                 </svg>
                 PDF
               </button>
-              <button 
-                onClick={() => {
-                  const itemsForPdf = (success.items || []).map((i: any) => {
+              <button
+                onClick={async () => {
+                  if (!success.partyPhone) {
+                    toast.error('Please enter a phone number to send via WhatsApp');
+                    return;
+                  }
+                  if (success.partyPhone) {
+                    await db().invoices.update(success.id, { customerPhone: success.partyPhone })
+                    scheduleBackgroundSync()
+                  }
+                  const itemsForPdf = (success.items || []).map((i) => {
                     const lineTotal = i.price * i.qty;
                     const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
-                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gst, taxable };
+                    return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gstRate, taxable };
                   });
-                  const pdfSubtotal = itemsForPdf.reduce((s: number, i: any) => s + i.taxable, 0);
+                  const pdfSubtotal = itemsForPdf.reduce((s, i) => s + i.taxable, 0);
                   const pdfTax = success.amount - pdfSubtotal;
                   const pdfData = {
                     invoiceNumber: success.number,
@@ -451,45 +556,37 @@ export default function POSPage() {
                   const waLink = getWhatsAppShareLink(pdfData)
                   window.open(waLink, '_blank')
                 }}
-                className="flex-1 rounded-xl bg-green-500 text-white py-3 text-sm font-medium hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors bg-green-500 text-white hover:bg-green-600"
               >
+
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.08 6.974 2.897a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                 </svg>
                 WhatsApp
               </button>
             </div>
-            <Button variant="outline" className="w-full mt-2" onClick={closeSuccess}>
-              New sale
-            </Button>
+            
+            <div className="mt-3 flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={closeSuccess}>
+                New sale
+              </Button>
+              {success.method === 'udhar' && (
+                <Button 
+                  className="flex-1"
+                  onClick={() => {
+                    closeSuccess();
+                    router.push('/dashboard');
+                  }}
+                >
+                  View Queue →
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      <PaywallModal
-        type="invoice"
-        open={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        currentCount={usageLimits?.currentInvoiceCount || 0}
-        limit={usageLimits?.invoiceLimit || 3}
-      />
-
-      {showScanner && (
-        <BarcodeScanner 
-          onClose={() => setShowScanner(false)} 
-          onScan={async (code) => {
-            setShowScanner(false);
-            const barcode = code.trim();
-            const product = products.find(p => (p.barcode || '').trim() === barcode);
-            if (product) {
-              addToCart(product);
-              setQuery("");
-            } else {
-              router.push(`/products/add?barcode=${encodeURIComponent(barcode)}`);
-            }
-          }} 
-        />
-      )}
+      {/* Barcode scanning removed in V2 */}
     </div>
   );
 }
@@ -551,12 +648,12 @@ function CartPanel({
               <div className="mt-2 flex items-center justify-between">
                 <div className="text-[11px] text-muted-foreground">{formatINR(i.salePrice)} × {i.qty}</div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => onQty(i.id, -1)} className="grid h-7 w-7 place-items-center rounded-md bg-secondary hover:bg-secondary/70">
-                    <Minus className="h-3 w-3" />
+                  <button onClick={() => onQty(i.id, -1)} className="grid h-9 w-9 place-items-center rounded-md bg-secondary hover:bg-secondary/70" aria-label={`Decrease quantity of ${i.name}`}>
+                    <Minus className="h-4 w-4" />
                   </button>
-                  <span className="w-7 text-center text-sm font-semibold">{i.qty}</span>
-                  <button onClick={() => onQty(i.id, 1)} className="grid h-7 w-7 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Plus className="h-3 w-3" />
+                  <span className="w-9 text-center text-sm font-semibold">{i.qty}</span>
+                  <button onClick={() => onQty(i.id, 1)} className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90" aria-label={`Increase quantity of ${i.name}`}>
+                    <Plus className="h-4 w-4" />
                   </button>
                 </div>
               </div>
@@ -596,7 +693,7 @@ const Sheet = ({ children, onClose, title }: { children: React.ReactNode; onClos
     >
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-lg font-bold">{title}</h3>
-        <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-secondary">
+        <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg hover:bg-secondary" aria-label="Close">
           <X className="h-4 w-4" />
         </button>
       </div>
