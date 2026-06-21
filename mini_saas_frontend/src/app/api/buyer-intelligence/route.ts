@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
           .where('tenantId')
           .equals(tenantId)
           .filter(c => {
-            if (phone && c.phone.replace(/\D/g, '') === phone.replace(/\D/g, '')) return true
+            if (phone && c.phone?.replace(/\D/g, '') === phone.replace(/\D/g, '')) return true
             if (gstin && c.gstin?.toUpperCase() === gstin.toUpperCase()) return true
             return false
           })

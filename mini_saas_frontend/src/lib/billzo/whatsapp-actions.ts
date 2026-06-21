@@ -97,7 +97,7 @@ export async function createInvoiceFromWhatsApp(
     try {
       const tenant = await db().tenants.get(tenantId)
       const pdfDoc = await generateInvoicePDF({
-        invoiceNumber: invoice.id.slice(0, 8).toUpperCase(),
+        invoiceNumber: invoice.invoiceNumber || invoice.id.slice(0, 8).toUpperCase(),
         date: invoice.createdAt,
         customerName: invoice.customerName,
         customerPhone: invoice.customerPhone,

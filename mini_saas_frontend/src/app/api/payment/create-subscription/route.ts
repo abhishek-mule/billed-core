@@ -2,9 +2,12 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
+import { verifyRequest, validateJsonBody, validateRequired, errorResponse, logApiAccess } from '@/lib/billzo/api-middleware'
 
 const PRO_PRICE = 29900 // ₹299 in paise
 const GROWTH_PRICE = 59900 // ₹599 in paise
+
+const VALID_PLANS = new Set(['pro', 'growth'])
 
 const razorpay = process.env.RAZORPAY_KEY_ID
   ? new Razorpay({
@@ -13,26 +16,29 @@ const razorpay = process.env.RAZORPAY_KEY_ID
     })
   : null
 
-interface PaymentRequest {
-  tenantId: string
-  tenantName?: string
-  plan: 'pro' | 'growth'
-  customerEmail?: string
-  customerPhone?: string
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const body: PaymentRequest = await request.json()
-    const { tenantId, tenantName, plan = 'pro', customerEmail, customerPhone } = body
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
+    const userId = auth.userId!
 
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Tenant ID is required' }, { status: 400 })
+    const bodyResult = await validateJsonBody(request)
+    if (bodyResult.response) return bodyResult.response
+    const body = bodyResult.data!
+
+    const { tenantName, plan = 'pro', customerEmail, customerPhone } = body as {
+      tenantName?: string
+      plan: 'pro' | 'growth'
+      customerEmail?: string
+      customerPhone?: string
     }
 
-    if (!['pro', 'growth'].includes(plan)) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+    if (!VALID_PLANS.has(plan)) {
+      return errorResponse(`Invalid plan. Must be one of: ${Array.from(VALID_PLANS).join(', ')}`, 400)
     }
+
+    logApiAccess(request, tenantId, userId, `payment.create_subscription:${plan}`)
 
     const amount = plan === 'growth' ? GROWTH_PRICE : PRO_PRICE
 

@@ -42,35 +42,49 @@ export async function writeOutboxEvent(options: OutboxWriteOptions): Promise<str
     entityId = null,
     payload = null,
     causationId = null,
-    correlationId = crypto.randomUUID(),
+    correlationId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `corr_${Date.now()}`,
     idempotencyKey = null,
     version = 1,
   } = options
 
-  const { data, error } = await supabaseAdmin
-    .from('outbox')
-    .insert({
-      type,
-      tenant_id: tenantId,
-      entity_id: entityId,
-      payload,
-      causation_id: causationId,
-      correlation_id: correlationId,
-      idempotency_key: idempotencyKey,
-      version,
-      status: 'pending',
-      next_attempt_at: new Date().toISOString(),
-      attempts: 0,
-    })
-    .select('id')
-    .single()
-
-  if (error) {
-    console.error('[Outbox] Failed to write event:', error)
-    throw new Error(`Outbox write failed: ${error.message}`)
+  if (!tenantId) {
+    throw new Error('tenantId is required')
+  }
+  if (!type) {
+    throw new Error('type is required')
   }
 
-  return data.id
+  const insertPayload = {
+    type,
+    tenant_id: tenantId,
+    entity_id: entityId,
+    payload,
+    causation_id: causationId,
+    correlation_id: correlationId,
+    idempotency_key: idempotencyKey,
+    version,
+    status: 'pending',
+    next_attempt_at: new Date().toISOString(),
+    attempts: 0,
+  }
+
+  console.log('[Outbox] Inserting event:', JSON.stringify(insertPayload, null, 2))
+
+  const { data, error } = await supabaseAdmin
+    .from('outbox')
+    .insert(insertPayload)
+    .select('id')
+
+  if (error) {
+    console.error('[Outbox] Failed to write event:', JSON.stringify(error, null, 2))
+    throw new Error(`Outbox write failed: ${error.message} (code: ${error.code})`)
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Outbox write failed: No data returned from insert')
+  }
+
+  return data[0].id
 }
 
 /**
@@ -118,11 +132,16 @@ export async function markEventProcessing(eventId: string): Promise<boolean> {
  * Mark an outbox event as completed.
  */
 export async function markEventCompleted(eventId: string): Promise<boolean> {
+  // Atomically increment attempts and mark completed
+  const { data: attempts, error: rpcError } = await supabaseAdmin.rpc('increment_attempts', { event_id: eventId })
+  if (rpcError) {
+    console.error('[Outbox] Failed to increment attempts:', rpcError)
+  }
   const { error } = await supabaseAdmin
     .from('outbox')
     .update({
       status: 'completed',
-      attempts: supabaseAdmin.rpc('increment_attempts') || 1,
+      attempts: typeof attempts === 'number' ? attempts : 1,
     })
     .eq('id', eventId)
 

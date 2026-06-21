@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { emitWhatsAppStatusUpdated } from '@/lib/billzo/events'
 import { generateEventSequence } from '@billzo/shared'
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' })
     }
 
+    // Sanitize: only allow safe characters to prevent filter injection
+    const safeId = String(providerMessageId).replace(/[^a-zA-Z0-9_\-\.]/g, '')
+
     const parsedStatus = parseGupshupStatus(rawStatus || '')
     const now = new Date().toISOString()
 
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabaseAdmin
       .from('whatsapp_events')
       .select('billzo_message_id, invoice_id, tenant_id')
-      .or(`provider_message_id.eq.${providerMessageId},id.eq.${providerMessageId}`)
+      .or(`provider_message_id.eq.${safeId},id.eq.${safeId}`)
       .limit(1)
 
     if (!existing || existing.length === 0) {
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
           status: parsedStatus,
           occurred_at: now,
           created_at: now,
-          provider_message_id: providerMessageId,
+          provider_message_id: safeId,
           provider: 'gupshup',
           direction: 'inbound',
           event_layer: 'transport',

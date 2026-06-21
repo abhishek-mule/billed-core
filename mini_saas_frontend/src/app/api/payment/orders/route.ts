@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
+import { verifyRequest, validateJsonBody, validateRequired, errorResponse, logApiAccess } from '@/lib/billzo/api-middleware'
 
 const razorpay = process.env.RAZORPAY_KEY_ID
   ? new Razorpay({
@@ -10,35 +11,41 @@ const razorpay = process.env.RAZORPAY_KEY_ID
     })
   : null
 
-interface CreateOrderRequest {
-  invoiceId: string
-  amount: number
-  customerName?: string
-  customerPhone?: string
-  tenantId?: string
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const body: CreateOrderRequest = await request.json()
-    const { invoiceId, amount, customerName, customerPhone, tenantId } = body
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
+    const userId = auth.userId!
 
-    if (!invoiceId) {
-      return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 })
+    const bodyResult = await validateJsonBody(request)
+    if (bodyResult.response) return bodyResult.response
+    const body = bodyResult.data!
+
+    const { invoiceId, amount, customerName, customerPhone } = body as {
+      invoiceId: string
+      amount: number
+      customerName?: string
+      customerPhone?: string
     }
 
-    if (!amount || amount < 1) {
-      return NextResponse.json({ error: 'Amount must be at least ₹1' }, { status: 400 })
+    const required = validateRequired(body, ['invoiceId', 'amount'])
+    if (!required.valid) return errorResponse('invoiceId and amount are required', 400)
+
+    if (!amount || amount < 1 || typeof amount !== 'number') {
+      return errorResponse('Amount must be at least ₹1', 400)
     }
 
     if (!razorpay) {
-      return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 503 })
+      return errorResponse('Payment gateway not configured', 503)
     }
 
     const amountInPaise = Math.round(amount * 100)
     if (amountInPaise < 100) {
-      return NextResponse.json({ error: 'Minimum amount is ₹1 (100 paise)' }, { status: 400 })
+      return errorResponse('Minimum amount is ₹1 (100 paise)', 400)
     }
+
+    logApiAccess(request, tenantId!, userId!, `payment.create_order:${invoiceId}`)
 
     const receipt = `inv_${invoiceId.slice(-12)}_${Date.now()}`
 

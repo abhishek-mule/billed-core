@@ -1,6 +1,9 @@
 const OTP_TTL_MS = 5 * 60 * 1000
 
 export function hashOTP(otp: string, phone: string): string {
+  if (typeof window !== 'undefined') {
+    throw new Error('hashOTP can only be called on the server')
+  }
   const crypto = require('crypto')
   return crypto.createHash('sha256').update(`${phone}:${otp}`).digest('hex')
 }
@@ -10,12 +13,25 @@ export function verifyOTPHash(
   providedOTP: string,
   phone: string
 ): boolean {
+  if (typeof window !== 'undefined') {
+    throw new Error('verifyOTPHash can only be called on the server')
+  }
   const hash = hashOTP(providedOTP, phone)
   return timingSafeEqual(storedHash, hash)
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
+  
+  if (typeof window === 'undefined') {
+    try {
+      const crypto = require('crypto')
+      return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+    } catch {
+      // Fallback to manual implementation
+    }
+  }
+
   let result = 0
   for (let i = 0; i < a.length; i++) {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i)

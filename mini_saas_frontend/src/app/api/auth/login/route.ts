@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +11,27 @@ export async function POST(request: NextRequest) {
 
     if (!email && !uid) {
       return NextResponse.json({ error: 'Missing credentials' }, { status: 400 })
+    }
+
+    // Verify user exists in database
+    if (uid) {
+      const { data: user, error: userErr } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('id', uid)
+        .maybeSingle()
+      if (userErr || !user) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
+    } else if (email) {
+      const { data: user, error: userErr } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
+      if (userErr || !user) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
     }
 
     const userId: string = uid || `phone_${phone}`

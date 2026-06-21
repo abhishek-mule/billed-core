@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,9 @@ async function callGemini(prompt: string): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+
     const req: MatchRequest = await request.json()
 
     if (!req.items || req.items.length === 0 || !req.catalog || req.catalog.length === 0) {

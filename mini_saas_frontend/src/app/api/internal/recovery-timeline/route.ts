@@ -3,12 +3,12 @@ import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-const INTERNAL_KEY = process.env.INTERNAL_API_KEY || 'dev-internal-key'
+const INTERNAL_KEY = process.env.INTERNAL_API_KEY
 
 async function verifyInternal(request: NextRequest): Promise<boolean> {
   const key = request.headers.get('x-internal-key')
   if (key === INTERNAL_KEY) return true
-  if (process.env.NODE_ENV !== 'production') return true
+  if (!process.env.INTERNAL_API_KEY && process.env.NODE_ENV !== 'production') return true
   return false
 }
 
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
     // Sort by timestamp, fall back to source priority for ties
     const sourceOrder: Record<string, number> = { transport: 0, orchestration: 1, behavior: 2, attribution: 3, system: 4 }
     allEvents.sort((a, b) => {
-      const ts = a.timestamp.localeCompare(b.timestamp)
+      const ts = (a.timestamp ?? '').localeCompare(b.timestamp ?? '')
       if (ts !== 0) return ts
       return (sourceOrder[a.source] ?? 5) - (sourceOrder[b.source] ?? 5)
     })

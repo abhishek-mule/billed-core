@@ -128,7 +128,7 @@ export async function retryProductSync(): Promise<number> {
     .queue
     .where('status')
     .anyOf('failed', 'conflict')
-    .filter((item) => item.entity === 'product' && item.nextAttemptAt <= due && item.attempts < 10)
+    .filter((item) => item.nextAttemptAt <= due && item.attempts < 10)
     .toArray()
 
   for (const item of failed) {

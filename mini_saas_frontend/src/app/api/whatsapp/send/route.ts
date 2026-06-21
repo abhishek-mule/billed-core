@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
+import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
 import { EventType } from '@billzo/shared'
 
 export const dynamic = 'force-dynamic'
@@ -11,14 +12,14 @@ export async function POST(request: NextRequest) {
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const { customerId, invoiceId, templateKey, vars, personalNote, clientCorrelationId } = body as {
+    const { customerId, customerPhone, invoiceId, templateKey, vars, personalNote, message } = body as {
       customerId?: string
+      customerPhone?: string
       invoiceId?: string
       templateKey?: string
       vars?: Record<string, string | number>
       message?: string
       personalNote?: string
-      sendWhatsAppDirect?: boolean
       clientCorrelationId?: string
     }
 
@@ -26,29 +27,64 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'customerId is required' }, { status: 400 })
     }
 
-    const eventId = await writeOutboxEvent({
-      type: EventType.SEND_MESSAGE_INTENDED,
-      tenantId,
-      entityId: invoiceId || null,
-      payload: {
-        customerId,
-        invoiceId: invoiceId || null,
-        templateKey: templateKey || null,
-        vars: vars || null,
-        personalNote: personalNote || null,
-        clientCorrelationId: clientCorrelationId || null,
-        message: body.message || null,
-      },
-      idempotencyKey: clientCorrelationId || null,
+    // Try immediate send
+    const result = await sendDirectWhatsApp(tenantId, customerId, message || '', {
+      invoiceId,
+      customerPhone,
+      templateKey: templateKey || null,
+      vars: vars || null,
+      personalNote: personalNote || null,
+      origin: 'manual',
     })
 
-    const response = NextResponse.json({
+    // Route by result
+    if (result.sentVia === 'baileys') {
+      await writeOutboxEvent({
+        type: EventType.SEND_MESSAGE_INTENDED,
+        tenantId,
+        entityId: invoiceId || null,
+        payload: {
+          customerId,
+          invoiceId: invoiceId || null,
+          templateKey: templateKey || null,
+          message: message || null,
+          personalNote: personalNote || null,
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: 'Reminder queued for delivery via WhatsApp',
+      })
+    }
+
+    if (!result.success) {
+      // Only write outbox for retry if there's a viable channel (Baileys or Gupshup)
+      if (result.sentVia !== 'none') {
+        await writeOutboxEvent({
+          type: EventType.SEND_MESSAGE_INTENDED,
+          tenantId,
+          entityId: invoiceId || null,
+          payload: {
+            customerId,
+            invoiceId: invoiceId || null,
+            templateKey: templateKey || null,
+            message: message || null,
+            personalNote: personalNote || null,
+          },
+        })
+      }
+
+      return NextResponse.json({
+        success: false,
+        error: result.error || 'Failed to send',
+      }, { status: 500 })
+    }
+
+    return NextResponse.json({
       success: true,
-      eventId,
-      message: 'Message queued for delivery',
+      message: 'Reminder sent via WhatsApp!',
     })
-
-    return response
   } catch (err: any) {
     console.error('[WhatsAppSend] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

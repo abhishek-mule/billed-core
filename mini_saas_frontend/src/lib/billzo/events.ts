@@ -54,6 +54,7 @@ export async function emitEvent(event: Omit<BillzoEvent, 'version'>): Promise<st
 export async function emitPaymentCompleted(params: {
   invoiceId: string
   tenantId: string
+  customerId: string
   amount: number
   paymentId?: string
   provider?: string
@@ -68,6 +69,7 @@ export async function emitPaymentCompleted(params: {
     tenantId: params.tenantId,
     entityId: params.invoiceId,
     payload: {
+      customerId: params.customerId,
       amount: params.amount,
       paymentId: params.paymentId,
       provider: params.provider,
@@ -122,6 +124,7 @@ export async function emitRecoveryReminderSent(params: {
 export async function emitRecoveryCompleted(params: {
   invoiceId: string
   tenantId: string
+  customerId: string
   amount: number
   reminderEventId?: string
   attributionType?: string
@@ -135,6 +138,7 @@ export async function emitRecoveryCompleted(params: {
     tenantId: params.tenantId,
     entityId: params.invoiceId,
     payload: {
+      customerId: params.customerId,
       amount: params.amount,
       reminderEventId: params.reminderEventId,
       attributionType: params.attributionType || 'last_touch',
@@ -154,6 +158,7 @@ export async function emitRecoveryCompleted(params: {
 export async function emitPaymentReconciled(params: {
   invoiceId: string
   tenantId: string
+  customerId: string
   amount: number
   provider: string
   providerPaymentId: string
@@ -167,6 +172,7 @@ export async function emitPaymentReconciled(params: {
     tenantId: params.tenantId,
     entityId: params.invoiceId,
     payload: {
+      customerId: params.customerId,
       amount: params.amount,
       provider: params.provider,
       providerPaymentId: params.providerPaymentId,

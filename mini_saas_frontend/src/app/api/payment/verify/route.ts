@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { submitIntent } from '@/lib/authority/transport'
 import { recordPayment } from '@/lib/billzo/record-payment'
 
@@ -13,12 +14,15 @@ interface VerifyRequest {
   invoiceId?: string
   amount?: number
   tenantId?: string
+  customerId?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
     const body: VerifyRequest = await request.json()
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount, tenantId } = body
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount, tenantId: bodyTenantId } = body
+    const tenantId = bodyTenantId || auth.tenantId
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json(
@@ -47,6 +51,17 @@ export async function POST(request: NextRequest) {
     if (invoiceId && tenantId) {
       const pmtAmount = amount || 0
 
+      // Resolve customerId — prefer explicit, fall back to invoice lookup
+      let resolvedCustomerId = body.customerId
+      if (!resolvedCustomerId) {
+        const { data: inv } = await supabaseAdmin
+          .from('invoices')
+          .select('customer_id')
+          .eq('id', invoiceId)
+          .single()
+        resolvedCustomerId = inv?.customer_id
+      }
+
       try {
         const intentResult = await submitIntent(
           {
@@ -73,6 +88,7 @@ export async function POST(request: NextRequest) {
         await recordPayment({
           tenantId,
           invoiceId,
+          customerId: resolvedCustomerId || '',
           amount: pmtAmount,
           source: 'razorpay',
           actor: 'customer',
@@ -89,6 +105,7 @@ export async function POST(request: NextRequest) {
           tenantId: tenantId || '',
           correlationId: razorpay_order_id,
           payload: {
+            customerId: resolvedCustomerId || '',
             amount: pmtAmount,
             provider: 'razorpay',
             providerPaymentId: razorpay_payment_id,

@@ -38,9 +38,11 @@ CREATE TABLE IF NOT EXISTS processed_jobs (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS recovery_attributions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id VARCHAR(255) NOT NULL,
   invoice_id UUID NOT NULL,
   payment_id UUID,
   reminder_event_id UUID,
+  amount DECIMAL NOT NULL DEFAULT 0,
   attribution_type VARCHAR DEFAULT 'last_touch',
   attribution_window_hours INT DEFAULT 48,
   confidence_score DECIMAL DEFAULT 1.0,

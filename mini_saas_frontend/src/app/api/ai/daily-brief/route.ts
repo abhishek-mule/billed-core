@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +61,7 @@ function fallbackBrief(summary: any): { headline: string; actions: BriefAction[]
 
 function cleanBrief(value: any, summary: any) {
   const fallback = fallbackBrief(summary)
-  const allowedPaths = new Set(['/dashboard', '/pos', '/products', '/reports', '/scan', '/invoices', '/purchases'])
+  const allowedPaths = new Set(['/dashboard', '/pos', '/products', '/reports', '/invoices', '/purchases'])
 
   const actions = Array.isArray(value?.actions) ? value.actions : []
   const cleanedActions = actions
@@ -83,6 +84,9 @@ function cleanBrief(value: any, summary: any) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+
     const summary = await request.json()
     const apiKey = process.env.GEMINI_API_KEY
 
@@ -100,7 +104,7 @@ Rules:
 - Do not mention AI, Gemini, or internal data.
 - Do not advise illegal, threatening, or harassing collection.
 - Return only valid JSON.
-- actionPath must be one of: /dashboard, /pos, /products, /reports, /scan, /invoices, /purchases.
+- actionPath must be one of: /dashboard, /pos, /products, /reports, /invoices, /purchases.
 
 Business summary JSON:
 ${JSON.stringify(summary)}

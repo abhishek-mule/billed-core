@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { createClient } from '@supabase/supabase-js'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { getOtp, deleteOtp, setSession, findSessionsByPhone } from '@/lib/billzo/auth-store'
 import { normalizePhoneE164, verifyOTPHash } from '@/lib/billzo/auth-utils'
@@ -56,6 +57,26 @@ export async function POST(request: NextRequest) {
       existingTenantId = existingWithTenant[0].tenantId || undefined
     } else {
       userId = `user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+    }
+
+    // Record login event
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        await supabase.from('login_events').insert({
+          user_id: userId,
+          email: null,
+          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          user_agent: request.headers.get('user-agent') || null,
+          success: true,
+        })
+      }
+    } catch (e) {
+      // Non-critical: don't break login flow
     }
 
     const sessionId = crypto.randomBytes(32).toString('hex')

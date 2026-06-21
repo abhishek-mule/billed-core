@@ -22,6 +22,24 @@ export async function POST(request: NextRequest) {
     const expiry = tenant.whatsappConfig?.paymentLinkExpiry || 7
     const expiryDate = new Date(Date.now() + expiry * 24 * 60 * 60 * 1000)
 
+    // If Razorpay isn't configured, return a mock link for local dev
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      const mockId = `plink_${Date.now()}`
+      const mockUrl = `${request.nextUrl.origin}/pay/${invoiceId}`
+      await db().invoices.update(invoiceId, {
+        paymentLinkId: mockId,
+        paymentLinkUrl: mockUrl,
+        paymentLinkExpiry: expiryDate.toISOString(),
+      })
+      return NextResponse.json({
+        id: mockId,
+        short_url: mockUrl,
+        url: mockUrl,
+        amount,
+        expiry: expiryDate.toISOString(),
+      })
+    }
+
     const payload = {
       amount: Math.round(amount * 100),
       currency: 'INR',

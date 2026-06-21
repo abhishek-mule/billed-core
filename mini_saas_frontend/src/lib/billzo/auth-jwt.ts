@@ -1,14 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET || require('crypto').randomBytes(32).toString('hex')
-
-function assertSecret() {
-  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+/**
+ * JWT_SECRET is read lazily so server restart without env var is caught
+ * at first token operation, not at module-parse time.
+ */
+function requireSecret(): string {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET
+  if (process.env.NODE_ENV === 'production') {
     throw new Error('[BillZo] JWT_SECRET env var is required in production')
   }
+  return 'dev-secret-do-not-use-in-production'
 }
+
+const HEADER_B64 = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+
 const ACCESS_COOKIE = 'bz_access'
 const REFRESH_COOKIE = 'bz_refresh'
+
+/** Create an HMAC-SHA256 signature for the signing input. */
+function sign(input: string): string {
+  return require('crypto')
+    .createHmac('sha256', requireSecret())
+    .update(input)
+    .digest('base64url')
+}
+
+/** Produce a standard 3‑segment JWT: header.payload.signature */
+function encodeJwt(payload: Record<string, unknown>): string {
+  const b64Payload = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const sig = sign(`${HEADER_B64}.${b64Payload}`)
+  return `${HEADER_B64}.${b64Payload}.${sig}`
+}
+
+/**
+ * Verify a JWT that may be either the legacy 2‑segment format
+ * (base64(payload).signature) or the standard 3‑segment format
+ * (header.payload.signature).
+ */
+function verifyToken<T>(token: string, expectedType: string): T | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length === 2) {
+      // ── Legacy 2‑segment format ──
+      const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
+      if (payload.type !== expectedType) return null
+      if (payload.exp < Math.floor(Date.now() / 1000)) return null
+      const expectedSig = sign(parts[0])
+      if (expectedSig !== parts[1]) return null
+      return payload as T
+    }
+    if (parts.length === 3) {
+      // ── Standard 3‑segment format ──
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+      if (payload.type !== expectedType) return null
+      if (payload.exp < Math.floor(Date.now() / 1000)) return null
+      const expectedSig = sign(`${parts[0]}.${parts[1]}`)
+      if (expectedSig !== parts[2]) return null
+      return payload as T
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ── Token creation (always produces standard 3‑segment JWTs) ──────────────
 
 export function createAccessToken(payload: {
   sessionId: string
@@ -17,38 +73,26 @@ export function createAccessToken(payload: {
   phone?: string
   email?: string
 }): string {
-  assertSecret()
   const now = Math.floor(Date.now() / 1000)
-  const data = {
+  return encodeJwt({
     ...payload,
     iat: now,
     exp: now + 14 * 24 * 3600,
     type: 'access',
-  }
-  const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')
-  const signature = require('crypto')
-    .createHmac('sha256', JWT_SECRET)
-    .update(base64Payload)
-    .digest('base64url')
-  return `${base64Payload}.${signature}`
+  })
 }
 
 export function createRefreshToken(payload: { sessionId: string; userId: string }): string {
-  assertSecret()
   const now = Math.floor(Date.now() / 1000)
-  const data = {
+  return encodeJwt({
     ...payload,
     iat: now,
     exp: now + 30 * 24 * 3600,
     type: 'refresh',
-  }
-  const base64Payload = Buffer.from(JSON.stringify(data)).toString('base64url')
-  const signature = require('crypto')
-    .createHmac('sha256', JWT_SECRET)
-    .update(base64Payload)
-    .digest('base64url')
-  return `${base64Payload}.${signature}`
+  })
 }
+
+// ── Server‑side verify (Node.js Buffer) ──────────────────────────────────
 
 export function verifyAccessToken(token: string): {
   sessionId: string
@@ -57,63 +101,27 @@ export function verifyAccessToken(token: string): {
   phone?: string
   email?: string
 } | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 2) return null
-    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
-    if (payload.type !== 'access') return null
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null
-    const expectedSig = require('crypto')
-      .createHmac('sha256', JWT_SECRET)
-      .update(parts[0])
-      .digest('base64url')
-    if (expectedSig !== parts[1]) return null
-    return {
-      sessionId: payload.sessionId,
-      userId: payload.userId,
-      tenantId: payload.tenantId,
-      phone: payload.phone,
-      email: payload.email,
-    }
-  } catch {
-    return null
-  }
+  return verifyToken(token, 'access')
 }
 
 export function verifyRefreshToken(token: string): { sessionId: string; userId: string } | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 2) return null
-    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString())
-    if (payload.type !== 'refresh') return null
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null
-    const expectedSig = require('crypto')
-      .createHmac('sha256', JWT_SECRET)
-      .update(parts[0])
-      .digest('base64url')
-    if (expectedSig !== parts[1]) return null
-    return { sessionId: payload.sessionId, userId: payload.userId }
-  } catch {
-    return null
-  }
+  return verifyToken(token, 'refresh')
 }
 
-async function signWithWebCrypto(payloadBase64Url: string): Promise<string | null> {
+// ── Edge‑runtime helpers (WebCrypto + atob) ──────────────────────────────
+
+async function signEdge(input: string): Promise<string | null> {
   try {
-    const secret = new TextEncoder().encode(JWT_SECRET)
+    const secret = new TextEncoder().encode(requireSecret())
     const key = await crypto.subtle.importKey(
       'raw',
       secret,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['sign']
+      ['sign'],
     )
-    const signature = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      new TextEncoder().encode(payloadBase64Url)
-    )
-    return uint8ArrayToBase64Url(new Uint8Array(signature))
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
+    return uint8ArrayToBase64Url(new Uint8Array(sig))
   } catch {
     return null
   }
@@ -137,6 +145,33 @@ function uint8ArrayToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
+async function verifyTokenEdge<T>(token: string, expectedType: string): Promise<T | null> {
+  try {
+    const parts = token.split('.')
+    if (parts.length === 2) {
+      // ── Legacy 2‑segment format ──
+      const payload = decodeBase64UrlJson<any>(parts[0])
+      if (!payload || payload.type !== expectedType) return null
+      if (payload.exp < Math.floor(Date.now() / 1000)) return null
+      const expectedSig = await signEdge(parts[0])
+      if (!expectedSig || expectedSig !== parts[1]) return null
+      return payload as T
+    }
+    if (parts.length === 3) {
+      // ── Standard 3‑segment format ──
+      const payload = decodeBase64UrlJson<any>(parts[1])
+      if (!payload || payload.type !== expectedType) return null
+      if (payload.exp < Math.floor(Date.now() / 1000)) return null
+      const expectedSig = await signEdge(`${parts[0]}.${parts[1]}`)
+      if (!expectedSig || expectedSig !== parts[2]) return null
+      return payload as T
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function verifyAccessTokenEdge(token: string): Promise<{
   sessionId: string
   userId: string
@@ -144,41 +179,11 @@ export async function verifyAccessTokenEdge(token: string): Promise<{
   phone?: string
   email?: string
 } | null> {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 2) return null
-    const payload = decodeBase64UrlJson<any>(parts[0])
-    if (!payload) return null
-    if (payload.type !== 'access') return null
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null
-    const expectedSig = await signWithWebCrypto(parts[0])
-    if (!expectedSig || expectedSig !== parts[1]) return null
-    return {
-      sessionId: payload.sessionId,
-      userId: payload.userId,
-      tenantId: payload.tenantId,
-      phone: payload.phone,
-      email: payload.email,
-    }
-  } catch {
-    return null
-  }
+  return verifyTokenEdge(token, 'access')
 }
 
 export async function verifyRefreshTokenEdge(token: string): Promise<{ sessionId: string; userId: string } | null> {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 2) return null
-    const payload = decodeBase64UrlJson<any>(parts[0])
-    if (!payload) return null
-    if (payload.type !== 'refresh') return null
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null
-    const expectedSig = await signWithWebCrypto(parts[0])
-    if (!expectedSig || expectedSig !== parts[1]) return null
-    return { sessionId: payload.sessionId, userId: payload.userId }
-  } catch {
-    return null
-  }
+  return verifyTokenEdge(token, 'refresh')
 }
 
 export function setAuthCookies(

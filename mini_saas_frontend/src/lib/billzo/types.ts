@@ -179,11 +179,13 @@ export type Invoice = {
   nextRecoveryAt: string
   lastWhatsAppStatus: WhatsAppStatus
   lastWhatsAppAt?: string
+  lastReminderAt?: string
   reminderCount: number
   pdfUrl: string
   paymentLinkId?: string
   paymentLinkUrl?: string
   paymentLinkExpiry?: string
+  paymentMode?: string
   isSnoozed?: boolean
   snoozeUntil?: string
   version: number
@@ -302,6 +304,37 @@ export type QueueItem = {
   lastError?: string
   idempotencyKey: string
   conflictPolicy: ConflictPolicy
+}
+
+export type RecoveryCase = {
+  id: string
+  tenantId: string
+  customerId: string
+  customerName?: string
+  totalOutstanding: number
+  totalOverdue: number
+  openInvoiceCount: number
+  overdueInvoiceCount: number
+  recoveryStateV2: string
+  engagementStateV2?: string
+  nextActionType?: string
+  nextActionDueAt?: string
+  attentionScore: number
+  lastActivityAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type RecoveryAttribution = {
+  id: string
+  tenantId: string
+  invoiceId?: string
+  paymentId?: string
+  amount: number
+  attributedAmount?: number
+  attributionType: string
+  confidenceScore: number
+  createdAt: string
 }
 
 export type Activity = {

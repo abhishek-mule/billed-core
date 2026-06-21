@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCookie } from '@/lib/cookies'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const tenantId = getCookie('bz_tenant')
+export async function GET(request: NextRequest) {
+  const tenantId = request.cookies.get('bz_tenant')?.value
   if (!tenantId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data, error } = await supabaseAdmin
     .from('messaging_channels')
-    .select('id, channel_type, provider, phone_number, display_name, connection_state, quality_score, delivery_success_rate, last_heartbeat_at, last_connected_at, is_active, created_at')
+    .select('id, channel_type, provider, phone_number, connection_state, quality_score, delivery_success_rate, last_heartbeat_at, last_connected_at, is_active, created_at')
     .eq('tenant_id', tenantId)
     .order('priority', { ascending: true })
 
@@ -24,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = getCookie('bz_tenant')
+  const tenantId = request.cookies.get('bz_tenant')?.value
   if (!tenantId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

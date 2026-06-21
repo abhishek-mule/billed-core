@@ -26,8 +26,10 @@ function getCookie(name: string): string | null {
 function decodeJwtPayload(token: string): Record<string, any> | null {
   try {
     const parts = token.split('.')
-    if (parts.length !== 2) return null
-    return JSON.parse(atob(parts[0]))
+    if (parts.length < 2) return null
+    // JWT payload is the second part (index 1)
+    const payload = parts[1]
+    return JSON.parse(atob(payload))
   } catch {
     return null
   }

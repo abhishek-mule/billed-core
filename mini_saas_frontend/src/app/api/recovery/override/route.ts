@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest, validateJsonBody, validateRequired, errorResponse } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -6,21 +7,22 @@ const WORKER_URL = process.env.WORKER_URL || 'http://localhost:10000'
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const { tenantId } = auth
 
-    const body = await request.json()
+    const bodyResult = await validateJsonBody(request)
+    if (bodyResult.response) return bodyResult.response
+    const body = bodyResult.data!
+
     const { invoiceId, reason, warningAcked } = body as {
       invoiceId: string
       reason?: string
       warningAcked?: boolean
     }
 
-    if (!invoiceId) {
-      return NextResponse.json({ error: 'invoiceId is required' }, { status: 400 })
-    }
+    const required = validateRequired(body, ['invoiceId'])
+    if (!required.valid) return errorResponse('invoiceId is required', 400)
 
     const workerRes = await fetch(`${WORKER_URL}/api/v1/recovery/override`, {
       method: 'POST',

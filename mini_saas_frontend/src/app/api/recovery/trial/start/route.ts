@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // The tenant is on a paid plan — no trial needed
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
-      .select('plan')
+      .select('plan, upi_id, gstin')
       .eq('id', tenantId)
       .single()
 
@@ -32,6 +32,16 @@ export async function GET(request: NextRequest) {
         totalOverdue: 0,
         message: 'Auto recovery is already active on your plan.',
       })
+    }
+
+    // Business verification gate: require UPI or GSTIN before recovery trial
+    const hasBusinessProof = tenant?.upi_id || tenant?.gstin
+    if (!hasBusinessProof) {
+      return NextResponse.json({
+        error: 'Please add your UPI ID or GSTIN in Settings to start recovery.',
+        eligibleCount: 0,
+        totalOverdue: 0,
+      }, { status: 400 })
     }
 
     // Eligible-customer query — expensive, runs only when user explicitly clicks

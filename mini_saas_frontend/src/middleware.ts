@@ -35,9 +35,15 @@ export async function middleware(request: NextRequest) {
     if (refreshed) return applyRoutingRules(refreshed, pathname, true, true, request.url)
   }
 
-  const response = NextResponse.next()
-  response.headers.set('x-user-id', userId || '')
-  response.headers.set('x-tenant-id', resolvedTenantId || tenantId || '')
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-user-id', userId || '')
+  requestHeaders.set('x-tenant-id', resolvedTenantId || tenantId || '')
+
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 
   return applyRoutingRules(response, pathname, !!userId, !!resolvedTenantId, request.url)
 }
@@ -46,7 +52,7 @@ function applyRoutingRules(response: NextResponse, pathname: string, hasAuth: bo
   const isAuthRoute = pathname.startsWith('/auth')
   const isAuthResolverRoute = pathname.startsWith('/auth/resolve')
   const isOnboardingRoute = pathname.startsWith('/onboarding')
-  const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/invoices') || pathname.startsWith('/parties') || pathname.startsWith('/settings') || pathname.startsWith('/reports') || pathname.startsWith('/pos') || pathname.startsWith('/scan') || pathname.startsWith('/pricing')
+  const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/invoices') || pathname.startsWith('/parties') || pathname.startsWith('/settings') || pathname.startsWith('/reports') || pathname.startsWith('/pos') || pathname.startsWith('/pricing') || pathname.startsWith('/more') || pathname.startsWith('/pulse') || pathname.startsWith('/cashflow') || pathname.startsWith('/products') || pathname.startsWith('/purchases') || pathname.startsWith('/recovery')
 
   if (DEBUG) {
     console.log(`[Middleware] Routing: path=${pathname}, hasAuth=${hasAuth}, hasTenant=${hasTenant}, isAuth=${isAuthRoute}, isAuthResolver=${isAuthResolverRoute}, isOnboarding=${isOnboardingRoute}, isApp=${isAppRoute}`)
@@ -123,5 +129,5 @@ async function tryRefresh(request: NextRequest, refreshToken: string): Promise<N
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth|api/events|auth/callback).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth|api/events|api/tenants|auth/callback).*)'],
 }

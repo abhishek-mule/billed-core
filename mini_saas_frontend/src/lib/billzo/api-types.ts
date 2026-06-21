@@ -86,6 +86,25 @@ export interface QueueApiSummary {
   totalCustomers: number
   vipCustomers: number
   blockedRemindersToday: number
+  stuckMoneyTotal: number
+  customersNeedingAction: number
+  collectedAfterFollowup: number
+  casesResolvedThisMonth: number
+  priorityCases: Array<{
+    caseId: string
+    customerId: string
+    customerName: string
+    phone: string
+    totalOverdue: number
+    oldestOverdueDays: number
+    attentionScore: number
+    nextActionType: string
+    promiseToPayDate: string | null
+    ignoredReminders: number
+    brokenPromises: number
+    openInvoiceCount: number
+    automationMode: 'full_auto' | 'manual' | 'muted'
+  }>
 }
 
 export interface RecentEvent {

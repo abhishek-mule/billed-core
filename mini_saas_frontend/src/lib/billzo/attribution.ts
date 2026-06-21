@@ -18,6 +18,7 @@ export interface AttributionResult {
 export async function attributeRecovery(params: {
   invoiceId: string
   tenantId: string
+  customerId?: string
   paymentId?: string
   paymentTimestamp: string
   attributionWindowHours?: number
@@ -25,6 +26,7 @@ export async function attributeRecovery(params: {
   const {
     invoiceId,
     tenantId,
+    customerId,
     paymentId,
     paymentTimestamp,
     attributionWindowHours = 48,
@@ -97,9 +99,11 @@ export async function attributeRecovery(params: {
   }
 
   // Emit recovery completed event
+  const resolvedCustomerId = customerId || (reminder.payload as Record<string, unknown> | null)?.customerId as string | undefined || ''
   await emitRecoveryCompleted({
     invoiceId,
     tenantId,
+    customerId: resolvedCustomerId,
     amount: 0, // Will be updated by caller
     reminderEventId: reminder.id,
     attributionType: 'last_touch',

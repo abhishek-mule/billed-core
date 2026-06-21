@@ -56,6 +56,30 @@ export function useContactImport() {
     error: null,
   })
 
+  const checkDuplicates = useCallback(async (contacts?: Contact[]) => {
+    const toCheck = contacts ?? state.contacts
+    if (toCheck.length === 0) return
+
+    setState(s => ({ ...s, loading: true }))
+
+    try {
+      const res = await fetch('/api/customers', { credentials: 'include' })
+      if (!res.ok) throw new Error('Failed to fetch existing customers')
+      const { customers } = await res.json()
+
+      const existingPhones = new Set(customers.map((c: any) => c.phone))
+      const checked = toCheck.map(c => ({
+        ...c,
+        isDuplicate: existingPhones.has(c.phone),
+      }))
+      const duplicateCount = checked.filter(c => c.isDuplicate).length
+
+      setState(s => ({ ...s, contacts: checked, duplicateCount, loading: false }))
+    } catch (err: any) {
+      setState(s => ({ ...s, loading: false, error: err.message }))
+    }
+  }, [state.contacts])
+
   const pickFromPhonebook = useCallback(async () => {
     if (!('contacts' in navigator)) {
       setState(s => ({ ...s, error: 'Contacts API not supported in this browser. Use CSV import instead.' }))
@@ -86,14 +110,16 @@ export function useContactImport() {
         email: email || undefined,
       }]
 
-      setState({
+      setState(s => ({
+        ...s,
         contacts,
         duplicateCount: 0,
         validCount: 1,
         invalidCount: 0,
         loading: false,
         error: null,
-      })
+      }))
+      checkDuplicates(contacts)
     } catch (err: any) {
       if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
         setState(s => ({
@@ -105,7 +131,7 @@ export function useContactImport() {
         setState(s => ({ ...s, loading: false, error: err.message }))
       }
     }
-  }, [])
+  }, [checkDuplicates])
 
   const pickMultiple = useCallback(async () => {
     if (!('contacts' in navigator)) {
@@ -135,18 +161,20 @@ export function useContactImport() {
       const validCount = contacts.filter(c => isValidPhone(c.phone)).length
       const invalidCount = contacts.length - validCount
 
-      setState({
+      setState(s => ({
+        ...s,
         contacts,
         duplicateCount: 0,
         validCount,
         invalidCount,
         loading: false,
         error: null,
-      })
+      }))
+      checkDuplicates(contacts)
     } catch (err: any) {
       setState(s => ({ ...s, loading: false, error: err.message }))
     }
-  }, [])
+  }, [checkDuplicates])
 
   const parseCSV = useCallback(async (file: File) => {
     setState(s => ({ ...s, loading: true, error: null }))
@@ -198,41 +226,20 @@ export function useContactImport() {
       const validCount = contacts.length
       const invalidCount = errors.length
 
-      setState({
+      setState(s => ({
+        ...s,
         contacts,
         duplicateCount: 0,
         validCount,
         invalidCount,
         loading: false,
         error: errors.length > 0 ? `Skipped ${errors.length} invalid rows: ${errors[0]}` : null,
-      })
-    } catch (err: any) {
-      setState(s => ({ ...s, loading: false, error: err.message }))
-    }
-  }, [])
-
-  const checkDuplicates = useCallback(async () => {
-    if (state.contacts.length === 0) return
-
-    setState(s => ({ ...s, loading: true }))
-
-    try {
-      const res = await fetch('/api/customers', { credentials: 'include' })
-      if (!res.ok) throw new Error('Failed to fetch existing customers')
-      const { customers } = await res.json()
-
-      const existingPhones = new Set(customers.map((c: any) => c.phone))
-      const contacts = state.contacts.map(c => ({
-        ...c,
-        isDuplicate: existingPhones.has(c.phone),
       }))
-      const duplicateCount = contacts.filter(c => c.isDuplicate).length
-
-      setState(s => ({ ...s, contacts, duplicateCount, loading: false }))
+      checkDuplicates(contacts)
     } catch (err: any) {
       setState(s => ({ ...s, loading: false, error: err.message }))
     }
-  }, [state.contacts])
+  }, [checkDuplicates])
 
   const submitImport = useCallback(async (mode: 'skip' | 'overwrite' = 'skip') => {
     if (state.contacts.length === 0) return

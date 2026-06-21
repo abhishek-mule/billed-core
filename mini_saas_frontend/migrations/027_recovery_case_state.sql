@@ -70,12 +70,15 @@ ALTER TABLE recovery_cases
   ADD COLUMN IF NOT EXISTS promise_to_pay_date TIMESTAMPTZ,
   -- Concurrency
   ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 1,
-  -- Attention score (deterministic ranking, not ML)
+  -- Projection version (for shadow truth comparison)
+  ADD COLUMN IF NOT EXISTS projection_version INTEGER NOT NULL DEFAULT 1,
+  -- Attention score (deterministic ranking)
   ADD COLUMN IF NOT EXISTS attention_score INTEGER NOT NULL DEFAULT 0;
 
 COMMENT ON COLUMN recovery_cases.recovery_state_v2 IS 'Factual collection position. Never behavioral.';
 COMMENT ON COLUMN recovery_cases.engagement_state_v2 IS 'Behavioral interpretation. Never factual.';
 COMMENT ON COLUMN recovery_cases.version IS 'Optimistic concurrency — incremented on every transition.';
+COMMENT ON COLUMN recovery_cases.projection_version IS 'Projection version for shadow truth comparison.';
 COMMENT ON COLUMN recovery_cases.attention_score IS 'Deterministic ranking for queue ordering. Higher = more urgent.';
 
 -- ============================================================

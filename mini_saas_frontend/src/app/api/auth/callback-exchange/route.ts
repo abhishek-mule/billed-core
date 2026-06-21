@@ -41,6 +41,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (sbError || !sbSession?.user) {
+      // Record failed login event
+      try {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        await supabase.from('login_events').insert({
+          user_id: null,
+          email: body.email || null,
+          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+          user_agent: request.headers.get('user-agent') || null,
+          success: false,
+        })
+      } catch (e) {
+        // Non-critical
+      }
       return NextResponse.json({ error: sbError?.message || 'Auth failed' }, { status: 401 })
     }
 
@@ -50,6 +65,22 @@ export async function POST(request: NextRequest) {
     const existingSessions = await findSessionsByUserId(userId)
     const existingWithTenant = existingSessions.find((s) => s.tenantId)
     const existingTenantId = existingWithTenant?.tenantId || undefined
+
+    // Record successful login event
+    try {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      await supabase.from('login_events').insert({
+        user_id: userId,
+        email,
+        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        user_agent: request.headers.get('user-agent') || null,
+        success: true,
+      })
+    } catch (e) {
+      // Non-critical
+    }
 
     const sessionId = crypto.randomBytes(32).toString('hex')
 

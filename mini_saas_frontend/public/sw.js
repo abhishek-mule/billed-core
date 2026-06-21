@@ -1,4 +1,4 @@
-const CACHE = 'billzo-static-v3'
+const CACHE = 'billzo-static-v4'
 const PRECACHE = [
   '/manifest.json',
   '/logo_new.png',

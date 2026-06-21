@@ -1,11 +1,15 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { db } from '@/lib/billzo/db'
 import type { BillingEvent } from '@/lib/billzo/analytics'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+
     const body = await request.json()
     const events: BillingEvent[] = body.events || []
 

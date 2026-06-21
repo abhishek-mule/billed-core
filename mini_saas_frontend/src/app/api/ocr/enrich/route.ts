@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
 
@@ -80,6 +81,9 @@ function parseGeminiResponse(text: string): Partial<EnrichmentResult> {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+
     const body = await request.json()
     const { barcode } = body
 

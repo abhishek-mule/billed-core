@@ -98,6 +98,22 @@ export async function flushEvents(): Promise<void> {
   }
 }
 
+// Minimal fire-and-forget helper for Recovery Queue telemetry
+// Posts directly to the dedicated events API (bypasses IndexedDB buffering)
+export function trackQueueEvent(
+  eventType: string,
+  customerId?: string,
+  metadata?: Record<string, unknown>,
+) {
+  if (typeof window === 'undefined') return
+  fetch('/api/recovery/queue/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ eventType, customerId, metadata }),
+  }).catch(() => {})
+}
+
 if (typeof window !== 'undefined') {
   setInterval(() => {
     flushEvents().catch(console.error)
@@ -120,4 +136,11 @@ export const events = {
   login_google: 'login_google',
   login_email: 'login_email',
   login_phone: 'login_phone',
+  // Recovery Queue telemetry
+  view_queue: 'VIEW_QUEUE',
+  send_reminder: 'SEND_REMINDER',
+  mark_promise: 'MARK_PROMISE',
+  record_payment: 'RECORD_PAYMENT',
+  open_history: 'OPEN_HISTORY',
+  queue_completed: 'QUEUE_COMPLETED',
 } as const

@@ -1,67 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCookie } from '@/lib/cookies'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { createRedisClient } from '@/lib/billzo/redis'
+import { verifyRequest, errorResponse } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const tenantId = getCookie('bz_tenant')
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  await writeOutboxEvent({
-    idempotencyKey: `whatsapp:pair:${tenantId}:${new Date().toISOString().slice(0, 10)}`,
-    type: 'whatsapp.pair.requested',
-    tenantId,
-    entityId: null,
-    payload: {},
-    causationId: null,
-    correlationId: `pair:${tenantId}:${Date.now()}`,
-    version: 1,
-  })
-
-  return NextResponse.json({ success: true })
-}
-
-async function tryRedisOp<T>(fn: () => T | Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> {
   try {
-    const value = await fn()
-    return { ok: true, value }
-  } catch {
-    return { ok: false }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const { tenantId } = auth
+
+    const correlationId = `pair:${tenantId}:${Date.now()}`
+    const eventId = await writeOutboxEvent({
+      idempotencyKey: `whatsapp:pair:${tenantId}:${Date.now()}`,
+      type: 'whatsapp.pair.requested',
+      tenantId: tenantId!,
+      entityId: null,
+      payload: {},
+      causationId: null,
+      correlationId,
+      version: 1,
+    })
+
+    console.log('[WhatsApp/Pair] Outbox event written:', eventId)
+    return NextResponse.json({ success: true, eventId, correlationId })
+  } catch (error: any) {
+    console.error('[WhatsApp/Pair] POST Error:', error.message, error.stack)
+    return NextResponse.json({
+      error: `Failed to start pairing: ${error.message || 'Unknown error'}`,
+    }, { status: 500 })
   }
 }
 
 export async function GET(request: NextRequest) {
-  const tenantId = request.nextUrl.searchParams.get('tenantId')
+  const auth = await verifyRequest(request)
+  if (auth.response) return auth.response
+  const tenantId = request.nextUrl.searchParams.get('tenantId') || auth.tenantId
   if (!tenantId) {
-    return NextResponse.json({ error: 'tenantId required' }, { status: 400 })
+    return errorResponse('tenantId required', 400)
   }
 
-  const redisResult = await tryRedisOp(() => {
-    const r = createRedisClient()
-    return r
-  })
-  if (!redisResult.ok) {
-    return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null })
-  }
+  const redis = createRedisClient()
 
-  const redis = redisResult.value
   try {
     const [qr, exists, stateRaw] = await Promise.all([
-      tryRedisOp(() => redis.get(`baileys:qr:${tenantId}`)),
-      tryRedisOp(() => redis.exists(`baileys:auth:${tenantId}`)),
-      tryRedisOp(() => redis.get(`baileys:state:${tenantId}`)),
+      redis.get(`baileys:qr:${tenantId}`).catch(() => null),
+      redis.exists(`baileys:creds:${tenantId}`).catch(() => null),
+      redis.get(`baileys:state:${tenantId}`).catch(() => null),
     ])
 
     let connectionState = 'disconnected'
     let health: Record<string, any> | null = null
 
-    if (stateRaw.ok && stateRaw.value) {
+    if (stateRaw) {
       try {
-        const parsed = JSON.parse(stateRaw.value)
+        const parsed = JSON.parse(stateRaw)
         connectionState = parsed.connectionState || connectionState
         health = {
           lastHeartbeatAt: parsed.lastHeartbeatAt || null,
@@ -72,38 +66,44 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
 
-    if (exists.ok && exists.value && connectionState === 'disconnected') {
+    if (exists && connectionState === 'disconnected') {
       connectionState = 'connected'
     }
 
-    if (qr.ok && qr.value) {
-      return NextResponse.json({ status: 'awaiting_scan', qr: qr.value, connectionState, health })
+    if (qr) {
+      return NextResponse.json({ status: 'awaiting_scan', qr, connectionState, health } as const)
     }
-    return NextResponse.json({ status: connectionState === 'connected' ? 'connected' : 'waiting', connectionState, health })
-  } finally {
-    await redis.quit().catch(() => {})
+    const connStatus: 'connected' | 'waiting' = connectionState === 'connected' ? 'connected' : 'waiting'
+    return NextResponse.json({ status: connStatus, connectionState, health })
+  } catch (error: any) {
+    console.error('[WhatsApp/Pair] GET Error:', error)
+    return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null, error: error.message })
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const tenantId = getCookie('bz_tenant')
-  if (!tenantId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const { tenantId } = auth
+
+    const body = await request.json().catch(() => ({}))
+    const { tenantId: targetTenant } = body
+
+    await writeOutboxEvent({
+      idempotencyKey: `whatsapp:unpair:${tenantId}:${Date.now()}`,
+      type: 'whatsapp.unpaired',
+      tenantId: targetTenant || tenantId!,
+      entityId: null,
+      payload: {},
+      causationId: null,
+      correlationId: `unpair:${tenantId}:${Date.now()}`,
+      version: 1,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    console.error('[WhatsApp/Pair] DELETE Error:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
-
-  const body = await request.json().catch(() => ({}))
-  const { tenantId: targetTenant } = body
-
-  await writeOutboxEvent({
-    idempotencyKey: `whatsapp:unpair:${tenantId}:${Date.now()}`,
-    type: 'whatsapp.unpaired',
-    tenantId: targetTenant || tenantId,
-    entityId: null,
-    payload: {},
-    causationId: null,
-    correlationId: `unpair:${tenantId}:${Date.now()}`,
-    version: 1,
-  })
-
-  return NextResponse.json({ success: true })
 }
