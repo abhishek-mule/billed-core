@@ -143,9 +143,9 @@ export default function PartyDetailPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
             <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => { setLoading(true); setError(null); loadParty() }}>
@@ -159,15 +159,15 @@ export default function PartyDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-7 w-32 bg-slate-200 rounded animate-pulse" />
-          <div className="h-28 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-7 w-32 bg-muted rounded animate-pulse" />
+          <div className="h-28 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-3 gap-3">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-white border border-slate-200 rounded-lg animate-pulse" />)}
+            {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-card border border-border rounded-lg animate-pulse" />)}
           </div>
-          <div className="h-10 bg-white border border-slate-200 rounded-lg animate-pulse" />
-          <div className="h-64 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-10 bg-card border border-border rounded-lg animate-pulse" />
+          <div className="h-64 bg-card border border-border rounded-lg animate-pulse" />
         </div>
       </div>
     )
@@ -175,9 +175,9 @@ export default function PartyDetailPage() {
 
   if (!customer) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
-        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 text-center text-sm text-slate-500">
-          Party not found. <Link href="/parties" className="text-slate-900 font-medium hover:underline">Back to parties</Link>
+      <div className="min-h-screen bg-muted/50 pb-8">
+        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 text-center text-sm text-muted-foreground">
+          Party not found. <Link href="/parties" className="text-foreground font-medium hover:underline">Back to parties</Link>
         </div>
       </div>
     )
@@ -207,16 +207,16 @@ export default function PartyDetailPage() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Back link */}
-        <Link href="/parties" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700">
+        <Link href="/parties" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-4 h-4" /> All parties
         </Link>
 
         {/* Party header */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 lg:p-5">
+        <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
           <div className="flex items-start gap-4">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
               pending > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
@@ -229,10 +229,10 @@ export default function PartyDetailPage() {
                   <input
                     value={editForm.name}
                     onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                    className="text-lg font-semibold bg-transparent border-b border-slate-300 focus:outline-none focus:border-slate-500 flex-1 text-slate-900"
+                    className="text-lg font-semibold bg-transparent border-b border-border focus:outline-none focus:border-primary flex-1 text-foreground"
                   />
                 ) : (
-                  <h1 className="text-lg font-semibold text-slate-900 truncate">{customer.name}</h1>
+                  <h1 className="text-lg font-semibold text-foreground truncate">{customer.name}</h1>
                 )}
                 <button
                   onClick={() => setShowAutomationModal(true)}
@@ -247,7 +247,7 @@ export default function PartyDetailPage() {
                       name: customer.name, phone: customer.phone || '', whatsapp_number: customer.whatsapp_number || '',
                       gstin: customer.gstin || '', email: customer.email || '', address: customer.address || ''
                     }); setEditing(true) }}
-                    className="text-xs text-slate-500 font-medium shrink-0 hover:text-slate-700"
+                    className="text-xs text-muted-foreground font-medium shrink-0 hover:text-foreground"
                   >
                     Edit
                   </button>
@@ -263,13 +263,13 @@ export default function PartyDetailPage() {
                     { key: 'address', label: 'Address', icon: MapPin, type: 'text', placeholder: 'Full address' },
                   ].map(field => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <field.icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <field.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <input
                         value={(editForm as any)[field.key]}
                         onChange={e => setEditForm(f => ({ ...f, [field.key]: e.target.value }))}
                         placeholder={field.placeholder}
                         type={field.type}
-                        className="flex-1 bg-transparent text-sm border-b border-dotted border-slate-200 focus:outline-none focus:border-slate-400 placeholder:text-slate-400 text-slate-900"
+                        className="flex-1 bg-transparent text-sm border-b border-dotted border-border focus:outline-none focus:border-primary placeholder:text-muted-foreground text-foreground"
                       />
                     </div>
                   ))}
@@ -285,7 +285,7 @@ export default function PartyDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 space-y-1 text-sm text-slate-500">
+                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {customer.phone && (
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5" /> {customer.phone}
@@ -314,16 +314,16 @@ export default function PartyDetailPage() {
 
         {/* Financial summary */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white border border-slate-200 rounded-lg p-3">
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Total Invoiced</p>
-            <p className="text-base font-semibold text-slate-900 tabular-nums">{formatINR(totalInvoiced)}</p>
+          <div className="bg-card border border-border rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Invoiced</p>
+            <p className="text-base font-semibold text-foreground tabular-nums">{formatINR(totalInvoiced)}</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-lg p-3">
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Total Paid</p>
+          <div className="bg-card border border-border rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Paid</p>
             <p className="text-base font-semibold text-emerald-600 tabular-nums">{formatINR(totalPaid)}</p>
           </div>
-          <div className={`bg-white border rounded-lg p-3 ${pending > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
-            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Pending</p>
+          <div className={`bg-card border rounded-lg p-3 ${pending > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-border'}`}>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Pending</p>
             <p className={`text-base font-semibold tabular-nums ${pending > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>
               {formatINR(pending)}
             </p>
@@ -339,14 +339,14 @@ export default function PartyDetailPage() {
               setShowWAModal(true)
             }}
             disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50 bg-foreground text-background hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground"
           >
             <MessageSquare className="w-4 h-4" />
             {customer.automationMode === 'muted' ? 'Reminders Paused' : 'Send Reminder'}
           </button>
           <button
             onClick={() => router.push(`/pos?customerId=${id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium border border-slate-200 text-slate-700 hover:bg-slate-50"
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium border border-border text-foreground hover:bg-muted"
           >
             <Plus className="w-4 h-4" />
             New Invoice
@@ -379,11 +379,11 @@ export default function PartyDetailPage() {
         )}
 
         {/* Tab bar */}
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-border">
           <button
             onClick={() => setActiveTab('invoices')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'invoices' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
+              activeTab === 'invoices' ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Invoices ({invoices.length})
@@ -391,7 +391,7 @@ export default function PartyDetailPage() {
           <button
             onClick={() => setActiveTab('payments')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'payments' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
+              activeTab === 'payments' ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Payments ({payments.length})
@@ -399,9 +399,9 @@ export default function PartyDetailPage() {
         </div>
 
         {/* Transactions list */}
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
           {filteredTransactions.length === 0 ? (
-            <div className="p-8 text-center text-sm text-slate-400">
+            <div className="p-8 text-center text-sm text-muted-foreground">
               {activeTab === 'invoices' ? 'No invoices yet' : 'No payments yet'}
             </div>
           ) : (
@@ -410,13 +410,13 @@ export default function PartyDetailPage() {
                 <div key={i} className="px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                      t.type === "invoice" ? "bg-slate-50 text-slate-500" : "bg-emerald-50 text-emerald-600"
+                      t.type === "invoice" ? "bg-muted text-muted-foreground" : "bg-emerald-50 text-emerald-600"
                     }`}>
                       {t.type === "invoice" ? <Receipt className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">{t.label}</p>
-                      <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <p className="text-sm font-medium text-foreground truncate">{t.label}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> {new Date(t.date).toLocaleDateString()}
                         {t.type === "invoice" && (
                           <span className={`ml-1 capitalize ${
@@ -428,12 +428,12 @@ export default function PartyDetailPage() {
                     </div>
                   </div>
                   <div className="text-right flex items-center gap-2 shrink-0">
-                    <span className={`text-sm font-semibold tabular-nums ${t.type === "payment" ? "text-emerald-600" : "text-slate-900"}`}>
+                    <span className={`text-sm font-semibold tabular-nums ${t.type === "payment" ? "text-emerald-600" : "text-foreground"}`}>
                       {t.type === "payment" ? "+" : ""}{formatINR(t.amount)}
                     </span>
                     {t.type === "invoice" && t.id && (
-                      <Link href={`/invoices/${t.id}`} className="p-1 rounded hover:bg-slate-50">
-                        <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                      <Link href={`/invoices/${t.id}`} className="p-1 rounded hover:bg-muted">
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                       </Link>
                     )}
                   </div>
@@ -446,13 +446,13 @@ export default function PartyDetailPage() {
         {/* WhatsApp Modal */}
         {showWAModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <div className="w-full max-w-lg bg-white border border-slate-200 rounded-lg shadow-xl">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-                <h2 className="text-sm font-semibold text-slate-900">
+            <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground">
                   {customer.phone ? 'Send WhatsApp Reminder' : 'Add phone number'}
                 </h2>
-                <button onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }} className="p-1 rounded hover:bg-slate-100">
-                  <span className="text-slate-400 text-lg leading-none">×</span>
+                <button onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }} className="p-1 rounded hover:bg-muted">
+                  <span className="text-muted-foreground text-lg leading-none">×</span>
                 </button>
               </div>
               {customer.phone ? (
@@ -460,7 +460,7 @@ export default function PartyDetailPage() {
                   <div className="p-4 space-y-4">
                     {unpaidInvoices.length > 1 && (
                       <div>
-                        <label className="text-xs font-medium text-slate-500 mb-1 block">Select Invoice</label>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">Select Invoice</label>
                         <select
                           value={selectedInvoiceId || ""}
                           onChange={(e) => {
@@ -468,7 +468,7 @@ export default function PartyDetailPage() {
                             const inv = invoices.find((i: any) => i.id === e.target.value)
                             setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(inv?.total || pending)} is due. Please clear it at your earliest convenience.`)
                           }}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                         >
                           <option value="">All unpaid invoices ({formatINR(pending)})</option>
                           {unpaidInvoices.map((inv: any) => (
@@ -480,29 +480,29 @@ export default function PartyDetailPage() {
                       </div>
                     )}
                     <div>
-                      <label className="text-xs font-medium text-slate-500 mb-1 block">Message Preview</label>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Message Preview</label>
                       <textarea
                         value={editingMessage}
                         onChange={(e) => setEditingMessage(e.target.value)}
                         rows={4}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400 resize-none"
+                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary resize-none"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-slate-500 mb-1 block">Personal Note (optional)</label>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Personal Note (optional)</label>
                       <textarea
                         value={personalNote}
                         onChange={(e) => setPersonalNote(e.target.value)}
                         rows={2}
                         placeholder="Add a personal note..."
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 resize-none"
+                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
                       />
                     </div>
                     {waError && (
                       <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">{waError}</div>
                     )}
                   </div>
-                  <div className="flex gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50">
+                  <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted">
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage("") }}>
                       Cancel
                     </Button>
@@ -515,21 +515,21 @@ export default function PartyDetailPage() {
                 <>
                   <div className="p-4 space-y-4">
                     <div>
-                      <label className="text-xs font-medium text-slate-500 mb-1 block">Customer Phone</label>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Customer Phone</label>
                       <input
                         value={missingPhone}
                         onChange={e => setMissingPhone(e.target.value)}
                         placeholder="+91 98765 43210"
                         type="tel"
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                       />
                     </div>
-                    <p className="text-xs text-slate-400">A phone number is required to send WhatsApp reminders. This will be saved to the customer profile.</p>
+                    <p className="text-xs text-muted-foreground">A phone number is required to send WhatsApp reminders. This will be saved to the customer profile.</p>
                     {waError && (
                       <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">{waError}</div>
                     )}
                   </div>
-                  <div className="flex gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50">
+                  <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted">
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }}>
                       Cancel
                     </Button>
@@ -553,11 +553,11 @@ export default function PartyDetailPage() {
         {/* Automation modal */}
         {showAutomationModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <div className="w-full max-w-sm bg-white border border-slate-200 rounded-lg shadow-xl">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-                <h2 className="text-sm font-semibold text-slate-900">Reminder Settings</h2>
-                <button onClick={() => setShowAutomationModal(false)} className="p-1 rounded hover:bg-slate-100">
-                  <span className="text-slate-400 text-lg leading-none">×</span>
+            <div className="w-full max-w-sm bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground">Reminder Settings</h2>
+                <button onClick={() => setShowAutomationModal(false)} className="p-1 rounded hover:bg-muted">
+                  <span className="text-muted-foreground text-lg leading-none">×</span>
                 </button>
               </div>
               <div className="p-4 space-y-2">
@@ -587,20 +587,20 @@ export default function PartyDetailPage() {
                     disabled={updatingAutomation}
                     className={`w-full text-left p-3 rounded-lg border transition-colors ${
                       (customer.automationMode || 'full_auto') === m
-                        ? 'border-slate-900 bg-slate-50'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                        ? 'border-foreground bg-muted'
+                        : 'border-border bg-card hover:border-border'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${MODE_DOT_COLORS[m]}`} />
-                        <span className="text-sm font-medium text-slate-900">{MODE_LABELS[m]}</span>
+                        <span className="text-sm font-medium text-foreground">{MODE_LABELS[m]}</span>
                       </div>
                       {(customer.automationMode || 'full_auto') === m && (
-                        <CheckCircle2 className="w-4 h-4 text-slate-900" />
+                        <CheckCircle2 className="w-4 h-4 text-foreground" />
                       )}
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-500 ml-4">
+                    <p className="mt-0.5 text-xs text-muted-foreground ml-4">
                       {m === 'full_auto' ? 'BillZo sends reminders automatically' :
                        m === 'manual' ? 'I approve each reminder before sending' :
                        'No reminders for this customer'}
@@ -608,8 +608,8 @@ export default function PartyDetailPage() {
                   </button>
                 ))}
               </div>
-              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 rounded-b-lg">
-                <p className="text-xs text-slate-400">Changes take effect immediately.</p>
+              <div className="px-4 py-3 border-t border-border bg-muted rounded-b-lg">
+                <p className="text-xs text-muted-foreground">Changes take effect immediately.</p>
               </div>
             </div>
           </div>

@@ -260,7 +260,7 @@ function PlanCard({
   return (
     <div
       className={`relative rounded-2xl border p-6 ${
-        popular ? "border-primary shadow-lg" : "border-border"
+        popular ? "border-primary shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]" : "border-border"
       }`}
     >
       {popular && (
@@ -293,7 +293,7 @@ function PlanCard({
           className={`mt-6 w-full rounded-xl py-3 font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
             isFree
               ? "border-2 border-border bg-transparent text-foreground hover:bg-secondary"
-              : "bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30"
+              : "bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg"
           }`}
         >
         {processing && selected ? (

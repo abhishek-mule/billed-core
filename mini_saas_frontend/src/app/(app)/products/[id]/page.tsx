@@ -150,11 +150,11 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-7 w-32 bg-slate-200 rounded animate-pulse" />
-          <div className="h-48 bg-white border border-slate-200 rounded-lg animate-pulse" />
-          <div className="h-64 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-7 w-32 bg-muted rounded animate-pulse" />
+          <div className="h-48 bg-card border border-border rounded-lg animate-pulse" />
+          <div className="h-64 bg-card border border-border rounded-lg animate-pulse" />
         </div>
       </div>
     )
@@ -162,9 +162,9 @@ export default function ProductDetailPage() {
 
   if (error || !product) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
             <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error || 'Product not found'}</p>
             <Button variant="outline" size="sm" onClick={() => router.push('/products')}>
@@ -177,10 +177,10 @@ export default function ProductDetailPage() {
   }
 
   const Section = ({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) => (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-        <Icon className="w-4 h-4 text-slate-500" />
-        <h3 className="text-sm font-medium text-slate-900">{title}</h3>
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <Icon className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
       </div>
       <div className="p-4">
         {children}
@@ -193,27 +193,27 @@ export default function ProductDetailPage() {
     type?: string; placeholder?: string; suffix?: string
   }) => (
     <div>
-      <label className="text-xs font-medium text-slate-500 mb-1 block">{label}</label>
+      <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
       <div className="relative">
         <input
           type={type}
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
         />
-        {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{suffix}</span>}
+        {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>}
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Back + Actions */}
         <div className="flex items-center justify-between">
-          <button onClick={() => router.push('/products')} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700">
+          <button onClick={() => router.push('/products')} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" /> All Products
           </button>
           <div className="flex gap-2">
@@ -242,11 +242,11 @@ export default function ProductDetailPage() {
             <Field label="Sale Price" value={form.salePrice} type="number" onChange={v => setForm(f => ({ ...f, salePrice: parseFloat(v) || 0 }))} suffix="₹" />
             <Field label="Purchase Price" value={form.purchasePrice} type="number" onChange={v => setForm(f => ({ ...f, purchasePrice: parseFloat(v) || 0 }))} suffix="₹" />
             <div>
-              <label className="text-xs font-medium text-slate-500 mb-1 block">GST Rate</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">GST Rate</label>
               <select
                 value={form.gstRate}
                 onChange={e => setForm(f => ({ ...f, gstRate: parseInt(e.target.value) }))}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
               >
                 {GST_RATES.map(r => (
                   <option key={r} value={r}>{r}% GST</option>
@@ -262,12 +262,12 @@ export default function ProductDetailPage() {
             <Field label="Current Stock" value={form.stock} type="number" onChange={v => setForm(f => ({ ...f, stock: parseInt(v) || 0 }))} />
             <Field label="Low Stock Alert At" value={form.lowStockAt} type="number" onChange={v => setForm(f => ({ ...f, lowStockAt: parseInt(v) || 0 }))} />
             <div>
-              <label className="text-xs font-medium text-slate-500 mb-1 block">Status</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
               <div className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium ${statusCfg.bg}`}>
                 <span className={`w-2 h-2 rounded-full ${statusCfg.dot}`} />
                 <StatusIcon className="w-3.5 h-3.5" />
                 {statusCfg.label}
-                {status !== 'out_of_stock' && <span className="text-slate-500 font-normal ml-1">({form.stock})</span>}
+                {status !== 'out_of_stock' && <span className="text-muted-foreground font-normal ml-1">({form.stock})</span>}
               </div>
             </div>
           </div>
@@ -277,13 +277,13 @@ export default function ProductDetailPage() {
         <Section title="Movement Timeline" icon={Calendar}>
           {movements.length === 0 ? (
             <div className="text-center py-6">
-              <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-400">No movement history yet</p>
-              <p className="text-xs text-slate-300 mt-1">Sales and purchases will appear here</p>
+              <Package className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No movement history yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Sales and purchases will appear here</p>
             </div>
           ) : (
             <div className="space-y-0">
-              <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-1 py-1.5 text-[10px] text-slate-400 font-medium uppercase tracking-wider border-b border-slate-100">
+              <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-1 py-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider border-b border-border">
                 <span>Reference</span>
                 <span className="text-right">Qty</span>
                 <span className="text-right">Balance</span>
@@ -292,13 +292,13 @@ export default function ProductDetailPage() {
                 {movements.map((m, i) => (
                   <div key={i} className="grid grid-cols-[1fr_80px_100px] gap-2 px-1 py-2 items-center">
                     <div className="min-w-0">
-                      <p className="text-sm text-slate-900 truncate">{m.reference}</p>
-                      <p className="text-[10px] text-slate-400">{new Date(m.date).toLocaleDateString()}</p>
+                      <p className="text-sm text-foreground truncate">{m.reference}</p>
+                      <p className="text-[10px] text-muted-foreground">{new Date(m.date).toLocaleDateString()}</p>
                     </div>
                     <div className={`text-right text-sm font-medium tabular-nums ${m.quantity < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                       {m.quantity > 0 ? '+' : ''}{m.quantity}
                     </div>
-                    <div className="text-right text-sm text-slate-700 font-medium tabular-nums">{m.balance}</div>
+                    <div className="text-right text-sm text-foreground font-medium tabular-nums">{m.balance}</div>
                   </div>
                 ))}
               </div>
@@ -309,16 +309,16 @@ export default function ProductDetailPage() {
         {/* Delete Confirmation */}
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <div className="w-full max-w-sm bg-white border border-slate-200 rounded-lg shadow-xl">
-              <div className="px-4 py-3 border-b border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-900">Delete Product</h3>
+            <div className="w-full max-w-sm bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
+              <div className="px-4 py-3 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground">Delete Product</h3>
               </div>
               <div className="p-4">
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-muted-foreground">
                   Are you sure you want to delete <strong>{product.name}</strong>? This action cannot be undone.
                 </p>
               </div>
-              <div className="flex gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50 rounded-b-lg">
+              <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted rounded-b-lg">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
                 <Button size="sm" className="flex-1 bg-rose-600 hover:bg-rose-700 text-white" onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting...' : 'Delete'}

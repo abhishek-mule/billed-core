@@ -457,10 +457,10 @@ export default function InvoiceDetailPage() {
 
       {showWAModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="font-bold text-lg">{invoice.customerPhone ? 'Send via WhatsApp' : 'Add phone number'}</h2>
-              <button onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }} className="p-2 rounded-lg hover:bg-slate-100">
+              <button onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }} className="p-2 rounded-lg hover:bg-muted">
                 ✕
               </button>
             </div>
@@ -469,7 +469,7 @@ export default function InvoiceDetailPage() {
                 <div className="p-5 space-y-4">
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground mb-1">Preview</div>
-                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 leading-relaxed">
+                    <div className="rounded-xl bg-muted/50 p-3 text-sm text-foreground leading-relaxed">
                       {paid
                         ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
                         : `Hello ${invoice.customerName}, your invoice for ₹${total} is ready. Pay now: ${invoice.paymentLinkUrl || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
@@ -492,7 +492,7 @@ export default function InvoiceDetailPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-3 p-5 border-t bg-slate-50">
+                <div className="flex gap-3 p-5 border-t bg-muted/50">
                   <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError('') }}>Cancel</Button>
                   <button
                     onClick={() => sendWhatsApp()}
@@ -527,7 +527,7 @@ export default function InvoiceDetailPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-3 p-5 border-t bg-slate-50">
+                <div className="flex gap-3 p-5 border-t bg-muted/50">
                   <Button variant="outline" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }}>Cancel</Button>
                   <button
                     onClick={savePhoneAndSend}
@@ -589,10 +589,10 @@ export default function InvoiceDetailPage() {
       {/* Override Modal */}
       {showOverrideModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="font-bold text-lg">Override Decision Engine</h2>
-              <button onClick={() => { setShowOverrideModal(false); setOverrideError(''); setOverrideWarning(''); }} className="p-2 rounded-lg hover:bg-slate-100">
+              <button onClick={() => { setShowOverrideModal(false); setOverrideError(''); setOverrideWarning(''); }} className="p-2 rounded-lg hover:bg-muted">
                 ✕
               </button>
             </div>
@@ -673,10 +673,10 @@ export default function InvoiceDetailPage() {
       {/* Record Payment Modal */}
       {showRecordPaymentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="font-bold text-lg">Record Payment</h2>
-              <button onClick={() => { setShowRecordPaymentModal(false); setRecordPaymentError(''); }} className="p-2 rounded-lg hover:bg-slate-100">
+              <button onClick={() => { setShowRecordPaymentModal(false); setRecordPaymentError(''); }} className="p-2 rounded-lg hover:bg-muted">
                 ✕
               </button>
             </div>

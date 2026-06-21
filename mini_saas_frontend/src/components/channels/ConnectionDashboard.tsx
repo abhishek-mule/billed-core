@@ -31,7 +31,7 @@ function stateIcon(state: string) {
     case 'banned':
       return <AlertCircle className="h-4 w-4 text-red-600" />
     default:
-      return <WifiOff className="h-4 w-4 text-slate-400" />
+      return <WifiOff className="h-4 w-4 text-muted-foreground" />
   }
 }
 
@@ -60,7 +60,7 @@ function stateColor(state: string) {
     case 'auth_expired':
     case 'banned':
     case 'shadow': return 'bg-red-100 text-red-700'
-    default: return 'bg-slate-100 text-slate-600'
+    default: return 'bg-muted text-muted-foreground'
   }
 }
 
@@ -78,7 +78,7 @@ function qualityBar(score: number | null) {
   const color = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs font-medium text-muted-foreground w-8 text-right">{pct}%</span>

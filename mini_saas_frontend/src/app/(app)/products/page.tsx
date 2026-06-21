@@ -78,25 +78,25 @@ function InventoryHero({
       onClick={onClick}
       className={`text-left p-3 rounded-lg border transition-colors ${
         active
-          ? 'bg-slate-50 border-slate-300'
-          : 'bg-white border-slate-200 hover:border-slate-300'
+          ? 'bg-muted border-border'
+          : 'bg-card border-border hover:border-border'
       }`}
     >
-      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-lg font-semibold tabular-nums ${count > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
+      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</p>
+      <p className={`text-lg font-semibold tabular-nums ${count > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
         {count}
       </p>
     </button>
   )
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4 lg:p-5">
+    <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
       <div className="grid grid-cols-4 gap-3 lg:gap-4">
-        <div className="bg-white p-3 rounded-lg">
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">
+        <div className="bg-card p-3 rounded-lg">
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">
             <ShoppingCart className="w-3 h-3 inline mr-1" />Total Products
           </p>
-          <p className="text-lg lg:text-xl font-semibold text-slate-900 tabular-nums">{totalProducts}</p>
+          <p className="text-lg lg:text-xl font-semibold text-foreground tabular-nums">{totalProducts}</p>
         </div>
         <FilterStat
           label="Low Stock"
@@ -142,10 +142,10 @@ function InventoryAttentionSection({ products }: { products: Product[] }) {
         {critical.map(p => {
           const estimatedDays = p.stock > 0 ? Math.max(1, Math.round(p.stock / 2)) : 0
           return (
-            <div key={p.id} className="flex items-center justify-between bg-white rounded border border-amber-200/60 px-3 py-2">
+            <div key={p.id} className="flex items-center justify-between bg-card rounded border border-amber-200/60 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                <p className="text-xs text-slate-500">{p.stock} remaining — ~{estimatedDays} day{estimatedDays > 1 ? 's' : ''}</p>
+                <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                <p className="text-xs text-muted-foreground">{p.stock} remaining — ~{estimatedDays} day{estimatedDays > 1 ? 's' : ''}</p>
               </div>
               <div className="w-full max-w-[120px] h-1.5 bg-amber-100 rounded-full ml-3">
                 <div
@@ -168,28 +168,28 @@ function ProductCard({ product, onSelect }: { product: Product; onSelect: () => 
   return (
     <button
       onClick={onSelect}
-      className="w-full text-left bg-white border border-slate-200 rounded-lg p-3 hover:border-slate-300 transition-colors"
+      className="w-full text-left bg-card border border-border rounded-lg p-3 hover:border-border transition-colors"
     >
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-          <Package className="w-4 h-4 text-slate-400" />
+        <div className="w-9 h-9 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
+          <Package className="w-4 h-4 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-900 truncate">{product.name}</p>
+          <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
           <div className="flex items-center gap-2 mt-0.5">
             <span className={`flex items-center gap-1 text-xs`}>
               <span className={`w-1.5 h-1.5 rounded-full ${indicator.dot}`} />
               <span className={indicator.text}>{indicator.label}</span>
             </span>
             {product.stock > 0 && (
-              <span className="text-xs text-slate-400">({product.stock})</span>
+              <span className="text-xs text-muted-foreground">({product.stock})</span>
             )}
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-semibold text-slate-900 tabular-nums">{formatINR(product.salePrice)}</p>
+          <p className="text-sm font-semibold text-foreground tabular-nums">{formatINR(product.salePrice)}</p>
           {product.unit && (
-            <p className="text-[10px] text-slate-400">per {product.unit}</p>
+            <p className="text-[10px] text-muted-foreground">per {product.unit}</p>
           )}
         </div>
       </div>
@@ -243,14 +243,14 @@ function ExportDropdown({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1">
-      <button onClick={() => handleExport('xlsx')} className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+    <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] z-20 py-1">
+      <button onClick={() => handleExport('xlsx')} className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-muted flex items-center gap-2">
         <Download className="w-4 h-4" /> Export Excel
       </button>
-      <button onClick={() => handleExport('csv')} className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+      <button onClick={() => handleExport('csv')} className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-muted flex items-center gap-2">
         <Download className="w-4 h-4" /> Export CSV
       </button>
-      <button onClick={() => { onClose(); router.push('/products/import') }} className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+      <button onClick={() => { onClose(); router.push('/products/import') }} className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-muted flex items-center gap-2">
         <Upload className="w-4 h-4" /> Import
       </button>
     </div>
@@ -340,13 +340,13 @@ export default function ProductsPage() {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-28 bg-white border border-slate-200 rounded-lg animate-pulse" />
-          <div className="h-10 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-28 bg-card border border-border rounded-lg animate-pulse" />
+          <div className="h-10 bg-card border border-border rounded-lg animate-pulse" />
           <div className="space-y-2">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-16 bg-white border border-slate-200 rounded-lg animate-pulse" />
+              <div key={i} className="h-16 bg-card border border-border rounded-lg animate-pulse" />
             ))}
           </div>
         </div>
@@ -357,9 +357,9 @@ export default function ProductsPage() {
   // ── Error ──
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
             <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
@@ -374,14 +374,14 @@ export default function ProductsPage() {
   // ── Empty ──
   if (products.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-slate-200 rounded-lg p-8 lg:p-12 text-center">
-            <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-4">
-              <Package className="w-6 h-6 text-slate-400" />
+          <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center">
+            <div className="w-14 h-14 rounded-full bg-muted border border-border flex items-center justify-center mx-auto mb-4">
+              <Package className="w-6 h-6 text-muted-foreground" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">No products yet</h2>
-            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">
+            <h2 className="text-lg font-semibold text-foreground mb-2">No products yet</h2>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Add your first product to start managing inventory and creating invoices.
             </p>
             <Button onClick={() => router.push('/products/add')}>
@@ -394,7 +394,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Inventory Health Hero */}
@@ -412,18 +412,18 @@ export default function ProductsPage() {
         {/* Search + Actions bar */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               ref={searchRef}
               type="text"
               placeholder="Search by name, barcode, or HSN... (/)"
               value={q}
               onChange={e => setQ(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+              className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
             {q && (
               <button onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-4 h-4 text-slate-400" />
+                <X className="w-4 h-4 text-muted-foreground" />
               </button>
             )}
           </div>
@@ -445,18 +445,18 @@ export default function ProductsPage() {
 
         {/* Active filter indicator */}
         {activeFilter && (
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Filtered by: <strong className="text-slate-700">{activeFilter === 'low_stock' ? 'Low Stock' : 'Out of Stock'}</strong></span>
-            <button onClick={() => setActiveFilter(null)} className="text-slate-400 hover:text-slate-600 underline">Clear</button>
-            <span className="text-slate-300">|</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Filtered by: <strong className="text-foreground">{activeFilter === 'low_stock' ? 'Low Stock' : 'Out of Stock'}</strong></span>
+            <button onClick={() => setActiveFilter(null)} className="text-muted-foreground hover:text-muted-foreground underline">Clear</button>
+            <span className="text-muted-foreground">|</span>
             <span>{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
           </div>
         )}
 
         {/* Product list */}
         {filtered.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-lg p-8 text-center">
-            <p className="text-sm text-slate-400">No products match your search</p>
+          <div className="bg-card border border-border rounded-lg p-8 text-center">
+            <p className="text-sm text-muted-foreground">No products match your search</p>
           </div>
         ) : (
           <>
@@ -478,7 +478,7 @@ export default function ProductsPage() {
               </div>
             )}
 
-            <div className="text-center text-xs text-slate-400 pt-1">
+            <div className="text-center text-xs text-muted-foreground pt-1">
               Showing {displayed.length} of {filtered.length} product{filtered.length !== 1 ? 's' : ''}
               {q && ` for "${q}"`}
             </div>
@@ -490,7 +490,7 @@ export default function ProductsPage() {
       <div className="sm:hidden fixed bottom-20 right-4 z-10">
         <button
           onClick={() => router.push('/products/add')}
-          className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg"
+          className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
         >
           <Plus className="w-5 h-5" />
         </button>
@@ -500,7 +500,7 @@ export default function ProductsPage() {
       <div className="sm:hidden fixed bottom-20 right-20 z-10">
         <button
           onClick={() => router.push('/products/import')}
-          className="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow"
+          className="w-10 h-10 rounded-full bg-card border border-border text-muted-foreground flex items-center justify-center shadow"
         >
           <Upload className="w-4 h-4" />
         </button>

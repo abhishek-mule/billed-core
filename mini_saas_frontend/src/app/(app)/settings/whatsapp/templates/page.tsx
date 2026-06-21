@@ -110,7 +110,7 @@ export default function WhatsAppTemplatesPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/settings/whatsapp')} className="p-2 rounded-xl hover:bg-slate-100">
+        <button onClick={() => router.push('/settings/whatsapp')} className="p-2 rounded-xl hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
@@ -153,7 +153,7 @@ export default function WhatsAppTemplatesPage() {
         {TEMPLATE_TYPES.map(({ key, label, desc, placeholder }) => {
           const hasTemplate = !!templates[key]
           return (
-            <div key={key} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+            <div key={key} className="rounded-2xl border bg-card shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] overflow-hidden">
               <div className="p-4 flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export default function WhatsAppTemplatesPage() {
                         <CheckCircle2 className="h-3 w-3" /> Template set
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-400 font-medium">Not configured</span>
+                      <span className="text-xs text-muted-foreground font-medium">Not configured</span>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
@@ -188,12 +188,12 @@ export default function WhatsAppTemplatesPage() {
               </div>
               {hasTemplate && (
                 <div className="px-4 pb-4">
-                  <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 font-mono leading-relaxed">
+                  <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground font-mono leading-relaxed">
                     {templates[key]}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {Object.entries(PLACEHOLDER_HELP).map(([ph, help]) => (
-                      <span key={ph} className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">
+                      <span key={ph} className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground">
                         {ph} = {help}
                       </span>
                     ))}
@@ -207,10 +207,10 @@ export default function WhatsAppTemplatesPage() {
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border bg-white shadow-xl">
+          <div className="w-full max-w-lg rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="font-bold text-lg">Edit Template — {TEMPLATE_TYPES.find(t => t.key === createType)?.label}</h2>
-              <button onClick={() => setShowCreate(false)} className="p-2 rounded-lg hover:bg-slate-100">
+              <button onClick={() => setShowCreate(false)} className="p-2 rounded-lg hover:bg-muted">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -235,11 +235,11 @@ export default function WhatsAppTemplatesPage() {
                   ))}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground bg-slate-50 p-3 rounded-lg">
+              <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                 After saving, submit this template in Meta Business Suite or Gupshup for approval. Once approved, it will be used for sending messages.
               </p>
             </div>
-            <div className="flex gap-3 p-5 border-t bg-slate-50">
+            <div className="flex gap-3 p-5 border-t bg-muted/50">
               <button onClick={() => setShowCreate(false)} className="flex-1 h-11 rounded-xl border font-medium">Cancel</button>
               <button
                 onClick={saveTemplate}

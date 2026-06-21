@@ -92,15 +92,15 @@ export default function AddProductPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Header */}
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50">
-            <ArrowLeft className="w-4 h-4 text-slate-600" />
+          <button onClick={() => router.back()} className="p-2 rounded-lg border border-border hover:bg-muted">
+            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
-          <h1 className="text-lg font-semibold text-slate-900">Add Product</h1>
+          <h1 className="text-lg font-semibold text-foreground">Add Product</h1>
         </div>
 
         {error && (
@@ -108,7 +108,7 @@ export default function AddProductPage() {
         )}
 
         {/* Basic / Advanced toggle */}
-        <div className="bg-white border border-slate-200 rounded-lg p-3">
+        <div className="bg-card border border-border rounded-lg p-3">
           <button
             type="button"
             onClick={() => setBasicMode(!basicMode)}
@@ -116,24 +116,24 @@ export default function AddProductPage() {
           >
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-500" />
-              <span className="font-medium text-slate-700">
+              <span className="font-medium text-foreground">
                 {basicMode ? 'Basic Mode' : 'Advanced Mode'}
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted-foreground">
                 {basicMode ? '(Name, Price, Stock)' : '(All fields)'}
               </span>
             </div>
-            {basicMode ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+            {basicMode ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Product Identity — always shown */}
-          <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <h2 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-4">Product Identity</h2>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Product Identity</h2>
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
                   Product Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -143,32 +143,32 @@ export default function AddProductPage() {
                   onChange={handleChange}
                   required
                   placeholder="e.g. LED Bulb 9W"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 
               {/* Advanced fields */}
               <div className={`grid grid-cols-2 gap-4 overflow-hidden transition-all ${basicMode ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-96 opacity-100'}`}>
                 <div>
-                  <label className="text-xs font-medium text-slate-500 mb-1 block">Barcode</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Barcode</label>
                   <input
                     type="text"
                     name="barcode"
                     value={form.barcode}
                     onChange={handleChange}
                     placeholder="e.g. 8901262010129"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-500 mb-1 block">HSN Code</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">HSN Code</label>
                   <input
                     type="text"
                     name="hsn"
                     value={form.hsn}
                     onChange={handleChange}
                     placeholder="e.g. 85395000"
-                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -176,13 +176,13 @@ export default function AddProductPage() {
           </div>
 
           {/* Pricing & Tax */}
-          <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <h2 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-4">Pricing & Tax</h2>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Pricing & Tax</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Sale Price</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Sale Price</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">₹</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
                   <input
                     type="number"
                     name="salePrice"
@@ -190,14 +190,14 @@ export default function AddProductPage() {
                     onChange={handleChange}
                     step="0.01"
                     placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 bg-white pl-7 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                    className="w-full rounded-lg border border-border bg-card pl-7 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Purchase Price</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Purchase Price</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">₹</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
                   <input
                     type="number"
                     name="purchasePrice"
@@ -205,17 +205,17 @@ export default function AddProductPage() {
                     onChange={handleChange}
                     step="0.01"
                     placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 bg-white pl-7 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                    className="w-full rounded-lg border border-border bg-card pl-7 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">GST Rate</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">GST Rate</label>
                 <select
                   name="gstRate"
                   value={form.gstRate}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                 >
                   {GST_RATES.map(r => (
                     <option key={r} value={r}>{r}% GST</option>
@@ -223,12 +223,12 @@ export default function AddProductPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Unit</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Unit</label>
                 <select
                   name="unit"
                   value={form.unit}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                 >
                   <option value="pcs">Pieces (pcs)</option>
                   <option value="kg">Kilogram (kg)</option>
@@ -241,27 +241,27 @@ export default function AddProductPage() {
           </div>
 
           {/* Stock */}
-          <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <h2 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-4">Stock</h2>
+          <div className="bg-card border border-border rounded-lg p-4">
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-4">Stock</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Current Stock</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Current Stock</label>
                 <input
                   type="number"
                   name="stock"
                   value={form.stock}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Low Stock Alert At</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Low Stock Alert At</label>
                 <input
                   type="number"
                   name="lowStockAt"
                   value={form.lowStockAt}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-slate-400"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
             </div>

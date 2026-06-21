@@ -39,7 +39,7 @@ export function Invoices() {
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Auto-suggested Customers</h2>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {sorted.map((customer) => (
-            <button key={customer.id} className="whitespace-nowrap rounded-full border border-border bg-white px-5 py-2 text-sm font-semibold text-foreground transition-all hover:border-primary/30 hover:bg-muted" onClick={() => createQuickInvoice(customer, topProduct)}>
+            <button key={customer.id} className="whitespace-nowrap rounded-full border border-border bg-card px-5 py-2 text-sm font-semibold text-foreground transition-all hover:border-primary/30 hover:bg-muted" onClick={() => createQuickInvoice(customer, topProduct)}>
               {customer.name}
             </button>
           ))}

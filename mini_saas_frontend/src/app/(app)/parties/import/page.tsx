@@ -26,7 +26,7 @@ export default function ImportCustomersPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/parties')} className="p-2 rounded-xl hover:bg-slate-100">
+        <button onClick={() => router.push('/parties')} className="p-2 rounded-xl hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
@@ -54,7 +54,7 @@ export default function ImportCustomersPage() {
             <button
               onClick={pickFromPhonebook}
               disabled={state.loading}
-              className="flex flex-col items-center gap-2 rounded-2xl border bg-white p-6 shadow-sm hover:shadow-md transition-all active:scale-95"
+              className="flex flex-col items-center gap-2 rounded-2xl border bg-card p-6 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:shadow-md transition-all active:scale-95"
             >
               <div className="grid h-14 w-14 place-items-center rounded-2xl bg-green-50">
                 <Phone className="h-7 w-7 text-green-600" />
@@ -66,7 +66,7 @@ export default function ImportCustomersPage() {
             <button
               onClick={pickMultiple}
               disabled={state.loading}
-              className="flex flex-col items-center gap-2 rounded-2xl border bg-white p-6 shadow-sm hover:shadow-md transition-all active:scale-95"
+              className="flex flex-col items-center gap-2 rounded-2xl border bg-card p-6 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:shadow-md transition-all active:scale-95"
             >
               <div className="grid h-14 w-14 place-items-center rounded-2xl bg-green-50">
                 <Users className="h-7 w-7 text-green-600" />
@@ -81,11 +81,11 @@ export default function ImportCustomersPage() {
               <div className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-3 text-muted-foreground">or upload a file</span>
+              <span className="bg-card px-3 text-muted-foreground">or upload a file</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-card p-6 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)]">
             <div className="flex flex-col items-center gap-3">
               <input
                 ref={fileInputRef}
@@ -143,26 +143,26 @@ export default function ImportCustomersPage() {
                 </span>
               )}
             </div>
-            <button onClick={reset} className="p-2 rounded-xl hover:bg-slate-100">
+            <button onClick={reset} className="p-2 rounded-xl hover:bg-muted">
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border bg-card shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] overflow-hidden">
             <div className="max-h-80 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 sticky top-0">
+                <thead className="bg-muted sticky top-0">
                   <tr>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">#</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Name</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Phone</th>
-                    <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Name</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Phone</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {state.contacts.map((c, i) => (
                     <tr key={i} className={`border-t ${c.isDuplicate ? 'bg-amber-50' : ''}`}>
-                      <td className="px-4 py-3 text-slate-400">{i + 1}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
                       <td className="px-4 py-3 font-medium">{c.name}</td>
                       <td className="px-4 py-3">{formatPhoneDisplay(c.phone)}</td>
                       <td className="px-4 py-3">

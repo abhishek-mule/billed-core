@@ -209,10 +209,10 @@ export function QueueActionList() {
           const isActing = actingCase === item.caseId
           const isRecording = recordingPayment === item.caseId
           const isMenuOpen = showMenu === item.caseId
-          const badgeClass = stateBadge[item.recoveryState] || 'bg-gray-100 text-gray-700'
+          const badgeClass = stateBadge[item.recoveryState] || 'bg-muted text-foreground'
 
           return (
-            <li key={item.caseId} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <li key={item.caseId} className="bg-card border border-border rounded-xl overflow-hidden">
               {/* Main row */}
               <div className="flex items-center gap-3 px-4 py-3">
                 {/* Rank */}
@@ -223,13 +223,13 @@ export function QueueActionList() {
                 {/* Customer + amount */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900 truncate">{item.customer.name}</span>
+                    <span className="text-sm font-semibold text-foreground truncate">{item.customer.name}</span>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeClass}`}>
                       {item.recoveryState.replace('_', ' ')}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-sm font-bold text-gray-900">{formatINR(item.amount)}</span>
+                    <span className="text-sm font-bold text-foreground">{formatINR(item.amount)}</span>
                     {item.overdue > 0 && (
                       <span className="text-xs text-red-600 font-medium">{formatINR(item.overdue)} overdue</span>
                     )}
@@ -249,12 +249,12 @@ export function QueueActionList() {
                     disabled={isDisabled || isActing}
                     className={`
                       flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all
-                      ${isDisabled ? 'bg-gray-50 text-gray-400 cursor-default' :
+                      ${isDisabled ? 'bg-muted text-muted-foreground cursor-default' :
                         action.id === 'send_reminder' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 active:bg-amber-200' :
                         action.id === 'call' ? 'bg-orange-50 text-orange-700 hover:bg-orange-100 active:bg-orange-200' :
                         action.id === 'record_payment' ? 'bg-green-50 text-green-700 hover:bg-green-100 active:bg-green-200' :
                         action.id === 'mark_resolved' ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200' :
-                        'bg-gray-50 text-gray-700 hover:bg-gray-100'}
+                        'bg-muted/50 text-foreground hover:bg-muted'}
                     `}
                   >
                     {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : actionIcons[action.id]}
@@ -267,14 +267,14 @@ export function QueueActionList() {
                   <div className="relative">
                     <button
                       onClick={() => setShowMenu(isMenuOpen ? null : item.caseId)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-muted-foreground"
+                      className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </button>
                     {isMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setShowMenu(null)} />
-                        <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]">
+                        <div className="absolute right-0 top-8 z-20 bg-card border border-border rounded-lg shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] py-1 min-w-[140px]">
                           {item.secondaryActions.map(sa => (
                             <button
                               key={sa.id}
@@ -285,7 +285,7 @@ export function QueueActionList() {
                                 performAction(item.caseId, sa.id)
                               }}
                               disabled={actingCase === item.caseId}
-                              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                              className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-50"
                             >
                               {sa.label}
                             </button>
@@ -299,7 +299,7 @@ export function QueueActionList() {
 
               {/* Inline Record Payment form */}
               {isRecording && (
-                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 space-y-2">
+                <div className="border-t border-border px-4 py-3 bg-muted space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
@@ -308,7 +308,7 @@ export function QueueActionList() {
                         value={paymentAmount}
                         onChange={e => setPaymentAmount(e.target.value)}
                         placeholder="Amount"
-                        className="w-full pl-6 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500"
+                        className="w-full pl-6 pr-3 py-1.5 text-sm border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                         autoFocus
                       />
                     </div>
@@ -333,7 +333,7 @@ export function QueueActionList() {
                     </button>
                     <button
                       onClick={() => { setRecordingPayment(null); setActionError(null) }}
-                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-gray-700"
+                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
                     >
                       Cancel
                     </button>

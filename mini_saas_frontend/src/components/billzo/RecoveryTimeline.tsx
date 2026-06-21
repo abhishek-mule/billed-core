@@ -19,7 +19,7 @@ const eventIcons: Record<string, React.ReactNode> = {
 };
 
 const eventColors: Record<string, string> = {
-  "invoice.created": "bg-slate-100 text-slate-600",
+  "invoice.created": "bg-muted text-muted-foreground",
   "recovery.reminder.sent": "bg-blue-100 text-blue-600",
   "recovery.reminder.delivered": "bg-green-100 text-green-600",
   "recovery.reminder.failed": "bg-red-100 text-red-600",
@@ -187,7 +187,7 @@ export function RecoveryTimeline({ events, recoveredAmount, onOverride }: Recove
       {header}
 
       {showFilters && (
-        <div className="mt-3 mb-4 p-3 rounded-xl bg-slate-50 border border-border space-y-2">
+        <div className="mt-3 mb-4 p-3 rounded-xl bg-muted/50 border border-border space-y-2">
           <div>
             <div className="text-[11px] font-medium text-muted-foreground mb-1.5">Type</div>
             <div className="flex flex-wrap gap-1.5">
@@ -247,7 +247,7 @@ export function RecoveryTimeline({ events, recoveredAmount, onOverride }: Recove
             <div key={event.id} className="flex gap-3">
               {/* Timeline line */}
               <div className="flex flex-col items-center">
-                <div className={`grid h-8 w-8 place-items-center rounded-full shrink-0 ${eventColors[event.type] || "bg-gray-100 text-gray-600"}`}>
+                <div className={`grid h-8 w-8 place-items-center rounded-full shrink-0 ${eventColors[event.type] || "bg-muted text-muted-foreground"}`}>
                   {eventIcons[event.type] || <Clock className="h-4 w-4" />}
                 </div>
                 {index < filteredEvents.length - 1 && (

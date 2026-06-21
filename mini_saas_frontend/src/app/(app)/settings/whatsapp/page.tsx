@@ -229,7 +229,7 @@ export default function WhatsAppSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
           <div className="h-8 w-48 bg-card border border-border rounded-lg animate-pulse" />
           {[1, 2, 3].map(i => (
@@ -241,17 +241,17 @@ export default function WhatsAppSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link href="/settings" className="p-2 rounded-lg hover:bg-slate-200 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-500" />
+          <Link href="/settings" className="p-2 rounded-lg hover:bg-muted transition-colors">
+            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </Link>
           <div>
             <h1 className="text-lg font-semibold text-foreground">WhatsApp</h1>
-            <p className="text-sm text-slate-500">Connect WhatsApp, manage templates, auto-send</p>
+            <p className="text-sm text-muted-foreground">Connect WhatsApp, manage templates, auto-send</p>
           </div>
         </div>
 
@@ -309,14 +309,14 @@ export default function WhatsAppSettingsPage() {
 
         {/* Provider section */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
+          <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
                 <Smartphone className="w-4 h-4 text-emerald-600" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">WhatsApp Provider</p>
-                <p className="text-xs text-slate-500">Choose how to send WhatsApp messages</p>
+                <p className="text-xs text-muted-foreground">Choose how to send WhatsApp messages</p>
               </div>
             </div>
           </div>
@@ -334,7 +334,7 @@ export default function WhatsAppSettingsPage() {
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground capitalize">{provider}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {provider === "gupshup" ? "Transactional API" : "Merchant-owned WhatsApp"}
                   </p>
                 </button>
@@ -343,12 +343,12 @@ export default function WhatsAppSettingsPage() {
 
             {/* Baileys pairing */}
             {isBaileys && (
-              <div className="rounded-lg border border-border bg-slate-50 p-3 space-y-3">
+              <div className="rounded-lg border border-border bg-muted/50 p-3 space-y-3">
                 {pairStatus === "connected" ? (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Wifi className="w-4 h-4 text-emerald-500" />
-                      <span className="text-sm font-medium text-slate-700">Linked & Active</span>
+                      <span className="text-sm font-medium text-foreground">Linked & Active</span>
                     </div>
                     <button onClick={disconnectBaileys} className="text-xs text-rose-500 hover:underline font-medium">
                       Disconnect
@@ -360,7 +360,7 @@ export default function WhatsAppSettingsPage() {
                       {qrDataUrl ? (
                         <img src={qrDataUrl} alt="WhatsApp QR" className="w-48 h-48 rounded" />
                       ) : (
-                        <div className="w-48 h-48 bg-slate-100 rounded flex items-center justify-center">
+                        <div className="w-48 h-48 bg-muted rounded flex items-center justify-center">
                           <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
                         </div>
                       )}
@@ -373,7 +373,7 @@ export default function WhatsAppSettingsPage() {
                         {qrTimeLeft}s
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 text-center max-w-xs">
+                    <p className="text-xs text-muted-foreground text-center max-w-xs">
                       Open WhatsApp on your phone → Menu → Linked Devices → Link a Device → Scan this QR
                     </p>
                   </div>
@@ -381,7 +381,7 @@ export default function WhatsAppSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <WifiOff className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-slate-500">Not connected</span>
+                      <span className="text-sm text-muted-foreground">Not connected</span>
                     </div>
                     <button
                       onClick={startPairing}
@@ -404,14 +404,14 @@ export default function WhatsAppSettingsPage() {
             {(config.whatsappProvider || "gupshup") === "gupshup" && (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Gupshup API Key</label>
+                  <label className="block text-xs font-medium text-foreground mb-1">Gupshup API Key</label>
                   <div className="relative">
                     <input
                       value={config.gupshupApiKey || ""}
                       onChange={e => set("gupshupApiKey", e.target.value)}
                       type={showApiKey ? "text" : "password"}
                       placeholder="Enter your API key"
-                      className="w-full h-10 rounded-lg border border-border px-3 pr-9 text-sm font-mono text-foreground focus:outline-none focus:border-slate-400"
+                      className="w-full h-10 rounded-lg border border-border px-3 pr-9 text-sm font-mono text-foreground focus:outline-none focus:border-primary"
                     />
                     <button
                       onClick={() => setShowApiKey(!showApiKey)}
@@ -423,22 +423,22 @@ export default function WhatsAppSettingsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">App Name</label>
+                    <label className="block text-xs font-medium text-foreground mb-1">App Name</label>
                     <input
                       value={config.gupshupAppName || ""}
                       onChange={e => set("gupshupAppName", e.target.value)}
                       placeholder="My App"
-                      className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-slate-400"
+                      className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">Source Number</label>
+                    <label className="block text-xs font-medium text-foreground mb-1">Source Number</label>
                     <input
                       value={config.sourceNumber || ""}
                       onChange={e => set("sourceNumber", e.target.value)}
                       placeholder="919876543210"
                       type="tel"
-                      className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-slate-400"
+                      className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                 </div>
@@ -457,20 +457,20 @@ export default function WhatsAppSettingsPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Message Templates</p>
-            <p className="text-xs text-slate-500">Customize invoice, reminder, and receipt templates</p>
+            <p className="text-xs text-muted-foreground">Customize invoice, reminder, and receipt templates</p>
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         </Link>
 
         {/* Auto-Send */}
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-              <MessageCircle className="w-4 h-4 text-slate-500" />
+          <div className="flex items-center gap-3 border-b border-border pb-4">
+            <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+              <MessageCircle className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Auto-Send</p>
-              <p className="text-xs text-slate-500">Control when messages go out automatically</p>
+              <p className="text-xs text-muted-foreground">Control when messages go out automatically</p>
             </div>
           </div>
 
@@ -482,7 +482,7 @@ export default function WhatsAppSettingsPage() {
               className="h-4 w-4 accent-emerald-500 rounded border-border"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700">Auto-send invoice via WhatsApp</p>
+              <p className="text-sm font-medium text-foreground">Auto-send invoice via WhatsApp</p>
               <p className="text-xs text-muted-foreground">After creating an invoice</p>
             </div>
           </label>
@@ -495,14 +495,14 @@ export default function WhatsAppSettingsPage() {
               className="h-4 w-4 accent-emerald-500 rounded border-border"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700">Include payment links</p>
+              <p className="text-sm font-medium text-foreground">Include payment links</p>
               <p className="text-xs text-muted-foreground">Add UPI payment links in messages</p>
             </div>
           </label>
 
           {config.paymentLinkEnabled && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Payment link expiry</label>
+              <label className="block text-xs font-medium text-foreground mb-1.5">Payment link expiry</label>
               <div className="grid grid-cols-3 gap-2">
                 {[7, 15, 30].map(days => (
                   <button
@@ -526,13 +526,13 @@ export default function WhatsAppSettingsPage() {
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Opt-in Message</p>
-            <p className="text-xs text-slate-500">First message sent to new customers before regular messages</p>
+            <p className="text-xs text-muted-foreground">First message sent to new customers before regular messages</p>
           </div>
           <textarea
             value={config.optInMessage || ""}
             onChange={e => set("optInMessage", e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-border px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-slate-400 resize-none"
+            className="w-full rounded-lg border border-border px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
             placeholder="Hi {{name}}..."
           />
           <p className="text-[10px] text-muted-foreground">

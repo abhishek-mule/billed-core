@@ -24,7 +24,7 @@ function getEventIcon(evt: RecentEvent) {
   if (reason.includes('whatsapp') || reason.includes('reminder')) return { icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950' }
   if (reason.includes('invoice') || reason.includes('created')) return { icon: FileText, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950' }
   if (reason.includes('recovery') || reason.includes('recovered')) return { icon: TrendingUp, color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-950' }
-  return { icon: Activity, color: 'text-slate-500', bg: 'bg-muted' }
+  return { icon: Activity, color: 'text-muted-foreground', bg: 'bg-muted' }
 }
 
 function formatDate() {
@@ -296,7 +296,7 @@ export default function BillZoHome() {
         <p className="text-sm text-muted-foreground mb-6">{error}</p>
         <button
           onClick={() => { retryCountRef.current = 0; loadQueue(false) }}
-          className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-lg font-medium shadow-sm hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-lg font-medium shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:opacity-90 transition-opacity"
         >
           <RefreshCw className="w-4 h-4" />
           Retry
@@ -340,7 +340,7 @@ export default function BillZoHome() {
       </header>
 
       {isNewMerchant && (
-        <div className="bg-primary rounded-xl p-6 text-primary-foreground shadow-sm">
+        <div className="bg-primary rounded-xl p-6 text-primary-foreground shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)]">
           <h3 className="font-semibold text-lg mb-1">Welcome to BillZo!</h3>
           <p className="text-primary-foreground/80 text-sm mb-4">Start by adding your first product or customer.</p>
           <div className="flex gap-2">
@@ -351,7 +351,7 @@ export default function BillZoHome() {
       )}
 
       {/* ─── SECTION 1: Recoverable Today ─────────── */}
-      <div className="bg-slate-900 text-white rounded-2xl p-5 lg:p-6 shadow-lg">
+      <div className="bg-foreground text-background rounded-2xl p-5 lg:p-6 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
             Recoverable Today
@@ -462,10 +462,10 @@ export default function BillZoHome() {
 
       {/* ─── SECTION 3: Quick Actions ─────────────── */}
       <section>
-        <div className="bg-card/90 backdrop-blur-xl border border-border rounded-xl p-2 shadow-lg lg:shadow-none lg:bg-transparent lg:border-none lg:p-0">
+        <div className="bg-card/90 backdrop-blur-xl border border-border rounded-xl p-2 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] lg:shadow-none lg:bg-transparent lg:border-none lg:p-0">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { label: "New Bill", icon: Plus, href: "/pos", cls: "bg-foreground text-background shadow-sm" },
+              { label: "New Bill", icon: Plus, href: "/pos", cls: "bg-foreground text-background shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)]" },
               { label: "Record Payment", icon: IndianRupee, href: "/pulse", cls: "bg-card text-foreground border border-border hover:border-primary/30" },
               { label: "Add Customer", icon: UserPlus, href: "/parties/add", cls: "bg-card text-foreground border border-border hover:border-primary/30" },
               { label: "Send Reminder", icon: Send, href: "/recovery/queue", cls: "bg-card text-foreground border border-border hover:border-primary/30" },
@@ -500,7 +500,7 @@ export default function BillZoHome() {
               </Link>
             </div>
             {upcoming.length > 0 ? (
-              <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden shadow-sm">
+              <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)]">
                 {upcoming.map((r, i) => {
                   const diff = r.nextRecoveryAt ? new Date(r.nextRecoveryAt).getTime() - Date.now() : -1
                   const inDays = Math.ceil(diff / 86400000)
@@ -558,7 +558,7 @@ export default function BillZoHome() {
                 ].map((card, i) => (
                   <div key={i} className={`rounded-lg p-4 flex items-center justify-between border border-border/50 transition-all ${card.bg}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg bg-card flex items-center justify-center ${card.color} shadow-sm`}>
+                      <div className={`w-10 h-10 rounded-lg bg-card flex items-center justify-center ${card.color} shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)]`}>
                         <card.icon size={20} strokeWidth={1.5} />
                       </div>
                       <div>
@@ -576,7 +576,7 @@ export default function BillZoHome() {
 
             <section className="space-y-4">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Activity</h2>
-              <div className="bg-card border border-border rounded-xl p-5 shadow-sm relative">
+              <div className="bg-card border border-border rounded-xl p-5 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] relative">
                 {recentEvents.length > 0 ? (
                   <div className="space-y-5 relative">
                     <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />

@@ -154,7 +154,7 @@ export default function AddCustomerPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/parties')} className="p-2 rounded-xl hover:bg-slate-100">
+        <button onClick={() => router.push('/parties')} className="p-2 rounded-xl hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
@@ -178,7 +178,7 @@ export default function AddCustomerPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="rounded-2xl border bg-white p-5 shadow-sm space-y-4">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-1.5">Name *</label>
             <input

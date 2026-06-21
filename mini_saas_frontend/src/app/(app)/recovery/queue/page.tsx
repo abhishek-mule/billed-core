@@ -73,9 +73,9 @@ function signalColor(c: PriorityCase): string {
     if (due <= new Date()) return 'text-amber-600'
     return 'text-purple-600'
   }
-  if (c.ignoredReminders >= 3) return 'text-slate-600'
+  if (c.ignoredReminders >= 3) return 'text-muted-foreground'
   if (c.oldestOverdueDays > 0) return 'text-orange-600'
-  return 'text-slate-500'
+  return 'text-muted-foreground'
 }
 
 function formatSignal(c: PriorityCase): string {
@@ -248,18 +248,18 @@ export default function RecoveryQueuePage() {
     : null
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-2xl mx-auto px-4 lg:px-6 py-5 lg:py-8 space-y-5">
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Recovery Queue</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Cash collection workbench</p>
+            <h1 className="text-lg font-bold text-foreground">Recovery Queue</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Cash collection workbench</p>
           </div>
           <button
             onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -267,7 +267,7 @@ export default function RecoveryQueuePage() {
         </div>
 
         {error && (
-          <div className="border border-red-200 rounded-xl p-4 bg-white">
+          <div className="border border-red-200 rounded-xl p-4 bg-card">
             <div className="flex items-center gap-2 text-sm text-red-600">
               <AlertTriangle size={16} />
               {error}
@@ -277,9 +277,9 @@ export default function RecoveryQueuePage() {
 
         {loading && (
           <div className="space-y-4">
-            <div className="h-28 bg-white rounded-xl border border-slate-100 animate-pulse" />
+            <div className="h-28 bg-card rounded-xl border border-border animate-pulse" />
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 bg-white rounded-xl border border-slate-100 animate-pulse" />
+              <div key={i} className="h-24 bg-card rounded-xl border border-border animate-pulse" />
             ))}
           </div>
         )}
@@ -287,15 +287,15 @@ export default function RecoveryQueuePage() {
         {!loading && !error && (
           <>
             {/* Hero Card */}
-            <div className="bg-slate-900 text-white rounded-2xl p-5 lg:p-6 shadow-lg">
-              <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
+            <div className="bg-foreground text-background rounded-2xl p-5 lg:p-6 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                 <Banknote size={14} />
                 <span className="uppercase tracking-wider font-semibold">Recoverable Today</span>
               </div>
               <p className="text-3xl lg:text-4xl font-bold tabular-nums tracking-tight">
                 {formatINR(totalOverdue)}
               </p>
-              <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Users size={12} />
                   {customersNeedingAction} customer{customersNeedingAction !== 1 ? "s" : ""}
@@ -319,28 +319,28 @@ export default function RecoveryQueuePage() {
                 <div className="space-y-2">
                   {samples.length > 0 ? (
                     samples.map((s, i) => (
-                      <div key={i} className="bg-white border border-slate-200 rounded-xl p-4">
+                      <div key={i} className="bg-card border border-border rounded-xl p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                               {s.customer.slice(-1)}
                             </span>
                             <div>
-                              <p className="font-medium text-slate-900">{s.customer}</p>
-                              <p className="text-xs text-slate-500">
+                              <p className="font-medium text-foreground">{s.customer}</p>
+                              <p className="text-xs text-muted-foreground">
                                 {s.daysOverdue > 0 ? `${s.daysOverdue} days overdue` : "Due today"}
                               </p>
                             </div>
                           </div>
-                          <p className="font-bold text-slate-900 tabular-nums">{formatINR(s.amount)}</p>
+                          <p className="font-bold text-foreground tabular-nums">{formatINR(s.amount)}</p>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center">
+                    <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
                       <CheckCircle2 className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                      <p className="font-semibold text-slate-700">No outstanding payments</p>
-                      <p className="text-xs text-slate-500 mt-1">Keep sending invoices to track recovery.</p>
+                      <p className="font-semibold text-foreground">No outstanding payments</p>
+                      <p className="text-xs text-muted-foreground mt-1">Keep sending invoices to track recovery.</p>
                     </div>
                   )}
                 </div>
@@ -354,7 +354,7 @@ export default function RecoveryQueuePage() {
                     </p>
                     <Link
                       href="/settings"
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-sm transition-all"
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-foreground font-bold text-sm transition-all"
                     >
                       Upgrade Now
                       <ChevronRight size={16} />
@@ -366,15 +366,15 @@ export default function RecoveryQueuePage() {
 
             {/* Full Queue */}
             {!isPreview && sections === null && (
-              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
+              <div className="bg-card border border-border rounded-xl p-8 text-center">
                 <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-3" />
-                <p className="font-semibold text-slate-900 text-lg">All caught up</p>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="font-semibold text-foreground text-lg">All caught up</p>
+                <p className="text-sm text-muted-foreground mt-1">
                   No customers need follow-up right now.
                 </p>
                 <Link
                   href="/pos"
-                  className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition-colors"
+                  className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
                 >
                   + Create Invoice
                 </Link>
@@ -387,10 +387,10 @@ export default function RecoveryQueuePage() {
                   <section key={section.id} className="space-y-3">
                     <div className="flex items-center gap-2 px-1">
                       <span className={`w-2 h-2 rounded-full ${SECTION_CONFIG[section.id].dot}`} />
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                         {SECTION_CONFIG[section.id].label}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-medium">
+                      <span className="text-[10px] text-muted-foreground font-medium">
                         {section.items.length}
                       </span>
                     </div>
@@ -410,7 +410,7 @@ export default function RecoveryQueuePage() {
                   </section>
                 ))}
 
-                <div className="border-t border-slate-200 pt-3 flex items-center justify-between text-xs text-slate-500">
+                <div className="border-t border-border pt-3 flex items-center justify-between text-xs text-muted-foreground">
                   <span>{needCount} customer{needCount !== 1 ? "s" : ""} need{needCount === 1 ? "s" : ""} attention</span>
                   <Link href="/recovery/history" className="flex items-center gap-1 text-primary hover:underline font-medium">
                     <History size={12} />
@@ -422,22 +422,22 @@ export default function RecoveryQueuePage() {
 
             {/* Queue Complete state — all customers actioned */}
             {!isPreview && sections !== null && allDone && (
-              <div className="bg-white border-2 border-emerald-200 rounded-xl p-8 text-center">
+              <div className="bg-card border-2 border-emerald-200 rounded-xl p-8 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mx-auto">
                   <CheckCircle2 size={36} className="text-emerald-600" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-900 mt-4">Today's actions complete</h2>
-                <p className="text-sm text-slate-500 mt-1">
+                <h2 className="text-xl font-bold text-foreground mt-4">Today's actions complete</h2>
+                <p className="text-sm text-muted-foreground mt-1">
                   {needCount} customer{needCount !== 1 ? "s" : ""} processed
                 </p>
-                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-slate-400">
+                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-muted-foreground">
                   <span>{formatINR(totalOverdue)} still outstanding</span>
                   <span>&middot;</span>
                   <span>{doneCount} action{doneCount !== 1 ? "s" : ""} taken</span>
                 </div>
                 <Link
                   href="/recovery/history"
-                  className="inline-flex items-center gap-1.5 mt-6 px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                  className="inline-flex items-center gap-1.5 mt-6 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted transition-colors"
                 >
                   <History size={14} />
                   View History
@@ -511,29 +511,29 @@ function CustomerCard({
     : c.promiseToPayDate
       ? (new Date(c.promiseToPayDate) <= new Date() ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700')
       : c.ignoredReminders >= 3
-        ? 'bg-slate-100 text-slate-700'
+        ? 'bg-muted text-foreground'
         : 'bg-orange-100 text-orange-700'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
+    <div className="bg-card border border-border rounded-xl p-4 hover:shadow-sm dark:hover:shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-shadow">
       {/* Header: name + amount */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <Link
             href={`/parties/${c.customerId}`}
-            className="font-semibold text-slate-900 hover:text-primary transition-colors truncate"
+            className="font-semibold text-foreground hover:text-primary transition-colors truncate"
           >
             {c.customerName}
           </Link>
           <div className="flex items-baseline gap-3 mt-1">
-            <span className="text-2xl font-bold text-slate-900 tabular-nums">
+            <span className="text-2xl font-bold text-foreground tabular-nums">
               {formatINR(c.totalOverdue)}
             </span>
-            <span className="text-xs text-slate-400 font-medium">Outstanding</span>
+            <span className="text-xs text-muted-foreground font-medium">Outstanding</span>
           </div>
         </div>
         {c.phone && (
-          <span className="hidden sm:block text-xs text-slate-400 font-mono">{c.phone}</span>
+          <span className="hidden sm:block text-xs text-muted-foreground font-mono">{c.phone}</span>
         )}
       </div>
 
@@ -551,8 +551,8 @@ function CustomerCard({
       <div className="flex items-center gap-2 mt-2.5">
         {stages.map((s, i) => (
           <div key={s.label} className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${s.active ? 'bg-slate-700' : 'bg-slate-200'}`} />
-            <span className={`text-[10px] font-medium ${s.active ? 'text-slate-600' : 'text-slate-300'}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${s.active ? 'bg-muted-foreground/20' : 'bg-muted'}`} />
+            <span className={`text-[10px] font-medium ${s.active ? 'text-muted-foreground' : 'text-slate-300'}`}>
               {s.label}
             </span>
             {i < stages.length - 1 && (
@@ -563,23 +563,23 @@ function CustomerCard({
       </div>
 
       {/* Details row */}
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         {c.promiseToPayDate && (
           <span>
-            <span className="font-medium text-slate-600">Expected Payment:</span> {formatDate(c.promiseToPayDate)}
+            <span className="font-medium text-muted-foreground">Expected Payment:</span> {formatDate(c.promiseToPayDate)}
           </span>
         )}
         <span>
-          <span className="font-medium text-slate-600">Last Contact:</span> {formatLastContact(c.lastActivityAt)}
+          <span className="font-medium text-muted-foreground">Last Contact:</span> {formatLastContact(c.lastActivityAt)}
         </span>
         {c.nextReminderAt && (
           <span>
-            <span className="font-medium text-slate-600">Next Reminder:</span> {formatDate(c.nextReminderAt)} {new Date(c.nextReminderAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
+            <span className="font-medium text-muted-foreground">Next Reminder:</span> {formatDate(c.nextReminderAt)} {new Date(c.nextReminderAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
           </span>
         )}
         {!c.nextReminderAt && (
           <span>
-            <span className="font-medium text-slate-600">Next Action:</span> {formatActionTime(c)}
+            <span className="font-medium text-muted-foreground">Next Action:</span> {formatActionTime(c)}
           </span>
         )}
       </div>
@@ -596,13 +596,13 @@ function CustomerCard({
 
       {/* Reminder count */}
       {c.ignoredReminders > 0 && (
-        <p className="text-[10px] text-slate-400 mt-1.5">
+        <p className="text-[10px] text-muted-foreground mt-1.5">
           {c.ignoredReminders} reminder{c.ignoredReminders > 1 ? "s" : ""} ignored
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
         <button
           onClick={() => { trackQueueEvent(E.record_payment, c.customerId); onPayment(c) }}
           disabled={isSending}
@@ -633,7 +633,7 @@ function CustomerCard({
         </button>
         <button
           onClick={() => onHistory(c)}
-          className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+          className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
           title="View history"
         >
           <History size={14} />

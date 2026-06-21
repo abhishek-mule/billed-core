@@ -149,12 +149,12 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl dark:shadow-[0_16px_64px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-200">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100"
+          className="absolute top-4 right-4 p-1 rounded-full hover:bg-muted"
         >
-          <X className="h-5 w-5 text-gray-400" />
+          <X className="h-5 w-5 text-muted-foreground" />
         </button>
 
         <div className="p-8 text-center">

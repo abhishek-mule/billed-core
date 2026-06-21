@@ -85,7 +85,7 @@ export function Settings() {
                 <p className="text-xs font-medium text-muted-foreground">Payment integration configured</p>
               </div>
             </div>
-            <button className="rounded-lg border border-border bg-white px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted" onClick={() => {}}>Configure</button>
+            <button className="rounded-lg border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted" onClick={() => {}}>Configure</button>
           </div>
 
           <div className="row-card">
@@ -124,7 +124,7 @@ export function Settings() {
                 {pushBusy ? 'Working...' : 'Enable'}
               </button>
               <button
-                className="rounded-lg border border-border bg-white px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted"
+                className="rounded-lg border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted"
                 disabled={pushBusy}
                 onClick={sendTestPush}
               >

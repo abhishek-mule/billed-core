@@ -106,11 +106,11 @@ export default function BusinessProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-8 w-48 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-8 w-48 bg-card border border-border rounded-lg animate-pulse" />
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-24 bg-white border border-slate-200 rounded-lg animate-pulse" />
+            <div key={i} className="h-24 bg-card border border-border rounded-lg animate-pulse" />
           ))}
         </div>
       </div>
@@ -118,17 +118,17 @@ export default function BusinessProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link href="/settings" className="p-2 rounded-lg hover:bg-slate-200 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-500" />
+          <Link href="/settings" className="p-2 rounded-lg hover:bg-muted transition-colors">
+            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </Link>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Business Profile</h1>
-            <p className="text-sm text-slate-500">Shop name, address, GST, PAN, UPI ID</p>
+            <h1 className="text-lg font-semibold text-foreground">Business Profile</h1>
+            <p className="text-sm text-muted-foreground">Shop name, address, GST, PAN, UPI ID</p>
           </div>
         </div>
 
@@ -147,25 +147,25 @@ export default function BusinessProfilePage() {
         )}
 
         {/* Shop Identity */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-            <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-              <Store className="w-4 h-4 text-slate-500" />
+        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
+          <div className="flex items-center gap-3 pb-3 border-b border-border">
+            <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+              <Store className="w-4 h-4 text-muted-foreground" />
             </div>
-            <p className="text-sm font-semibold text-slate-900">Shop Identity</p>
+            <p className="text-sm font-semibold text-foreground">Shop Identity</p>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Shop name</label>
+            <label className="block text-xs font-medium text-foreground mb-1">Shop name</label>
             <input
               value={profile.name}
               onChange={e => set("name", e.target.value)}
               placeholder="My Shop"
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+              className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-foreground mb-1">
                 <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> Phone</span>
               </label>
               <input
@@ -173,11 +173,11 @@ export default function BusinessProfilePage() {
                 onChange={e => set("phone", e.target.value)}
                 placeholder="9876543210"
                 type="tel"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-foreground mb-1">
                 <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> Email</span>
               </label>
               <input
@@ -185,12 +185,12 @@ export default function BusinessProfilePage() {
                 onChange={e => set("email", e.target.value)}
                 placeholder="shop@example.com"
                 type="email"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label className="block text-xs font-medium text-foreground mb-1">
               <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> Address</span>
             </label>
             <textarea
@@ -198,54 +198,54 @@ export default function BusinessProfilePage() {
               onChange={e => set("address", e.target.value)}
               placeholder="Shop address"
               rows={2}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 resize-none"
+              className="w-full rounded-lg border border-border px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary resize-none"
             />
           </div>
         </div>
 
         {/* Tax & Payment Info */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-            <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4 text-slate-500" />
+        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
+          <div className="flex items-center gap-3 pb-3 border-b border-border">
+            <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+              <FileText className="w-4 h-4 text-muted-foreground" />
             </div>
-            <p className="text-sm font-semibold text-slate-900">Tax & Payment Info</p>
+            <p className="text-sm font-semibold text-foreground">Tax & Payment Info</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-foreground mb-1">
                 <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> GSTIN</span>
               </label>
               <input
                 value={profile.gstin}
                 onChange={e => set("gstin", e.target.value)}
                 placeholder="22AAAAA0000A1Z5"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 uppercase"
+                className="w-full h-10 rounded-lg border border-border px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary uppercase"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label className="block text-xs font-medium text-foreground mb-1">
                 <span className="flex items-center gap-1"><Landmark className="w-3 h-3" /> PAN</span>
               </label>
               <input
                 value={profile.pan}
                 onChange={e => set("pan", e.target.value)}
                 placeholder="AAAAA0000A"
-                className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 uppercase"
+                className="w-full h-10 rounded-lg border border-border px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary uppercase"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
+            <label className="block text-xs font-medium text-foreground mb-1">
               <span className="flex items-center gap-1"><CreditCard className="w-3 h-3" /> UPI ID</span>
             </label>
             <input
               value={profile.upiId}
               onChange={e => set("upiId", e.target.value)}
               placeholder="shop@paytm"
-              className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+              className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Used for payment links in invoices</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Used for payment links in invoices</p>
           </div>
         </div>
 
@@ -253,14 +253,14 @@ export default function BusinessProfilePage() {
         <div className="flex gap-3 pt-2">
           <Link
             href="/settings"
-            className="flex-1 h-11 rounded-lg border border-slate-200 flex items-center justify-center text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+            className="flex-1 h-11 rounded-lg border border-border flex items-center justify-center text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
           >
             Cancel
           </Link>
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 h-11 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            className="flex-1 h-11 rounded-lg bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             {saving ? (
               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

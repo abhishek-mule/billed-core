@@ -35,7 +35,7 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
     <div className={`relative ${className}`}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-slate-50 transition-colors"
+        className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm font-medium shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:bg-muted transition-colors"
       >
         <Calendar className="h-4 w-4 text-muted-foreground" />
         <span>{selectedLabel}</span>
@@ -45,7 +45,7 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 z-20 w-52 rounded-2xl border bg-white shadow-xl p-2 space-y-1">
+          <div className="absolute right-0 top-full mt-2 z-20 w-52 rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-2 space-y-1">
             {options.map(opt => (
               <button
                 key={opt.value}
@@ -53,7 +53,7 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
                 className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
                   selectedLabel === opt.label
                     ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-slate-100'
+                    : 'hover:bg-muted'
                 }`}
               >
                 {opt.label}

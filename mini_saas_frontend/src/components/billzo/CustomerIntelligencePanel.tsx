@@ -43,7 +43,7 @@ const STATE_COLORS: Record<string, string> = {
   partial_payment: 'bg-amber-50 text-amber-700 border-amber-200',
   disputed: 'bg-red-50 text-red-700 border-red-200',
   recovered: 'bg-green-50 text-green-700 border-green-200',
-  closed: 'bg-slate-50 text-slate-500 border-slate-200',
+  closed: 'bg-muted/50 text-muted-foreground border-border',
 }
 
 const ACTION_ICONS: Record<string, typeof Send> = {
@@ -89,15 +89,15 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
 
   if (loading) {
     return (
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+      <div className="bg-card border border-border rounded-lg p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           <Zap size={12} />
           BillZo Recovery
         </div>
         <div className="space-y-2 animate-pulse">
-          <div className="h-4 bg-slate-100 rounded w-3/4" />
-          <div className="h-4 bg-slate-100 rounded w-1/2" />
-          <div className="h-4 bg-slate-100 rounded w-2/3" />
+          <div className="h-4 bg-muted rounded w-3/4" />
+          <div className="h-4 bg-muted rounded w-1/2" />
+          <div className="h-4 bg-muted rounded w-2/3" />
         </div>
       </div>
     )
@@ -105,7 +105,7 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
 
   if (error) {
     return (
-      <div className="bg-white border border-rose-200 rounded-lg p-4">
+      <div className="bg-card border border-rose-200 rounded-lg p-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-rose-600 uppercase tracking-wider mb-2">
           <AlertTriangle size={12} />
           Recovery Error
@@ -117,12 +117,12 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
 
   if (!data) {
     return (
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+      <div className="bg-card border border-border rounded-lg p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
           <Zap size={12} />
           BillZo Recovery
         </div>
-        <p className="text-xs text-slate-500">No active recovery case for this customer.</p>
+        <p className="text-xs text-muted-foreground">No active recovery case for this customer.</p>
       </div>
     )
   }
@@ -160,9 +160,9 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
 
   return (
     <>
-    <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
+    <div className="bg-card border border-border rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Zap size={12} />
           BillZo Recovery
         </div>
@@ -173,55 +173,55 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-0.5">Total Overdue</p>
-          <p className="text-base font-bold text-slate-900 tabular-nums">{formatINR(data.case.total_overdue || 0)}</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Total Overdue</p>
+          <p className="text-base font-bold text-foreground tabular-nums">{formatINR(data.case.total_overdue || 0)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-0.5">Attention Score</p>
-          <p className="text-base font-bold text-slate-900 tabular-nums">{data.case.attention_score || 0}</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Attention Score</p>
+          <p className="text-base font-bold text-foreground tabular-nums">{data.case.attention_score || 0}</p>
         </div>
         <div>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-0.5">Oldest Overdue</p>
-          <p className="text-sm font-semibold text-slate-900">{data.oldestOverdueLabel}</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Oldest Overdue</p>
+          <p className="text-sm font-semibold text-foreground">{data.oldestOverdueLabel}</p>
         </div>
         <div>
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-0.5">Open Invoices</p>
-          <p className="text-sm font-semibold text-slate-900">{data.openInvoiceCount}</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Open Invoices</p>
+          <p className="text-sm font-semibold text-foreground">{data.openInvoiceCount}</p>
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-3 space-y-2">
-        <div className="flex items-center gap-2 text-xs text-slate-600">
-          <Receipt size={12} className="shrink-0 text-slate-400" />
-          <span className="text-slate-400">Next action:</span>
-          <span className="font-medium text-slate-900 flex items-center gap-1">
+      <div className="border-t border-border pt-3 space-y-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Receipt size={12} className="shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground">Next action:</span>
+          <span className="font-medium text-foreground flex items-center gap-1">
             <ActionIcon size={12} />
             {data.nextActionLabel}
           </span>
         </div>
-        <div className="text-xs text-slate-500 bg-slate-50 rounded-lg px-2.5 py-1.5">
-          <span className="font-medium text-slate-600">Why:</span> {data.nextActionReason}
+        <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5">
+          <span className="font-medium text-muted-foreground">Why:</span> {data.nextActionReason}
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs text-slate-500">
+      <div className="border-t border-border pt-3 space-y-1.5 text-xs text-muted-foreground">
         {data.lastPaymentAt && (
           <div className="flex items-center gap-2">
-            <Calendar size={11} className="shrink-0 text-slate-400" />
+            <Calendar size={11} className="shrink-0 text-muted-foreground" />
             Last payment: {new Date(data.lastPaymentAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
           </div>
         )}
         <div className="flex items-center gap-2">
-          <BarChart3 size={11} className="shrink-0 text-slate-400" />
+          <BarChart3 size={11} className="shrink-0 text-muted-foreground" />
           {data.paymentBehavior}
         </div>
         <div className="flex items-center gap-2">
-          <Clock size={11} className="shrink-0 text-slate-400" />
+          <Clock size={11} className="shrink-0 text-muted-foreground" />
           Customer since {data.customerSince}
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-3 space-y-2">
+      <div className="border-t border-border pt-3 space-y-2">
         {stateKey === 'promised' && data.case.promise_to_pay_date && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-700">
             <CheckCircle2 size={14} />

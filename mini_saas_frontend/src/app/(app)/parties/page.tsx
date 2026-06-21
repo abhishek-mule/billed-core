@@ -100,23 +100,23 @@ function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
   activeParties: number
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4 lg:p-5">
+    <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
       <div className="grid grid-cols-3 gap-4 lg:gap-6">
         <div>
-          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Total Receivables</p>
-          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Receivables</p>
+          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {formatINR(totalReceivables)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Total Payables</p>
-          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Payables</p>
+          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {formatINR(totalPayables)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Active Parties</p>
-          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Active Parties</p>
+          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {activeParties}
           </p>
         </div>
@@ -142,25 +142,25 @@ function PartyCard({ party, isSelected, onSelect }: {
       onClick={onSelect}
       className={`w-full text-left p-3 rounded-lg border transition-colors ${
         isSelected
-          ? 'bg-slate-50 border-slate-300'
-          : 'bg-white border-slate-200 hover:border-slate-300'
+          ? 'bg-muted border-border'
+          : 'bg-card border-border hover:border-border'
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <span className="text-sm font-semibold text-slate-600">
+        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+          <span className="text-sm font-semibold text-muted-foreground">
             {party.name.charAt(0).toUpperCase()}
           </span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <p className="font-medium text-slate-900 truncate">{party.name}</p>
-            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
+            <p className="font-medium text-foreground truncate">{party.name}</p>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
               {type}
             </span>
           </div>
           {party.phone && (
-            <p className="text-xs text-slate-500 truncate">{party.phone}</p>
+            <p className="text-xs text-muted-foreground truncate">{party.phone}</p>
           )}
           <div className="flex items-center justify-between mt-1.5">
             <p className={`text-sm font-semibold tabular-nums ${
@@ -196,24 +196,24 @@ function PartyDetail({ party, onBack }: {
     <div className="space-y-4">
       {/* Back button (mobile) */}
       {onBack && (
-        <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+        <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-4 h-4" /> Back to parties
         </button>
       )}
 
       {/* Party header */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-lg font-bold text-slate-600">
+          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-muted-foreground">
               {party.name.charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-semibold text-slate-900">{party.name}</h2>
-            <p className="text-sm text-slate-500">{party.phone}</p>
+            <h2 className="text-lg font-semibold text-foreground">{party.name}</h2>
+            <p className="text-sm text-muted-foreground">{party.phone}</p>
             {party.gstin && (
-              <p className="text-xs text-slate-400">GST: {party.gstin}</p>
+              <p className="text-xs text-muted-foreground">GST: {party.gstin}</p>
             )}
           </div>
         </div>
@@ -256,32 +256,32 @@ function PartyDetail({ party, onBack }: {
 
       {/* Financial Summary */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Outstanding</p>
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Outstanding</p>
           <p className="text-base font-semibold text-rose-600 tabular-nums">{formatINR(party.outstanding)}</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Total Sales</p>
-          <p className="text-base font-semibold text-slate-900 tabular-nums">{formatINR(party.totalSales)}</p>
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Sales</p>
+          <p className="text-base font-semibold text-foreground tabular-nums">{formatINR(party.totalSales)}</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Avg Payment</p>
-          <p className="text-base font-semibold text-slate-900 tabular-nums">
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Avg Payment</p>
+          <p className="text-base font-semibold text-foreground tabular-nums">
             {avgPaymentTime || '—'}
           </p>
         </div>
       </div>
 
       {/* Pending Invoices */}
-      <div className="bg-white border border-slate-200 rounded-lg">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <h3 className="text-sm font-medium text-slate-900">
+      <div className="bg-card border border-border rounded-lg">
+        <div className="px-4 py-3 border-b border-border">
+          <h3 className="text-sm font-medium text-foreground">
             Pending Invoices {pendingInvoices.length > 0 && `(${pendingInvoices.length})`}
           </h3>
         </div>
         {pendingInvoices.length === 0 ? (
           <div className="p-6 text-center">
-            <p className="text-sm text-slate-400">No pending invoices</p>
+            <p className="text-sm text-muted-foreground">No pending invoices</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -291,21 +291,21 @@ function PartyDetail({ party, onBack }: {
                 <div key={inv.id} className="px-4 py-3 flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-medium text-slate-900 truncate">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {inv.invoiceNumber || `#${inv.id.slice(0, 8)}`}
                       </p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[status]}`}>
                         {STATUS_LABELS[status]}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-foreground">
                       Due {inv.dueAt || inv.dueDate ? new Date(inv.dueAt || inv.dueDate!).toLocaleDateString() : '—'} · {formatINR(getOutstanding(inv))}
                     </p>
                   </div>
                   <div className="flex gap-1.5 ml-3 flex-shrink-0">
                     <button
                       onClick={() => router.push(`/parties/${party.id}`)}
-                      className="text-xs px-2.5 py-1.5 rounded bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium"
+                      className="text-xs px-2.5 py-1.5 rounded bg-muted border border-border text-muted-foreground hover:bg-muted font-medium"
                     >
                       Remind
                     </button>
@@ -466,17 +466,17 @@ export default function PartiesPage() {
   // ── Loading state ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-24 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-24 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
             <div className="space-y-2">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-20 bg-white border border-slate-200 rounded-lg animate-pulse" />
+                <div key={i} className="h-20 bg-card border border-border rounded-lg animate-pulse" />
               ))}
             </div>
             <div className="hidden lg:block">
-              <div className="h-96 bg-white border border-slate-200 rounded-lg animate-pulse" />
+              <div className="h-96 bg-card border border-border rounded-lg animate-pulse" />
             </div>
           </div>
         </div>
@@ -487,9 +487,9 @@ export default function PartiesPage() {
   // ── Error state ──
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
             <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
@@ -504,14 +504,14 @@ export default function PartiesPage() {
   // ── Empty state ──
   if (customers.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-slate-200 rounded-lg p-8 lg:p-12 text-center">
-            <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-4">
-              <Users className="w-6 h-6 text-slate-400" />
+          <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center">
+            <div className="w-14 h-14 rounded-full bg-muted border border-border flex items-center justify-center mx-auto mb-4">
+              <Users className="w-6 h-6 text-muted-foreground" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">No parties yet</h2>
-            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">
+            <h2 className="text-lg font-semibold text-foreground mb-2">No parties yet</h2>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Start managing your business relationships. Import from your contacts or add a party manually.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -529,7 +529,7 @@ export default function PartiesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Financial Hero */}
@@ -542,14 +542,14 @@ export default function PartiesPage() {
         {/* Search + Add (desktop) */}
         <div className="hidden lg:flex items-center gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               ref={searchRef}
               type="text"
               placeholder="Search by name, phone, or GST... (/)"
               value={q}
               onChange={e => setQ(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+              className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
           </div>
           <Button variant="outline" size="sm" onClick={() => router.push('/parties/import')}>
@@ -568,18 +568,18 @@ export default function PartiesPage() {
             {/* Mobile search + add */}
             <div className="lg:hidden flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search parties..."
                   value={q}
                   onChange={e => setQ(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                  className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
               </div>
               <button
                 onClick={() => router.push('/parties/add')}
-                className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0"
+                className="w-9 h-9 rounded-lg bg-foreground text-background flex items-center justify-center flex-shrink-0"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -587,7 +587,7 @@ export default function PartiesPage() {
 
             {/* Party count */}
             <div className="flex items-center justify-between px-1">
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-xs text-muted-foreground font-medium">
                 {filtered.length} {filtered.length === 1 ? 'party' : 'parties'}
                 {q && filtered.length !== parties.length && ` (of ${parties.length})`}
               </p>
@@ -595,8 +595,8 @@ export default function PartiesPage() {
 
             {/* Party list */}
             {filtered.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-                <p className="text-sm text-slate-400">No parties match your search</p>
+              <div className="bg-card border border-border rounded-lg p-6 text-center">
+                <p className="text-sm text-muted-foreground">No parties match your search</p>
               </div>
             ) : (
               <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
@@ -623,11 +623,11 @@ export default function PartiesPage() {
             {selectedParty ? (
               <PartyDetail party={selectedParty} />
             ) : (
-              <div className="bg-white border border-slate-200 rounded-lg p-8 lg:p-12 text-center h-full flex flex-col items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mb-3">
-                  <Users className="w-5 h-5 text-slate-400" />
+              <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center h-full flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-muted border border-border flex items-center justify-center mb-3">
+                  <Users className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <p className="text-sm text-slate-500">Select a party to view details</p>
+                <p className="text-sm text-muted-foreground">Select a party to view details</p>
               </div>
             )}
           </div>
@@ -638,7 +638,7 @@ export default function PartiesPage() {
       <div className="lg:hidden fixed bottom-20 right-4 z-10">
         <button
           onClick={() => router.push('/parties/add')}
-          className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg"
+          className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
         >
           <Plus className="w-5 h-5" />
         </button>

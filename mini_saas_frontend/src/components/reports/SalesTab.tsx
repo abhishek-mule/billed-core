@@ -47,13 +47,13 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
 
       {/* Main Stats */}
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
           <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">This month</div>
           <div className="mt-2 text-3xl font-black text-foreground">{money(metrics.thisMonth)}</div>
           <div className="mt-1 text-xs font-medium text-muted-foreground">{metrics.invoiceCount} invoices generated</div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
           <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Growth</div>
           <div className="mt-2 flex items-center gap-2">
             <div className={`flex items-center gap-1 text-2xl font-black ${metrics.trend >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -64,7 +64,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
           <div className="mt-1 text-xs font-medium text-muted-foreground">vs {money(metrics.lastMonth)} last month</div>
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
           <div className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Avg Ticket</div>
           <div className="mt-2 text-3xl font-black text-foreground">{money(metrics.avgInvoiceValue)}</div>
           <div className="mt-1 text-xs font-medium text-muted-foreground">per customer visit</div>
@@ -72,7 +72,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
       </div>
 
       {/* Sales Chart */}
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="font-bold text-lg">Sales Performance</h3>
@@ -127,12 +127,12 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
 
       {/* Top Products */}
       {metrics.topProducts.length > 0 && (
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <h3 className="font-bold text-lg">Top Products</h3>
           <p className="text-xs text-muted-foreground mb-4">Best-selling by revenue</p>
           <div className="space-y-4">
             {metrics.topProducts.map((p, i) => (
-              <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-50 rounded-xl transition-colors">
+              <div key={i} className="flex items-center justify-between group p-2 hover:bg-muted rounded-xl transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                     {i + 1}
@@ -143,7 +143,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-slate-900 text-lg">{money(p.revenue)}</p>
+                  <p className="font-black text-foreground text-lg">{money(p.revenue)}</p>
                 </div>
               </div>
             ))}
@@ -153,12 +153,12 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
 
       {/* Top Customers */}
       {metrics.topCustomers.length > 0 && (
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
           <h3 className="font-bold text-lg">Top Customers</h3>
           <p className="text-xs text-muted-foreground mb-4">Clients bringing in the most revenue</p>
           <div className="space-y-4">
             {metrics.topCustomers.map((c, i) => (
-              <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-50 rounded-xl transition-colors">
+              <div key={i} className="flex items-center justify-between group p-2 hover:bg-muted rounded-xl transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                     {i + 1}
@@ -169,7 +169,7 @@ export function SalesTab({ metrics, plan }: SalesTabProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-slate-900 text-lg">{money(c.totalAmount)}</p>
+                  <p className="font-black text-foreground text-lg">{money(c.totalAmount)}</p>
                 </div>
               </div>
             ))}

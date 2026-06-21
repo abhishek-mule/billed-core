@@ -39,12 +39,12 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
       {hasData ? (
         <>
           {/* Recovery Hero Card */}
-          <div className="rounded-2xl bg-slate-900 text-white p-8 shadow-xl relative overflow-hidden">
+          <div className="rounded-2xl bg-foreground text-background p-8 shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[80px] -mr-20 -mt-20"></div>
             <div className="relative z-10">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Recovery Volume</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Total Recovery Volume</p>
                   <p className="mt-2 text-5xl font-black">{money(recovery.totalRecovered)}</p>
                   {roiMultiple >= 1 && (
                     <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-xs font-bold border border-emerald-500/20">
@@ -53,7 +53,7 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                     </div>
                   )}
                 </div>
-                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-background/5 border border-background/10 backdrop-blur-sm">
                   <PieIcon className="h-7 w-7 text-primary" />
                 </div>
               </div>
@@ -65,8 +65,8 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                   { label: 'Avg Time', val: `${recovery.avgRecoveryDays} days` },
                   { label: 'Invoices', val: recovery.invoicesRecovered },
                 ].map((stat, idx) => (
-                  <div key={idx} className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{stat.label}</p>
+                  <div key={idx} className="p-4 rounded-2xl bg-background/5 border border-background/5">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{stat.label}</p>
                     <p className="mt-1 text-lg font-bold flex items-center gap-1">
                       {stat.icon && <stat.icon className="h-4 w-4" />}
                       {stat.val}
@@ -79,7 +79,7 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
 
           <div className="grid lg:grid-cols-[1fr_350px] gap-5">
             {/* Pending Breakdown */}
-            <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border bg-card p-6 shadow-sm">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="font-bold text-lg">Money on the Table</h3>
@@ -99,18 +99,18 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                   recovery.pendingBreakdown.slice(0, 5).map(inv => (
                     <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border p-4 transition-all hover:border-primary/20 hover:bg-primary/5">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold text-xs">
                           {inv.customerName.charAt(0)}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900">{inv.customerName}</p>
-                          <p className="text-[10px] font-medium text-slate-500 uppercase tracking-tight">
+                          <p className="font-bold text-foreground">{inv.customerName}</p>
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-tight">
                             {inv.days} days overdue · {inv.status}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-black text-slate-900">{money(inv.amount)}</p>
+                        <p className="font-black text-foreground">{money(inv.amount)}</p>
                         {plan !== 'starter' && (
                           <p className="cursor-pointer text-[10px] font-bold text-primary hover:underline">Push Reminder</p>
                         )}
@@ -120,14 +120,14 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                 ) : (
                   <div className="py-10 text-center">
                     <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto opacity-20" />
-                    <p className="mt-2 text-sm font-medium text-slate-400">Zero pending invoices!</p>
+                    <p className="mt-2 text-sm font-medium text-muted-foreground">Zero pending invoices!</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Chart Card */}
-            <div className="rounded-2xl border bg-white p-6 shadow-sm flex flex-col">
+            <div className="rounded-2xl border bg-card p-6 shadow-sm flex flex-col">
               <h3 className="font-bold text-lg mb-1">Status Mix</h3>
               <p className="text-xs text-muted-foreground mb-6">Paid vs Pending ratio</p>
 
@@ -151,16 +151,16 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                 </ResponsiveContainer>
               </div>
 
-              <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="mt-4 p-4 rounded-xl bg-muted border border-border">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-500 uppercase tracking-tighter">Conversion</span>
-                  <span className="font-black text-slate-900">
+                  <span className="font-bold text-muted-foreground uppercase tracking-tighter">Conversion</span>
+                  <span className="font-black text-foreground">
                     {recovery.invoicesRecovered + recovery.invoicesPending > 0
                       ? `${Math.round((recovery.invoicesRecovered / (recovery.invoicesRecovered + recovery.invoicesPending)) * 100)}%`
                       : '0%'}
                   </span>
                 </div>
-                <div className="mt-2 w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div className="mt-2 w-full h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500"
                     style={{ width: `${recovery.invoicesRecovered + recovery.invoicesPending > 0 ? (recovery.invoicesRecovered / (recovery.invoicesRecovered + recovery.invoicesPending)) * 100 : 0}%` }}
@@ -171,17 +171,17 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
           </div>
         </>
       ) : (
-        <div className="rounded-3xl border-2 border-dashed border-slate-200 p-12 text-center bg-slate-50/50">
-          <div className="w-20 h-20 bg-white rounded-full border shadow-sm flex items-center justify-center mx-auto">
-            <TrendingUp className="h-10 w-10 text-slate-300" />
+        <div className="rounded-3xl border-2 border-dashed border-border p-12 text-center bg-muted/50">
+          <div className="w-20 h-20 bg-card rounded-full border shadow-sm flex items-center justify-center mx-auto">
+            <TrendingUp className="h-10 w-10 text-muted-foreground" />
           </div>
-          <h3 className="mt-6 font-black text-xl text-slate-900">Start Your Recovery Journey</h3>
-          <p className="mt-2 text-slate-500 max-w-xs mx-auto">
+          <h3 className="mt-6 font-black text-xl text-foreground">Start Your Recovery Journey</h3>
+          <p className="mt-2 text-muted-foreground max-w-xs mx-auto">
             Automate your payment collection and see your cash flow improve instantly.
           </p>
           <button
             onClick={() => router.push('/pos')}
-            className="mt-6 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all active:scale-95"
+            className="mt-6 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg hover:bg-indigo-700 hover:-translate-y-0.5 transition-all active:scale-95"
           >
             Create Your First Invoice
           </button>

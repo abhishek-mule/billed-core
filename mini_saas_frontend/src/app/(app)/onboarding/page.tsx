@@ -221,8 +221,8 @@ export default function OnboardingPage() {
       <div className="flex-1 grid place-items-center px-4 pb-16">
         <div className="w-full max-w-md animate-in zoom-in-95 duration-300">
           {loading === "idle" || loading === "creating" ? (
-            <div className="rounded-2xl border border-border bg-white shadow-lg p-7">
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
+            <div className="rounded-2xl border border-border bg-card shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] p-7">
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
                 <Store className="h-6 w-6" />
               </div>
               <h1 className="mt-5 text-2xl font-bold tracking-tight">Set up your shop</h1>
@@ -270,7 +270,7 @@ export default function OnboardingPage() {
                     <div className="w-full border-t border-border"></div>
                   </div>
                   <div className="relative flex justify-center text-xs">
-                    <span className="bg-white px-2 text-muted-foreground">
+                    <span className="bg-card px-2 text-muted-foreground">
                       Auto-fill with UPI or GSTIN (optional)
                     </span>
                   </div>
@@ -341,7 +341,7 @@ export default function OnboardingPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-border bg-white shadow-lg p-10 text-center">
+            <div className="rounded-2xl border border-border bg-card shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] p-10 text-center">
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-green-100 text-green-600 animate-in zoom-in-95">
                 <CheckCircle2 className="h-8 w-8" />
               </div>

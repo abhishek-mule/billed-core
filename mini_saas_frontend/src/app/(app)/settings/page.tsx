@@ -142,17 +142,17 @@ export default function SettingsPage() {
   const STATUS_STYLES: Record<CategoryStatus, string> = {
     connected: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     not_connected: 'bg-amber-50 text-amber-700 border-amber-200',
-    pending: 'bg-slate-50 text-slate-500 border-slate-200',
+    pending: 'bg-muted/50 text-muted-foreground border-border',
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-16 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="h-16 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-28 bg-white border border-slate-200 rounded-lg animate-pulse" />
+              <div key={i} className="h-28 bg-card border border-border rounded-lg animate-pulse" />
             ))}
           </div>
         </div>
@@ -162,9 +162,9 @@ export default function SettingsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
             <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Again</Button>
@@ -175,17 +175,17 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
         {/* Shop identity banner */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-full bg-slate-900 text-white flex items-center justify-center text-base font-bold shrink-0">
+        <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center text-base font-bold shrink-0">
             {tenant?.name?.charAt(0) || 'S'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-900 truncate">{tenant?.name || 'My Shop'}</p>
-            <p className="text-xs text-slate-500">{tenant?.phone || ''}{tenant?.plan ? ` · ${tenant.plan}` : ''}</p>
+            <p className="text-sm font-semibold text-foreground truncate">{tenant?.name || 'My Shop'}</p>
+            <p className="text-xs text-muted-foreground">{tenant?.phone || ''}{tenant?.plan ? ` · ${tenant.plan}` : ''}</p>
           </div>
           <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
             Active
@@ -194,21 +194,21 @@ export default function SettingsPage() {
 
         {/* Quick Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             ref={searchRef}
             type="text"
             placeholder="Search settings... (/)"
             value={q}
             onChange={e => setQ(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+            className="w-full pl-9 pr-3 py-2.5 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
         </div>
 
         {/* Category grid */}
         {filtered.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-lg p-8 text-center">
-            <p className="text-sm text-slate-400">No settings match &ldquo;{q}&rdquo;</p>
+          <div className="bg-card border border-border rounded-lg p-8 text-center">
+            <p className="text-sm text-muted-foreground">No settings match &ldquo;{q}&rdquo;</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -216,8 +216,8 @@ export default function SettingsPage() {
               <Link
                 key={cat.id}
                 href={cat.href}
-                className={`bg-white border rounded-lg p-4 transition-colors hover:border-slate-300 ${
-                  cat.danger ? 'border-rose-200 hover:border-rose-300' : 'border-slate-200'
+                className={`bg-card border rounded-lg p-4 transition-colors hover:border-border ${
+                  cat.danger ? 'border-rose-200 hover:border-rose-300' : 'border-border'
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -225,22 +225,22 @@ export default function SettingsPage() {
                     cat.danger ? 'bg-rose-50 text-rose-500' :
                     cat.id === 'whatsapp' ? 'bg-emerald-50 text-emerald-600' :
                     cat.id === 'recovery' ? 'bg-amber-50 text-amber-600' :
-                    'bg-slate-50 text-slate-500'
+                    'bg-muted/50 text-muted-foreground'
                   }`}>
                     {cat.icon}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-slate-900">{cat.title}</p>
+                      <p className="text-sm font-medium text-foreground">{cat.title}</p>
                       {cat.status && cat.statusLabel && (
                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[cat.status]}`}>
                           {cat.statusLabel}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{cat.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{cat.description}</p>
                   </div>
-                  <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-rose-300' : 'text-slate-300'}`} />
+                  <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-rose-300' : 'text-muted-foreground'}`} />
                 </div>
               </Link>
             ))}
@@ -248,26 +248,26 @@ export default function SettingsPage() {
         )}
 
         {/* Appearance */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-slate-50 text-slate-500">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-muted/50 text-muted-foreground">
               {theme === 'light' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900">Appearance</p>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-sm font-medium text-foreground">Appearance</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Currently {theme === 'light' ? 'Light' : 'Dark'} mode
               </p>
             </div>
             <button
               onClick={toggleTheme}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'
+                theme === 'dark' ? 'bg-foreground/20' : 'bg-muted'
               }`}
               aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
               <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transform transition-transform ${
+                className={`inline-block h-4 w-4 rounded-full bg-card shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] transform transition-transform ${
                   theme === 'dark' ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
@@ -281,7 +281,7 @@ export default function SettingsPage() {
             <AlertCircle className="w-4 h-4 text-rose-400" />
             <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">Danger Zone</p>
           </div>
-          <div className="bg-white border border-rose-200 rounded-lg divide-y divide-rose-100 overflow-hidden">
+          <div className="bg-card border border-rose-200 rounded-lg divide-y divide-rose-100 overflow-hidden">
             <button
               onClick={handleSignOut}
               className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-rose-50 transition-colors"

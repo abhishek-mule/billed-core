@@ -491,7 +491,7 @@ export default function InvoiceSendPage() {
               <button
                 onClick={handleSend}
                 disabled={sending}
-                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
+                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
               >
                 <Send size={18} />
                 Send Invoice on WhatsApp

@@ -30,15 +30,15 @@ function MetricRow({ label, value, trend, tag }: {
   tag?: { label: string; color: string }
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-3 lg:p-4">
-      <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-lg lg:text-xl font-semibold text-slate-900 tabular-nums">{value}</p>
+    <div className="bg-card border border-border rounded-lg p-3 lg:p-4">
+      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-lg lg:text-xl font-semibold text-foreground tabular-nums">{value}</p>
       <div className="flex items-center gap-2 mt-1">
         {trend && (
           <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${
             trend.direction === 'up' ? 'text-emerald-600' :
             trend.direction === 'down' ? 'text-rose-600' :
-            'text-slate-400'
+            'text-muted-foreground'
           }`}>
             {trend.direction === 'up' ? <ArrowUpRight className="w-3 h-3" /> :
              trend.direction === 'down' ? <ArrowDownRight className="w-3 h-3" /> : null}
@@ -74,7 +74,7 @@ function SimpleBar({ items, maxHeight = 48 }: {
               opacity: 0.7,
             }}
           />
-          <span className="text-[9px] text-slate-400 font-medium whitespace-nowrap">{item.label}</span>
+          <span className="text-[9px] text-muted-foreground font-medium whitespace-nowrap">{item.label}</span>
         </div>
       ))}
     </div>
@@ -96,7 +96,7 @@ function MiniTrend({ data, height = 40 }: {
       {data.map((d, i) => (
         <div
           key={i}
-          className="w-full rounded-t bg-slate-900/10"
+          className="w-full rounded-t bg-foreground/10"
           style={{ height: `${(d.sales / max) * height}px`, maxWidth: `${w}px` }}
           title={`${d.week}: ${formatINR(d.sales)}`}
         />
@@ -128,22 +128,22 @@ function ActionList({ items, renderItem, viewAll }: {
 }) {
   if (items.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-        <p className="text-sm text-slate-400">All clear — nothing needs attention</p>
+      <div className="bg-card border border-border rounded-lg p-6 text-center">
+        <p className="text-sm text-muted-foreground">All clear — nothing needs attention</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div className="divide-y divide-slate-100">
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="divide-y divide-border">
         {items.slice(0, 5).map((item, i) => renderItem(item, i))}
       </div>
       {viewAll && items.length > 5 && (
-        <div className="px-4 py-2 border-t border-slate-100">
+        <div className="px-4 py-2 border-t border-border">
           <button
             onClick={() => window.location.href = viewAll.href}
-            className="text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center gap-1"
+            className="text-xs text-muted-foreground hover:text-foreground font-medium flex items-center gap-1"
           >
             View All ({items.length}) <ChevronRight className="w-3 h-3" />
           </button>
@@ -164,11 +164,11 @@ function SectionHeader({ icon, title, subtitle }: {
 }) {
   return (
     <div className="flex items-center gap-2 mb-3">
-      <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center">
+      <div className="w-6 h-6 rounded bg-muted flex items-center justify-center">
         {icon}
       </div>
-      <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-      {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
     </div>
   )
 }
@@ -217,7 +217,7 @@ function SendReminderButton({ phone, customerName, amount }: {
       onClick={handleClick}
       className={`text-xs px-2 py-1 rounded font-medium transition-colors ${
         sent ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-        'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+        'bg-muted/50 text-muted-foreground border border-border hover:bg-muted'
       }`}
     >
       {sent ? 'Sent!' : 'Remind'}
@@ -240,9 +240,9 @@ function ExpectedRecovery({ aging }: { aging: AgingBucket[] }) {
   }))
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <p className="text-xs font-medium text-slate-500 mb-3">Expected Recovery Timeline</p>
-      <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex">
+    <div className="bg-card border border-border rounded-lg p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">Expected Recovery Timeline</p>
+      <div className="h-3 bg-muted rounded-full overflow-hidden flex">
         {bands.map((b, i) => (
           <div
             key={i}
@@ -255,8 +255,8 @@ function ExpectedRecovery({ aging }: { aging: AgingBucket[] }) {
       <div className="grid grid-cols-4 gap-2 mt-3">
         {bands.map((b, i) => (
           <div key={i} className="text-center">
-            <p className="text-[9px] text-slate-400 font-medium">{b.label}</p>
-            <p className="text-xs font-semibold text-slate-700 tabular-nums">{formatINR(b.amount)}</p>
+            <p className="text-[9px] text-muted-foreground font-medium">{b.label}</p>
+            <p className="text-xs font-semibold text-foreground tabular-nums">{formatINR(b.amount)}</p>
           </div>
         ))}
       </div>
@@ -271,22 +271,22 @@ function ExpectedRecovery({ aging }: { aging: AgingBucket[] }) {
 function AgingBucketsBar({ buckets }: { buckets: AgingBucket[] }) {
   const total = buckets.reduce((s, b) => s + b.amount, 0)
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <p className="text-xs font-medium text-slate-500 mb-3">Aging Buckets</p>
+    <div className="bg-card border border-border rounded-lg p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">Aging Buckets</p>
       <div className="space-y-2">
         {buckets.map((b, i) => {
           const pct = total > 0 ? (b.amount / total) * 100 : 0
           return (
             <div key={i} className="flex items-center gap-3">
-              <span className="text-xs text-slate-600 w-16 shrink-0 font-medium">{b.label}</span>
-              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <span className="text-xs text-muted-foreground w-16 shrink-0 font-medium">{b.label}</span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${pct}%`, backgroundColor: b.color }}
                 />
               </div>
-              <span className="text-xs text-slate-700 w-20 text-right tabular-nums font-medium">{formatINR(b.amount)}</span>
-              <span className="text-[10px] text-slate-400 w-8 text-right">{b.count}</span>
+              <span className="text-xs text-foreground w-20 text-right tabular-nums font-medium">{formatINR(b.amount)}</span>
+              <span className="text-[10px] text-muted-foreground w-8 text-right">{b.count}</span>
             </div>
           )
         })}
@@ -302,20 +302,20 @@ function AgingBucketsBar({ buckets }: { buckets: AgingBucket[] }) {
 function GSTBreakdown({ hsnBreakdown }: { hsnBreakdown: { rate: number; taxableValue: number; gst: number }[] }) {
   const maxRate = Math.max(...hsnBreakdown.map(h => h.taxableValue), 1)
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <p className="text-xs font-medium text-slate-500 mb-3">GST Breakdown by Rate</p>
+    <div className="bg-card border border-border rounded-lg p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">GST Breakdown by Rate</p>
       <div className="space-y-2">
         {hsnBreakdown.map((h, i) => (
           <div key={i} className="flex items-center gap-3">
-            <span className="text-xs text-slate-600 w-12 shrink-0 font-medium">{h.rate}%</span>
-            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <span className="text-xs text-muted-foreground w-12 shrink-0 font-medium">{h.rate}%</span>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full rounded-full bg-slate-600/50"
+                className="h-full rounded-full bg-foreground/50"
                 style={{ width: `${(h.taxableValue / maxRate) * 100}%` }}
               />
             </div>
-            <span className="text-xs text-slate-700 w-20 text-right tabular-nums font-medium">{formatINR(h.taxableValue)}</span>
-            <span className="text-xs text-slate-400 w-16 text-right tabular-nums">{formatINR(h.gst)}</span>
+            <span className="text-xs text-foreground w-20 text-right tabular-nums font-medium">{formatINR(h.taxableValue)}</span>
+            <span className="text-xs text-muted-foreground w-16 text-right tabular-nums">{formatINR(h.gst)}</span>
           </div>
         ))}
       </div>
@@ -330,17 +330,17 @@ function GSTBreakdown({ hsnBreakdown }: { hsnBreakdown: { rate: number; taxableV
 function SalesTrend({ weekly }: { weekly: { week: string; sales: number }[] }) {
   const max = Math.max(...weekly.map(w => w.sales), 1)
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <p className="text-xs font-medium text-slate-500 mb-3">Weekly Sales Trend</p>
+    <div className="bg-card border border-border rounded-lg p-4">
+      <p className="text-xs font-medium text-muted-foreground mb-3">Weekly Sales Trend</p>
       <div className="flex items-end gap-1.5 h-24">
         {weekly.map((w, i) => (
           <div key={i} className="flex-1 flex flex-col items-center gap-1">
             <div
-              className="w-full rounded-t bg-slate-900/10 hover:bg-slate-900/20 transition-colors"
+              className="w-full rounded-t bg-foreground/10 hover:bg-foreground/20 transition-colors"
               style={{ height: `${(w.sales / max) * 80}%` }}
               title={`${w.week}: ${formatINR(w.sales)}`}
             />
-            <span className="text-[8px] text-slate-400 whitespace-nowrap">{w.week.slice(0, 3)}</span>
+            <span className="text-[8px] text-muted-foreground whitespace-nowrap">{w.week.slice(0, 3)}</span>
           </div>
         ))}
       </div>
@@ -435,19 +435,19 @@ export default function ReportsPage() {
   // ── Loading ──
   if (loading || productLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-6xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-6">
           <div className="flex justify-between">
-            <div className="h-8 w-48 bg-slate-200 rounded animate-pulse" />
-            <div className="h-9 w-40 bg-slate-200 rounded animate-pulse" />
+            <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+            <div className="h-9 w-40 bg-muted rounded animate-pulse" />
           </div>
           {[...Array(5)].map((_, i) => (
             <div key={i} className="space-y-3">
-              <div className="h-5 w-32 bg-slate-200 rounded animate-pulse" />
+              <div className="h-5 w-32 bg-muted rounded animate-pulse" />
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {[...Array(4)].map((_, j) => <div key={j} className="h-20 bg-white border border-slate-200 rounded-lg animate-pulse" />)}
+                {[...Array(4)].map((_, j) => <div key={j} className="h-20 bg-card border border-border rounded-lg animate-pulse" />)}
               </div>
-              <div className="h-32 bg-white border border-slate-200 rounded-lg animate-pulse" />
+              <div className="h-32 bg-card border border-border rounded-lg animate-pulse" />
             </div>
           ))}
         </div>
@@ -456,13 +456,13 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-8">
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {hasAnyData ? `${dateRange.start} — ${dateRange.end}` : 'Track your business performance'}
             </p>
           </div>
@@ -472,7 +472,7 @@ export default function ReportsPage() {
 
         {/* ── SALES ── */}
         <Section>
-          <SectionHeader icon={<TrendingUp className="w-3.5 h-3.5 text-slate-500" />} title="Sales" subtitle={sales.dateRangeLabel} />
+          <SectionHeader icon={<TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />} title="Sales" subtitle={sales.dateRangeLabel} />
           {sales.invoiceCount > 0 ? (
             <>
               <MetricGrid>
@@ -484,7 +484,7 @@ export default function ReportsPage() {
                 <MetricRow label="Avg Ticket" value={formatINR(sales.avgInvoiceValue)} />
                 <MetricRow label="Invoices" value={String(sales.invoiceCount)} />
                 <MetricRow label="Last Month" value={formatINR(sales.lastMonth)}
-                  tag={{ label: 'vs previous', color: 'text-slate-400' }} />
+                  tag={{ label: 'vs previous', color: 'text-muted-foreground' }} />
               </MetricGrid>
               {sales.weeklyBreakdown.length > 0 && <SalesTrend weekly={sales.weeklyBreakdown} />}
               {sales.topCustomers.length > 0 && (
@@ -493,13 +493,13 @@ export default function ReportsPage() {
                   renderItem={(c: any, i) => (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xs text-slate-400 w-4 shrink-0">{i + 1}</span>
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">{c.name}</p>
-                          <p className="text-xs text-slate-500">{c.invoiceCount} invoice{c.invoiceCount > 1 ? 's' : ''}</p>
+                          <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                          <p className="text-xs text-muted-foreground">{c.invoiceCount} invoice{c.invoiceCount > 1 ? 's' : ''}</p>
                         </div>
                       </div>
-                      <p className="text-sm font-semibold text-slate-900 tabular-nums">{formatINR(c.totalAmount)}</p>
+                      <p className="text-sm font-semibold text-foreground tabular-nums">{formatINR(c.totalAmount)}</p>
                     </div>
                   )}
                   viewAll={{ label: 'All Customers', href: '/parties' }}
@@ -507,8 +507,8 @@ export default function ReportsPage() {
               )}
             </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-              <p className="text-sm text-slate-400 mb-3">No sales data yet</p>
+            <div className="bg-card border border-border rounded-lg p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-3">No sales data yet</p>
               <Button size="sm" onClick={() => router.push('/pos')}><Plus className="w-4 h-4 mr-1" /> Create Invoice</Button>
             </div>
           )}
@@ -516,7 +516,7 @@ export default function ReportsPage() {
 
         {/* ── MONEY ── */}
         <Section>
-          <SectionHeader icon={<Wallet className="w-3.5 h-3.5 text-slate-500" />} title="Money" subtitle="Collections & recovery" />
+          <SectionHeader icon={<Wallet className="w-3.5 h-3.5 text-muted-foreground" />} title="Money" subtitle="Collections & recovery" />
           {recovery && moneyMetrics.totalCollected > 0 ? (
             <>
               <MetricGrid>
@@ -536,8 +536,8 @@ export default function ReportsPage() {
                   renderItem={(inv: PendingInvoice, i) => (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">{inv.customerName}</p>
-                        <p className="text-xs text-slate-500">{inv.days}d overdue · {formatINR(inv.amount)}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{inv.customerName}</p>
+                        <p className="text-xs text-muted-foreground">{inv.days}d overdue · {formatINR(inv.amount)}</p>
                       </div>
                       <SendReminderButton phone={inv.customerPhone} customerName={inv.customerName} amount={inv.amount} />
                     </div>
@@ -547,8 +547,8 @@ export default function ReportsPage() {
               )}
             </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-              <p className="text-sm text-slate-400 mb-3">No collection data yet</p>
+            <div className="bg-card border border-border rounded-lg p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-3">No collection data yet</p>
               <Button size="sm" onClick={() => router.push('/pulse')}><Wallet className="w-4 h-4 mr-1" /> Record Payment</Button>
             </div>
           )}
@@ -556,7 +556,7 @@ export default function ReportsPage() {
 
         {/* ── UDHARI (Signature Report) ── */}
         <Section>
-          <SectionHeader icon={<Clock className="w-3.5 h-3.5 text-slate-500" />} title="UDHARI" subtitle="Outstanding & aging" />
+          <SectionHeader icon={<Clock className="w-3.5 h-3.5 text-muted-foreground" />} title="UDHARI" subtitle="Outstanding & aging" />
           {aging.length > 0 && aging.some(b => b.amount > 0) ? (
             <>
               <MetricGrid>
@@ -580,14 +580,14 @@ export default function ReportsPage() {
                   renderItem={(inv: PendingInvoice, i) => (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">{inv.customerName}</p>
-                        <p className="text-xs text-slate-500">{inv.days}d overdue · {formatINR(inv.amount)}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{inv.customerName}</p>
+                        <p className="text-xs text-muted-foreground">{inv.days}d overdue · {formatINR(inv.amount)}</p>
                       </div>
                       <div className="flex gap-1.5">
                         {inv.customerPhone && (
                           <button
                             onClick={() => window.open(`tel:${inv.customerPhone}`, '_blank')}
-                            className="text-xs px-2 py-1 rounded font-medium bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100"
+                            className="text-xs px-2 py-1 rounded font-medium bg-muted/50 border border-border text-muted-foreground hover:bg-muted"
                           >
                             <Phone className="w-3 h-3" />
                           </button>
@@ -601,15 +601,15 @@ export default function ReportsPage() {
               )}
             </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-              <p className="text-sm text-slate-400">No outstanding invoices — all clear</p>
+            <div className="bg-card border border-border rounded-lg p-6 text-center">
+              <p className="text-sm text-muted-foreground">No outstanding invoices — all clear</p>
             </div>
           )}
         </Section>
 
         {/* ── INVENTORY ── */}
         <Section>
-          <SectionHeader icon={<Package className="w-3.5 h-3.5 text-slate-500" />} title="Inventory" subtitle="Stock health" />
+          <SectionHeader icon={<Package className="w-3.5 h-3.5 text-muted-foreground" />} title="Inventory" subtitle="Stock health" />
           {inventoryMetrics.total > 0 ? (
             <>
               <MetricGrid>
@@ -626,10 +626,10 @@ export default function ReportsPage() {
                   renderItem={(p: any, i) => (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xs text-slate-400 w-4 shrink-0">{i + 1}</span>
+                        <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                          <p className="text-xs text-slate-500">{p.stock} remaining · low at {p.lowStockAt || 5}</p>
+                          <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                          <p className="text-xs text-muted-foreground">{p.stock} remaining · low at {p.lowStockAt || 5}</p>
                         </div>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => router.push(`/products/${p.id}`)}>
@@ -642,8 +642,8 @@ export default function ReportsPage() {
               )}
             </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-              <p className="text-sm text-slate-400 mb-3">No products yet</p>
+            <div className="bg-card border border-border rounded-lg p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-3">No products yet</p>
               <Button size="sm" onClick={() => router.push('/products/add')}><Plus className="w-4 h-4 mr-1" /> Add Product</Button>
             </div>
           )}
@@ -651,7 +651,7 @@ export default function ReportsPage() {
 
         {/* ── TAX ── */}
         <Section>
-          <SectionHeader icon={<FileText className="w-3.5 h-3.5 text-slate-500" />} title="Tax" subtitle="GST summary" />
+          <SectionHeader icon={<FileText className="w-3.5 h-3.5 text-muted-foreground" />} title="Tax" subtitle="GST summary" />
           {gst.invoiceCount > 0 ? (
             <>
               <MetricGrid>
@@ -667,10 +667,10 @@ export default function ReportsPage() {
                   renderItem={(h: any, i) => (
                     <div key={i} className="px-4 py-2.5 flex items-center justify-between">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">HSN {h.hsn}</p>
-                        <p className="text-xs text-slate-500">{h.qty} units · {h.rate}% GST</p>
+                        <p className="text-sm font-medium text-foreground truncate">HSN {h.hsn}</p>
+                        <p className="text-xs text-muted-foreground">{h.qty} units · {h.rate}% GST</p>
                       </div>
-                      <p className="text-sm font-semibold text-slate-900 tabular-nums">{formatINR(h.taxableValue)}</p>
+                      <p className="text-sm font-semibold text-foreground tabular-nums">{formatINR(h.taxableValue)}</p>
                     </div>
                   )}
                   viewAll={{ label: 'Full HSN Summary', href: '/reports?tab=gst' }}
@@ -678,8 +678,8 @@ export default function ReportsPage() {
               )}
             </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
-              <p className="text-sm text-slate-400 mb-3">No GST data yet</p>
+            <div className="bg-card border border-border rounded-lg p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-3">No GST data yet</p>
               <Button size="sm" onClick={() => router.push('/pos')}><Plus className="w-4 h-4 mr-1" /> Create Invoice</Button>
             </div>
           )}

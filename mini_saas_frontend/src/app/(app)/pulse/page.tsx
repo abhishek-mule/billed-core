@@ -262,19 +262,19 @@ export default function PulsePage() {
   // ── loading ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-6 bg-slate-100 animate-pulse rounded w-48" />
+          <div className="h-6 bg-muted animate-pulse rounded w-48" />
           <div className="grid grid-cols-3 gap-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="rounded-lg border border-slate-200 p-4 space-y-2">
-                <div className="h-3 bg-slate-100 animate-pulse rounded w-20" />
-                <div className="h-7 bg-slate-100 animate-pulse rounded w-24" />
+              <div key={i} className="rounded-lg border border-border p-4 space-y-2">
+                <div className="h-3 bg-muted animate-pulse rounded w-20" />
+                <div className="h-7 bg-muted animate-pulse rounded w-24" />
               </div>
             ))}
           </div>
-          <div className="h-12 bg-slate-100 animate-pulse rounded-lg" />
-          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-100 animate-pulse rounded-lg" />)}</div>
+          <div className="h-12 bg-muted animate-pulse rounded-lg" />
+          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />)}</div>
         </div>
       </div>
     )
@@ -282,9 +282,9 @@ export default function PulsePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="border border-red-200 rounded-lg p-8 text-center bg-white">
+          <div className="border border-red-200 rounded-lg p-8 text-center bg-card">
             <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
             <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
             <p className="text-xs text-red-600 mb-4">{error}</p>
@@ -300,7 +300,7 @@ export default function PulsePage() {
 
   // ── render ──
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
+    <div className="min-h-screen bg-muted/50 pb-24 lg:pb-8">
       <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
         {/* ═══════════════════════════
@@ -308,14 +308,14 @@ export default function PulsePage() {
            ═══════════════════════════ */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {successPmts.length} collected &middot; {formatINR(todayCollected)} today
             </p>
           </div>
 
           <button
             onClick={() => { setShowRecord(true); resetRecord() }}
-            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-xs font-medium rounded-lg hover:bg-foreground/90"
           >
             <Plus className="h-3.5 w-3.5" /> Record Payment
           </button>
@@ -325,24 +325,24 @@ export default function PulsePage() {
            COLLECTION CARDS
            ═══════════════════════════ */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-slate-500 font-medium">Today collected</p>
-            <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+          <div className="bg-card border border-border rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-muted-foreground font-medium">Today collected</p>
+            <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
               {formatINR(todayCollected)}
             </p>
             <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-0.5">
               <TrendingUp className="h-3 w-3" /> {successPmts.filter(p => isToday(p.createdAt)).length} payments
             </p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-slate-500 font-medium">This month</p>
-            <p className="text-xl font-bold tabular-nums tracking-tight text-slate-900 mt-0.5">
+          <div className="bg-card border border-border rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-muted-foreground font-medium">This month</p>
+            <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
               {formatINR(monthCollected)}
             </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{successPmts.length} total collections</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{successPmts.length} total collections</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-slate-500 font-medium">Pending UDHARI</p>
+          <div className="bg-card border border-border rounded-lg px-4 py-3.5">
+            <p className="text-[11px] text-muted-foreground font-medium">Pending UDHARI</p>
             <p className="text-xl font-bold tabular-nums tracking-tight text-amber-700 mt-0.5">
               {formatINR(pendingUdhaari)}
             </p>
@@ -356,20 +356,20 @@ export default function PulsePage() {
            PAYMENT STREAM (only success)
            ═══════════════════════════ */}
         {successPmts.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-lg px-5 py-10 text-center">
+          <div className="bg-card border border-border rounded-lg px-5 py-10 text-center">
             <Wallet className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-900">No payments recorded yet</p>
-            <p className="text-xs text-slate-500 mt-1 mb-5">Get started by creating an invoice or recording a payment manually</p>
+            <p className="text-sm font-semibold text-foreground">No payments recorded yet</p>
+            <p className="text-xs text-muted-foreground mt-1 mb-5">Get started by creating an invoice or recording a payment manually</p>
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => router.push("/pos")}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="px-4 py-2 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
               >
                 Create invoice
               </button>
               <button
                 onClick={() => { setShowRecord(true); resetRecord() }}
-                className="px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"
+                className="px-4 py-2 bg-foreground text-background text-xs font-medium rounded-lg hover:bg-foreground/90"
               >
                 Record payment
               </button>
@@ -379,7 +379,7 @@ export default function PulsePage() {
           <div className="space-y-4">
             {grouped.map(group => (
               <div key={group.label}>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 px-0.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-0.5">
                   {group.label} &middot; {group.payments.length} payment{group.payments.length !== 1 ? "s" : ""}
                 </p>
                 <div className="space-y-1">
@@ -389,26 +389,26 @@ export default function PulsePage() {
                       <button
                         key={p.id}
                         onClick={() => setSelectedPmt(p)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 flex items-center gap-3 hover:border-slate-300 transition-colors text-left"
+                        className="w-full bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-border transition-colors text-left"
                       >
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                           {providerIcon[p.provider] || <CreditCard className="h-4 w-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold tabular-nums tracking-tight text-slate-900">
+                            <span className="text-sm font-semibold tabular-nums tracking-tight text-foreground">
                               {p.amount < 0 ? `- ${formatINR(Math.abs(p.amount))}` : formatINR(p.amount)}
                             </span>
                             {p.amount < 0 && (
-                              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Reversal</span>
+                              <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Reversal</span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 mt-0.5">
+                          <div className="text-xs text-muted-foreground mt-0.5">
                             {inv ? inv.customerName : "Unknown"} &middot; {fmtAgo(p.createdAt)}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded capitalize">
+                          <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded capitalize">
                             {p.provider?.replace("_", " ")}
                           </span>
                           <ChevronRight className="h-4 w-4 text-slate-300" />
@@ -428,7 +428,7 @@ export default function PulsePage() {
          ══════════════════════════════════════ */}
       <button
         onClick={() => { setShowRecord(true); resetRecord() }}
-        className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center hover:bg-slate-800 active:scale-95 transition-all"
+        className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-foreground text-background shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-foreground/90 active:scale-95 transition-all"
         aria-label="Record payment"
       >
         <Plus className="h-6 w-6" />
@@ -439,43 +439,43 @@ export default function PulsePage() {
          ══════════════════════════════════════ */}
       {selectedPmt && (
         <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setSelectedPmt(null)}>
-          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-card w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-900">Payment Details</p>
-              <button onClick={() => setSelectedPmt(null)} className="p-1 rounded-md hover:bg-slate-100">
-                <X className="h-4 w-4 text-slate-500" />
+              <p className="text-sm font-semibold text-foreground">Payment Details</p>
+              <button onClick={() => setSelectedPmt(null)} className="p-1 rounded-md hover:bg-muted">
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
 
             <div className="text-center py-3">
-              <p className={`text-2xl font-bold tabular-nums tracking-tight ${selectedPmt.amount < 0 ? "text-red-600" : "text-slate-900"}`}>
+              <p className={`text-2xl font-bold tabular-nums tracking-tight ${selectedPmt.amount < 0 ? "text-red-600" : "text-foreground"}`}>
                 {selectedPmt.amount < 0 ? `- ${formatINR(Math.abs(selectedPmt.amount))}` : formatINR(selectedPmt.amount)}
               </p>
             </div>
 
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Customer</span>
-                <span className="font-medium text-slate-900">{invMap.get(selectedPmt.invoiceId)?.customerName || "—"}</span>
+                <span className="text-muted-foreground">Customer</span>
+                <span className="font-medium text-foreground">{invMap.get(selectedPmt.invoiceId)?.customerName || "—"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Method</span>
-                <span className="font-medium text-slate-900 capitalize">{selectedPmt.provider?.replace("_", " ")}</span>
+                <span className="text-muted-foreground">Method</span>
+                <span className="font-medium text-foreground capitalize">{selectedPmt.provider?.replace("_", " ")}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Time</span>
-                <span className="font-medium text-slate-900">{new Date(selectedPmt.createdAt).toLocaleString("en-IN")}</span>
+                <span className="text-muted-foreground">Time</span>
+                <span className="font-medium text-foreground">{new Date(selectedPmt.createdAt).toLocaleString("en-IN")}</span>
               </div>
               {selectedPmt.notes && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Notes</span>
-                  <span className="font-medium text-slate-900 text-right max-w-[60%]">{selectedPmt.notes}</span>
+                  <span className="text-muted-foreground">Notes</span>
+                  <span className="font-medium text-foreground text-right max-w-[60%]">{selectedPmt.notes}</span>
                 </div>
               )}
               {selectedPmt.providerPaymentId && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Ref ID</span>
-                  <span className="font-medium text-slate-900 text-[10px]">{selectedPmt.providerPaymentId}</span>
+                  <span className="text-muted-foreground">Ref ID</span>
+                  <span className="font-medium text-foreground text-[10px]">{selectedPmt.providerPaymentId}</span>
                 </div>
               )}
             </div>
@@ -497,21 +497,21 @@ export default function PulsePage() {
          ══════════════════════════════════════ */}
       {showReverse && (
         <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setShowReverse(false)}>
-          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+          <div className="bg-card w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-900">Reverse Payment</p>
-              <button onClick={() => setShowReverse(false)} className="p-1 rounded-md hover:bg-slate-100">
-                <X className="h-4 w-4 text-slate-500" />
+              <p className="text-sm font-semibold text-foreground">Reverse Payment</p>
+              <button onClick={() => setShowReverse(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
-            <p className="text-xs text-slate-500">Why are you reversing this payment?</p>
+            <p className="text-xs text-muted-foreground">Why are you reversing this payment?</p>
             <div className="space-y-1">
               {reversalReasons.map(r => (
                 <button
                   key={r}
                   onClick={() => setReverseReason(r)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors ${
-                    reverseReason === r ? "bg-slate-100 text-slate-900 font-semibold" : "text-slate-600 hover:bg-slate-50"
+                    reverseReason === r ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {r}
@@ -535,58 +535,58 @@ export default function PulsePage() {
          ══════════════════════════════════════ */}
       {showRecord && (
         <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/20" onClick={() => setShowRecord(false)}>
-          <div className="bg-white w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-card w-full max-w-sm rounded-t-2xl lg:rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {[1, 2, 3].map(s => (
-                  <div key={s} className={`h-2 w-2 rounded-full ${recordStep >= s ? "bg-slate-900" : "bg-slate-200"}`} />
+                  <div key={s} className={`h-2 w-2 rounded-full ${recordStep >= s ? "bg-foreground" : "bg-muted"}`} />
                 ))}
-                <span className="text-[11px] text-slate-400 ml-1">
+                <span className="text-[11px] text-muted-foreground ml-1">
                   Step {recordStep}/3
                 </span>
               </div>
-              <button onClick={() => setShowRecord(false)} className="p-1 rounded-md hover:bg-slate-100">
-                <X className="h-4 w-4 text-slate-500" />
+              <button onClick={() => setShowRecord(false)} className="p-1 rounded-md hover:bg-muted">
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
 
             {/* Step 1: Select Party */}
             {recordStep === 1 && (
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">Select party</p>
+                <p className="text-sm font-semibold text-foreground">Select party</p>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
                     value={partyQ}
                     onChange={e => setPartyQ(e.target.value)}
                     placeholder="Search by name or phone..."
-                    className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                     autoFocus
                   />
                 </div>
                 <div className="space-y-1 max-h-52 overflow-y-auto">
                   {filteredCusts.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">No customers found</p>
+                    <p className="text-xs text-muted-foreground text-center py-4">No customers found</p>
                   ) : filteredCusts.map(c => {
                     const due = custOutstanding.get(c.id)
                     return (
                       <button
                         key={c.id}
                         onClick={() => { setSelectedCust(c); setRecordStep(2) }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors text-left"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted transition-colors text-left"
                       >
-                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                           {c.name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">{c.name}</p>
-                          <p className="text-[11px] text-slate-500">{c.phone}</p>
+                          <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{c.phone}</p>
                         </div>
                         {due !== undefined && (
                           <div className="text-right shrink-0">
                             <p className="text-xs font-semibold tabular-nums text-amber-600">{formatINR(due)}</p>
-                            <p className="text-[10px] text-slate-400">outstanding</p>
+                            <p className="text-[10px] text-muted-foreground">outstanding</p>
                           </div>
                         )}
                         <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
@@ -600,26 +600,26 @@ export default function PulsePage() {
             {/* Step 2: Enter Amount */}
             {recordStep === 2 && selectedCust && (
               <div className="space-y-4">
-                <p className="text-sm font-semibold text-slate-900">Enter amount</p>
+                <p className="text-sm font-semibold text-foreground">Enter amount</p>
 
-                <div className="bg-slate-50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">{selectedCust.name}</span>
+                <div className="bg-muted/50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{selectedCust.name}</span>
                   {custOutstanding.has(selectedCust.id) && (
-                    <span className="font-medium text-slate-700">
+                    <span className="font-medium text-foreground">
                       Outstanding: {formatINR(custOutstanding.get(selectedCust.id)!)}
                     </span>
                   )}
                 </div>
 
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-slate-400">₹</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">₹</span>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={pmtAmount}
                     onChange={e => setPmtAmount(e.target.value)}
                     placeholder="0"
-                    className="w-full h-14 rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-xl font-bold tabular-nums text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    className="w-full h-14 rounded-lg border border-border bg-card pl-10 pr-4 text-xl font-bold tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                     autoFocus
                   />
                 </div>
@@ -628,13 +628,13 @@ export default function PulsePage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPmtAmount(String(custOutstanding.get(selectedCust.id)!))}
-                      className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="flex-1 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted"
                     >
                       Full amount
                     </button>
                     <button
                       onClick={() => setPmtAmount(String(Math.round(custOutstanding.get(selectedCust.id)! / 2)))}
-                      className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="flex-1 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted"
                     >
                       Half
                     </button>
@@ -644,14 +644,14 @@ export default function PulsePage() {
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => setRecordStep(1)}
-                    className="flex-1 py-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    className="flex-1 py-2.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted"
                   >
                     Back
                   </button>
                   <button
                     onClick={() => pmtAmount && parseFloat(pmtAmount) > 0 && setRecordStep(3)}
                     disabled={!pmtAmount || parseFloat(pmtAmount) <= 0}
-                    className="flex-1 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-lg bg-foreground text-background text-xs font-medium hover:bg-foreground/90 disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -662,11 +662,11 @@ export default function PulsePage() {
             {/* Step 3: Select Method */}
             {recordStep === 3 && (
               <div className="space-y-4">
-                <p className="text-sm font-semibold text-slate-900">Payment method</p>
+                <p className="text-sm font-semibold text-foreground">Payment method</p>
 
-                <div className="bg-slate-50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">{selectedCust?.name}</span>
-                  <span className="font-semibold tabular-nums text-slate-900">{formatINR(parseFloat(pmtAmount || "0"))}</span>
+                <div className="bg-muted/50 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{selectedCust?.name}</span>
+                  <span className="font-semibold tabular-nums text-foreground">{formatINR(parseFloat(pmtAmount || "0"))}</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -676,13 +676,13 @@ export default function PulsePage() {
                       onClick={() => setSelectedMethod(m.id)}
                       className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg border transition-colors text-left ${
                         selectedMethod === m.id
-                          ? "border-slate-900 bg-slate-50"
-                          : "border-slate-200 hover:border-slate-300"
+                          ? "border-foreground bg-muted"
+                          : "border-border hover:border-border"
                       }`}
                     >
-                      <div className="text-slate-600">{m.icon}</div>
-                      <span className="text-sm font-medium text-slate-900">{m.label}</span>
-                      {selectedMethod === m.id && <Check className="h-4 w-4 text-slate-900 ml-auto" />}
+                      <div className="text-muted-foreground">{m.icon}</div>
+                      <span className="text-sm font-medium text-foreground">{m.label}</span>
+                      {selectedMethod === m.id && <Check className="h-4 w-4 text-foreground ml-auto" />}
                     </button>
                   ))}
                 </div>
@@ -690,14 +690,14 @@ export default function PulsePage() {
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={() => setRecordStep(2)}
-                    className="flex-1 py-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    className="flex-1 py-2.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted"
                   >
                     Back
                   </button>
                   <button
                     onClick={submitPayment}
                     disabled={saving}
-                    className="flex-1 py-2.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 rounded-lg bg-foreground text-background text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {saving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

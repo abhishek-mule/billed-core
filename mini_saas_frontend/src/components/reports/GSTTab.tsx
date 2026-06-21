@@ -79,20 +79,20 @@ export function GSTTab({ report, plan }: GSTTabProps) {
             </p>
             <p className="mt-1 text-sm opacity-70">{report.invoiceCount} invoices</p>
           </div>
-          <div className="grid h-12 w-12 place-items-center rounded-xl bg-white/20">
+          <div className="grid h-12 w-12 place-items-center rounded-xl bg-background/20">
             <FileText className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-6 grid grid-cols-3 gap-3">
-          <div className="rounded-lg bg-white/10 p-3">
+          <div className="rounded-lg bg-background/10 p-3">
             <div className="text-xs opacity-70">Total Sales</div>
             <div className="mt-1 text-lg font-bold">{money(report.totalSales)}</div>
           </div>
-          <div className="rounded-lg bg-white/10 p-3">
+          <div className="rounded-lg bg-background/10 p-3">
             <div className="text-xs opacity-70">Output GST</div>
             <div className="mt-1 text-lg font-bold">{money(report.outputGST)}</div>
           </div>
-          <div className="rounded-lg bg-white/10 p-3">
+          <div className="rounded-lg bg-background/10 p-3">
             <div className="text-xs opacity-70">Net GST</div>
             <div className="mt-1 text-lg font-bold">{money(report.netGST)}</div>
           </div>
@@ -115,7 +115,7 @@ export function GSTTab({ report, plan }: GSTTabProps) {
       </div>
 
       {report.hsnBreakdown.length > 0 ? (
-        <div className="rounded-2xl border bg-white p-5">
+        <div className="rounded-2xl border bg-card p-5">
           <h3 className="font-bold">HSN-wise Summary</h3>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
@@ -154,7 +154,7 @@ export function GSTTab({ report, plan }: GSTTabProps) {
 
       <PaywallTeaser plan={plan} />
 
-      <div className="rounded-2xl border bg-white p-5">
+      <div className="rounded-2xl border bg-card p-5">
         <h3 className="font-bold">GSTR-1 Export</h3>
         <p className="mt-1 text-sm text-muted-foreground">Download GSTR-1 JSON for monthly filing</p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -163,7 +163,7 @@ export function GSTTab({ report, plan }: GSTTabProps) {
             <select
               value={gstrMonth}
               onChange={(e) => setGstrMonth(Number(e.target.value))}
-              className="mt-1 block rounded-xl border bg-white px-3 py-2 text-sm font-medium"
+              className="mt-1 block rounded-xl border bg-card px-3 py-2 text-sm font-medium"
             >
               {MONTHS.map((name, i) => (
                 <option key={i + 1} value={i + 1}>{name}</option>
@@ -175,7 +175,7 @@ export function GSTTab({ report, plan }: GSTTabProps) {
             <select
               value={gstrYear}
               onChange={(e) => setGstrYear(Number(e.target.value))}
-              className="mt-1 block rounded-xl border bg-white px-3 py-2 text-sm font-medium"
+              className="mt-1 block rounded-xl border bg-card px-3 py-2 text-sm font-medium"
             >
               {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -185,7 +185,7 @@ export function GSTTab({ report, plan }: GSTTabProps) {
           <button
             onClick={handleGSTR1Download}
             disabled={downloadingGstr}
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
           >
             <FileDown className="h-4 w-4" />
             {downloadingGstr ? 'Downloading...' : 'Download GSTR-1'}

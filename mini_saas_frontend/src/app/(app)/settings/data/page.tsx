@@ -50,17 +50,17 @@ export default function DataPrivacyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-8">
+    <div className="min-h-screen bg-muted pb-8">
       <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <Link href="/settings" className="p-2 rounded-lg hover:bg-slate-200 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-500" />
+          <Link href="/settings" className="p-2 rounded-lg hover:bg-muted transition-colors">
+            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </Link>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Data & Privacy</h1>
-            <p className="text-sm text-slate-500">Export data, manage storage</p>
+            <h1 className="text-lg font-semibold text-foreground">Data & Privacy</h1>
+            <p className="text-sm text-muted-foreground">Export data, manage storage</p>
           </div>
         </div>
 
@@ -79,21 +79,21 @@ export default function DataPrivacyPage() {
         )}
 
         {/* Export data */}
-        <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 overflow-hidden">
+        <div className="bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
           <div className="p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-              <Download className="w-4 h-4 text-slate-500" />
+            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+              <Download className="w-4 h-4 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Export Data</p>
-              <p className="text-xs text-slate-500">Download your business data for backup or migration</p>
+              <p className="text-sm font-semibold text-foreground">Export Data</p>
+              <p className="text-xs text-muted-foreground">Download your business data for backup or migration</p>
             </div>
           </div>
           <div className="p-4 flex gap-3">
             <button
               onClick={() => handleExport("csv")}
               disabled={exporting !== null}
-              className="flex-1 h-11 rounded-lg border border-slate-200 flex items-center justify-center gap-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              className="flex-1 h-11 rounded-lg border border-border flex items-center justify-center gap-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
             >
               {exporting === "csv" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -105,7 +105,7 @@ export default function DataPrivacyPage() {
             <button
               onClick={() => handleExport("json")}
               disabled={exporting !== null}
-              className="flex-1 h-11 rounded-lg border border-slate-200 flex items-center justify-center gap-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              className="flex-1 h-11 rounded-lg border border-border flex items-center justify-center gap-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
             >
               {exporting === "json" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -118,13 +118,13 @@ export default function DataPrivacyPage() {
         </div>
 
         {/* Storage info */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
-            <Database className="w-4 h-4 text-slate-500" />
+        <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <Database className="w-4 h-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-900">Local Storage</p>
-            <p className="text-xs text-slate-500">Data is cached locally for offline access</p>
+            <p className="text-sm font-semibold text-foreground">Local Storage</p>
+            <p className="text-xs text-muted-foreground">Data is cached locally for offline access</p>
           </div>
           <button
             onClick={() => {
@@ -132,7 +132,7 @@ export default function DataPrivacyPage() {
               setExportDone(true)
               setTimeout(() => setExportDone(false), 3000)
             }}
-            className="h-8 px-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
+            className="h-8 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors shrink-0"
           >
             Clear Cache
           </button>
@@ -144,7 +144,7 @@ export default function DataPrivacyPage() {
             <AlertCircle className="w-4 h-4 text-rose-400" />
             <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">Danger Zone</p>
           </div>
-          <div className="bg-white border border-rose-200 rounded-lg overflow-hidden">
+          <div className="bg-card border border-rose-200 rounded-lg overflow-hidden">
             {confirmDelete ? (
               <div className="p-4 space-y-3">
                 <p className="text-sm text-rose-700 font-medium">Are you sure?</p>
@@ -154,7 +154,7 @@ export default function DataPrivacyPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setConfirmDelete(false)}
-                    className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                    className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
                   >
                     Cancel
                   </button>

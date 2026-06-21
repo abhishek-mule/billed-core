@@ -31,7 +31,7 @@ const actionConfig: Record<ActionType, { color: string; bg: string; label: strin
   send_reminder:  { color: 'text-amber-600',     bg: 'bg-amber-50 border-amber-200',    label: 'Send Reminder' },
   call:           { color: 'text-orange-600',    bg: 'bg-orange-50 border-orange-200',  label: 'Call Customer' },
   wait:           { color: 'text-blue-600',      bg: 'bg-blue-50 border-blue-200',      label: 'Wait' },
-  monitor:        { color: 'text-gray-500',      bg: 'bg-gray-50 border-gray-200',      label: 'Monitor' },
+  monitor:        { color: 'text-muted-foreground',      bg: 'bg-muted border-border',      label: 'Monitor' },
 }
 
 function getActionConfig(type: string) {

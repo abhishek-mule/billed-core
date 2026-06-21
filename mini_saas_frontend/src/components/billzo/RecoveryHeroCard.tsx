@@ -17,7 +17,7 @@ export function RecoveryHeroCard({
   casesResolvedThisMonth 
 }: RecoveryHeroCardProps) {
   return (
-    <div className="bg-slate-900 text-white rounded-xl p-6 mb-6">
+    <div className="bg-foreground text-background rounded-xl p-6 mb-6">
       <div className="flex items-baseline justify-between mb-2">
         <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
           STUCK MONEY

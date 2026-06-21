@@ -70,7 +70,7 @@ export default function TodaysPriority({
       </div>
 
       {/* PRIMARY CARD */}
-      <div className="bg-slate-900 text-white rounded-xl p-5 shadow-lg">
+      <div className="bg-foreground text-background rounded-xl p-5 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
         <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider opacity-60 mb-1">
@@ -97,7 +97,7 @@ export default function TodaysPriority({
         </div>
 
         {/* WHY */}
-        <div className="bg-white/5 rounded-lg p-3 mb-4 text-sm">
+        <div className="bg-background/5 rounded-lg p-3 mb-4 text-sm">
           <p className="font-medium opacity-80 mb-1">Why:</p>
           <p className="opacity-70">{buildReason(primaryCase)}</p>
         </div>
