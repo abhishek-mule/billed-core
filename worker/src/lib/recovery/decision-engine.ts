@@ -15,6 +15,12 @@
 //   6. Customer reachable
 //   7. No recent manual contact (48h window)
 //   8. Customer tier permits escalation stage
+//   9. Not in silence period (consecutive ignores)
+//  10. Under monthly reminder cap
+//  11. Under total reminder cap per invoice
+//  12. Engagement not ghosting (cooldown)
+//  13. Business hours (9 AM – 8 PM tenant timezone)
+//  14. Customer 24h cooldown (never >1 reminder/customer/day)
 // ============================================================
 
 import {
@@ -23,6 +29,7 @@ import {
   type DecisionRuleResult,
   type Decision,
   TIER_MAX_STAGE,
+  ANNOVER_THRESHOLDS,
 } from '@billzo/shared'
 
 const REMINDER_STAGE_ORDER = ['t0_soft', 't24_nudge', 't72_strong', 't5_warning']
@@ -32,16 +39,17 @@ function stageIndex(stage: string): number {
 }
 
 // ============================================================
-// canSendReminder — Evaluate all 8 pre-send rules
+// canSendReminder — Evaluate all pre-send rules
 // ============================================================
 
 export function canSendReminder(input: CanSendReminderInput): CanSendReminderOutput {
   const now = input.now || new Date().toISOString()
+  const nowMs = new Date(now).getTime()
 
   // ── Pre-check: Merchant override (bypass all checks) ──
   let overrideActive = false
   if (input.invoice.overrideSend && input.invoice.overrideAt) {
-    const hoursSinceOverride = (new Date(now).getTime() - new Date(input.invoice.overrideAt).getTime()) / 3600000
+    const hoursSinceOverride = (nowMs - new Date(input.invoice.overrideAt).getTime()) / 3600000
     overrideActive = hoursSinceOverride < 24
   }
 
@@ -62,6 +70,7 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
       checksPassed: 1,
       totalChecks: 1,
       nextReviewAt: null,
+      merchantInterventionTriggered: false,
     }
   }
 
@@ -129,24 +138,28 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
   rules.push(r5)
 
   // ── Rule 6: Customer reachable ──
-  const hasPhone = !!input.customer.phone
+  const rawPhone = input.customer.phone || ''
+  const cleanPhone = rawPhone.replace(/\D/g, '')
+  const hasValidPhone = cleanPhone.length >= 10
   const deliveryRate = input.behaviorMetrics?.deliveryRate ?? 1
-  const reachable = hasPhone && deliveryRate >= 0.3
+  const reachable = hasValidPhone && deliveryRate >= 0.3
   const r6: DecisionRuleResult = {
     rule: 'customer_reachable',
     passed: reachable,
-    detail: !hasPhone
+    detail: !rawPhone
       ? 'No phone number on file'
-      : deliveryRate < 0.3
-        ? `Delivery rate too low: ${(deliveryRate * 100).toFixed(0)}%`
-        : `Phone exists, delivery rate ${(deliveryRate * 100).toFixed(0)}%`,
+      : !hasValidPhone
+        ? `Invalid phone format: "${rawPhone}"`
+        : deliveryRate < 0.3
+          ? `Delivery rate too low: ${(deliveryRate * 100).toFixed(0)}%`
+          : `Phone valid, delivery rate ${(deliveryRate * 100).toFixed(0)}%`,
   }
   rules.push(r6)
 
   // ── Rule 7: No recent manual contact (48h window) ──
   let recentManual = false
   if (input.invoice.manualInteractionAt) {
-    const hoursSinceContact = (new Date(now).getTime() - new Date(input.invoice.manualInteractionAt).getTime()) / 3600000
+    const hoursSinceContact = (nowMs - new Date(input.invoice.manualInteractionAt).getTime()) / 3600000
     recentManual = hoursSinceContact < 48
   }
   const r7: DecisionRuleResult = {
@@ -171,6 +184,115 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
       : `Tier ${input.customer.customerTier} max stage is ${maxStage}, but current is ${input.invoice.recoveryStage}`,
   }
   rules.push(r8)
+
+  // ── Rule 9: Not in silence period (consecutive ignores) ──
+  const T = ANNOVER_THRESHOLDS
+  const consecutiveIgnores = input.reminderHistory?.consecutiveIgnores ?? 0
+  const lastReminderAt = input.reminderHistory?.lastReminderAt || input.invoice.lastReminderAt
+  let inSilencePeriod = false
+  let silenceEndAt: string | null = null
+  if (consecutiveIgnores >= T.maxConsecutiveIgnores && lastReminderAt) {
+    const silenceEndMs = new Date(lastReminderAt).getTime() + T.silenceDaysAfterIgnore * 86400000
+    inSilencePeriod = nowMs < silenceEndMs
+    silenceEndAt = new Date(silenceEndMs).toISOString()
+  }
+  const r9: DecisionRuleResult = {
+    rule: 'not_in_silence_period',
+    passed: !inSilencePeriod,
+    detail: inSilencePeriod
+      ? `Customer ignored ${consecutiveIgnores} reminders — silence until ${silenceEndAt?.slice(0, 10)}`
+      : consecutiveIgnores > 0
+        ? `Customer has ${consecutiveIgnores} consecutive ignores (threshold: ${T.maxConsecutiveIgnores})`
+        : 'No silence period active',
+  }
+  rules.push(r9)
+
+  // ── Rule 10: Under monthly reminder cap ──
+  const sentThisMonth = input.reminderHistory?.sentThisMonth ?? 0
+  const r10: DecisionRuleResult = {
+    rule: 'under_monthly_cap',
+    passed: sentThisMonth < T.maxRemindersPerMonth,
+    detail: sentThisMonth >= T.maxRemindersPerMonth
+      ? `Monthly cap reached: ${sentThisMonth}/${T.maxRemindersPerMonth} reminders`
+      : `Monthly usage: ${sentThisMonth}/${T.maxRemindersPerMonth}`,
+  }
+  rules.push(r10)
+
+  // ── Rule 11: Under total reminder cap per invoice ──
+  const totalSent = input.reminderHistory?.totalSent ?? 0
+  const r11: DecisionRuleResult = {
+    rule: 'under_total_cap',
+    passed: totalSent < T.maxRemindersPerInvoice,
+    detail: totalSent >= T.maxRemindersPerInvoice
+      ? `Total cap reached: ${totalSent}/${T.maxRemindersPerInvoice} reminders for this invoice`
+      : `Total reminders sent: ${totalSent}/${T.maxRemindersPerInvoice}`,
+  }
+  rules.push(r11)
+
+  // ── Rule 12: Engagement cooldown (ghosting) ──
+  const engagementState = input.customer.engagementState || 'unseen'
+  const isGhosting = engagementState === 'ghosting'
+  let ghostingCooldown = false
+  if (isGhosting && lastReminderAt) {
+    const cooldownEndMs = new Date(lastReminderAt).getTime() + T.annoyanceCooldownDays * 86400000
+    ghostingCooldown = nowMs < cooldownEndMs
+  }
+  const r12: DecisionRuleResult = {
+    rule: 'engagement_cooldown',
+    passed: !ghostingCooldown,
+    detail: ghostingCooldown
+      ? `Customer is ghosting — cooldown active for ${T.annoyanceCooldownDays}d after last reminder`
+      : isGhosting
+        ? 'Customer is ghosting but cooldown expired — consider channel switch'
+        : `Engagement state: ${engagementState}`,
+  }
+  rules.push(r12)
+
+  // ── Rule 13: Business hours (9 AM – 8 PM tenant timezone) ──
+  const tz = input.timezone || 'Asia/Kolkata'
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date(now)),
+    10,
+  )
+  const inBusinessHours = hour >= 9 && hour < 20
+  const r13: DecisionRuleResult = {
+    rule: 'business_hours',
+    passed: inBusinessHours,
+    detail: inBusinessHours
+      ? `Current time in ${tz}: ${hour}:00 (within 9–20 window)`
+      : `Outside business hours in ${tz}: ${hour}:00 (window: 9–20)`,
+  }
+  rules.push(r13)
+
+  // ── Rule 14: Customer cooldown — never send more than once per 24h ──
+  const hoursSinceLast = input.reminderHistory?.hoursSinceLastCustomerReminder ?? 99
+  const customerCooldownOk = hoursSinceLast >= 24
+  const r14: DecisionRuleResult = {
+    rule: 'customer_cooldown',
+    passed: customerCooldownOk,
+    detail: customerCooldownOk
+      ? hoursSinceLast < 99
+        ? `Last customer reminder ${hoursSinceLast.toFixed(0)}h ago (threshold: 24h)`
+        : 'No recent reminders sent to this customer'
+      : `Customer received a reminder ${hoursSinceLast.toFixed(0)}h ago — 24h cooldown active`,
+  }
+  rules.push(r14)
+
+  // ── Rule 16: Merchant intervention trigger (3+ consecutive ignores) ──
+  const consecutiveIgnores16 = input.reminderHistory?.consecutiveIgnores ?? 0
+  const merchantInterventionTriggered = consecutiveIgnores16 >= T.merchantInterventionIgnores
+  const r16: DecisionRuleResult = {
+    rule: 'merchant_intervention_trigger',
+    passed: true,
+    detail: merchantInterventionTriggered
+      ? `Customer ignored ${consecutiveIgnores16} reminders — merchant intervention recommended`
+      : `Consecutive ignores: ${consecutiveIgnores16} (threshold: ${T.merchantInterventionIgnores})`,
+  }
+  rules.push(r16)
 
   // ── Aggregate ──
   const allPassed = rules.every(r => r.passed)
@@ -211,6 +333,19 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
       case 'not_snoozed':
         nextReviewAt = input.invoice.snoozeUntil
         break
+      case 'not_in_silence_period':
+        nextReviewAt = silenceEndAt
+        break
+      case 'customer_cooldown':
+        if (lastReminderAt) {
+          nextReviewAt = new Date(new Date(lastReminderAt).getTime() + 24 * 3600000).toISOString()
+        }
+        break
+      case 'engagement_cooldown':
+        if (lastReminderAt) {
+          nextReviewAt = new Date(new Date(lastReminderAt).getTime() + T.annoyanceCooldownDays * 86400000).toISOString()
+        }
+        break
     }
   }
 
@@ -231,5 +366,6 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
     checksPassed: passedCount,
     totalChecks: totalCount,
     nextReviewAt,
+    merchantInterventionTriggered,
   }
 }

@@ -50,6 +50,8 @@ export interface OrchestrationInput {
     invoice: InvoiceOrchestrationState;
     operatingHours: OperatingHoursConfig;
     transportConfidence?: number;
+    customerTier?: string;
+    reputationScore?: number;
 }
 export interface DecisionRuleTrace {
     ruleId: string;

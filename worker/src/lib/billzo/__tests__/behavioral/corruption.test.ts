@@ -40,7 +40,7 @@ describe('Corruption Scenario A: Fake Read Receipt Injection', () => {
     }))
 
     const observations = fakeReads
-      .map(interpretProjectionDelta)
+      .map(d => interpretProjectionDelta(d))
       .filter((o): o is BehavioralObservation => o !== null)
 
     // All should be message_seen at sub-2s discount

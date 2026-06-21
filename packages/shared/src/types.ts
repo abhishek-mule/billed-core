@@ -84,6 +84,7 @@ export type ProjectionDeliveryHealth =
   | 'degraded'
 
 export type WhatsAppProvider = 'gupshup' | 'baileys'
+export type AutomationMode = 'full_auto' | 'manual' | 'muted'
 
 // ============================================================
 // MESSAGE ORIGIN — Who triggered the send
@@ -120,21 +121,18 @@ import crypto from 'crypto'
  *
  * Format: bmsg_{base36(snowflake)}
  */
+let _seqCounter = 0n
+
 export function generateBillzoMessageId(): string {
   const ts = BigInt(Date.now()) << 12n
-  const nano = process.hrtime.bigint() & 0xfffn
-  const combined = ts | nano
-  return `bmsg_${combined.toString(36)}`
+  const counter = (_seqCounter++ & 0xfffn)
+  return `bmsg_${(ts | counter).toString(36)}`
 }
 
-/**
- * Generate a monotonic event sequence value using the same Snowflake scheme.
- * Sortable by wall-clock order, unique per-call without atomics.
- */
 export function generateEventSequence(): bigint {
   const ts = BigInt(Date.now()) << 12n
-  const nano = process.hrtime.bigint() & 0xfffn
-  return ts | nano
+  const counter = (_seqCounter++ & 0xfffn)
+  return ts | counter
 }
 
 /**
@@ -168,6 +166,17 @@ export function computeTransportHash(params: {
 // ============================================================
 
 export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue'
+
+export function isOverdue(
+  status: InvoiceStatus,
+  dueDate: string | Date | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (status === 'paid') return false
+  if (!dueDate) return false
+  const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate
+  return due < now
+}
 
 // ============================================================
 // SYNC STATUS

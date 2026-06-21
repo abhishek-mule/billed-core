@@ -71,6 +71,13 @@ You are working on **BillZo**, a WhatsApp-native recovery platform for Indian me
 | 11 | "Remind all" button wired in cashflow | Done |
 | 12 | `scheduleBackgroundSync()` on `online` event | Done |
 | 13 | Unused imports pruned from invoices, detail, timeline | Done |
+| 14 | Double BillZo branding: topbar title hidden on desktop (sidebar is brand anchor) | Done |
+| 15 | Sidebar hamburger: 3-span bars → lucide PanelLeftClose/PanelLeft icons | Done |
+| 16 | Bottom nav visible on desktop: added explicit `@media (min-width: 1024px) { display: none !important }` | Done |
+| 17 | Mobile hamburger visible on desktop: same CSS guard + added base `.mobile-ham` styles | Done |
+| 18 | `/api/recovery/queue` 500 on cold start: lazy-init Supabase client inside handler (was module-level `createClient('')` throwing), 8 queries now parallel | Done |
+| 19 | Dashboard v1 (Stripe-grade): removed purple gradient, emojis → white/slate, Control Tower, tabular-nums | Done |
+| 20 | Dashboard v2 (4-layer cockpit): Pulse / AI Action Center / Health Cards / Recent Activity. Removed navigation grid, zero shadows, recent events from API | Done |
 
 ## Context Preservation Strategy
 *   Update `AGENT.md` after every session with a fix log.

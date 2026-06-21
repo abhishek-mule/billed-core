@@ -20,7 +20,18 @@ export interface CanSendReminderOutput {
     checksPassed: number;
     totalChecks: number;
     nextReviewAt: string | null;
+    merchantInterventionTriggered: boolean;
+    interventionReason?: string;
+    recommendedAction?: 'send' | 'skip' | 'flag_merchant' | 'switch_channel';
 }
+export declare const ANNOVER_THRESHOLDS: {
+    maxRemindersPerMonth: number;
+    maxConsecutiveIgnores: number;
+    silenceDaysAfterIgnore: number;
+    maxRemindersPerInvoice: number;
+    annoyanceCooldownDays: number;
+    merchantInterventionIgnores: number;
+};
 export interface CanSendReminderInput {
     invoice: {
         id: string;
@@ -35,6 +46,8 @@ export interface CanSendReminderInput {
         overrideSend: boolean;
         overrideAt: string | null;
         overrideReason: string | null;
+        lastReminderAt?: string | null;
+        reminderCount?: number;
     };
     customer: {
         id: string;
@@ -43,14 +56,25 @@ export interface CanSendReminderInput {
         automationMode: string;
         phoneVerification: PhoneVerificationStatus;
         reputationScore: number;
+        engagementState?: string;
     };
     activePromiseDate?: string | null;
+    reminderHistory?: {
+        totalSent: number;
+        sentThisMonth: number;
+        lastReminderAt: string | null;
+        consecutiveIgnores: number;
+        lastReadAt: string | null;
+        linkClicked: boolean;
+        hoursSinceLastCustomerReminder: number;
+    };
     behaviorMetrics?: {
         readRate: number;
         deliveryRate: number;
         observationCount: number;
     };
     now?: string;
+    timezone?: string;
 }
 export declare const TIER_MAX_STAGE: Record<CustomerTier, string>;
 //# sourceMappingURL=decision-engine-types.d.ts.map

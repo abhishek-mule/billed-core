@@ -50,4 +50,11 @@ export interface SpineValidationError {
 }
 export declare function validateSpineEventInput(input: unknown): SpineValidationError[];
 export declare function inferEntityType(eventType: string): SpineEntityType;
+export interface DomainContext {
+    clock: {
+        now(): string;
+    };
+}
+export declare const realClock: DomainContext['clock'];
+export declare function createDomainContext(): DomainContext;
 //# sourceMappingURL=spine.d.ts.map

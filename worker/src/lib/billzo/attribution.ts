@@ -21,6 +21,7 @@ export async function attributeRecovery(
   params: {
     invoiceId: string
     tenantId: string
+    customerId?: string
     paymentId?: string
     paymentTimestamp: string
     attributionWindowHours?: number
@@ -30,6 +31,7 @@ export async function attributeRecovery(
   const {
     invoiceId,
     tenantId,
+    customerId,
     paymentId,
     paymentTimestamp,
     attributionWindowHours = 48,
@@ -103,6 +105,17 @@ export async function attributeRecovery(
     confidenceScore = 0.95
   }
 
+  // Fetch payment amount for attribution record
+  let amount = 0
+  if (paymentId) {
+    const { data: payment } = await supabaseAdmin
+      .from('payments')
+      .select('amount')
+      .eq('id', paymentId)
+      .single()
+    if (payment) amount = parseFloat(payment.amount) || 0
+  }
+
   // Write attribution to recovery_attributions table (governed by authority if available)
   if (authority) {
     const attrResult = await authority.submit({
@@ -111,8 +124,10 @@ export async function attributeRecovery(
       actor: 'attribution-worker',
       payload: {
         invoiceId,
+        tenantId,
         paymentId: paymentId ?? null,
         reminderEventId: reminder.id,
+        amount,
         attributionType: 'last_touch',
         attributionWindowHours,
         confidenceScore,
@@ -127,9 +142,12 @@ export async function attributeRecovery(
     const { error: attributionError } = await supabaseAdmin
       .from('recovery_attributions')
       .insert({
+        tenant_id: tenantId,
         invoice_id: invoiceId,
         payment_id: paymentId,
         reminder_event_id: reminder.id,
+        amount,
+        attributed_amount: amount,
         attribution_type: 'last_touch',
         attribution_window_hours: attributionWindowHours,
         confidence_score: confidenceScore,
@@ -148,9 +166,11 @@ export async function attributeRecovery(
   })
 
   // Emit recovery completed event
+  const resolvedCustomerId = customerId || (reminder.payload as Record<string, unknown> | null)?.customerId as string | undefined || ''
   const emitResult = await emitRecoveryCompleted({
     invoiceId,
     tenantId,
+    customerId: resolvedCustomerId,
     amount: 0, // Will be updated by caller
     reminderEventId: reminder.id,
     attributionType: 'last_touch',

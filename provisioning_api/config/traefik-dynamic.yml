@@ -1,0 +1,59 @@
+http:
+  routers:
+    # Wildcard subdomain router
+    wildcard:
+      rule: "HostRegexp(`{subdomain:[a-zA-Z0-9-]+}.billed.app`)"
+      service: frappe-backend
+      entryPoints:
+        - web
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    frappe-backend:
+      loadBalancer:
+        servers:
+          - url: "http://backend:8000"
+        healthCheck:
+          path: /api/method/ping
+          interval: 30s
+          timeout: 3s
+          unhealthyThreshold: 3
+          healthyThreshold: 2
+
+  middlewares:
+    # Security headers
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+        customRequestHeaders:
+          X-Real-IP: ""
+          X-Forwarded-Proto: ""
+
+    # Rate limiting per tenant
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    # Compression
+    compression:
+      compress: {}
+
+# TCP Services (for Socket.IO)
+tcp:
+  services:
+    socketio:
+      loadBalancer:
+        servers:
+          - address: "websocket:9000"

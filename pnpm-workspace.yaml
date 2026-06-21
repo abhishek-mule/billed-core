@@ -2,3 +2,14 @@ packages:
   - 'packages/*'
   - 'worker'
   - 'mini_saas_frontend'
+blockExoticSubdeps: false
+allowBuilds:
+  cypress: true
+  '@firebase/util': true
+  core-js: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+  tesseract.js: true
+  core-js-pure: false
+  sharp: set this to true or false

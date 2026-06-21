@@ -6,50 +6,16 @@ import {
   type WASocket,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
-import { getBaileysAuthState, saveBaileysAuthState, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
+import { getBaileysCreds, saveBaileysCreds, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
+import { RedisBaileysKeyStore } from '../stores/baileys-keys'
 import { storeQrCode, clearQrCode } from '../stores/baileys-qr'
 import { setBaileysState, clearBaileysState } from '../stores/baileys-state'
 import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
 import pino from 'pino'
+import fs from 'fs'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
-
-function createInMemoryKeyStore() {
-  const store = new Map<string, any>()
-  return {
-    get: async (type: string, ids: string[]) => {
-      const data: Record<string, any> = {}
-      for (const id of ids) {
-        const key = `${type}:${id}`
-        const val = store.get(key)
-        if (val !== undefined) data[id] = val
-      }
-      return data
-    },
-    set: async (data: Record<string, Record<string, any>>) => {
-      for (const [type, entries] of Object.entries(data)) {
-        for (const [id, value] of Object.entries(entries)) {
-          store.set(`${type}:${id}`, value)
-        }
-      }
-    },
-    has: async (type: string, ids: string[]) => {
-      const result: Record<string, boolean> = {}
-      for (const id of ids) {
-        result[id] = store.has(`${type}:${id}`)
-      }
-      return result
-    },
-    delete: async (ids: string[]) => {
-      for (const id of ids) {
-        for (const key of store.keys()) {
-          if (key.endsWith(`:${id}`)) store.delete(key)
-        }
-      }
-    },
-  }
-}
 
 interface SocketEntry {
   socket: WASocket
@@ -59,6 +25,9 @@ interface SocketEntry {
 
 const sockets = new Map<string, SocketEntry>()
 const intentionallyDisconnecting = new Set<string>()
+const reconnectAttempts = new Map<string, number>()
+const RECONNECT_BASE_MS = 1_000
+const RECONNECT_MAX_MS = 60_000
 let logger: ReturnType<typeof pino>
 
 function getLogger() {
@@ -68,6 +37,17 @@ function getLogger() {
   return logger
 }
 
+function reconnectBackoff(tenantId: string): number {
+  const attempt = reconnectAttempts.get(tenantId) ?? 0
+  const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, attempt), RECONNECT_MAX_MS)
+  reconnectAttempts.set(tenantId, attempt + 1)
+  return delay
+}
+
+function resetReconnectBackoff(tenantId: string): void {
+  reconnectAttempts.delete(tenantId)
+}
+
 export async function startBaileysSocket(tenantId: string): Promise<void> {
   console.log(`[Baileys] startBaileysSocket called for tenant: ${tenantId}`)
   if (sockets.has(tenantId)) {
@@ -75,7 +55,6 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
     return
   }
 
-  // Distributed lock — prevents multiple workers starting sockets for the same tenant
   const lockMaxRetries = 12
   let hasLock = false
   for (let i = 0; i < lockMaxRetries; i++) {
@@ -90,39 +69,43 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
   }
   console.log(`[Baileys] Lock acquired for ${tenantId}`)
 
-  let authState: any
+  let creds: any
+  let keyStore: RedisBaileysKeyStore
   try {
-    console.log(`[Baileys] Loading auth state for ${tenantId}...`)
-    const loaded = await getBaileysAuthState(tenantId)
-    if (loaded) {
-      const storeMethods = createInMemoryKeyStore();
-      // If loaded.keys.get is missing, it's a deserialized plain object. 
-      // We need to re-attach the methods and populate the underlying map.
-      if (typeof loaded.keys.get !== 'function') {
-        console.log(`[Baileys] Reconstructing KeyStore methods for ${tenantId}`);
-        const data = loaded.keys;
-        // In the plain object case, loaded.keys might just be the data Map converted to an object
-        // We need to populate our fresh storeMethods map with that data.
-        // Actually, looking at how it's saved, JSON.stringify/parse on a Map 
-        // usually converts it to an array or object depending on implementation.
-        // The safest path is to just initialize a fresh store if methods are missing
-        // and let Baileys re-authenticate if necessary, to avoid partial state corruption.
-        console.warn(`[Baileys] Keys store broken for ${tenantId}, discarding state.`);
-        await deleteBaileysAuthState(tenantId);
-        authState = {
-          creds: loaded.creds,
-          keys: storeMethods,
-        };
-      } else {
-        authState = loaded;
+    console.log(`[Baileys] Loading creds for ${tenantId}...`)
+    creds = await getBaileysCreds(tenantId)
+    keyStore = new RedisBaileysKeyStore(tenantId)
+
+    if (creds) {
+      console.log(`[Baileys] Creds loaded for ${tenantId} (id: ${creds.id})`)
+      // Ensure messaging_channel exists for this already-paired tenant
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('messaging_channels')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('provider', 'baileys')
+          .maybeSingle()
+        if (!existing) {
+          await supabaseAdmin.from('messaging_channels').insert({
+            tenant_id: tenantId,
+            channel_type: 'whatsapp',
+            provider: 'baileys',
+            phone_number: 'baileys',
+            display_name: 'WhatsApp (Baileys)',
+            connection_state: 'connected',
+            priority: 10,
+            config: {},
+            is_active: true,
+          })
+          console.log(`[Baileys] Created messaging_channel for already-paired tenant ${tenantId}`)
+        }
+      } catch (err) {
+        console.error(`[Baileys] Failed to create messaging_channel for ${tenantId}:`, err)
       }
-      console.log(`[Baileys] Auth state loaded for ${tenantId} (hasCreds: ${!!authState.creds})`);
     } else {
-      authState = {
-        creds: initAuthCreds(),
-        keys: createInMemoryKeyStore(),
-      }
-      console.log(`[Baileys] Initialized fresh auth state for ${tenantId}`)
+      creds = initAuthCreds()
+      console.log(`[Baileys] Initialized fresh creds for ${tenantId}`)
     }
   } catch (err) {
     console.error(`[Baileys] Failed to load auth for tenant ${tenantId}, releasing lock:`, err)
@@ -139,20 +122,9 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
   } catch {
     console.warn(`[Baileys] Failed to fetch latest version, using default`)
   }
-  const rawStore = createInMemoryKeyStore()
+
   const sock = makeWASocket({
-    auth: {
-      creds: authState.creds,
-      keys: new Proxy(rawStore, {
-        get: (target, prop) => {
-          if (prop === 'get') return target.get
-          if (prop === 'set') return target.set
-          if (prop === 'has') return target.has
-          if (prop === 'delete') return target.delete
-          return (target as any)[prop]
-        }
-      }) as any
-    },
+    auth: { creds, keys: keyStore } as any,
     version,
     printQRInTerminal: false,
     logger: getLogger(),
@@ -162,12 +134,11 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
   const entry: SocketEntry = { socket: sock, connected: false, tenantId }
   sockets.set(tenantId, entry)
 
-  // Start auto-renewal of the lock
   startLockRenewal(tenantId)
 
   sock.ev.on('creds.update', async () => {
     console.log(`[Baileys] Creds updated for ${tenantId}`)
-    await saveBaileysAuthState(tenantId, { creds: authState.creds, keys: authState.keys })
+    await saveBaileysCreds(tenantId, creds)
   })
 
   sock.ev.on('connection.update', async (update) => {
@@ -189,14 +160,44 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       entry.connected = true
       const now = new Date().toISOString()
       console.log(`[Baileys] Connected for tenant ${tenantId}`)
+      resetReconnectBackoff(tenantId)
       await clearQrCode(tenantId)
       await setBaileysState(tenantId, { connectionState: 'connected', lastConnectedAt: now, lastHeartbeatAt: now, error: null })
+
+      // Auto-create messaging_channel if it doesn't exist
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from('messaging_channels')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('provider', 'baileys')
+          .maybeSingle()
+        if (!existing) {
+          await supabaseAdmin.from('messaging_channels').insert({
+            tenant_id: tenantId,
+            channel_type: 'whatsapp',
+            provider: 'baileys',
+            phone_number: 'baileys',
+            display_name: 'WhatsApp (Baileys)',
+            connection_state: 'connected',
+            priority: 10,
+            config: {},
+            is_active: true,
+          })
+          console.log(`[Baileys] Created messaging_channel for tenant ${tenantId}`)
+        }
+      } catch (err) {
+        console.error(`[Baileys] Failed to create messaging_channel for ${tenantId}:`, err)
+      }
     }
 
     if (connection === 'close') {
       entry.connected = false
       const isIntentional = intentionallyDisconnecting.has(tenantId)
       intentionallyDisconnecting.delete(tenantId)
+
+      // Always clear stale QR — a dead socket's QR is worthless
+      await clearQrCode(tenantId)
 
       if (isIntentional) {
         await releaseSocketLock(tenantId)
@@ -220,15 +221,16 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
         console.log(`[Baileys] Logged out for tenant ${tenantId}, auth cleared`)
       } else if (isQrRefsExhausted) {
         console.log(`[Baileys] QR refs exhausted for ${tenantId}, stopping auto-reconnect`)
-        await clearQrCode(tenantId)
         await setBaileysState(tenantId, { connectionState: 'disconnected', error: 'qr_refs_exhausted' })
         sockets.delete(tenantId)
       } else {
-        await setBaileysState(tenantId, { connectionState: 'reconnecting', error: 'connection_closed' })
+        const delay = reconnectBackoff(tenantId)
+        console.log(`[Baileys] Reconnecting ${tenantId} in ${delay}ms (attempt ${reconnectAttempts.get(tenantId)})`)
+        await setBaileysState(tenantId, { connectionState: 'reconnecting', error: `reconnect_in_${delay}ms` })
         setTimeout(() => {
           sockets.delete(tenantId)
           startBaileysSocket(tenantId)
-        }, 1000)
+        }, delay)
       }
     }
   })
@@ -263,7 +265,6 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       if (!ourStatus) continue
 
       try {
-        // Phase 3: resolve billzoMessageId and invoiceId from provider_message_id
         let resolvedBillzoMessageId: string | null = null
         let resolvedInvoiceId: string | null = null
         if (msgId) {
@@ -279,7 +280,6 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
           }
         }
 
-        // Emit status update event with resolved identity
         await emitWhatsAppStatusUpdated({
           billzoMessageId: resolvedBillzoMessageId,
           invoiceId: resolvedInvoiceId,
@@ -356,8 +356,12 @@ export async function sendBaileysDocument(
   }
 
   const jid = `${phone.replace(/\D/g, '')}@s.whatsapp.net`
+  // Support local file paths — read as Buffer for Baileys
+  const document: any = (url.startsWith('/') || url.startsWith('file://'))
+    ? fs.readFileSync(url.startsWith('file://') ? url.slice(7) : url)
+    : { url }
   const result = await sock.sendMessage(jid, {
-    document: { url },
+    document,
     fileName,
     caption,
     mimetype: 'application/pdf',

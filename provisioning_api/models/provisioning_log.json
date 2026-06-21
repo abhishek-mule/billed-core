@@ -1,0 +1,120 @@
+{
+  "name": "Provisioning Log",
+  "doctype": "DocType",
+  "module": "Billed Core",
+  "autoname": "field:webhook_event_id",
+  "is_submittable": 0,
+  "is_tree": 0,
+  "editable_grid": 1,
+  "track_changes": 1,
+  
+  "fields": [
+    {
+      "fieldname": "webhook_event_id",
+      "fieldtype": "Data",
+      "label": "Webhook Event ID",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "tenant_id",
+      "fieldtype": "Link",
+      "label": "Tenant ID",
+      "target": "Customer",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "pending\nprocessing\nactive\nfailed\ndeprovisioned",
+      "default": "pending",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "razorpay_payment_id",
+      "fieldtype": "Data",
+      "label": "Razorpay Payment ID"
+    },
+    {
+      "fieldname": "domain",
+      "fieldtype": "Data",
+      "label": "Domain"
+    },
+    {
+      "fieldname": "plan",
+      "fieldtype": "Select",
+      "label": "Plan",
+      "options": "starter\nbusiness\nenterprise",
+      "default": "starter"
+    },
+    {
+      "fieldname": "gstin",
+      "fieldtype": "Data",
+      "label": "GSTIN"
+    },
+    {
+      "fieldname": "error_message",
+      "fieldtype": "Small Text",
+      "label": "Error Message"
+    },
+    {
+      "fieldname": "retry_count",
+      "fieldtype": "Int",
+      "label": "Retry Count",
+      "default": "0"
+    },
+    {
+      "fieldname": "created_at",
+      "fieldtype": "Datetime",
+      "label": "Created At",
+      "default": "now",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "processed_at",
+      "fieldtype": "Datetime",
+      "label": "Processed At"
+    },
+    {
+      "fieldname": "webhook_payload",
+      "fieldtype": "Code",
+      "label": "Webhook Payload",
+      "options": "JSON"
+    }
+  ],
+  
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Billed Core Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1
+    }
+  ],
+  
+  "sort_field": "created_at",
+  "sort_order": "desc",
+  
+  "title_field": "tenant_id",
+  "quick_entry": 0,
+  
+  "track_seen": 1,
+  "allow_copy": 0,
+  "allow_import": 1,
+  "allow_rename": 0,
+  
+  "doctype": "DocType",
+  "doctype_or_field": "DocType",
+  "name": "Provisioning Log"
+}

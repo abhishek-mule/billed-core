@@ -1,4 +1,6 @@
 import { supabaseAdmin } from './supabase-admin'
+import type { DomainContext } from '@billzo/shared'
+import { createDomainContext } from '@billzo/shared'
 
 export const MATCHING_ALGORITHM_VERSION = 1
 
@@ -28,7 +30,9 @@ export interface PaymentSignal {
 export async function matchPaymentToInvoice(
   signal: PaymentSignal,
   tenantId: string,
+  ctx?: DomainContext,
 ): Promise<MatchResult | null> {
+  const clock = ctx?.clock ?? createDomainContext().clock
   const { data: invoices, error } = await supabaseAdmin
     .from('invoices')
     .select('*')
@@ -41,7 +45,7 @@ export async function matchPaymentToInvoice(
   }
 
   const scored = invoices
-    .map((invoice) => scoreInvoice(invoice, signal))
+    .map((invoice) => scoreInvoice(invoice, signal, clock))
     .filter((result) => result.confidence > 0.5)
     .sort((a, b) => b.confidence - a.confidence)
 
@@ -52,7 +56,7 @@ export async function matchPaymentToInvoice(
   return null
 }
 
-function scoreInvoice(invoice: any, signal: PaymentSignal): MatchResult {
+function scoreInvoice(invoice: any, signal: PaymentSignal, clock: DomainContext['clock']): MatchResult {
   let score = 0
   let matchType: MatchType = 'fuzzy'
   const reasons: string[] = []
@@ -93,7 +97,7 @@ function scoreInvoice(invoice: any, signal: PaymentSignal): MatchResult {
     }
   }
 
-  const invoiceAge = Date.now() - new Date(invoice.created_at).getTime()
+  const invoiceAge = new Date(clock.now()).getTime() - new Date(invoice.created_at).getTime()
   const invoiceAgeDays = invoiceAge / (1000 * 60 * 60 * 24)
   if (invoiceAgeDays < 7) {
     score += 0.05

@@ -168,3 +168,23 @@ export function inferEntityType(eventType: string): SpineEntityType {
   if (eventType.startsWith('whatsapp.')) return 'whatsapp_message'
   return 'unknown'
 }
+
+// ----------------------------------------------------------
+// DomainContext — injectable execution boundary
+// ----------------------------------------------------------
+// Every domain function should accept ctx as its first parameter
+// to eliminate non-deterministic calls (Date.now(), Math.random()).
+// ----------------------------------------------------------
+export interface DomainContext {
+  clock: {
+    now(): string   // ISO 8601 timestamp
+  }
+}
+
+export const realClock: DomainContext['clock'] = {
+  now: () => new Date().toISOString(),
+}
+
+export function createDomainContext(): DomainContext {
+  return { clock: realClock }
+}

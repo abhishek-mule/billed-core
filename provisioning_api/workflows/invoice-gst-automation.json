@@ -1,0 +1,100 @@
+{
+  "name": "Billed Core Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "invoice.created",
+        "integration": "webhook"
+      },
+      "id": "invoice-trigger",
+      "name": "Invoice Created",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "limit": 1,
+        "filters": {
+          "doctype": "Sales Invoice",
+          "name": "{{ $json.name }}"
+        }
+      },
+      "id": "get-invoice",
+      "name": "Get Invoice Details",
+      "type": "n8n-nodes-base.frappe",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batch": false,
+        "options": {}
+      },
+      "id": "calculate-taxes",
+      "name": "Calculate GST",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Sales Invoice",
+        "operation": "update",
+        "invoiceId": "{{ $json.name }}",
+        "data": {
+          "custom_gst_applied": true,
+          "custom_igst_amount": "{{ $json.igst }}",
+          "custom_cgst_amount": "{{ $json.cgst }}",
+          "custom_sgst_amount": "{{ $json.sgst }}"
+        }
+      },
+      "id": "update-invoice",
+      "name": "Update Invoice with GST",
+      "type": "n8n-nodes-base.frappe",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Sales Invoice",
+        "operation": "submit",
+        "invoiceId": "{{ $json.name }}"
+      },
+      "id": "submit-invoice",
+      "name": "Auto Submit Invoice",
+      "type": "n8n-nodes-base.frappe",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Invoice Created": {
+      "main": [[
+        {"node": "Get Invoice Details"}
+      ]]
+    },
+    "Get Invoice Details": {
+      "main": [[
+        {"node": "Calculate GST"}
+      ]]
+    },
+    "Calculate GST": {
+      "main": [[
+        {"node": "Update Invoice with GST"}
+      ]]
+    },
+    "Update Invoice with GST": {
+      "main": [[
+        {"node": "Auto Submit Invoice"}
+      ]]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "invoice-gst-automation",
+  "tags": ["gst", "invoicing"],
+  "createdAt": "2026-04-19T17:00:00Z",
+  "updatedAt": "2026-04-19T17:00:00Z"
+}

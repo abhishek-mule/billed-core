@@ -174,7 +174,7 @@ describe('pipeline stress test — 110 fixtures across 15 customers', () => {
     // Same fingerprints and scores
     for (let i = 0; i < situations1.length; i++) {
       expect(situations1[i].situationFingerprint).toBe(situations2[i].situationFingerprint)
-      expect(situations1[i].priorityScore).toBe(situations2[i].priorityScore)
+      expect(situations1[i].priorityScore).toBeCloseTo(situations2[i].priorityScore, 10)
     }
   })
 

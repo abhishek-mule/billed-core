@@ -1,5 +1,5 @@
 import type { TransportAdapter, OutboundMessage, SendResult, ChannelHealth, ConnectionState } from '../types'
-import { sendViaBaileys, sendBaileysDocument, sendBaileysImage, getBaileysSocket, isBaileysConnected } from '../../../../lib/baileys-socket'
+import { sendViaBaileys, sendBaileysDocument, sendBaileysImage, getBaileysSocket, isBaileysConnected, startBaileysSocket, disconnectBaileys } from '../../../../lib/baileys-socket'
 import { getBaileysState } from '../../../../stores/baileys-state'
 import { supabaseAdmin } from '../../billzo/supabase-admin'
 
@@ -19,22 +19,33 @@ export class BaileysAdapter implements TransportAdapter {
 
     const t0 = performance.now()
     const phone = message.to.replace(/\D/g, '')
+    const maxRetries = 12
+    const retryDelayMs = 2000
 
-    try {
-      let result: { messageId: string }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        let result: { messageId: string }
 
-      if (message.document) {
-        result = await sendBaileysDocument(channel.tenant_id, phone, message.document.url, message.document.fileName, message.document.caption)
-      } else if (message.image) {
-        result = await sendBaileysImage(channel.tenant_id, phone, message.image.url, message.image.caption)
-      } else {
-        result = await sendViaBaileys(channel.tenant_id, phone, message.text)
+        if (message.document) {
+          result = await sendBaileysDocument(channel.tenant_id, phone, message.document.url, message.document.fileName, message.document.caption)
+        } else if (message.image) {
+          result = await sendBaileysImage(channel.tenant_id, phone, message.image.url, message.image.caption)
+        } else {
+          result = await sendViaBaileys(channel.tenant_id, phone, message.text)
+        }
+
+        return { success: true, providerMessageId: result.messageId, latencyMs: performance.now() - t0 }
+      } catch (err: any) {
+        const isDisconnected = err.message?.includes('not connected')
+        if (!isDisconnected || attempt === maxRetries) {
+          return { success: false, providerMessageId: null, error: err.message, latencyMs: performance.now() - t0 }
+        }
+        console.log(`[BaileysAdapter] Socket not connected (attempt ${attempt}/${maxRetries}), waiting ${retryDelayMs}ms...`)
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs))
       }
-
-      return { success: true, providerMessageId: result.messageId, latencyMs: performance.now() - t0 }
-    } catch (err: any) {
-      return { success: false, providerMessageId: null, error: err.message, latencyMs: performance.now() - t0 }
     }
+
+    return { success: false, providerMessageId: null, error: 'Baileys not connected after retries', latencyMs: performance.now() - t0 }
   }
 
   async getHealth(channelId: string): Promise<ChannelHealth> {
@@ -94,7 +105,6 @@ export class BaileysAdapter implements TransportAdapter {
 
     if (!channel) return
 
-    const { startBaileysSocket } = await import('../../../../lib/baileys-socket')
     await startBaileysSocket(channel.tenant_id)
     await supabaseAdmin
       .from('messaging_channels')
@@ -111,7 +121,6 @@ export class BaileysAdapter implements TransportAdapter {
 
     if (!channel) return
 
-    const { disconnectBaileys } = await import('../../../../lib/baileys-socket')
     await disconnectBaileys(channel.tenant_id)
     await supabaseAdmin
       .from('messaging_channels')

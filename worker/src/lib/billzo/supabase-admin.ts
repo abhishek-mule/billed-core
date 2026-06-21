@@ -1,5 +1,6 @@
 // authority:exempt notification_routing — device token management
 import { createClient } from '@supabase/supabase-js'
+import WebSocket from 'ws'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey =
@@ -7,7 +8,9 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   ''
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+export const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+  realtime: { transport: WebSocket as never },
+})
 
 export async function saveDeviceToken(tenantId: string, fcmToken: string, deviceType: string) {
   const { data, error } = await supabaseAdmin

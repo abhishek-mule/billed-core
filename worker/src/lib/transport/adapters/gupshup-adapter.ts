@@ -1,6 +1,6 @@
 import type { TransportAdapter, OutboundMessage, SendResult, ChannelHealth, ConnectionState } from '../types'
 import { supabaseAdmin } from '../../billzo/supabase-admin'
-import { createRedisConnection } from '../../../../lib/redis'
+import { getRedis } from '../../../../lib/redis'
 
 const CIRCUIT_THRESHOLD = 5
 const CIRCUIT_TTL = 3600
@@ -158,7 +158,7 @@ export class GupshupAdapter implements TransportAdapter {
   }
 
   private async isCircuitOpen(channelId: string): Promise<boolean> {
-    const redis = createRedisConnection()
+    const redis = getRedis()
     try {
       const raw = await redis.get(`circuit:gupshup:${channelId}`)
       if (!raw) return false
@@ -166,30 +166,20 @@ export class GupshupAdapter implements TransportAdapter {
       return state.failures >= CIRCUIT_THRESHOLD
     } catch {
       return false
-    } finally {
-      await redis.quit()
     }
   }
 
   private async recordSendSuccess(channelId: string): Promise<void> {
-    const redis = createRedisConnection()
-    try {
-      await redis.del(`circuit:gupshup:${channelId}`)
-    } finally {
-      await redis.quit()
-    }
+    const redis = getRedis()
+    await redis.del(`circuit:gupshup:${channelId}`)
   }
 
   private async recordSendFailure(channelId: string): Promise<void> {
-    const redis = createRedisConnection()
-    try {
-      const key = `circuit:gupshup:${channelId}`
-      const raw = await redis.get(key)
-      const state = raw ? JSON.parse(raw) : { failures: 0 }
-      state.failures = (state.failures || 0) + 1
-      await redis.setex(key, CIRCUIT_TTL, JSON.stringify(state))
-    } finally {
-      await redis.quit()
-    }
+    const redis = getRedis()
+    const key = `circuit:gupshup:${channelId}`
+    const raw = await redis.get(key)
+    const state = raw ? JSON.parse(raw) : { failures: 0 }
+    state.failures = (state.failures || 0) + 1
+    await redis.setex(key, CIRCUIT_TTL, JSON.stringify(state))
   }
 }

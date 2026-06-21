@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Billed-Core / Mini-SaaS — Full Stack Rebuild Script
-# Run from WSL: bash /mnt/c/Users/HP/Desktop/mini_saas/rebuild_stack.sh
 # =============================================================================
 set -e
 
-FRAPPE_DIR="/mnt/c/Users/HP/Desktop/mini_saas/frappe_docker"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FRAPPE_DIR="$SCRIPT_DIR/frappe_docker"
 PROJECT_NAME="frappe_docker"
 ERPNEXT_IMAGE="frappe/erpnext:v16.13.3"
 

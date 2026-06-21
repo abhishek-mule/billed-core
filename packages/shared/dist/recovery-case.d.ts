@@ -1,7 +1,7 @@
 export declare const RECOVERY_STATES_V2: readonly ["active", "overdue", "partial_payment", "promised", "recovered", "disputed", "closed"];
 export type RecoveryStateV2 = (typeof RECOVERY_STATES_V2)[number];
 export declare const RECOVERY_STATE_PRECEDENCE: Record<RecoveryStateV2, number>;
-export declare const ENGAGEMENT_STATES_V2: readonly ["unseen", "engaged", "intent", "likely_to_pay", "ghosting"];
+export declare const ENGAGEMENT_STATES_V2: readonly ["unseen", "engaged", "intent", "likely_to_pay", "ghosting", "snoozed"];
 export type EngagementStateV2 = (typeof ENGAGEMENT_STATES_V2)[number];
 export declare const NEXT_ACTION_TYPES: readonly ["send_reminder", "review_payment", "follow_up_call", "wait", "merchant_review"];
 export type NextActionType = (typeof NEXT_ACTION_TYPES)[number];
@@ -44,14 +44,25 @@ export interface RecoveryCaseEventConsumption {
     caseId: string;
     processedAt: string;
 }
+export interface RecoveryFinancialState {
+    totalOutstanding: number;
+    totalOverdue: number;
+    openInvoiceCount: number;
+    overdueInvoiceCount: number;
+    disputedInvoiceCount: number;
+    promisedInvoiceCount: number;
+    invoiceCount: number;
+}
 export interface RecoveryCaseTransition {
     caseId: string;
     recoveryState?: RecoveryStateV2;
     engagementState?: EngagementStateV2;
     nextActionType?: NextActionType | null;
     nextActionDueAt?: string | null;
+    promiseToPayDate?: string | null;
     attentionScore?: number;
     version: number;
+    financialState: RecoveryFinancialState;
     event: Omit<RecoveryCaseEvent, 'id' | 'occurredAt'>;
 }
 export declare function deriveRecoveryState(invoices: {

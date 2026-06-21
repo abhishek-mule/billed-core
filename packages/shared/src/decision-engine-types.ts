@@ -61,11 +61,23 @@ export interface CanSendReminderOutput {
   checksPassed: number
   totalChecks: number
   nextReviewAt: string | null
+  merchantInterventionTriggered: boolean
+  interventionReason?: string
+  recommendedAction?: 'send' | 'skip' | 'flag_merchant' | 'switch_channel'
 }
 
 // ============================================================
 // INPUT — Everything the engine needs to decide
 // ============================================================
+
+export const ANNOVER_THRESHOLDS = {
+  maxRemindersPerMonth: 6,
+  maxConsecutiveIgnores: 3,
+  silenceDaysAfterIgnore: 7,
+  maxRemindersPerInvoice: 10,
+  annoyanceCooldownDays: 3,
+  merchantInterventionIgnores: 3,
+}
 
 export interface CanSendReminderInput {
   invoice: {
@@ -81,6 +93,8 @@ export interface CanSendReminderInput {
     overrideSend: boolean
     overrideAt: string | null
     overrideReason: string | null
+    lastReminderAt?: string | null
+    reminderCount?: number
   }
   customer: {
     id: string
@@ -89,14 +103,25 @@ export interface CanSendReminderInput {
     automationMode: string
     phoneVerification: PhoneVerificationStatus
     reputationScore: number
+    engagementState?: string
   }
   activePromiseDate?: string | null
+  reminderHistory?: {
+    totalSent: number
+    sentThisMonth: number
+    lastReminderAt: string | null
+    consecutiveIgnores: number
+    lastReadAt: string | null
+    linkClicked: boolean
+    hoursSinceLastCustomerReminder: number
+  }
   behaviorMetrics?: {
     readRate: number
     deliveryRate: number
     observationCount: number
   }
   now?: string
+  timezone?: string
 }
 
 // ============================================================

@@ -1,0 +1,298 @@
+version: "3.9"
+
+x-custom-backend: &custom-backend
+  image: frappe/erpnext:v16.13.3
+  pull_policy: always
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis-cache:
+      condition: service_started
+    redis-queue:
+      condition: service_started
+
+services:
+  # ========================================
+  # TRAEFIK ROUTING LAYER (Wildcard Subdomains)
+  # ========================================
+  traefik:
+    image: traefik:v3.0
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+      - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+    environment:
+      - TRAEFIK_PROVIDERS_DOCKER=true
+      - TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYLABEL=true
+      - TRAEFIK_PROVIDERS_DOCKER_NETWORK=billed_core_backend
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=admin@billed.app
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE=/certs/acme.json
+      - TRAEFIK_LOG_LEVEL=INFO
+      - TRAEFIK_ACCESSLOG=true
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.billed.app`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certResolver=letsencrypt"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # DATABASE CLUSTER
+  # ========================================
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-character-set-client-handshake --skip-innodb-read-only-compressed --max-connections=500
+    networks:
+      - billed_core_backend
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-uroot", "-p$${DB_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ========================================
+  # REDIS (Cache & Queue)
+  # ========================================
+  redis-cache:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis-cache-data:/data
+    networks:
+      - billed_core_backend
+
+  redis-queue:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - billed_core_backend
+
+  # ========================================
+  # PROVISIONING PROXY (API)
+  # ========================================
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - TEMPLATE_SITE=${TEMPLATE_SITE:-template.site}
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.billed.app`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.services.api.loadbalancer.server.port=8001"
+
+  # ========================================
+  # BACKEND WORKERS
+  # ========================================
+  configurator:
+    <<: *custom-backend
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        wait-for-it -t 60 db:3306;
+        wait-for-it -t 60 redis-cache:6379;
+        wait-for-it -t 60 redis-queue:6379;
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache redis://redis-cache:6379;
+        bench set-config -g redis_queue redis://redis-queue:6379;
+        bench set-config -g redis_socketio redis://redis-queue:6379;
+        bench set-config -gp socketio_port 9000;
+        bench set-config -g chromium_path /usr/bin/chromium-headless-shell;
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  backend:
+    <<: *custom-backend
+    command: bench serve --port 8000
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`backend.billed.app`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+  websocket:
+    <<: *custom-backend
+    command: node /home/frappe/frappe-bench/apps/frappe/socketio.js
+    environment:
+      - FRAPPE_REDIS_CACHE=redis://redis-cache:6379
+      - FRAPPE_REDIS_QUEUE=redis://redis-queue:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  # ========================================
+  # FRONTEND (Nginx)
+  # ========================================
+  frontend:
+    image: frappe/erpnext:v16.13.3
+    restart: unless-stopped
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    command: bash /usr/local/bin/nginx-entrypoint.sh
+    environment:
+      - BACKEND=backend:8000
+      - SOCKETIO=websocket:9000
+      - FRAPPE_SITE_NAME_HEADER=$$host
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=HostRegexp(`{subdomain:[a-zA-Z0-9-]+}.billed.app`)"
+      - "traefik.http.routers.frontend.priority=10"
+      - "traefik.http.routers.frontend.entrypoints=web,websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+
+  # ========================================
+  # QUEUE WORKERS
+  # ========================================
+  queue-short:
+    <<: *custom-backend
+    command: bench worker --queue short,default
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  queue-long:
+    <<: *custom-backend
+    command: bench worker --queue long,default,short
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  scheduler:
+    <<: *custom-backend
+    command: bench schedule
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+
+  # ========================================
+  # n8n ORCHESTRATOR
+  # ========================================
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - EXECUTIONS_MODE=regular
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - EXECUTIONS_TIMEOUT=300
+      - WEBHOOK_URL=http://n8n.billed.app
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      - billed_core_backend
+
+  # ========================================
+  # METRICS (Prometheus + Grafana)
+  # ========================================
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`metrics.billed.app`)"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://grafana.billed.app
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - billed_core_backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`dash.billed.app`)"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - prometheus
+
+networks:
+  billed_core_backend:
+    name: billed_core_backend
+    driver: bridge
+
+volumes:
+  sites:
+    name: billed_core_sites
+  db-data:
+    name: billed_core_db_data
+  redis-cache-data:
+    name: billed_core_redis_cache
+  redis-queue-data:
+    name: billed_core_redis_queue
+  n8n-data:
+    name: billed_core_n8n_data
+  prometheus-data:
+    name: billed_core_prometheus
+  grafana-data:
+    name: billed_core_grafana

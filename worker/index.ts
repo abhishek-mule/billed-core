@@ -2,8 +2,9 @@ import http from 'node:http'
 import { Queue } from 'bullmq'
 import { createOutboxWorker, processOutboxEvent } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
+import { startPromiseExpiryScanner, stopPromiseExpiryScanner } from './src/lib/recovery/promise-expiry'
 import { createReconciliationWorker } from './queues/reconciliation'
-import { createCognitionWorker, enqueueCognitionJobs } from './queues/cognition'
+// import { enqueueCognitionJobs } from './queues/cognition' // HALTED: Track 3
 import { createRetryWorker, enqueueDeadLetterRetries } from './queues/retry'
 import { supabaseAdmin } from './src/lib/billzo/supabase-admin'
 import { startBaileysSocket } from './lib/baileys-socket'
@@ -100,6 +101,39 @@ function startHealthServer(runtime: AuthorityRuntime) {
           res.end(JSON.stringify({ applied: false, error: e.message }))
         }
       })
+    } else if (req.method === 'OPTIONS' && req.url === '/api/v1/recovery/trigger-reminder') {
+      res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' })
+      res.end()
+    } else if (req.method === 'POST' && req.url === '/api/v1/recovery/trigger-reminder') {
+      const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', async () => {
+        try {
+          const { invoiceId, tenantId } = JSON.parse(body)
+          if (!invoiceId || !tenantId) {
+            res.writeHead(400, cors)
+            res.end(JSON.stringify({ error: 'Missing invoiceId or tenantId' }))
+            return
+          }
+          const connection = createRedisConnection()
+          const queue = new Queue('reminders', { connection })
+          await queue.add(`reminder:${invoiceId}:t0_soft`, { invoiceId, tenantId, stage: 't0_soft' }, {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 60000 },
+          })
+          await queue.close()
+          await connection.quit()
+          res.writeHead(200, cors)
+          res.end(JSON.stringify({ success: true }))
+        } catch (e: any) {
+          res.writeHead(500, cors)
+          res.end(JSON.stringify({ error: e.message }))
+        }
+      })
+    } else if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' })
+      res.end()
     } else {
       res.writeHead(200)
       res.end('BillZo Worker')
@@ -158,7 +192,7 @@ async function main() {
 
   // ---- MutationGate: per-domain enforcement layer (Phase 5) ----
   const mutationGate = new MutationGate({
-    mode: 'shadow',
+    mode: 'dual_write',
     databaseUrl: process.env.AUTHORITY_DATABASE_URL,
   })
 
@@ -180,7 +214,13 @@ async function main() {
           throw new Error(`Gate blocked: domain '${domain}' in block mode — ${intentType} rejected`)
         }
 
-        const result = await origSubmit(intent, mode)
+        let result: any
+        try {
+          result = await origSubmit(intent, mode)
+        } catch (err: any) {
+          console.warn(`[mutation-gate] Authority write skipped for ${intentType}:`, err.message)
+          result = { skipped: true }
+        }
 
         mutationGate.submit({
           idempotencyKey: intent.nonce ?? `${intent.intentType}:${intent.tenantId}:${Date.now()}`,
@@ -232,7 +272,7 @@ async function main() {
   enqueueOutbox()
   const remindersWorker = createRemindersWorker(gatedClient as any)
   const reconciliationWorker = createReconciliationWorker(gatedClient as any)
-  const cognitionWorker = createCognitionWorker()
+  // const cognitionWorker = createCognitionWorker() // HALTED: Track 3 — hallucinating without real data
   const retryWorker = createRetryWorker()
   logWorkerEvent({ message: 'All queue workers started', level: 'info', timestamp: new Date().toISOString() })
 
@@ -275,17 +315,17 @@ async function main() {
   enqueueOverdue()
   const overdueInterval = setInterval(enqueueOverdue, 5 * 60 * 1000)
 
-  // Cognition pipeline — compute operational situations every 10 minutes
-  const enqueueCognition = async () => {
-    try {
-      const count = await enqueueCognitionJobs()
-      if (count > 0) console.log(`[Worker] Enqueued ${count} cognition jobs`)
-    } catch (err) {
-      console.error('[Worker] Failed to enqueue cognition jobs:', err)
-    }
-  }
-  enqueueCognition()
-  const cognitionInterval = setInterval(enqueueCognition, 10 * 60 * 1000)
+  // Cognition pipeline — HALTED: Track 3 — hallucinating without real data
+  // const enqueueCognition = async () => {
+  //   try {
+  //     const count = await enqueueCognitionJobs()
+  //     if (count > 0) console.log(`[Worker] Enqueued ${count} cognition jobs`)
+  //   } catch (err) {
+  //     console.error('[Worker] Failed to enqueue cognition jobs:', err)
+  //   }
+  // }
+  // enqueueCognition()
+  // const cognitionInterval = setInterval(enqueueCognition, 10 * 60 * 1000)
 
   // Phase 0: Spine diagnostics log — periodic snapshot of invariant violations
   const logSpineDiagnostics = async () => {
@@ -461,15 +501,19 @@ async function main() {
   computeCustomerReputations()
   const customerReputationInterval = setInterval(computeCustomerReputations, 6 * 60 * 60 * 1000)
 
+  // Scan for expired promises every 5 minutes
+  startPromiseExpiryScanner()
+
   const shutdown = async () => {
     console.log('[Worker] Shutting down...')
     clearInterval(overdueInterval)
-    clearInterval(cognitionInterval)
+    // clearInterval(cognitionInterval) // HALTED: Track 3
     clearInterval(spineDiagInterval)
     clearInterval(healthProbeInterval)
     clearInterval(deadLetterInterval)
     clearInterval(reputationInterval)
     clearInterval(customerReputationInterval)
+    stopPromiseExpiryScanner()
 
     // Shutdown authority gateway first (stop accepting new intents)
     await runtime.shutdown()
@@ -481,7 +525,7 @@ async function main() {
       outboxListener.stop(),
       remindersWorker.close(),
       reconciliationWorker.close(),
-      cognitionWorker.close(),
+      // cognitionWorker.close(), // HALTED: Track 3
       retryWorker.close(),
     ])
     console.log('[Worker] All workers closed')

@@ -18,6 +18,7 @@ export interface SpineDiagnosticsSnapshot {
     missing_external_refs: number
     dual_write_paths: number
     missing_causation_id: number
+    missing_customer_id: number
     non_deterministic_uuid: number
   }
   lastViolation: {
@@ -37,6 +38,7 @@ class SpineDiagnosticsImpl {
     missing_external_refs: 0,
     dual_write_paths: 0,
     missing_causation_id: 0,
+    missing_customer_id: 0,
     non_deterministic_uuid: 0,
   }
   private _lastViolation: SpineDiagnosticsSnapshot['lastViolation'] = null
@@ -101,6 +103,14 @@ class SpineDiagnosticsImpl {
   }
 
   // ----------------------------------------------------------
+  // Probe: event without customerId in payload (E1 violation)
+  // ----------------------------------------------------------
+  missingCustomerId(eventType: string): void {
+    this._counters.missing_customer_id++
+    this.record('missing_customer_id', `type=${eventType}`)
+  }
+
+  // ----------------------------------------------------------
   // Probe: crypto.randomUUID() used where deterministic ID expected
   // ----------------------------------------------------------
   nonDeterministicUuid(source: string): void {
@@ -145,6 +155,7 @@ class SpineDiagnosticsImpl {
       missing_external_refs: 0,
       dual_write_paths: 0,
       missing_causation_id: 0,
+      missing_customer_id: 0,
       non_deterministic_uuid: 0,
     }
     this._lastViolation = null

@@ -14,11 +14,12 @@ import { attributeRecovery } from '../src/lib/billzo/attribution'
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
-import { enqueueCognitionJob } from './cognition'
-import { transitionCase } from '../src/lib/recovery/case-machine'
+// import { enqueueCognitionJob } from './cognition' // HALTED: Track 3
+import { transitionCase, canHandleEvent } from '../src/lib/recovery/case-machine'
 import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
+import { ShadowProjection, initializeShadowProjection } from '../src/lib/recovery/shadow-projection'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
@@ -148,9 +149,10 @@ const HANDLER_LANES: LaneHandler[] = [
 
   // RECOVERY LANE — Canonical state machine for customer collection position
   { lane: 'recovery', priority: 1, name: 'tryHandleRecoveryCaseStateMachine', handle: tryHandleRecoveryCaseStateMachine },
+  { lane: 'recovery', priority: 2, name: 'tryHandleShadowProjection', handle: tryHandleShadowProjection },
 
-  // COGNITION LANE — Trigger attention pipeline recompute on relevant events
-  { lane: 'cognition', priority: 1, name: 'tryHandleCognitionTrigger', handle: tryHandleCognitionTrigger },
+  // COGNITION LANE — Track 3 (disabled: behavioral metrics not production-ready)
+  // { lane: 'cognition', priority: 1, name: 'tryHandleCognitionTrigger', handle: tryHandleCognitionTrigger },
 
   // ATTRIBUTION LANE — Economic causality
   { lane: 'attribution', priority: 1, name: 'tryHandleAttribution', handle: tryHandleAttribution },
@@ -189,7 +191,7 @@ export async function processOutboxEvent(event: any): Promise<void> {
 
   // Execute handlers in lane order (transport → behavior → attribution → notification)
   // Each handler catches its own errors — a failure in one concern does not block others.
-  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'cognition', 'attribution', 'notification']
+  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'attribution', 'notification']
 
   for (const lane of laneOrder) {
     const laneHandlers = HANDLER_LANES
@@ -345,24 +347,9 @@ async function tryHandleBaileysLifecycle(event: any): Promise<void> {
 // recovery_case_event_consumptions. Duplicate events are silently
 // skipped.
 
-const RECOVERY_STATE_EVENTS = new Set([
-  'invoice.created',
-  'invoice.overdue',
-  'payment.completed',
-  'payment.reconciled',
-  'recovery.reminder.sent',
-  'recovery.reminder.delivered',
-  'recovery.reminder.failed',
-  'whatsapp.status.updated',
-  'customer.called',
-  'merchant.snoozed',
-  'merchant.payment_reported',
-  'recovery.completed',
-])
-
 async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   console.log('[StateMachine] Ingesting event:', event.type, event.entityId);
-  if (!RECOVERY_STATE_EVENTS.has(event.type)) {
+  if (!canHandleEvent(event.type)) {
     console.log('[StateMachine] Event type ignored:', event.type);
     return;
   }
@@ -370,16 +357,18 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
-  // Resolve customer_id: from payload (merchant actions) or from invoice (system events)
+  // Resolve customer_id: events MUST carry it in payload (E1: Event Sovereignty)
   let customerId: string | undefined = event.payload?.customerId
   if (!customerId) {
+    console.warn('[StateMachine] Event without customerId in payload — falling back to invoice lookup', { type: event.type, entityId: event.entityId, tenantId })
+    spineDiagnostics.missingCustomerId(event.type)
     const invoiceId = event.entityId
     if (!invoiceId) return
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
       .select('customer_id')
       .eq('id', invoiceId)
-      .single()
+      .maybeSingle()
     customerId = invoice?.customer_id
   }
   if (!customerId) return
@@ -490,14 +479,15 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
       next_action_due_at: result.nextActionDueAt || null,
       attention_score: result.attentionScore ?? current?.attentionScore ?? 0,
       version: result.version,
-      // Counts from current (updated by backfill/migration, maintained here)
-      invoice_count: current?.invoiceCount || 1,
-      open_invoice_count: current?.openInvoiceCount || 1,
-      overdue_invoice_count: current?.overdueInvoiceCount || 0,
-      disputed_invoice_count: current?.disputedInvoiceCount || 0,
-      promised_invoice_count: current?.promisedInvoiceCount || 0,
-      total_outstanding: current?.totalOutstanding || signal.amount || 0,
-      total_overdue: current?.totalOverdue || 0,
+      promise_to_pay_date: result.promiseToPayDate ?? null,
+      // Financial state from state machine (single source of truth)
+      total_outstanding: result.financialState.totalOutstanding,
+      total_overdue: result.financialState.totalOverdue,
+      open_invoice_count: result.financialState.openInvoiceCount,
+      overdue_invoice_count: result.financialState.overdueInvoiceCount,
+      disputed_invoice_count: result.financialState.disputedInvoiceCount,
+      promised_invoice_count: result.financialState.promisedInvoiceCount,
+      invoice_count: result.financialState.invoiceCount,
       // Activity
       last_activity_at: now,
       updated_at: now,
@@ -533,6 +523,48 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
     .from('recovery_case_event_consumptions')
     .insert({ source_event_id: event.id, case_id: caseId })
     .then(() => {}, () => {})
+
+  // 9. Write to payment_promises table for decision engine visibility
+  if (event.type === 'promise.made' && result.promiseToPayDate) {
+    await supabaseAdmin
+      .from('payment_promises')
+      .upsert({
+        tenant_id: tenantId,
+        customer_id: customerId,
+        invoice_id: invoiceId,
+        promise_date: result.promiseToPayDate,
+        amount: signal.amount || 0,
+        status: 'active',
+        notes: event.payload?.notes || null,
+      }, { onConflict: undefined, ignoreDuplicates: false })
+      .then(() => {}, () => {})
+  }
+  if (event.type === 'promise.broken') {
+    await supabaseAdmin
+      .from('payment_promises')
+      .update({ status: 'broken' })
+      .eq('customer_id', customerId)
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+      .then(() => {}, () => {})
+  }
+}
+
+// ============================================================
+// SHADOW PROJECTION — Parallel financial truth verification
+// ============================================================
+let _shadowProjection: ShadowProjection | null = null
+
+async function getShadowProjection(): Promise<ShadowProjection> {
+  if (!_shadowProjection) {
+    _shadowProjection = await initializeShadowProjection()
+  }
+  return _shadowProjection
+}
+
+async function tryHandleShadowProjection(event: any): Promise<void> {
+  const projection = await getShadowProjection()
+  await projection.processEvent(event)
 }
 
 // ============================================================
@@ -555,10 +587,11 @@ const COGNITION_TRIGGER_EVENTS = new Set([
   'recovery.completed',
 ])
 
-async function tryHandleCognitionTrigger(event: any): Promise<void> {
-  if (!COGNITION_TRIGGER_EVENTS.has(event.type)) return
-  await enqueueCognitionJob(event.tenantId)
-}
+// HALTED: Track 3
+// async function tryHandleCognitionTrigger(event: any): Promise<void> {
+//   if (!COGNITION_TRIGGER_EVENTS.has(event.type)) return
+//   await enqueueCognitionJob(event.tenantId)
+// }
 
 // ============================================================
 // 6. OBSERVATION INTERPRETER — Transport delta → behavioral observation
@@ -634,6 +667,7 @@ async function handlePaymentEvent(event: any): Promise<void> {
   await attributeRecovery({
     invoiceId,
     tenantId,
+    customerId: event.payload?.customerId,
     paymentId: event.payload?.paymentId,
     paymentTimestamp: event.createdAt,
   })

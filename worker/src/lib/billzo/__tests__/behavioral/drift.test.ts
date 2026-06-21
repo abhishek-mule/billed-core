@@ -100,7 +100,7 @@ describe('Snapshot Registration (v1)', () => {
     // This captures the current behavior for future drift comparison
     for (const c of v1SnapshotCases) {
       const obs = c.deltas
-        .map(interpretProjectionDelta)
+        .map(d => interpretProjectionDelta(d))
         .filter((o): o is BehavioralObservation => o !== null)
       c.v1Snapshot.observations = obs
       c.v1Snapshot.metadata.timestamp = new Date().toISOString()

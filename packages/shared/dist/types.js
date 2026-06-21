@@ -12,6 +12,7 @@ exports.getNextStage = getNextStage;
 exports.generateBillzoMessageId = generateBillzoMessageId;
 exports.generateEventSequence = generateEventSequence;
 exports.computeTransportHash = computeTransportHash;
+exports.isOverdue = isOverdue;
 exports.REMINDER_STAGES = ['t0_soft', 't24_nudge', 't72_strong', 't5_warning'];
 exports.STAGE_LABELS = {
     t0_soft: 'friendly reminder',
@@ -84,6 +85,14 @@ function computeTransportHash(params) {
         (params.attemptNumber || 1).toString(),
     ].join('|');
     return crypto_1.default.createHash('md5').update(raw).digest('hex');
+}
+function isOverdue(status, dueDate, now = new Date()) {
+    if (status === 'paid')
+        return false;
+    if (!dueDate)
+        return false;
+    const due = typeof dueDate === 'string' ? new Date(dueDate) : dueDate;
+    return due < now;
 }
 // ============================================================
 // RECOVERY STATE — Business semantic state

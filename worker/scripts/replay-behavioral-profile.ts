@@ -70,7 +70,7 @@ async function replayBehavioralProfile(options: ReplayOptions): Promise<{
     // Replay raw projection deltas through current interpreter
     const deltas = await loadProjectionDeltas(tenantId, customerId, fromTimestamp)
     observations = deltas
-      .map(interpretProjectionDelta)
+      .map(d => interpretProjectionDelta(d))
       .filter((o): o is BehavioralObservation => o !== null)
   }
 

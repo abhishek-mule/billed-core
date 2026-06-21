@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'provisioning-api'
+    static_configs:
+      - targets: ['provisioning-sidecar:8001']
+    metrics_path: '/metrics'
+
+  - job_name: 'frappe-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: '/api/method/frappe.promql'
+
+  - job_name: 'n8n'
+    static_configs:
+      - targets: ['n8n:5678']
+    metrics_path: '/metrics'

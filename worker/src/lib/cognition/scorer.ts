@@ -153,34 +153,37 @@ async function computePaymentAnomalyItems(tenantId: string): Promise<AttentionIt
     .gte('created_at', fortyEightHoursAgo)
 
   if (orphanPayments) {
-    for (const pmt of orphanPayments) {
-      const { data: invoice } = await supabaseAdmin
-        .from('invoices')
-        .select('id, customer_id, customers!inner(name)')
-        .eq('id', pmt.invoice_id)
-        .single()
+    const invoiceIds = orphanPayments.map(p => p.invoice_id).filter(Boolean)
+    const { data: matchedInvoices } = invoiceIds.length > 0
+      ? await supabaseAdmin
+          .from('invoices')
+          .select('id')
+          .in('id', invoiceIds)
+      : { data: [] }
+    const matchedSet = new Set((matchedInvoices || []).map(i => i.id))
 
-      if (!invoice) {
-        items.push({
-          id: crypto.randomUUID(),
-          tenantId,
-          situationId: null,
-          intentType: 'payment_anomaly',
-          entityType: 'payment',
-          entityId: pmt.id,
-          priorityScore: Math.min((pmt.amount || 0) / 1000, 25),
-          urgency: 'medium',
-          confidence: 0.5,
-          signalData: {
-            payment_id: pmt.id,
-            amount: pmt.amount,
-            received_at: pmt.created_at,
-            anomaly_type: 'orphan_payment',
-          },
-          correlationKey: `payment_anomaly:${tenantId}:orphan`,
-          createdAt: new Date().toISOString(),
-        })
-      }
+    for (const pmt of orphanPayments) {
+      if (pmt.invoice_id && matchedSet.has(pmt.invoice_id)) continue
+
+      items.push({
+        id: crypto.randomUUID(),
+        tenantId,
+        situationId: null,
+        intentType: 'payment_anomaly',
+        entityType: 'payment',
+        entityId: pmt.id,
+        priorityScore: Math.min((pmt.amount || 0) / 1000, 25),
+        urgency: 'medium',
+        confidence: 0.5,
+        signalData: {
+          payment_id: pmt.id,
+          amount: pmt.amount,
+          received_at: pmt.created_at,
+          anomaly_type: 'orphan_payment',
+        },
+        correlationKey: `payment_anomaly:${tenantId}:orphan`,
+        createdAt: new Date().toISOString(),
+      })
     }
   }
 
@@ -206,39 +209,46 @@ async function computeCommunicationFailureItems(tenantId: string): Promise<Atten
       failMap.set(ev.invoice_id, (failMap.get(ev.invoice_id) || 0) + 1)
     }
 
-    for (const [invoiceId, count] of failMap) {
-      if (count < 3) continue
+    const qualifiedIds = Array.from(failMap.entries())
+      .filter(([_, count]) => count >= 3)
+      .map(([id]) => id)
 
-      const { data: inv } = await supabaseAdmin
+    if (qualifiedIds.length > 0) {
+      const { data: invoices } = await supabaseAdmin
         .from('invoices')
         .select('id, customer_id, customers!inner(name), total, tenant_id')
-        .eq('id', invoiceId)
-        .single()
+        .in('id', qualifiedIds)
 
-      if (!inv) continue
+      const invMap = new Map((invoices || []).map(i => [i.id, i]))
 
-      const score = Math.min(count * 5, 35)
+      for (const [invoiceId, count] of failMap) {
+        if (count < 3) continue
+        const inv = invMap.get(invoiceId)
+        if (!inv) continue
 
-      items.push({
-        id: crypto.randomUUID(),
-        tenantId,
-        situationId: null,
-        intentType: 'communication_failure',
-        entityType: 'invoice',
-        entityId: invoiceId,
-        priorityScore: score,
-        urgency: count >= 5 ? 'critical' : 'high',
-        confidence: 0.8,
-        signalData: {
-          customer_id: inv.customer_id,
-          customer_name: (inv as any).customers?.name,
-          invoice_total: inv.total,
-          failure_count: count,
-          anomaly_type: 'delivery_failure',
-        },
-        correlationKey: `communication_failure:${tenantId}:${inv.customer_id}`,
-        createdAt: new Date().toISOString(),
-      })
+        const score = Math.min(count * 5, 35)
+
+        items.push({
+          id: crypto.randomUUID(),
+          tenantId,
+          situationId: null,
+          intentType: 'communication_failure',
+          entityType: 'invoice',
+          entityId: invoiceId,
+          priorityScore: score,
+          urgency: count >= 5 ? 'critical' : 'high',
+          confidence: 0.8,
+          signalData: {
+            customer_id: inv.customer_id,
+            customer_name: (inv as any).customers?.name,
+            invoice_total: inv.total,
+            failure_count: count,
+            anomaly_type: 'delivery_failure',
+          },
+          correlationKey: `communication_failure:${tenantId}:${inv.customer_id}`,
+          createdAt: new Date().toISOString(),
+        })
+      }
     }
   }
 
@@ -263,40 +273,47 @@ async function computeCommunicationFailureItems(tenantId: string): Promise<Atten
       }
     }
 
-    for (const [invoiceId, info] of silentMap) {
-      if (info.count < 2) continue
+    const silentQualified = Array.from(silentMap.entries())
+      .filter(([_, info]) => info.count >= 2)
+      .map(([id]) => id)
 
-      const { data: inv } = await supabaseAdmin
+    if (silentQualified.length > 0) {
+      const { data: silentInvoices } = await supabaseAdmin
         .from('invoices')
         .select('id, customer_id, customers!inner(name), total, tenant_id')
-        .eq('id', invoiceId)
-        .single()
+        .in('id', silentQualified)
 
-      if (!inv) continue
+      const silentInvMap = new Map((silentInvoices || []).map(i => [i.id, i]))
 
-      const score = Math.min(info.count * 4, 30)
+      for (const [invoiceId, info] of silentMap) {
+        if (info.count < 2) continue
+        const inv = silentInvMap.get(invoiceId)
+        if (!inv) continue
 
-      items.push({
-        id: crypto.randomUUID(),
-        tenantId,
-        situationId: null,
-        intentType: 'communication_failure',
-        entityType: 'invoice',
-        entityId: invoiceId,
-        priorityScore: score,
-        urgency: 'medium',
-        confidence: 0.6,
-        signalData: {
-          customer_id: inv.customer_id,
-          customer_name: (inv as any).customers?.name,
-          invoice_total: inv.total,
-          unread_count: info.count,
-          last_delivered_at: info.lastAt,
-          anomaly_type: 'silent_customer',
-        },
-        correlationKey: `communication_failure:${tenantId}:${inv.customer_id}`,
-        createdAt: new Date().toISOString(),
-      })
+        const score = Math.min(info.count * 4, 30)
+
+        items.push({
+          id: crypto.randomUUID(),
+          tenantId,
+          situationId: null,
+          intentType: 'communication_failure',
+          entityType: 'invoice',
+          entityId: invoiceId,
+          priorityScore: score,
+          urgency: 'medium',
+          confidence: 0.6,
+          signalData: {
+            customer_id: inv.customer_id,
+            customer_name: (inv as any).customers?.name,
+            invoice_total: inv.total,
+            unread_count: info.count,
+            last_delivered_at: info.lastAt,
+            anomaly_type: 'silent_customer',
+          },
+          correlationKey: `communication_failure:${tenantId}:${inv.customer_id}`,
+          createdAt: new Date().toISOString(),
+        })
+      }
     }
   }
 

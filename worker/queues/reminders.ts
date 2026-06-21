@@ -30,36 +30,123 @@ const logger = createQueueLogger('reminders')
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
-function buildMessage(stage: ReminderStage, customerName: string, amount: number, businessName: string, upiId?: string, tenantId?: string, invoiceId?: string): string {
-  const stageLabel = STAGE_LABELS[stage]
-  const amountText = `₹${amount.toLocaleString('en-IN')}`
-  const lines = [
-    `Dear ${customerName},`,
-    '',
-    `This is a ${stageLabel} regarding your pending amount of ${amountText}.`,
-    stage === 't5_warning'
-      ? 'Please arrange payment immediately to avoid any further escalation.'
-      : 'Please clear the dues at your earliest convenience.',
-    '',
-  ]
+// ── Message Variation Library (Rule 12) ──
+// 3 variations per stage; cycles through them so customers never see the same text twice.
+// 4th param (paidText) used for partial payment acknowledgment.
+const MESSAGE_VARIATIONS: Record<ReminderStage, Array<(c: string, a: string, b: string, d: string) => string[]>> = {
+  t0_soft: [
+    (c, a, b, d) => [
+      `Hi ${c} 🙏`,
+      `Hope you're doing well. Just a gentle reminder that ${a}${d} is pending from your end.`,
+      `Please pay at your earliest convenience:`,
+    ],
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `This is a friendly reminder regarding your outstanding amount of ${a}${d}.`,
+      `Kindly clear the dues when possible. Thank you for your business!`,
+    ],
+    (c, a, b, d) => [
+      `Hello ${c} 😊`,
+      `Trusting you're having a good week. Just circling back on the pending ${a}${d}.`,
+      `No stress — whenever it's convenient for you:`,
+    ],
+  ],
+  t24_nudge: [
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `This is a follow-up regarding your pending amount of ${a}${d}.`,
+      `It's been a few days — please arrange payment at your earliest.`,
+    ],
+    (c, a, b, d) => [
+      `Hi ${c},`,
+      `Quick reminder: ${a}${d} is still outstanding on your account.`,
+      `Please process the payment when you get a moment.`,
+    ],
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `We noticed that the payment of ${a}${d} is pending.`,
+      `Kindly update us if there's any issue we can help with.`,
+    ],
+  ],
+  t72_strong: [
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `This is an urgent reminder regarding ${a}${d} which is now significantly overdue.`,
+      `We request you to clear the amount at the earliest to avoid any escalation.`,
+    ],
+    (c, a, b, d) => [
+      `Hello ${c},`,
+      `${a}${d} — this payment is now overdue. We've sent previous reminders but haven't heard back.`,
+      `Please arrange payment immediately or reply with an update.`,
+    ],
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `Despite multiple reminders, ${a}${d} remains unpaid.`,
+      `We value your relationship and request you to settle this at the earliest.`,
+    ],
+  ],
+  t5_warning: [
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `This is a final notice regarding ${a}${d}.`,
+      `If we do not receive payment within 3 days, we will have to escalate this matter further.`,
+      `Please treat this as urgent.`,
+    ],
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `FINAL REMINDER: ${a}${d} is long overdue despite all previous notices.`,
+      `Immediate payment is required to avoid any further action.`,
+      `Please contact us immediately if there's an issue.`,
+    ],
+    (c, a, b, d) => [
+      `Dear ${c},`,
+      `We have attempted to reach you multiple times regarding the overdue amount of ${a}${d}.`,
+      `This is your final notice. Kindly clear the dues within 3 working days.`,
+    ],
+  ],
+}
 
-  if (upiId && tenantId && invoiceId) {
-    const token = signUpiToken({
-      invoiceId,
-      tenantId,
-      amount,
-      upiId,
-      exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-    })
-    lines.push(`Pay here: ${appUrl}/pay/r/${token}`)
-    lines.push('')
-  } else if (upiId) {
-    lines.push(`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent(businessName)}`)
-    lines.push('')
+function buildPaymentUrls(upiId?: string, tenantId?: string, invoiceId?: string, amount?: number, businessName?: string): string[] {
+  if (!upiId) return []
+  if (tenantId && invoiceId && amount) {
+    const token = signUpiToken({ invoiceId, tenantId, amount, upiId, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })
+    return [`Pay here: ${appUrl}/pay/r/${token}`]
   }
+  return [`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent(businessName || '')}`]
+}
 
-  lines.push(`Regards,\n${businessName}`)
-  return lines.join('\n')
+// Track which variation was last used per (tenantId, invoiceId) so we cycle forward
+const variationIndexCache = new Map<string, number>()
+
+function getNextVariationKey(tenantId: string, invoiceId: string): number {
+  const key = `${tenantId}:${invoiceId}`
+  const current = variationIndexCache.get(key) ?? -1
+  const next = (current + 1) % 3
+  variationIndexCache.set(key, next)
+  return next
+}
+
+function buildMessage(
+  stage: ReminderStage,
+  customerName: string,
+  amount: number,
+  businessName: string,
+  upiId?: string,
+  tenantId?: string,
+  invoiceId?: string,
+  variationIndex?: number,
+  total?: number,
+): { text: string; variationIndex: number } {
+  const amountText = `₹${amount.toLocaleString('en-IN')}`
+  const isPartial = total !== undefined && total > amount
+  const paidText = isPartial ? ` (₹${(total - amount).toLocaleString('en-IN')} paid)` : ''
+  const vars = MESSAGE_VARIATIONS[stage]
+  const idx = variationIndex ?? (tenantId && invoiceId ? getNextVariationKey(tenantId, invoiceId) : 0)
+  const builder = vars[idx % vars.length]
+  const body = builder(customerName, amountText, businessName, paidText)
+  const urls = buildPaymentUrls(upiId, tenantId, invoiceId, amount, businessName)
+  const lines = [...body, '', ...urls, '', `Regards,\n${businessName}`]
+  return { text: lines.join('\n'), variationIndex: idx }
 }
 
 const BAILEYS_HOURLY_LIMIT = 50
@@ -68,6 +155,7 @@ const BAILEYS_DAILY_WARMUP = 10
 const WARMUP_DAYS = 3
 
 async function checkRateLimit(tenantId: string, provider: WhatsAppProvider): Promise<boolean> {
+  if (process.env.DISABLE_RATE_LIMIT === 'true') return true
   try {
     const redis = getRedis()
     const hourKey = `rate:${tenantId}:${new Date().toISOString().slice(0, 13).replace(/[^0-9]/g, '')}`
@@ -115,6 +203,9 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
       const startTime = Date.now()
       const { invoiceId, tenantId, stage } = job.data
 
+      // Jitter ±15 min on next reminder time to avoid burst collisions
+      const jitter = () => (Math.random() - 0.5) * 30 * 60 * 1000
+
       const lockKey = `reminder:${invoiceId}:${stage}`
       const result = await withLock(lockKey, 60000, async () => {
         logger.info({ invoiceId, stage }, 'Sending reminder')
@@ -139,6 +230,19 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         const tenant = tenantResult.data
         const config = (tenant.whatsapp_config || {}) as Record<string, any>
 
+        // Fetch all unpaid invoices for this customer (for consolidated reminder)
+        const { data: unpaidInvoices } = await supabaseAdmin
+          .from('invoices')
+          .select('id, total, outstanding_amount, due_date')
+          .eq('tenant_id', tenantId)
+          .eq('customer_id', customer.id)
+          .in('status', ['unpaid', 'overdue', 'partial'])
+          .gt('outstanding_amount', 0)
+          .order('due_date', { ascending: true })
+
+        const unpaid = unpaidInvoices || []
+        const isConsolidated = unpaid.length > 1
+
         // ── Decision Engine: Pre-Send Checklist ──
         const automationMode = customer?.automation_mode || 'full_auto'
         if (automationMode === 'muted') {
@@ -155,6 +259,51 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           .limit(1)
           .maybeSingle()
 
+        // ── Reminder history for new decision rules ──
+        const [reminderEventsResult, customerRemindersResult] = await Promise.all([
+          supabaseAdmin
+            .from('whatsapp_events')
+            .select('status, created_at')
+            .eq('invoice_id', invoiceId)
+            .eq('tenant_id', tenantId)
+            .eq('direction', 'outbound')
+            .order('created_at', { ascending: false }),
+          supabaseAdmin
+            .from('whatsapp_events')
+            .select('created_at')
+            .eq('customer_id', customer?.id || '')
+            .eq('tenant_id', tenantId)
+            .eq('direction', 'outbound')
+            .in('status', ['sent', 'delivered', 'read'])
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ])
+
+        const reminderEvents = reminderEventsResult.data
+        const customerReminders = customerRemindersResult.data
+
+        const totalSent = reminderEvents?.length ?? 0
+        const monthStart = new Date()
+        monthStart.setDate(1)
+        monthStart.setHours(0, 0, 0, 0)
+        const sentThisMonth = reminderEvents?.filter(
+          (e: any) => new Date(e.created_at) >= monthStart,
+        ).length ?? 0
+        // Consecutive ignores: most recent outbound events that were not read
+        let consecutiveIgnores = 0
+        if (reminderEvents) {
+          for (const e of reminderEvents) {
+            if (e.status === 'read') break
+            if (e.status === 'sent' || e.status === 'queued') consecutiveIgnores++
+          }
+        }
+        const lastReminderAt = reminderEvents?.[0]?.created_at || null
+        const lastCustomerReminderAt = customerReminders?.[0]?.created_at || null
+        const hoursSinceLastCustomerReminder = lastCustomerReminderAt
+          ? (Date.now() - new Date(lastCustomerReminderAt).getTime()) / 3600000
+          : 99
+
+        logger.info({ invoiceId, stage }, 'Running decision engine')
         const decisionResult = canSendReminder({
           invoice: {
             id: invoiceId,
@@ -169,6 +318,8 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             overrideSend: invoice.override_send || false,
             overrideAt: invoice.override_at || null,
             overrideReason: invoice.override_reason || null,
+            lastReminderAt,
+            reminderCount: totalSent,
           },
           customer: {
             id: customer?.id || '',
@@ -177,9 +328,33 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             automationMode,
             phoneVerification: customer?.phone_verification || 'unknown',
             reputationScore: customer?.reputation_score ?? 50,
+            engagementState: customer?.engagement_state || 'unseen',
           },
           activePromiseDate: activePromise?.promise_date || null,
+          timezone: 'Asia/Kolkata',
+          reminderHistory: {
+            totalSent,
+            sentThisMonth,
+            consecutiveIgnores,
+            lastReminderAt,
+            lastReadAt: null,
+            linkClicked: false,
+            hoursSinceLastCustomerReminder,
+          },
         })
+
+        logger.info({
+          invoiceId,
+          customerId: customer?.id,
+          stage,
+          decision: decisionResult.decision,
+          allowed: decisionResult.allowed,
+          checksPassed: decisionResult.checksPassed,
+          totalChecks: decisionResult.totalChecks,
+          confidence: decisionResult.confidence,
+          blockedBy: decisionResult.rules.find(r => !r.passed)?.rule || null,
+          hoursSinceLastCustomerReminder,
+        }, 'recovery_decision')
 
         // Log decision to audit table
         // authority:exempt append_only_observability — recovery_decisions is append-only audit log, not business state
@@ -243,6 +418,10 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
 
         const phoneNumber = customer?.whatsapp_number || customer?.phone
         const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, '') : ''
+        if (cleanPhone.length < 10) {
+          logger.warn({ invoiceId, customerId: customer?.id, phone: phoneNumber }, 'Skipping — invalid phone number')
+          return { skipped: true, reason: `invalid_phone: "${phoneNumber}"`, invoiceId, stage }
+        }
         const upiId = tenant.upi_id || config.upiId
         const effectiveProvider: WhatsAppProvider = config.whatsappProvider === 'baileys' ? 'baileys' : 'gupshup'
 
@@ -260,7 +439,61 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           return { skipped: true, reason: 'rate_limited', invoiceId, stage }
         }
 
-        const message = buildMessage(stage as ReminderStage, customer?.customer_name || 'Customer', invoice.total || 0, tenant.company_name || 'BillZo', upiId, tenantId, invoiceId)
+        let message: string
+        let msgVariation = 0
+        let messageType = stage
+        let invoiceCount = 1
+
+        if (isConsolidated) {
+          const totalDue = unpaid.reduce((sum, inv) => sum + (Number(inv.outstanding_amount) || Number(inv.total) || 0), 0)
+          const paymentUrls = buildPaymentUrls(upiId, tenantId, unpaid[0].id, unpaid[0].total, tenant.company_name)
+          const paymentLink = paymentUrls[0] || `upi://pay?pa=${encodeURIComponent(upiId)}&am=${totalDue}&pn=${encodeURIComponent(tenant.company_name || '')}`
+
+          message = `Hi ${customer.customer_name || 'Customer'},\n\nYour outstanding balance is ₹${totalDue.toLocaleString('en-IN')}.\n\nThis amount is spread across ${unpaid.length} pending invoices.\n\nPlease clear the pending amount:\n\n${paymentLink}\n\nReply if payment has already been made.`
+          messageType = 'consolidated_v1'
+          invoiceCount = unpaid.length
+        } else {
+          const { text, variationIndex } = buildMessage(
+            stage as ReminderStage,
+            customer?.customer_name || 'Customer',
+            invoice.outstanding_amount ?? invoice.total ?? 0,
+            tenant.company_name || 'BillZo',
+            upiId, tenantId, invoiceId,
+            undefined,
+            invoice.total,
+          )
+          message = text
+          msgVariation = variationIndex
+        }
+
+        // ── Send-time guard: idempotency check ──
+        // Has this invoice+stage already been sent in the last 24 hours?
+        const { data: existingSend } = await supabaseAdmin
+          .from('whatsapp_events')
+          .select('id')
+          .eq('invoice_id', invoiceId)
+          .eq('tenant_id', tenantId)
+          .eq('direction', 'outbound')
+          .eq('message_type', stage)
+          .gte('occurred_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .limit(1)
+          .maybeSingle()
+        if (existingSend) {
+          logger.warn({ invoiceId, stage }, 'Duplicate send blocked — invoice+stage already sent in last 24h')
+          return { skipped: true, reason: 'duplicate_stage_today', invoiceId, stage }
+        }
+
+        // ── Send-time guard: payment check ──
+        // Is the invoice still unpaid?
+        const { data: freshInvoice } = await supabaseAdmin
+          .from('invoices')
+          .select('status, outstanding_amount')
+          .eq('id', invoiceId)
+          .single()
+        if (!freshInvoice || freshInvoice.status === 'paid' || (freshInvoice.outstanding_amount ?? 0) <= 0) {
+          logger.warn({ invoiceId, status: freshInvoice?.status }, 'Send skipped — invoice no longer outstanding')
+          return { skipped: true, reason: 'invoice_paid_or_zero', invoiceId, stage }
+        }
 
         if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
           logger.info({ tenantId }, 'Starting Baileys socket')
@@ -301,10 +534,16 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             customerId: customer?.id || null,
             phone: `+${cleanPhone}`,
             status: eventStatus,
-            messageType: stage,
+            messageType,
+            messageVariation: msgVariation,
+            messagePreview: message.slice(0, 120),
             providerMessageId: sendResult.messageId,
             provider: sendResult.provider,
             error: sendResult.error || null,
+            metadata: {
+              messageType,
+              invoiceCount,
+            },
           },
           causationId: null,
           correlationId: generateCorrelationId(invoiceId),
@@ -314,6 +553,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         })
 
         const nextStage = getNextStage(stage as ReminderStage)
+        const maxStageReached = nextStage === stage
 
         // Recovery orchestration fields update (governed by authority if available)
         // Phase 0 probe: Date.now() used for nextRecoveryAt calculation
@@ -328,9 +568,9 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
               lastWhatsappStatus: eventStatus,
               lastWhatsappAt: new Date().toISOString(),
               recoveryStage: nextStage,
-              nextRecoveryAt: nextStage !== stage
-                ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-                : null,
+              nextRecoveryAt: maxStageReached
+                ? null
+                : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
             },
           }, 'trusted_sync')
         } else {
@@ -340,11 +580,21 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             last_whatsapp_status: eventStatus,
             last_whatsapp_at: new Date().toISOString(),
             recovery_stage: nextStage,
-            next_recovery_at: nextStage !== stage
-              ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-              : null,
+            next_recovery_at: maxStageReached
+              ? null
+              : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
             sync_status: 'pending',
           }).eq('id', invoiceId)
+        }
+
+        // Terminal state: max stage reached → escalate to merchant for review
+        if (maxStageReached && customer?.id) {
+          // authority:fallback recovery_cases.update_terminal
+          await supabaseAdmin.from('recovery_cases').update({
+            recovery_state_v2: 'overdue',
+            next_action_type: 'merchant_review',
+            next_action_due_at: new Date().toISOString(),
+          }).eq('tenant_id', tenantId).eq('customer_id', customer.id)
         }
 
         if (eventStatus !== 'failed') {
@@ -355,6 +605,13 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             stage,
             channel: 'whatsapp',
             messageId: identity.billzoMessageId,
+          })
+
+          logger.info('recovery_send', {
+            invoiceId,
+            customerId: customer?.id,
+            stage,
+            provider: sendResult.provider,
           })
         }
 
@@ -503,13 +760,13 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                   actor: 'reminder-worker',
                   payload: {
                     invoiceId,
-                    nextRecoveryAt: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+                    nextRecoveryAt: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
                   },
                 }, 'trusted_sync')
               } else {
                 spineDiagnostics.dualWrite('reminders:updateCadence', 'invoices')
                 const cadenceUpdate: Record<string, any> = {
-                  next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000).toISOString(),
+                  next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
                 }
                 // authority:fallback reminder.update_cadence
                 await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)
@@ -556,7 +813,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
     },
     {
       connection,
-      concurrency: 10,
+      concurrency: 2,
     }
   )
 
@@ -576,11 +833,16 @@ export function createReminderQueue() {
   return new Queue<ReminderJobData>('reminders', { connection })
 }
 
+function createEnqueueLock(): { redis: ReturnType<typeof getRedis>; ttl: number } {
+  return { redis: getRedis(), ttl: 600 }
+}
+
 export async function enqueueOverdueReminders(): Promise<number> {
   const now = new Date().toISOString()
   let enqueued = 0
   let skippedMuted = 0
   let skippedManual = 0
+  let skippedLocked = 0
 
   const { data: invoices, error } = await supabaseAdmin
     .from('invoices')
@@ -592,7 +854,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
       customer_id
     `)
     .in('status', ['unpaid', 'overdue'])
-    .lte('next_recovery_at', now)
+    .or(`next_recovery_at.lte.${now},next_recovery_at.is.null`)
     .limit(200)
 
   if (error || !invoices) {
@@ -616,6 +878,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
   }
 
   const queue = createReminderQueue()
+  const lock = createEnqueueLock()
   for (const inv of invoices) {
     const stage = normalizeStage(inv.recovery_stage)
     if (!REMINDER_STAGES.includes(stage)) continue
@@ -627,7 +890,22 @@ export async function enqueueOverdueReminders(): Promise<number> {
     }
     if (mode === 'manual') {
       skippedManual++
-      // Don't auto-enqueue; merchant must approve from dashboard
+      continue
+    }
+
+    logger.info('recovery_scan_candidate', {
+      invoiceId: inv.id,
+      customerId: inv.customer_id,
+      stage,
+      nextRecoveryAt: inv.next_recovery_at,
+    })
+
+    // Distributed lock: prevent duplicate enqueue if this invoice+stage
+    // was already enqueued within the TTL window (e.g. after crash/restart)
+    const lockKey = `enqueue_lock:reminder:${inv.id}:${stage}`
+    const acquired = await lock.redis.set(lockKey, '1', 'EX', lock.ttl, 'NX')
+    if (!acquired) {
+      skippedLocked++
       continue
     }
 
@@ -638,12 +916,12 @@ export async function enqueueOverdueReminders(): Promise<number> {
     }, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 60000 },
-      delay: Math.floor(Math.random() * 30000) + 5000,
+      delay: Math.floor(Math.random() * 120000) + 30000,
     })
     enqueued++
   }
 
   await queue.close()
-  logger.info({ enqueued, skippedMuted, skippedManual }, 'Enqueued overdue reminder jobs')
+  logger.info({ enqueued, skippedMuted, skippedManual, skippedLocked }, 'Enqueued overdue reminder jobs')
   return enqueued
 }

@@ -1,4 +1,5 @@
-import type { CohortDefinition, ExperimentAssignment, ExperimentTreatment, BaselineEstimate, PredictionOutcome } from '@billzo/shared'
+import type { CohortDefinition, ExperimentAssignment, ExperimentTreatment, BaselineEstimate, PredictionOutcome, DomainContext } from '@billzo/shared'
+import { createDomainContext } from '@billzo/shared'
 import crypto from 'crypto'
 
 const MIN_SAMPLE_SIZE = 5
@@ -8,10 +9,12 @@ export function assignToExperiment(
   customerId: string,
   tenantId: string,
   cohorts: CohortDefinition[],
+  ctx?: DomainContext,
 ): ExperimentAssignment | null {
   if (cohorts.length === 0) return null
+  const clock = ctx?.clock ?? createDomainContext().clock
 
-  const now = new Date().toISOString()
+  const now = clock.now()
   const seed = `${tenantId}:${customerId}`
   const hash = crypto.createHash('md5').update(seed).digest('hex')
   const normalized = parseInt(hash.slice(0, 8), 16) / 0xffffffff

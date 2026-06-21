@@ -3,8 +3,9 @@ import type {
   ObservationSource,
   ObservationType,
   ProjectionDelta,
+  DomainContext,
 } from '@billzo/shared'
-import { INTERPRETER_VERSION } from '@billzo/shared'
+import { INTERPRETER_VERSION, createDomainContext } from '@billzo/shared'
 
 export const OBSERVATION_INTERPRETER_VERSION = '1.0.0'
 
@@ -27,26 +28,28 @@ const SECONDS_2 = 2_000
 
 export function interpretProjectionDelta(
   delta: ProjectionDelta,
+  ctx?: DomainContext,
 ): BehavioralObservation | null {
+  const clock = ctx?.clock ?? createDomainContext().clock
   const transportState = delta.transportState
   const prevState = delta.prevTransportState
 
   if (!prevState) return null
 
   if (transportState === 'read') {
-    return interpretRead(delta, prevState)
+    return interpretRead(delta, prevState, clock)
   }
 
   if (transportState === 'failed_terminal') {
-    return interpretFailure(delta)
+    return interpretFailure(delta, clock)
   }
 
   if (transportState === 'delivered' || transportState === 'received') {
-    return interpretDelivered(delta, prevState)
+    return interpretDelivered(delta, prevState, clock)
   }
 
   if (transportState === 'clicked_upi') {
-    return interpretUpiClick(delta)
+    return interpretUpiClick(delta, clock)
   }
 
   return null
@@ -55,6 +58,7 @@ export function interpretProjectionDelta(
 function interpretRead(
   delta: ProjectionDelta,
   prevState: string,
+  clock: DomainContext['clock'],
 ): BehavioralObservation | null {
   if (!delta.prevOccurredAt) {
     return makeObservation(
@@ -64,6 +68,7 @@ function interpretRead(
       0.5,
       delta,
       'Read detected — no previous timestamp for delta calculation',
+      clock,
     )
   }
 
@@ -79,6 +84,7 @@ function interpretRead(
       0.3,
       delta,
       'Sub-2s read — likely notification preview or auto-open artifact',
+      clock,
     )
   }
 
@@ -90,6 +96,7 @@ function interpretRead(
       0.6,
       delta,
       'Read 2-15s after delivery — plausible human read',
+      clock,
     )
   }
 
@@ -100,11 +107,13 @@ function interpretRead(
     0.8,
     delta,
     'Read >15s after delivery — high confidence human read',
+    clock,
   )
 }
 
 function interpretFailure(
   delta: ProjectionDelta,
+  clock: DomainContext['clock'],
 ): BehavioralObservation | null {
   return makeObservation(
     'channel_failure',
@@ -113,12 +122,14 @@ function interpretFailure(
     0.7,
     delta,
     'Transport failure detected',
+    clock,
   )
 }
 
 function interpretDelivered(
   delta: ProjectionDelta,
   prevState: string,
+  clock: DomainContext['clock'],
 ): BehavioralObservation | null {
   if (prevState === 'sent' || prevState === 'server_ack') {
     return makeObservation(
@@ -128,6 +139,7 @@ function interpretDelivered(
       0.5,
       delta,
       'Message delivered to device',
+      clock,
     )
   }
   return null
@@ -135,6 +147,7 @@ function interpretDelivered(
 
 function interpretUpiClick(
   delta: ProjectionDelta,
+  clock: DomainContext['clock'],
 ): BehavioralObservation | null {
   return makeObservation(
     'payment_intent',
@@ -143,6 +156,7 @@ function interpretUpiClick(
     0.9,
     delta,
     'UPI link clicked — strong payment intent signal',
+    clock,
   )
 }
 
@@ -153,6 +167,7 @@ function makeObservation(
   sourceReliability: number,
   delta: ProjectionDelta,
   reason: string,
+  clock: DomainContext['clock'],
 ): BehavioralObservation {
   return {
     type,
@@ -160,7 +175,7 @@ function makeObservation(
     source,
     sourceReliability,
     interpreterVersion: INTERPRETER_VERSION,
-    occurredAt: new Date().toISOString(),
+    occurredAt: clock.now(),
     tenantId: delta.tenantId,
     customerId: delta.customerId,
     invoiceId: delta.invoiceId,
@@ -186,7 +201,8 @@ export function detectEngagementAbsence(params: {
   totalInterventionsSent: number
   totalInterventionsRead: number
   sinceHours: number
-}): BehavioralObservation | null {
+}, ctx?: DomainContext): BehavioralObservation | null {
+  const clock = ctx?.clock ?? createDomainContext().clock
   const { tenantId, customerId, invoiceId, totalInterventionsSent, totalInterventionsRead, sinceHours } = params
 
   if (totalInterventionsSent < 2) return null
@@ -200,7 +216,7 @@ export function detectEngagementAbsence(params: {
       source: 'system_inference',
       sourceReliability: 0.6,
       interpreterVersion: INTERPRETER_VERSION,
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.now(),
       tenantId,
       customerId,
       invoiceId,
@@ -220,7 +236,7 @@ export function detectEngagementAbsence(params: {
       source: 'system_inference',
       sourceReliability: 0.5,
       interpreterVersion: INTERPRETER_VERSION,
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.now(),
       tenantId,
       customerId,
       invoiceId,

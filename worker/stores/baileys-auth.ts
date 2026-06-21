@@ -1,46 +1,58 @@
-import { createRedisConnection } from '../lib/redis'
-import type { AuthenticationState, SignalDataTypeMap } from '@whiskeysockets/baileys'
+// ============================================================
+// Baileys Auth State — Redis-backed credentials persistence
+// ============================================================
+// Stores creds (AuthenticationCreds) separately from signal keys.
+// Creds are small and stored as a single Redis key.
+// Signal keys are stored individually via RedisBaileysKeyStore.
+//
+// This split ensures keys survive JSON round-trips and can be
+// reconstructed after worker restart without data loss.
+// ============================================================
+
+import { getRedis } from '../lib/redis'
+import type { AuthenticationCreds } from '@whiskeysockets/baileys'
 import { BufferJSON } from '@whiskeysockets/baileys'
 
-const AUTH_PREFIX = 'baileys:auth:'
-const AUTH_TTL = 30 * 24 * 60 * 60
+const CREDS_PREFIX = 'baileys:creds:'
+const CREDS_TTL = 30 * 24 * 60 * 60
 
-export async function getBaileysAuthState(tenantId: string): Promise<AuthenticationState | null> {
-  const redis = createRedisConnection()
+export async function getBaileysCreds(tenantId: string): Promise<AuthenticationCreds | null> {
+  const redis = getRedis()
   try {
-    const raw = await redis.get(`${AUTH_PREFIX}${tenantId}`)
+    const raw = await redis.get(`${CREDS_PREFIX}${tenantId}`)
     if (!raw) return null
-    return JSON.parse(raw, BufferJSON.reviver) as AuthenticationState
-  } finally {
-    await redis.quit()
+    const parsed = JSON.parse(raw, BufferJSON.reviver) as AuthenticationCreds
+    if (!parsed || !parsed.registrationId) {
+      console.warn(`[BaileysAuth] Found invalid creds for ${tenantId}, discarding.`)
+      return null
+    }
+    return parsed
+  } catch (e) {
+    console.error(`[BaileysAuth] Error parsing creds for ${tenantId}`, e)
+    return null
   }
 }
 
-export async function saveBaileysAuthState(tenantId: string, state: AuthenticationState): Promise<void> {
-  const redis = createRedisConnection()
-  try {
-    const raw = JSON.stringify(state, BufferJSON.replacer)
-    await redis.setex(`${AUTH_PREFIX}${tenantId}`, AUTH_TTL, raw)
-  } finally {
-    await redis.quit()
-  }
-}
-
-export async function deleteBaileysAuthState(tenantId: string): Promise<void> {
-  const redis = createRedisConnection()
-  try {
-    await redis.del(`${AUTH_PREFIX}${tenantId}`)
-  } finally {
-    await redis.quit()
-  }
+export async function saveBaileysCreds(tenantId: string, creds: AuthenticationCreds): Promise<void> {
+  const redis = getRedis()
+  const raw = JSON.stringify(creds, BufferJSON.replacer)
+  await redis.setex(`${CREDS_PREFIX}${tenantId}`, CREDS_TTL, raw)
 }
 
 export async function hasBaileysAuth(tenantId: string): Promise<boolean> {
-  const redis = createRedisConnection()
-  try {
-    const exists = await redis.exists(`${AUTH_PREFIX}${tenantId}`)
-    return exists === 1
-  } finally {
-    await redis.quit()
+  const redis = getRedis()
+  const exists = await redis.exists(`${CREDS_PREFIX}${tenantId}`)
+  return exists === 1
+}
+
+export async function deleteBaileysAuthState(tenantId: string): Promise<void> {
+  const redis = getRedis()
+  const credsKey = `${CREDS_PREFIX}${tenantId}`
+  await redis.del(credsKey)
+
+  const keysPrefix = `baileys:keys:${tenantId}:*`
+  const keys = await redis.keys(keysPrefix)
+  if (keys.length > 0) {
+    await redis.del(...keys)
   }
 }

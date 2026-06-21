@@ -32,7 +32,7 @@ function makeDelta(overrides: Partial<ProjectionDelta> = {}): ProjectionDelta {
 
 function runInterpreter(deltas: ProjectionDelta[]): BehavioralObservation[] {
   return deltas
-    .map(interpretProjectionDelta)
+    .map(d => interpretProjectionDelta(d))
     .filter((o): o is BehavioralObservation => o !== null)
 }
 

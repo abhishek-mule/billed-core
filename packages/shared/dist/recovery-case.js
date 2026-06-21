@@ -44,6 +44,7 @@ exports.ENGAGEMENT_STATES_V2 = [
     'intent', // clicked payment link
     'likely_to_pay', // positive payment behavior pattern
     'ghosting', // repeated non-response after engagement
+    'snoozed', // merchant manually paused automation
 ];
 // ============================================================
 // NEXT ACTION TYPE — System recommendation

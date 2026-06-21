@@ -75,11 +75,12 @@ async function persistSituations(tenantId: string, situations: OperationalSituat
 
   const prevFingerprints = new Set((prevActive || []).map(s => s.situation_fingerprint))
 
-  // Upsert situations by fingerprint
-  for (const sit of situations) {
+  // Upsert situations by fingerprint (batch)
+  if (situations.length > 0) {
+    const now = new Date().toISOString()
     const { error } = await supabaseAdmin
       .from('operational_situations')
-      .upsert({
+      .upsert(situations.map(sit => ({
         tenant_id: sit.tenantId,
         situation_type: sit.situationType,
         situation_fingerprint: sit.situationFingerprint,
@@ -98,18 +99,18 @@ async function persistSituations(tenantId: string, situations: OperationalSituat
         max_display_order: sit.maxDisplayOrder,
         expires_at: sit.expiresAt,
         pipeline_version: sit.pipelineVersion,
-        updated_at: new Date().toISOString(),
-      }, {
+        updated_at: now,
+      })), {
         onConflict: 'situation_fingerprint',
         ignoreDuplicates: false,
       })
 
     if (error) {
-      logger.error({ tenantId, fingerprint: sit.situationFingerprint, err: error.message }, 'Failed to upsert situation')
+      logger.error({ tenantId, err: error.message }, 'Failed to batch upsert situations')
     }
   }
 
-  // Mark attention items with their situation_id
+  // Mark attention items with their situation_id (batch)
   const attentionItemIds = situations.flatMap(s => {
     const matchingItems = items.filter(i => {
       const ck = i.correlationKey
@@ -118,11 +119,11 @@ async function persistSituations(tenantId: string, situations: OperationalSituat
     return matchingItems.map(i => i.id)
   })
 
-  for (const itemId of attentionItemIds) {
+  if (attentionItemIds.length > 0) {
     await supabaseAdmin
       .from('attention_items')
       .update({ situation_id: situations[0]?.id || null })
-      .eq('id', itemId)
+      .in('id', attentionItemIds)
   }
 
   // Mark stale situations as completed (no longer in active set)
@@ -133,25 +134,38 @@ async function persistSituations(tenantId: string, situations: OperationalSituat
       .update({ situation_state: 'completed', updated_at: new Date().toISOString() })
       .eq('tenant_id', tenantId)
       .eq('situation_state', 'active')
-      .not('situation_fingerprint', 'in', `(${activeFingerprints.map(f => `'${f}'`).join(',')})`)
+      .not('situation_fingerprint', 'in', activeFingerprints)
   }
 
   // Send push notifications for new high-priority situations
   const newHighPriority = situations.filter(
     s => !prevFingerprints.has(s.situationFingerprint) && s.priorityScore >= 25,
   )
-  for (const sit of newHighPriority) {
-    const customerName = sit.affectedEntities?.customers?.[0]
-      ? await getCustomerName(sit.affectedEntities.customers[0])
-      : undefined
+  if (newHighPriority.length > 0) {
+    const customerIds = newHighPriority
+      .map(s => s.affectedEntities?.customers?.[0])
+      .filter(Boolean) as string[]
+    const customerNameMap = new Map<string, string>()
+    if (customerIds.length > 0) {
+      const { data: customers } = await supabaseAdmin
+        .from('customers')
+        .select('id, name')
+        .in('id', customerIds)
+      if (customers) {
+        for (const c of customers) customerNameMap.set(c.id, c.name)
+      }
+    }
+    for (const sit of newHighPriority) {
+      const customerId = sit.affectedEntities?.customers?.[0]
+      const customerName = customerId ? customerNameMap.get(customerId) : undefined
+      const url = buildSituationUrl(sit.situationType, customerName, customerId)
+      const title = sit.headline || 'New situation detected'
+      const body = customerName ? `${customerName} — ${sit.headline}` : sit.headline
 
-    const url = buildSituationUrl(sit.situationType, customerName, sit.affectedEntities?.customers?.[0])
-    const title = sit.headline || 'New situation detected'
-    const body = customerName ? `${customerName} — ${sit.headline}` : sit.headline
-
-    sendPushNotification({ tenantId, title, body, type: sit.situationType, url }).catch(err =>
-      logger.error({ tenantId, fingerprint: sit.situationFingerprint, err: (err as Error).message }, 'Push notification failed'),
-    )
+      sendPushNotification({ tenantId, title, body, type: sit.situationType, url }).catch(err =>
+        logger.error({ tenantId, fingerprint: sit.situationFingerprint, err: (err as Error).message }, 'Push notification failed'),
+      )
+    }
   }
 }
 
@@ -165,15 +179,6 @@ function buildSituationUrl(type: string, customerName?: string, customerId?: str
   }
   if (type === 'payment_anomaly') return '/pulse'
   return '/dashboard'
-}
-
-async function getCustomerName(customerId: string): Promise<string | undefined> {
-  const { data } = await supabaseAdmin
-    .from('customers')
-    .select('name')
-    .eq('id', customerId)
-    .single()
-  return data?.name || undefined
 }
 
 async function resolveAllActiveSituations(tenantId: string): Promise<void> {

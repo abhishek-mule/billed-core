@@ -8,9 +8,12 @@
     "start": "node dist/index.js",
     "build": "tsc && pnpm run lint:mutations",
     "lint:mutations": "node scripts/check-ungoverned-mutations.mjs",
-    "dev": "ts-node-dev --respawn index.ts",
+    "dev": "ts-node-dev -r dotenv/config --respawn index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "recovery:trace": "ts-node --transpile-only -r dotenv/config src/lib/recovery/audit/trace.ts",
+    "recovery:audit": "ts-node --transpile-only -r dotenv/config src/lib/recovery/audit/audit-cli.ts",
+    "recovery:rebuild": "ts-node --transpile-only -r dotenv/config src/lib/recovery/audit/rebuild-cli.ts"
   },
   "dependencies": {
     "@billzo/shared": "workspace:*",
@@ -24,11 +27,16 @@
     "ioredis": "5.10.1",
     "pino": "^8.17.0",
     "postgres": "^3.4.5",
-    "typescript": "^5.3.0"
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
+    "typescript": "^5.3.0",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "dotenv": "^16.4.7",
     "ts-node": "^10.9.0",
     "ts-node-dev": "^2.0.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.6"
   }
 }

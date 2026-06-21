@@ -68,6 +68,7 @@ function computePriorityScore(group: CorrelationGroup): number {
 
 function computeBestWindow(group: CorrelationGroup): { bestStart: string; bestEnd: string } | null {
   const now = new Date()
+  now.setSeconds(0, 0)
   const hour = now.getHours()
   // Simple heuristic: best window is next 4 hours if within business hours (9AM-6PM)
   if (hour >= 9 && hour < 18) {

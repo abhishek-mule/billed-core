@@ -1,6 +1,6 @@
 // authority:exempt append_only_observability — behavioral analytics materialization
-import type { BehavioralObservation, CustomerBehavioralMetrics, ProfileChanged } from '@billzo/shared'
-import { EventType, INTERPRETER_VERSION } from '@billzo/shared'
+import type { BehavioralObservation, CustomerBehavioralMetrics, ProfileChanged, DomainContext } from '@billzo/shared'
+import { EventType, INTERPRETER_VERSION, createDomainContext } from '@billzo/shared'
 import { supabaseAdmin } from './supabase-admin'
 import { decayedEMA, daysBetween, getHalfLife } from './decay'
 import { writeOutboxEvent } from './outbox'
@@ -26,7 +26,9 @@ const SCHEMA_VERSION = 1
 export async function materializeObservation(
   observation: BehavioralObservation,
   causationEventId?: string,
+  ctx?: DomainContext,
 ): Promise<void> {
+  const clock = ctx?.clock ?? createDomainContext().clock
   const idempotencyKey = causationEventId
     ? `behavioral:materialize:${causationEventId}`
     : `behavioral:materialize:${observation.tenantId}:${observation.customerId}:${observation.type}:${observation.occurredAt}`
@@ -34,21 +36,21 @@ export async function materializeObservation(
   await executeIdempotent(idempotencyKey, 'behavioral_materialize', observation.tenantId, async () => {
     switch (observation.type) {
       case 'message_seen':
-        await handleMessageSeen(observation)
+        await handleMessageSeen(observation, clock)
         break
       case 'attention_absent':
       case 'response_absent':
       case 'resolution_absent':
-        await handleAbsence(observation)
+        await handleAbsence(observation, clock)
         break
       case 'payment_intent':
-        await handlePaymentIntent(observation)
+        await handlePaymentIntent(observation, clock)
         break
       case 'resolution_completed':
-        await handleResolutionCompleted(observation)
+        await handleResolutionCompleted(observation, clock)
         break
       case 'channel_failure':
-        await handleChannelFailure(observation)
+        await handleChannelFailure(observation, clock)
         break
     }
     return null
@@ -59,13 +61,13 @@ export async function materializeObservation(
 // HANDLER: message_seen
 // ============================================================
 // Updates read rate and read counters with confidence weighting.
-async function handleMessageSeen(observation: BehavioralObservation): Promise<void> {
+async function handleMessageSeen(observation: BehavioralObservation, clock: DomainContext['clock']): Promise<void> {
   const { tenantId, customerId, confidence } = observation
-  const now = new Date().toISOString()
+  const now = clock.now()
 
   const current = await getMetrics(tenantId, customerId)
   const deltaDays = current
-    ? daysBetween(new Date(current.updatedAt), new Date())
+    ? daysBetween(new Date(current.updatedAt), new Date(clock.now()))
     : 0
 
   const newReadRate = decayedEMA(
@@ -100,16 +102,16 @@ async function handleMessageSeen(observation: BehavioralObservation): Promise<vo
     })
   }
 
-  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates)
+  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates, clock)
 }
 
 // ============================================================
 // HANDLER: attention_absent / response_absent / resolution_absent
 // ============================================================
 // Updates escalation counters and timing.
-async function handleAbsence(observation: BehavioralObservation): Promise<void> {
-  const { tenantId, customerId } = observation
-  const now = new Date().toISOString()
+async function handleAbsence(observation: BehavioralObservation, clock: DomainContext['clock']): Promise<void> {
+  const { tenantId, customerId, confidence } = observation
+  const now = clock.now()
 
   const current = await getMetrics(tenantId, customerId)
 
@@ -136,7 +138,7 @@ async function handleAbsence(observation: BehavioralObservation): Promise<void> 
     })
   }
 
-  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates)
+  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates, clock)
 }
 
 // ============================================================
@@ -144,11 +146,11 @@ async function handleAbsence(observation: BehavioralObservation): Promise<void> 
 // ============================================================
 // Currently a lightweight signal — tracked for future intent-to-payment
 // conversion funnel analysis.
-async function handlePaymentIntent(observation: BehavioralObservation): Promise<void> {
+async function handlePaymentIntent(observation: BehavioralObservation, clock: DomainContext['clock']): Promise<void> {
   const { tenantId, customerId } = observation
 
   const current = await getMetrics(tenantId, customerId)
-  const now = new Date().toISOString()
+  const now = clock.now()
 
   const updatedFields: string[] = ['observationCount']
 
@@ -171,7 +173,7 @@ async function handlePaymentIntent(observation: BehavioralObservation): Promise<
     })
   }
 
-  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates)
+  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates, clock)
 }
 
 // ============================================================
@@ -203,14 +205,14 @@ function checkAntiCausality(
 // The most impactful observation — updates liquidity windows,
 // conversion rate, settlement latency, read-to-pay latency,
 // and pressure memory.
-async function handleResolutionCompleted(observation: BehavioralObservation): Promise<void> {
+async function handleResolutionCompleted(observation: BehavioralObservation, clock: DomainContext['clock']): Promise<void> {
   const { tenantId, customerId, confidence, occurredAt, metadata } = observation
-  const now = new Date().toISOString()
+  const now = clock.now()
   const resolvedAt = new Date(occurredAt)
 
   const current = await getMetrics(tenantId, customerId)
   const deltaDays = current
-    ? daysBetween(new Date(current.updatedAt), new Date())
+    ? daysBetween(new Date(current.updatedAt), new Date(clock.now()))
     : 0
 
   // Anti-causality check: discount read→pay if read happened after payment
@@ -289,20 +291,20 @@ async function handleResolutionCompleted(observation: BehavioralObservation): Pr
     })
   }
 
-  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates)
+  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates, clock)
 }
 
 // ============================================================
 // HANDLER: channel_failure
 // ============================================================
 // Decays read rate to reflect channel viability loss.
-async function handleChannelFailure(observation: BehavioralObservation): Promise<void> {
+async function handleChannelFailure(observation: BehavioralObservation, clock: DomainContext['clock']): Promise<void> {
   const { tenantId, customerId, confidence } = observation
-  const now = new Date().toISOString()
+  const now = clock.now()
 
   const current = await getMetrics(tenantId, customerId)
   const deltaDays = current
-    ? daysBetween(new Date(current.updatedAt), new Date())
+    ? daysBetween(new Date(current.updatedAt), new Date(clock.now()))
     : 0
 
   const newReadRate = current
@@ -331,7 +333,7 @@ async function handleChannelFailure(observation: BehavioralObservation): Promise
     })
   }
 
-  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates)
+  await emitProfileChanged(tenantId, customerId, updatedFields, current ?? null, updates, clock)
 }
 
 // ============================================================
@@ -394,6 +396,7 @@ async function emitProfileChanged(
   changedFields: string[],
   before: CustomerBehavioralMetrics | null,
   after: Record<string, unknown>,
+  clock: DomainContext['clock'],
 ): Promise<void> {
   const beforeConfidence = before ? computeObservationConfidence(before) : 0
   const afterConfidence = computeUpdateConfidence(after)
@@ -404,7 +407,7 @@ async function emitProfileChanged(
     changedFields,
     confidenceBefore: beforeConfidence,
     confidenceAfter: afterConfidence,
-    occurredAt: new Date().toISOString(),
+    occurredAt: clock.now(),
   }
 
   await writeOutboxEvent({

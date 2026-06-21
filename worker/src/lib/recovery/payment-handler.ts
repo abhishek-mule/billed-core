@@ -8,6 +8,7 @@ import crypto from 'crypto'
 export interface RecordPaymentInput {
   tenantId: string
   invoiceId: string
+  customerId: string
   amount: number
   source: PaymentSource
   actor: PaymentActor
@@ -46,6 +47,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ paymen
     tenantId: input.tenantId,
     entityId: input.invoiceId,
     payload: {
+      customerId: input.customerId,
       amount: input.amount,
       source: input.source,
       actor: input.actor,

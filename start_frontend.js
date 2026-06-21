@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const { Pool } = require('pg');
 
-const frontendDir = '/mnt/c/Users/HP/Desktop/mini_saas/mini_saas_frontend';
+const frontendDir = path.resolve(__dirname, 'mini_saas_frontend');
 
 const MIGRATIONS = [
   {
@@ -108,7 +108,7 @@ async function runMigrations() {
 async function main() {
   await runMigrations();
 
-  const child = spawn('/mnt/c/nvm4w/nodejs/node.exe', ['dev', '-p', '3000'], {
+  const child = spawn('pnpm', ['dev', '-p', '3000'], {
     cwd: frontendDir,
     detached: true,
     stdio: 'ignore'

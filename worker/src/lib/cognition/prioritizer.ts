@@ -3,6 +3,7 @@ import { MAX_ACTIVE_SITUATIONS } from './types'
 
 export function prioritize(candidates: SituationCandidate[]): SituationCandidate[] {
   const now = new Date()
+  now.setSeconds(0, 0)
 
   return candidates
     .map(c => ({

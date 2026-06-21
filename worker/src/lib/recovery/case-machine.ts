@@ -18,9 +18,39 @@ import {
   RecoveryCaseTransition,
   RECOVERY_STATE_PRECEDENCE,
   computeAttentionScore,
+  type DomainContext,
 } from '@billzo/shared'
 
 export { RECOVERY_STATE_PRECEDENCE, computeAttentionScore } from '@billzo/shared'
+
+// ============================================================
+// SUPPORTED EVENTS — Single source of truth for the whitelist
+// The state machine owns which events it can handle.
+// ============================================================
+
+export const SUPPORTED_EVENTS = new Set([
+  'invoice.created',
+  'invoice.overdue',
+  'payment.completed',
+  'payment.reconciled',
+  'recovery.reminder.sent',
+  'recovery.reminder.delivered',
+  'recovery.reminder.failed',
+  'payment_link.clicked',
+  'promise.made',
+  'promise.broken',
+  'merchant.mark_disputed',
+  'merchant.mark_closed',
+  'customer.called',
+  'merchant.snoozed',
+  'merchant.payment_reported',
+  'recovery.completed',
+  'whatsapp.status.updated',
+])
+
+export function canHandleEvent(eventType: string): boolean {
+  return SUPPORTED_EVENTS.has(eventType)
+}
 
 // ============================================================
 // Types
@@ -71,8 +101,10 @@ export interface SignalEvent {
 export function transitionCase(
   current: CurrentCase | null,
   signal: SignalEvent,
+  ctx?: DomainContext,
 ): RecoveryCaseTransition | null {
-  const now = signal.occurredAt || new Date().toISOString()
+  const clock = ctx?.clock ?? { now: () => new Date().toISOString() }
+  const now = signal.occurredAt || clock.now()
   const base = current || {
     id: undefined,
     tenantId: signal.tenantId,
@@ -123,6 +155,8 @@ export function transitionCase(
       return handleMerchantSnoozed(base, signal, now)
     case 'merchant.payment_reported':
       return handlePaymentReported(base, signal, now)
+    case 'recovery.completed':
+      return handleRecoveryCompleted(base, signal, now)
     default:
       return null
   }
@@ -180,8 +214,18 @@ function buildTransition(
     engagementState: toEngagementState,
     nextActionType: next.nextActionType,
     nextActionDueAt: next.nextActionDueAt,
+    promiseToPayDate: next.promiseToPayDate,
     attentionScore: next.attentionScore,
     version: current.version + 1,
+    financialState: {
+      totalOutstanding: next.totalOutstanding,
+      totalOverdue: next.totalOverdue,
+      openInvoiceCount: next.openInvoiceCount,
+      overdueInvoiceCount: next.overdueInvoiceCount,
+      disputedInvoiceCount: next.disputedInvoiceCount,
+      promisedInvoiceCount: next.promisedInvoiceCount,
+      invoiceCount: next.invoiceCount,
+    },
     event: {
       caseId: current.id || '',
       eventType: eventType as any,
@@ -401,15 +445,28 @@ function handleCustomerCalled(current: CurrentCase, signal: SignalEvent, now: st
 
 function handleMerchantSnoozed(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
   const days = signal.snoozeDuration || 3
-  const dueAt = new Date(Date.now() + days * 86400000).toISOString()
+  const dueAt = new Date(new Date(now).getTime() + days * 86400000).toISOString()
   return buildTransition(
     current,
     {
+      nextActionType: 'wait',
       nextActionDueAt: dueAt,
+      engagementState: 'snoozed',
     },
     'transition',
     `Snoozed ${days} days by merchant`,
     { signalId: signal.id, snoozeDays: days },
+    now,
+  )
+}
+
+function handleRecoveryCompleted(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+  return buildTransition(
+    current,
+    { recoveryState: 'recovered' },
+    'transition',
+    'Payment attributed successfully',
+    { signalId: signal.id },
     now,
   )
 }

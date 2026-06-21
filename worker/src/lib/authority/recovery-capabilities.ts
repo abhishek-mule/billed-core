@@ -21,9 +21,11 @@ export const recoveryRecordAttribution: CapabilityProvider = {
     const payload = intent.payload as any
     const t0 = performance.now()
     const { error } = await supabaseAdmin.from('recovery_attributions').insert({
+      tenant_id: payload.tenantId,
       invoice_id: payload.invoiceId,
       payment_id: payload.paymentId ?? null,
       reminder_event_id: payload.reminderEventId,
+      amount: payload.amount ?? 0,
       attribution_type: payload.attributionType ?? 'last_touch',
       attribution_window_hours: payload.attributionWindowHours ?? 48,
       confidence_score: payload.confidenceScore ?? 1.0,

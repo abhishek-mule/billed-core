@@ -117,6 +117,7 @@ async function finalizeReconciliation(
     const result = await recordPayment({
       tenantId,
       invoiceId,
+      customerId: invoice.customer_id,
       amount: signal.amount,
       source: signal.provider === 'razorpay' ? 'razorpay' : 'cash',
       actor: 'customer',
@@ -137,6 +138,7 @@ async function finalizeReconciliation(
   await emitPaymentReconciled({
     invoiceId,
     tenantId,
+    customerId: invoice.customer_id,
     amount: signal.amount,
     provider: signal.provider,
     providerPaymentId: signal.providerPaymentId,
@@ -146,6 +148,7 @@ async function finalizeReconciliation(
   await emitPaymentCompleted({
     invoiceId,
     tenantId,
+    customerId: invoice.customer_id,
     amount: signal.amount,
     provider: signal.provider,
     providerPaymentId: signal.providerPaymentId,

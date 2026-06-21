@@ -6,11 +6,12 @@
 // Every event in the system MUST satisfy this contract.
 // ============================================================
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VALID_SOURCE_SYSTEMS = exports.VALID_ENTITY_TYPES = void 0;
+exports.realClock = exports.VALID_SOURCE_SYSTEMS = exports.VALID_ENTITY_TYPES = void 0;
 exports.uuidv7 = uuidv7;
 exports.uuidv7Timestamp = uuidv7Timestamp;
 exports.validateSpineEventInput = validateSpineEventInput;
 exports.inferEntityType = inferEntityType;
+exports.createDomainContext = createDomainContext;
 // ----------------------------------------------------------
 // UUID v7 generator — time-sortable unique identifiers
 // https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7
@@ -90,5 +91,11 @@ function inferEntityType(eventType) {
     if (eventType.startsWith('whatsapp.'))
         return 'whatsapp_message';
     return 'unknown';
+}
+exports.realClock = {
+    now: () => new Date().toISOString(),
+};
+function createDomainContext() {
+    return { clock: exports.realClock };
 }
 //# sourceMappingURL=spine.js.map

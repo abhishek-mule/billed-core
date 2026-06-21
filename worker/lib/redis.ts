@@ -1,4 +1,4 @@
-import Redis from 'ioredis'
+import Redis, { type RedisOptions } from 'ioredis'
 
 function getRedisUrl(): string {
   const url = process.env.UPSTASH_REDIS_URL
@@ -12,10 +12,29 @@ function getRedisUrl(): string {
   return ''
 }
 
-export function createRedisConnection(): Redis {
-  return new Redis(getRedisUrl(), {
+function makeRedis(overrides: Partial<RedisOptions> = {}): Redis {
+  const url = getRedisUrl()
+  const isTls = url.startsWith('rediss://')
+  return new Redis(url, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    tls: {},
+    ...(isTls ? { tls: {} } : {}),
+    ...overrides,
   })
+}
+
+let _sharedRedis: Redis | null = null
+
+export function getRedis(): Redis {
+  if (!_sharedRedis) {
+    _sharedRedis = makeRedis({ lazyConnect: true })
+    _sharedRedis.on('error', (err) => {
+      console.error('[redis] Shared connection error:', err.message)
+    })
+  }
+  return _sharedRedis
+}
+
+export function createRedisConnection(): Redis {
+  return makeRedis()
 }

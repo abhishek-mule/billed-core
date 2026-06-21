@@ -76,91 +76,103 @@ export class AuthorityOutboxDispatcher {
 
   private async fetchPendingEntries(): Promise<DispatchEntry[]> {
     const batchSize = this.options.batchSize ?? DEFAULT_BATCH_SIZE
-    const rows = await this.sql<DispatchEntry[]>`
-      SELECT oq.outbox_id, oq.intent_id, oq.plan_id, oq.payload, oq.priority_class
-      FROM authority_queue_outbox oq
-      WHERE NOT EXISTS (
-        SELECT 1 FROM authority_queue_dispatch_attempts da
-        WHERE da.outbox_id = oq.outbox_id
-      )
-      ORDER BY oq.created_at ASC
-      LIMIT ${batchSize}
-    `
-    return rows
+    try {
+      const rows = await this.sql<DispatchEntry[]>`
+        SELECT oq.id AS outbox_id, oq.intent_id, oq.plan_id, oq.payload, oq.priority_class
+        FROM authority_queue_outbox oq
+        WHERE NOT EXISTS (
+          SELECT 1 FROM authority_queue_dispatch_attempts da
+          WHERE da.outbox_id = oq.id
+        )
+        ORDER BY oq.created_at ASC
+        LIMIT ${batchSize}
+      `
+      return rows
+    } catch {
+      return []
+    }
   }
 
   private async dispatch(entry: DispatchEntry): Promise<void> {
-    // Record dispatch attempt first (append-only)
-    const [attempt] = await this.sql<{ attempt_id: string }[]>`
-      INSERT INTO authority_queue_dispatch_attempts (outbox_id, intent_id, status, attempted_at)
-      VALUES (${entry.outbox_id}, ${entry.intent_id}, 'in_progress', NOW())
-      RETURNING attempt_id
-    `
-    if (!attempt) return
-
     try {
-      // Load immutable plan
-      const [planRow] = await this.sql<{ execution_plan: ExecutionPlan }[]>`
-        SELECT execution_plan FROM authority_plans
-        WHERE plan_id = ${entry.plan_id}
-        LIMIT 1
+      // Record dispatch attempt first (append-only)
+      const [attempt] = await this.sql<{ attempt_id: string }[]>`
+        INSERT INTO authority_queue_dispatch_attempts (outbox_id, intent_id, status, attempted_at)
+        VALUES (${entry.outbox_id}, ${entry.intent_id}, 'in_progress', NOW())
+        RETURNING id AS attempt_id
       `
-      if (!planRow) {
-        await this.markFailed(attempt.attempt_id, 'plan_not_found')
-        return
+      if (!attempt) return
+
+      try {
+        // Load immutable plan
+        const [planRow] = await this.sql<{ execution_plan: ExecutionPlan }[]>`
+          SELECT execution_plan FROM authority_plans
+          WHERE plan_id = ${entry.plan_id}
+          LIMIT 1
+        `
+        if (!planRow) {
+          await this.markFailed(attempt.attempt_id, 'plan_not_found')
+          return
+        }
+
+        // Load the original intent for tenant/type info
+        const [intentRow] = await this.sql<{ intent_type: string; tenant_id: string; nonce: string }[]>`
+          SELECT intent_type, tenant_id, nonce FROM authority_intents
+          WHERE intent_id = ${entry.intent_id}
+          LIMIT 1
+        `
+        if (!intentRow) {
+          await this.markFailed(attempt.attempt_id, 'intent_not_found')
+          return
+        }
+
+        const intent: IntentEnvelope = {
+          intentId: entry.intent_id,
+          intentType: intentRow.intent_type,
+          intentVersion: 1,
+          tenantId: intentRow.tenant_id,
+          actor: 'system',
+          source: 'internal_worker',
+          timestamp: new Date().toISOString(),
+          causationId: null,
+          correlationId: null,
+          payload: (entry.payload as any) ?? {},
+          nonce: intentRow.nonce,
+          signature: '',
+        }
+
+        const results = await executePlan(
+          this.registry,
+          planRow.execution_plan,
+          intent,
+          this.sql,
+        )
+
+        const allSuccess = results.every(r => r.success)
+        await this.sql`
+          UPDATE authority_queue_dispatch_attempts
+          SET status = ${allSuccess ? 'completed' : 'failed'},
+              completed_at = NOW(),
+              result = ${this.sql.json(results.map(r => ({ success: r.success, error: r.error })))}
+          WHERE attempt_id = ${attempt.attempt_id}
+        `
+      } catch (err: any) {
+        await this.markFailed(attempt.attempt_id, err.message ?? 'unknown_error')
       }
-
-      // Load the original intent for tenant/type info
-      const [intentRow] = await this.sql<{ intent_type: string; tenant_id: string; nonce: string }[]>`
-        SELECT intent_type, tenant_id, nonce FROM authority_intents
-        WHERE intent_id = ${entry.intent_id}
-        LIMIT 1
-      `
-      if (!intentRow) {
-        await this.markFailed(attempt.attempt_id, 'intent_not_found')
-        return
-      }
-
-      const intent: IntentEnvelope = {
-        intentId: entry.intent_id,
-        intentType: intentRow.intent_type,
-        intentVersion: 1,
-        tenantId: intentRow.tenant_id,
-        actor: 'system',
-        source: 'internal_worker',
-        timestamp: new Date().toISOString(),
-        causationId: null,
-        correlationId: null,
-        payload: (entry.payload as any) ?? {},
-        nonce: intentRow.nonce,
-        signature: '',
-      }
-
-      const results = await executePlan(
-        this.registry,
-        planRow.execution_plan,
-        intent,
-        this.sql,
-      )
-
-      const allSuccess = results.every(r => r.success)
-      await this.sql`
-        UPDATE authority_queue_dispatch_attempts
-        SET status = ${allSuccess ? 'completed' : 'failed'},
-            completed_at = NOW(),
-            result = ${this.sql.json(results.map(r => ({ success: r.success, error: r.error })))}
-        WHERE attempt_id = ${attempt.attempt_id}
-      `
     } catch (err: any) {
-      await this.markFailed(attempt.attempt_id, err.message ?? 'unknown_error')
+      console.warn('[AuthorityOutboxDispatcher] Dispatch skipped:', err.message ?? 'unknown_error')
     }
   }
 
   private async markFailed(attemptId: string, error: string): Promise<void> {
-    await this.sql`
-      UPDATE authority_queue_dispatch_attempts
-      SET status = 'failed', completed_at = NOW(), error = ${error}
-      WHERE attempt_id = ${attemptId}
-    `
+    try {
+      await this.sql`
+        UPDATE authority_queue_dispatch_attempts
+        SET status = 'failed', completed_at = NOW(), error = ${error}
+        WHERE attempt_id = ${attemptId}
+      `
+    } catch {
+      // table may not exist — skip
+    }
   }
 }

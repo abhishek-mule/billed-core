@@ -46,6 +46,7 @@ export const ENGAGEMENT_STATES_V2 = [
   'intent',        // clicked payment link
   'likely_to_pay', // positive payment behavior pattern
   'ghosting',      // repeated non-response after engagement
+  'snoozed',       // merchant manually paused automation
 ] as const
 
 export type EngagementStateV2 = (typeof ENGAGEMENT_STATES_V2)[number]
@@ -139,6 +140,20 @@ export interface RecoveryCaseEventConsumption {
 }
 
 // ============================================================
+// FINANCIAL STATE — Money truth produced by the state machine
+// ============================================================
+
+export interface RecoveryFinancialState {
+  totalOutstanding: number
+  totalOverdue: number
+  openInvoiceCount: number
+  overdueInvoiceCount: number
+  disputedInvoiceCount: number
+  promisedInvoiceCount: number
+  invoiceCount: number
+}
+
+// ============================================================
 // TRANSITION — What the state machine produces
 // ============================================================
 
@@ -148,8 +163,10 @@ export interface RecoveryCaseTransition {
   engagementState?: EngagementStateV2
   nextActionType?: NextActionType | null
   nextActionDueAt?: string | null
+  promiseToPayDate?: string | null
   attentionScore?: number
   version: number
+  financialState: RecoveryFinancialState
   event: Omit<RecoveryCaseEvent, 'id' | 'occurredAt'>
 }
 
