@@ -1,233 +1,648 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Search, MessageCircle, Phone, Plus, Loader2, Upload, Users } from "lucide-react";
-import { Button } from "@/components/billzo/Button";
-import { db } from "@/lib/billzo/db";
-import { getUsageLimits, incrementReminderCount } from "@/lib/billzo/usage";
-import { PaywallModal } from "@/components/billzo/PaywallModal";
-import { EmptyState } from '@/components/billzo/EmptyState';
-import { formatINR } from "@/lib/utils";
-import { getCookie } from "@/lib/cookies";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Users, Phone, MessageSquare, Plus, Search, AlertTriangle,
+  UserPlus, Download, Upload, ArrowLeft, Clock, CreditCard,
+  CalendarDays, Receipt, MoreHorizontal, Wallet,
+} from "lucide-react"
+import { Button } from "@/components/billzo/Button"
+import { EmptyState } from "@/components/billzo/EmptyState"
+import { db } from "@/lib/billzo/db"
+import { formatINR } from "@/lib/utils"
+import { getCookie } from "@/lib/cookies"
+
+type Customer = {
+  id: string
+  tenantId: string
+  name: string
+  phone: string
+  whatsapp_number?: string
+  gstin?: string
+  email?: string
+  address?: string
+  notes?: string
+  automationMode?: string
+  lastUsedAt: string
+  invoiceCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+type Invoice = {
+  id: string
+  tenantId: string
+  customerId: string
+  total: number
+  paidAmount: number
+  dueAt?: string
+  dueDate?: string
+  status: string
+  invoiceNumber?: string
+  createdAt: string
+  recoveryStage?: string
+}
+
+type Payment = {
+  id: string
+  invoiceId: string
+  amount: number
+  method?: string
+  createdAt: string
+}
+
+type PartyWithBalance = Customer & {
+  outstanding: number
+  totalSales: number
+  overdueAmount: number
+  invoiceCount: number
+  paymentCount: number
+  invoices: Invoice[]
+  lastPaymentAt: string | null
+}
+
+function getPartyType(c: Customer): 'customer' | 'supplier' {
+  return c.notes?.toLowerCase().includes('supplier') ? 'supplier' : 'customer'
+}
+
+function getOutstanding(inv: Invoice): number {
+  return (inv.total || 0) - (inv.paidAmount || 0)
+}
+
+function getOutstandingStatus(inv: Invoice): 'overdue' | 'due_soon' | 'clear' {
+  if (getOutstanding(inv) <= 0) return 'clear'
+  const dueAt = inv.dueAt || inv.dueDate
+  if (!dueAt) return 'clear'
+  const due = new Date(dueAt)
+  const now = new Date()
+  const daysUntilDue = Math.ceil((due.getTime() - now.getTime()) / 86400000)
+  if (daysUntilDue < 0) return 'overdue'
+  if (daysUntilDue <= 3) return 'due_soon'
+  return 'clear'
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  overdue: 'bg-rose-50 text-rose-700 border-rose-200',
+  due_soon: 'bg-amber-50 text-amber-700 border-amber-200',
+  clear: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  overdue: 'Overdue',
+  due_soon: 'Due Soon',
+  clear: 'Clear',
+}
+
+function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
+  totalReceivables: number
+  totalPayables: number
+  activeParties: number
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 lg:p-5">
+      <div className="grid grid-cols-3 gap-4 lg:gap-6">
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Total Receivables</p>
+          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+            {formatINR(totalReceivables)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Total Payables</p>
+          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+            {formatINR(totalPayables)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Active Parties</p>
+          <p className="text-xl lg:text-2xl font-semibold text-slate-900 tabular-nums">
+            {activeParties}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartyCard({ party, isSelected, onSelect }: {
+  party: PartyWithBalance
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  const type = getPartyType(party)
+  const invoices = party.invoices || []
+  const overdueInvoices = invoices.filter(i => getOutstandingStatus(i) === 'overdue')
+  const maxStatus = overdueInvoices.length > 0 ? 'overdue'
+    : invoices.some(i => getOutstandingStatus(i) === 'due_soon') ? 'due_soon'
+    : 'clear'
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+        isSelected
+          ? 'bg-slate-50 border-slate-300'
+          : 'bg-white border-slate-200 hover:border-slate-300'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <span className="text-sm font-semibold text-slate-600">
+            {party.name.charAt(0).toUpperCase()}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <p className="font-medium text-slate-900 truncate">{party.name}</p>
+            <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
+              {type}
+            </span>
+          </div>
+          {party.phone && (
+            <p className="text-xs text-slate-500 truncate">{party.phone}</p>
+          )}
+          <div className="flex items-center justify-between mt-1.5">
+            <p className={`text-sm font-semibold tabular-nums ${
+              party.outstanding > 0 ? 'text-rose-600' : 'text-emerald-600'
+            }`}>
+              {formatINR(party.outstanding)}
+            </p>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[maxStatus]}`}>
+              {STATUS_LABELS[maxStatus]}
+            </span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function PartyDetail({ party, onBack }: {
+  party: PartyWithBalance
+  onBack?: () => void
+}) {
+  const router = useRouter()
+  const pendingInvoices = (party.invoices || [])
+    .filter(i => getOutstanding(i) > 0)
+    .sort((a, b) => new Date(a.dueAt || a.dueDate || a.createdAt).getTime() - new Date(b.dueAt || b.dueDate || b.createdAt).getTime())
+
+  const avgPaymentTime = useMemo(() => {
+    if (party.paymentCount === 0) return null
+    return '—'
+  }, [party.paymentCount])
+
+  return (
+    <div className="space-y-4">
+      {/* Back button (mobile) */}
+      {onBack && (
+        <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+          <ArrowLeft className="w-4 h-4" /> Back to parties
+        </button>
+      )}
+
+      {/* Party header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-slate-600">
+              {party.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold text-slate-900">{party.name}</h2>
+            <p className="text-sm text-slate-500">{party.phone}</p>
+            {party.gstin && (
+              <p className="text-xs text-slate-400">GST: {party.gstin}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex gap-2">
+        {party.phone && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => window.open(`tel:${party.phone}`, '_blank')}
+          >
+            <Phone className="w-4 h-4 mr-1.5" /> Call
+          </Button>
+        )}
+        {(party.whatsapp_number || party.phone) && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              const num = party.whatsapp_number || party.phone
+              window.open(`https://wa.me/${num?.replace(/[^0-9]/g, '')}`, '_blank')
+            }}
+          >
+            <MessageSquare className="w-4 h-4 mr-1.5" /> WhatsApp
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1"
+          onClick={() => router.push(`/parties/${party.id}`)}
+        >
+          <MoreHorizontal className="w-4 h-4 mr-1.5" /> Profile
+        </Button>
+      </div>
+
+      {/* Financial Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Outstanding</p>
+          <p className="text-base font-semibold text-rose-600 tabular-nums">{formatINR(party.outstanding)}</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Total Sales</p>
+          <p className="text-base font-semibold text-slate-900 tabular-nums">{formatINR(party.totalSales)}</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-lg p-3">
+          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Avg Payment</p>
+          <p className="text-base font-semibold text-slate-900 tabular-nums">
+            {avgPaymentTime || '—'}
+          </p>
+        </div>
+      </div>
+
+      {/* Pending Invoices */}
+      <div className="bg-white border border-slate-200 rounded-lg">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h3 className="text-sm font-medium text-slate-900">
+            Pending Invoices {pendingInvoices.length > 0 && `(${pendingInvoices.length})`}
+          </h3>
+        </div>
+        {pendingInvoices.length === 0 ? (
+          <div className="p-6 text-center">
+            <p className="text-sm text-slate-400">No pending invoices</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {pendingInvoices.map(inv => {
+              const status = getOutstandingStatus(inv)
+              return (
+                <div key={inv.id} className="px-4 py-3 flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {inv.invoiceNumber || `#${inv.id.slice(0, 8)}`}
+                      </p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[status]}`}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Due {inv.dueAt || inv.dueDate ? new Date(inv.dueAt || inv.dueDate!).toLocaleDateString() : '—'} · {formatINR(getOutstanding(inv))}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 ml-3 flex-shrink-0">
+                    <button
+                      onClick={() => router.push(`/parties/${party.id}`)}
+                      className="text-xs px-2.5 py-1.5 rounded bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium"
+                    >
+                      Remind
+                    </button>
+                    <button
+                      onClick={() => router.push(`/pulse?payInvoice=${inv.id}`)}
+                      className="text-xs px-2.5 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-medium"
+                    >
+                      Pay
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function PartiesPage() {
-  const router = useRouter();
-  const [q, setQ] = useState("");
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [usageLimits, setUsageLimits] = useState<any>(null);
-  const [showPaywall, setShowPaywall] = useState(false);
-  const [sendingWA, setSendingWA] = useState<string | null>(null);
-  const [waSuccess, setWaSuccess] = useState<string | null>(null);
+  const router = useRouter()
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    loadCustomers();
-  }, []);
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const tenantId = getCookie('bz_tenant')
+        if (!tenantId) { router.push('/auth'); return }
 
-  const loadCustomers = async () => {
-    try {
-      const tenantId = getCookie('bz_tenant')
-      if (!tenantId) {
-        router.push("/auth");
-        return;
+        const [cs, invs, pays] = await Promise.all([
+          db().customers.where('tenantId').equals(tenantId).toArray(),
+          db().invoices.where('tenantId').equals(tenantId).toArray(),
+          db().payments?.where('tenantId').equals(tenantId).toArray() || Promise.resolve([]),
+        ])
+
+        setCustomers(cs as unknown as Customer[])
+        setInvoices(invs as unknown as Invoice[])
+        setPayments(pays as unknown as Payment[])
+      } catch (err) {
+        setError('Failed to load parties. Please try again.')
+      } finally {
+        setLoading(false)
       }
-      const [data, invoices, usage] = await Promise.all([
-        db().customers.where("tenantId").equals(tenantId).toArray(),
-        db().invoices.where("tenantId").equals(tenantId).toArray(),
-        getUsageLimits(tenantId),
-      ]);
+    }
+    load()
+    window.addEventListener("billzo:changed", load)
+    return () => window.removeEventListener("billzo:changed", load)
+  }, [router])
 
-      const customerMap = new Map<string, number>();
-      for (const inv of invoices) {
-        if (inv.customerId) {
-          const pending = (inv.total || 0) - (inv.paidAmount || 0);
-          if (inv.status !== "paid") {
-            customerMap.set(inv.customerId, (customerMap.get(inv.customerId) || 0) + pending);
-          }
+  // Compute parties with balances
+  const parties: PartyWithBalance[] = useMemo(() => {
+    const invoiceMap = new Map<string, Invoice[]>()
+    for (const inv of invoices) {
+      const cid = (inv as any).customerId || (inv as any).customer_id || ''
+      if (!invoiceMap.has(cid)) invoiceMap.set(cid, [])
+      invoiceMap.get(cid)!.push(inv)
+    }
+
+    const paymentMap = new Map<string, Payment[]>()
+    for (const p of payments) {
+      const iid = (p as any).invoiceId || (p as any).invoice_id || ''
+      if (!paymentMap.has(iid)) paymentMap.set(iid, [])
+      paymentMap.get(iid)!.push(p)
+    }
+
+    return customers.map(c => {
+      const invs = invoiceMap.get(c.id) || []
+      const outstanding = invs.reduce((s, i) => s + ((i.total || 0) - (i.paidAmount || 0)), 0)
+      const totalSales = invs.reduce((s, i) => s + (i.total || 0), 0)
+      const overdueAmount = invs
+        .filter(i => {
+          const o = (i.total || 0) - (i.paidAmount || 0)
+          const d = i.dueAt || i.dueDate
+          return o > 0 && d && new Date(d) < new Date()
+        })
+        .reduce((s, i) => s + ((i.total || 0) - (i.paidAmount || 0)), 0)
+
+      let paymentCount = 0
+      let lastPaymentAt: string | null = null
+      for (const inv of invs) {
+        const invPayments = paymentMap.get(inv.id) || []
+        paymentCount += invPayments.length
+        for (const p of invPayments) {
+          if (!lastPaymentAt || p.createdAt > lastPaymentAt) lastPaymentAt = p.createdAt
         }
       }
 
-      const customersWithPending = data.map((c) => ({
+      return {
         ...c,
-        pending: customerMap.get(c.id) || 0,
-      }));
+        outstanding,
+        totalSales,
+        overdueAmount,
+        invoiceCount: invs.length,
+        paymentCount,
+        invoices: invs,
+        lastPaymentAt,
+      }
+    })
+  }, [customers, invoices, payments])
 
-      setCustomers(customersWithPending);
-      setUsageLimits(usage);
-    } catch (error) {
-      console.error("Failed to load customers:", error);
-    } finally {
-      setLoading(false);
+  // Filtered parties
+  const filtered = useMemo(() => {
+    if (!q.trim()) return parties
+    const query = q.toLowerCase()
+    return parties.filter(p =>
+      p.name.toLowerCase().includes(query) ||
+      p.phone?.toLowerCase().includes(query) ||
+      p.gstin?.toLowerCase().includes(query)
+    )
+  }, [parties, q])
+
+  // Selected party
+  const selectedParty = useMemo(
+    () => parties.find(p => p.id === selectedPartyId) || null,
+    [parties, selectedPartyId]
+  )
+
+  // Financial aggregates
+  const totalReceivables = useMemo(
+    () => parties.reduce((s, p) => s + p.outstanding, 0),
+    [parties]
+  )
+  const totalPayables = useMemo(
+    () => parties.reduce((s, p) => s + p.overdueAmount, 0),
+    [parties]
+  )
+  const activeParties = useMemo(
+    () => parties.filter(p => p.outstanding > 0).length,
+    [parties]
+  )
+
+  const handleSelectParty = useCallback((id: string) => {
+    setSelectedPartyId(id)
+  }, [])
+
+  // Keyboard shortcut: / to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement !== searchRef.current) {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
     }
-  };
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
-  const filtered = customers.filter((p) => p.name?.toLowerCase().includes(q.toLowerCase()));
-  const PAGE_SIZE = 25;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const visibleParties = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
-
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q]);
-
-  const totalPending = customers.reduce((s, p) => s + (p.pending || 0), 0);
-
-  const sendReminder = async (customer: any) => {
-    const tenantId = getCookie('bz_tenant')
-    if (!tenantId) return;
-
-    const limits = await getUsageLimits(tenantId);
-    if (!limits.canSendReminder) {
-      setShowPaywall(true);
-      return;
-    }
-
-    setSendingWA(customer.id);
-    try {
-      const res = await fetch('/api/whatsapp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          customerId: customer.id,
-          templateKey: 'udharGentle',
-          vars: {
-            '1': customer.name,
-            '2': formatINR(customer.pending),
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send');
-      await incrementReminderCount(tenantId);
-      setWaSuccess(customer.id);
-      setTimeout(() => setWaSuccess(null), 3000);
-      const newLimits = await getUsageLimits(tenantId);
-      setUsageLimits(newLimits);
-    } catch (err: any) {
-      console.error('Reminder failed:', err);
-    } finally {
-      setSendingWA(null);
-    }
-  };
-
+  // ── Loading state ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+          <div className="h-24 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-20 bg-white border border-slate-200 rounded-lg animate-pulse" />
+              ))}
+            </div>
+            <div className="hidden lg:block">
+              <div className="h-96 bg-white border border-slate-200 rounded-lg animate-pulse" />
+            </div>
+          </div>
+        </div>
       </div>
-    );
+    )
   }
 
-  return (
-    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-4xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="rounded-2xl bg-gradient-to-br from-green-500 to-green-600 text-white p-6 shadow-lg flex-1">
-          <div className="text-sm opacity-80">Total pending (Udhar)</div>
-          <div className="mt-2 text-4xl font-bold">{formatINR(totalPending)}</div>
-          <div className="mt-2 text-xs opacity-80">{customers.filter((p) => p.pending > 0).length} parties owe you money</div>
+  // ── Error state ──
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
+          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
+            <p className="text-sm text-rose-600 mb-4">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </div>
         </div>
-        <button
-          onClick={() => router.push('/parties/import')}
-          className="ml-4 h-14 w-14 rounded-2xl border-2 border-indigo-200 bg-indigo-50 flex flex-col items-center justify-center gap-1 hover:bg-indigo-100 transition-colors"
-        >
-          <Upload className="h-5 w-5 text-indigo-600" />
-          <span className="text-[10px] font-bold text-indigo-600">Import</span>
-        </button>
       </div>
+    )
+  }
 
-      <div className="relative">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search parties"
-                  className="w-full h-11 rounded-xl border border-input bg-card pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <Button
-                onClick={() => router.push('/parties/add')}
-              >
-                <Plus className="h-4 w-4" /> Add
+  // ── Empty state ──
+  if (customers.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
+          <div className="bg-white border border-slate-200 rounded-lg p-8 lg:p-12 text-center">
+            <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-4">
+              <Users className="w-6 h-6 text-slate-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">No parties yet</h2>
+            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">
+              Start managing your business relationships. Import from your contacts or add a party manually.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={() => router.push('/parties/import')}>
+                <Download className="w-4 h-4 mr-1.5" /> Import from Contacts
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/parties/add')}>
+                <UserPlus className="w-4 h-4 mr-1.5" /> Add Party Manually
               </Button>
             </div>
           </div>
-
-      {customers.length === 0 ? (
-        <EmptyState
-          icon={<Users className="h-12 w-12" />}
-          title="No parties yet"
-          description="Add customers and suppliers"
-          action={<Button onClick={() => router.push('/parties/add')}><Plus className="h-4 w-4" /> Add Party</Button>}
-        />
-      ) : (
-        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-          {visibleParties.map((p) => (
-            <div key={p.id} className="p-4 flex items-center gap-3">
-              <button
-                onClick={() => router.push(`/parties/${p.id}`)}
-                className={`grid h-11 w-11 place-items-center rounded-full font-semibold text-sm shrink-0 ${
-                  p.pending > 0 ? "bg-yellow-100 text-yellow-700" : "bg-secondary text-muted-foreground"
-                }`}
-              >
-                {p.name?.charAt(0)}
-              </button>
-              <button
-                onClick={() => router.push(`/parties/${p.id}`)}
-                className="flex-1 min-w-0 text-left"
-              >
-                <div className="font-semibold text-sm truncate">{p.name}</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Phone className="h-3 w-3" /> {p.phone}
-                </div>
-              </button>
-              <div className="text-right">
-                {p.pending > 0 ? (
-                  <>
-                    <div className="text-sm font-bold text-yellow-700">{formatINR(p.pending)}</div>
-                    <div className="text-[10px] text-muted-foreground">pending</div>
-                  </>
-                ) : (
-                  <span className="text-xs text-green-600 font-medium">Settled ✓</span>
-                )}
-              </div>
-              {p.pending > 0 && (
-                <button
-                  className="px-3 py-1.5 border border-input rounded-lg font-medium text-sm flex items-center gap-1.5 disabled:opacity-50"
-                  disabled={sendingWA === p.id}
-                  onClick={() => sendReminder(p)}
-                >
-                  {sendingWA === p.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : waSuccess === p.id ? (
-                    <span className="text-green-600">Sent ✓</span>
-                  ) : (
-                    <MessageCircle className="h-3.5 w-3.5" />
-                  )}
-                  {sendingWA === p.id ? "" : waSuccess === p.id ? "" : "Remind"}
-                </button>
-              )}
-            </div>
-          ))}
-          {hasMore && (
-            <div className="p-4 text-center border-t border-border">
-              <Button variant="ghost" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
-                Show more ({filtered.length - visibleCount} remaining)
-              </Button>
-            </div>
-          )}
         </div>
-      )}
+      </div>
+    )
+  }
 
-      <PaywallModal
-        type="reminder"
-        open={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        currentCount={usageLimits?.currentReminderCount || 0}
-        limit={usageLimits?.reminderLimit || 10}
-      />
+  return (
+    <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+
+        {/* Financial Hero */}
+        <FinancialHero
+          totalReceivables={totalReceivables}
+          totalPayables={totalPayables}
+          activeParties={activeParties}
+        />
+
+        {/* Search + Add (desktop) */}
+        <div className="hidden lg:flex items-center gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Search by name, phone, or GST... (/)"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={() => router.push('/parties/import')}>
+            <Upload className="w-4 h-4 mr-1.5" /> Import
+          </Button>
+          <Button size="sm" onClick={() => router.push('/parties/add')}>
+            <Plus className="w-4 h-4 mr-1.5" /> Add Party
+          </Button>
+        </div>
+
+        {/* Master-Detail Layout (Desktop) / List (Mobile) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
+
+          {/* Left Panel — Party List */}
+          <div className="space-y-2">
+            {/* Mobile search + add */}
+            <div className="lg:hidden flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search parties..."
+                  value={q}
+                  onChange={e => setQ(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                />
+              </div>
+              <button
+                onClick={() => router.push('/parties/add')}
+                className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Party count */}
+            <div className="flex items-center justify-between px-1">
+              <p className="text-xs text-slate-500 font-medium">
+                {filtered.length} {filtered.length === 1 ? 'party' : 'parties'}
+                {q && filtered.length !== parties.length && ` (of ${parties.length})`}
+              </p>
+            </div>
+
+            {/* Party list */}
+            {filtered.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
+                <p className="text-sm text-slate-400">No parties match your search</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+                {filtered.map(party => (
+                  <PartyCard
+                    key={party.id}
+                    party={party}
+                    isSelected={selectedPartyId === party.id}
+                    onSelect={() => {
+                      if (window.innerWidth < 1024) {
+                        router.push(`/parties/${party.id}`)
+                      } else {
+                        handleSelectParty(party.id)
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel — Selected Party Detail (Desktop only) */}
+          <div className="hidden lg:block">
+            {selectedParty ? (
+              <PartyDetail party={selectedParty} />
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-lg p-8 lg:p-12 text-center h-full flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mb-3">
+                  <Users className="w-5 h-5 text-slate-400" />
+                </div>
+                <p className="text-sm text-slate-500">Select a party to view details</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile FAB */}
+      <div className="lg:hidden fixed bottom-20 right-4 z-10">
+        <button
+          onClick={() => router.push('/parties/add')}
+          className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
     </div>
-  );
+  )
 }

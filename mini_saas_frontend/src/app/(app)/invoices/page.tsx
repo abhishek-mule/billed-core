@@ -23,10 +23,10 @@ function getOutstanding(inv: Invoice): number {
 }
 
 function getStatusBadge(inv: Invoice) {
-  if (inv.status === "paid") return { label: "Paid", cls: "bg-emerald-100 text-emerald-700" }
-  if (inv.status === "overdue") return { label: "Overdue", cls: "bg-rose-100 text-rose-700" }
-  if (inv.status === "partial") return { label: "Partial", cls: "bg-amber-100 text-amber-700" }
-  return { label: inv.status, cls: "bg-slate-100 text-slate-600" }
+  if (inv.status === "paid") return { label: "Paid", cls: "bg-emerald-600 text-white" }
+  if (inv.status === "overdue") return { label: "Overdue", cls: "bg-rose-600 text-white" }
+  if (inv.status === "partial") return { label: "Partial", cls: "bg-amber-500 text-white" }
+  return { label: "Unpaid", cls: "bg-slate-700 text-white" }
 }
 
 function getRisk(inv: Invoice): { label: string; cls: string } | null {
@@ -200,8 +200,7 @@ export default function InvoicesPage() {
            ═══════════════════════════ */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Invoices</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500">
               {invoices.length} total &middot; {formatINR(monthSales)} this month
             </p>
           </div>
@@ -374,7 +373,10 @@ export default function InvoicesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-900 truncate">{inv.customerName}</span>
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badge.cls}`}>
+                      {inv.customerPhone && (
+                        <span className="text-[12px] text-slate-500 font-mono">{inv.customerPhone}</span>
+                      )}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${badge.cls}`}>
                         {badge.label}
                       </span>
                       {risk && (
@@ -383,10 +385,20 @@ export default function InvoicesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-slate-500">{inv.invoiceNumber || inv.id.slice(0, 8)}</span>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[11px] text-slate-500 font-medium">{inv.invoiceNumber || inv.id.slice(0, 8)}</span>
+                      <span className="text-[10px] text-slate-300">&middot;</span>
+                      <span className="text-[11px] text-slate-500">
+                        {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                       <span className="text-[10px] text-slate-300">&middot;</span>
                       <span className="text-[11px] text-slate-500">Due {new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                      {inv.paymentMode && (inv.status === "paid" || inv.status === "partial") && (
+                        <>
+                          <span className="text-[10px] text-slate-300">&middot;</span>
+                          <span className="text-[11px] text-slate-500 font-medium capitalize">{inv.paymentMode}</span>
+                        </>
+                      )}
                       {inv.status !== "paid" && outstanding !== inv.total && (
                         <>
                           <span className="text-[10px] text-slate-300">&middot;</span>

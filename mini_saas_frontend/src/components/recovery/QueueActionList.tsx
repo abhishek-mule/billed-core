@@ -29,6 +29,7 @@ const actionIcons: Record<string, React.ReactNode> = {
   send_reminder: <Send className="h-3.5 w-3.5" />,
   call: <Phone className="h-3.5 w-3.5" />,
   record_payment: <IndianRupee className="h-3.5 w-3.5" />,
+  payment_reported: <CheckCircle2 className="h-3.5 w-3.5" />,
 }
 
 const stateBadge: Record<string, string> = {
@@ -107,8 +108,9 @@ export function QueueActionList() {
       sessionStorage.removeItem('bz_ttfa_started')
       setShowMenu(null)
       setRecordingPayment(null)
-      // Refetch queue to get updated state
-      fetchQueue()
+      await fetchQueue()
+      router.refresh()
+      window.dispatchEvent(new Event('billzo:changed'))
     } catch (err: any) {
       setActionError(err.message)
     } finally {

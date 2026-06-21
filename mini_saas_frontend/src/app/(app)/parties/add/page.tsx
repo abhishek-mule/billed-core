@@ -2,9 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { ArrowLeft, Phone, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/billzo/Button'
 import { normalizePhone, isValidPhone } from '@/lib/billzo/useContactImport'
+import { db, notifyChanged } from '@/lib/billzo/db'
+import { scheduleBackgroundSync } from '@/lib/billzo/sync'
+import { getCookie } from '@/lib/cookies'
 
 interface FormData {
   name: string
@@ -31,6 +35,7 @@ export default function AddCustomerPage() {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [whatsappTouched, setWhatsappTouched] = useState(false)
 
   const pickContact = async () => {
     if (!('contacts' in navigator)) {
@@ -41,8 +46,9 @@ export default function AddCustomerPage() {
       const [contact] = await (navigator as any).contacts.select(['name', 'tel'], { multiple: false })
       if (!contact) return
       const name = contact.name?.formatted || contact.name?.[0] || ''
-      const phone = contact.tel?.[0]?.value || contact.tel?.[0] || ''
-      setForm(f => ({ ...f, name, phone: normalizePhone(phone) }))
+      const phone = normalizePhone(contact.tel?.[0]?.value || contact.tel?.[0] || '')
+      setForm(f => ({ ...f, name, phone, whatsapp_number: phone }))
+      setWhatsappTouched(false)
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
         setErrors(e => ({ ...e, phone: 'Could not read contact. Please enter manually.' }))
@@ -94,8 +100,35 @@ export default function AddCustomerPage() {
         return
       }
 
+      const apiCustomer = data.customer
+      const tenantId = getCookie('bz_tenant') || ''
+      const now = new Date().toISOString()
+
+      await db().customers.put({
+        id: apiCustomer.id,
+        tenantId,
+        name: apiCustomer.customer_name || form.name.trim(),
+        phone: apiCustomer.phone || form.phone.trim(),
+        whatsapp_number: form.whatsapp_number?.trim() || undefined,
+        gstin: apiCustomer.gstin || form.gstin?.trim() || undefined,
+        email: apiCustomer.email || form.email?.trim() || undefined,
+        address: apiCustomer.billing_address || form.address?.trim() || undefined,
+        notes: form.notes?.trim() || undefined,
+        automationMode: apiCustomer.automation_mode || 'full_auto',
+        defaultTone: 'english',
+        opt_in: true,
+        lastUsedAt: now,
+        invoiceCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      notifyChanged()
+      scheduleBackgroundSync()
+
       setSuccess(true)
-      setTimeout(() => router.push('/parties'), 1200)
+      toast.success('Customer created')
+      router.push('/parties')
     } catch (err: any) {
       setApiError(err.message)
     } finally {
@@ -104,7 +137,17 @@ export default function AddCustomerPage() {
   }
 
   const set = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm(f => ({ ...f, [field]: e.target.value }))
+    const val = e.target.value
+    setForm(f => {
+      const updated = { ...f, [field]: val }
+      if (field === 'phone' && !whatsappTouched) {
+        updated.whatsapp_number = val
+      }
+      if (field === 'whatsapp_number') {
+        setWhatsappTouched(true)
+      }
+      return updated
+    })
     setErrors(er => ({ ...er, [field]: undefined }))
   }
 

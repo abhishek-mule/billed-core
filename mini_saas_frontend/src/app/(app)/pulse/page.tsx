@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search, Loader2, CreditCard, Smartphone, Banknote,
   AlertCircle, RefreshCw, X, ChevronRight, Plus,
@@ -57,6 +57,7 @@ function getOutstanding(inv: any): number {
 // ── component ──
 export default function PulsePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [payments, setPayments] = useState<any[]>([])
   const [invoices, setInvoices] = useState<any[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -100,6 +101,24 @@ export default function PulsePage() {
     }
   }
 
+  // Auto-select customer from payInvoice param
+  useEffect(() => {
+    if (loading || customers.length === 0) return
+    const payTarget = searchParams.get('payInvoice')
+    if (!payTarget) return
+
+    let match = customers.find(c => c.id === payTarget)
+    if (!match) {
+      const inv = invoices.find(i => i.id === payTarget)
+      if (inv) match = customers.find(c => c.id === inv.customerId)
+    }
+    if (match) {
+      setSelectedCust(match)
+      setShowRecord(true)
+      setRecordStep(2)
+    }
+  }, [loading, customers, invoices, searchParams])
+
   // ── derived ──
   const invMap = useMemo(() => {
     const m = new Map<string, Invoice>()
@@ -120,7 +139,7 @@ export default function PulsePage() {
   }, [successPmts])
 
   const pendingUdhaari = useMemo(
-    () => invoices.filter(i => i.status === "overdue" || i.status === "partial")
+    () => invoices.filter(i => i.status === "unpaid" || i.status === "overdue" || i.status === "partial")
       .reduce((s, inv) => s + getOutstanding(inv), 0),
     [invoices]
   )
@@ -289,11 +308,11 @@ export default function PulsePage() {
            ═══════════════════════════ */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Payments</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500">
               {successPmts.length} collected &middot; {formatINR(todayCollected)} today
             </p>
           </div>
+
           <button
             onClick={() => { setShowRecord(true); resetRecord() }}
             className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800"

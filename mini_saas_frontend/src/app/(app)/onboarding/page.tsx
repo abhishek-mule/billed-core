@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Store, CheckCircle2, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { autofillFromInput, validateGSTIN, validateUPI } from "@/lib/billzo/autofill";
-import { db, uuid } from "@/lib/billzo/db";
+import { db } from "@/lib/billzo/db";
 import { type PlanType } from "@/lib/billzo/plan-limits";
 
 interface AutofillData {
@@ -144,38 +144,44 @@ export default function OnboardingPage() {
         return
       }
 
-      const existingTenant = await db().tenants.where('ownerUserId').equals(userId).first()
-      const tenantId = existingTenant?.id || `tenant_${Date.now()}_${uuid().slice(0, 8)}`
-
-      const {
-        shopName: inferredName,
-        phone: inferredPhone,
-        upiId: finalUPI,
-        gstin: finalGSTIN,
-      } = await autofillFromInput({
-        shopName: shop.trim(),
-        phone,
-        upiId: upiId || undefined,
-        gstin: gstin || undefined,
+      // Call server-side tenant creation API first
+      const res = await fetch('/api/tenants/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopName: shop.trim(),
+          phone: phone || undefined,
+          upiId: upiId || undefined,
+          gstin: gstin || undefined,
+        }),
       })
-      const now = new Date().toISOString()
 
-      if (existingTenant) {
-        await db().tenants.update(existingTenant.id, {
-          name: inferredName,
-          phone: inferredPhone || phone || existingTenant.phone,
-          upiId: finalUPI || existingTenant.upiId,
-          gstin: finalGSTIN || existingTenant.gstin,
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null)
+        throw new Error(errorData?.error || `Request failed with status ${res.status}`)
+      }
+
+      const data = await res.json()
+
+      // Cache in Dexie
+      const now = new Date().toISOString()
+      const existingDexie = await db().tenants.get(data.tenantId)
+      if (existingDexie) {
+        await db().tenants.update(data.tenantId, {
+          name: data.tenantName,
+          phone: phone || undefined,
+          upiId: upiId || undefined,
+          gstin: gstin?.toUpperCase() || undefined,
           updatedAt: now,
         })
       } else {
         await db().tenants.add({
-          id: tenantId,
-          name: inferredName,
+          id: data.tenantId,
+          name: data.tenantName,
           ownerUserId: userId,
-          phone: inferredPhone || phone || undefined,
-          upiId: finalUPI,
-          gstin: finalGSTIN,
+          phone: phone || undefined,
+          upiId: upiId || undefined,
+          gstin: gstin?.toUpperCase() || undefined,
           plan: 'starter' as PlanType,
           paywallUnlocked: false,
           whiteLabel: false,
@@ -187,10 +193,10 @@ export default function OnboardingPage() {
         })
       }
 
-      setCookie('bz_tenant', tenantId)
-      setCookie('bz_tenant_name', inferredName)
-      localStorage.setItem('tenantId', tenantId)
-      localStorage.setItem('tenantName', inferredName)
+      setCookie('bz_tenant', data.tenantId)
+      setCookie('bz_tenant_name', data.tenantName)
+      localStorage.setItem('tenantId', data.tenantId)
+      localStorage.setItem('tenantName', data.tenantName)
       if (userId) localStorage.setItem('userId', userId)
       setLoading("done");
       setTimeout(() => router.push("/dashboard"), 1700);

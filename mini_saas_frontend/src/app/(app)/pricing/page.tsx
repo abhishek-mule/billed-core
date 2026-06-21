@@ -119,13 +119,19 @@ export default function PricingPage() {
 
       const rzpOptions: Record<string, unknown> = {
         key: data.keyId,
-        subscription_id: data.subscriptionId,
+        order_id: data.orderId,
         name: "BillZo",
         description: `BillZo ${planId} Plan`,
-        handler: async (response: { razorpay_subscription_id: string }) => {
+        handler: async (response: { razorpay_payment_id: string }) => {
           console.log("Payment successful:", response)
-          
+
           if (tenantId) {
+            await fetch("/api/payment/upgrade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ plan: planId }),
+            })
             import("@/lib/billzo/db").then(({ db }) => {
               db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
             })

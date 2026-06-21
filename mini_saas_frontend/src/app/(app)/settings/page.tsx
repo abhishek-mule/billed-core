@@ -1,414 +1,301 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut, Printer, Send, Loader2, Save, Building, Banknote, SwitchCamera, Zap } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/billzo/Button";
-import ConnectionDashboard from "@/components/channels/ConnectionDashboard";
-import { db } from "@/lib/billzo/db";
-import { getTenantId } from "@/lib/billzo/tenant";
-import { getCookie, setCookie, clearAuthCookies } from "@/lib/cookies";
+import { useState, useEffect, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import {
+  Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut,
+  Search, Clock, Download, Trash2, Zap, CheckCircle2, AlertCircle, XCircle,
+  Wifi, Sun, Moon,
+} from "lucide-react"
+import { useTheme } from "@/lib/billzo/theme"
+import { Button } from "@/components/billzo/Button"
+import { db } from "@/lib/billzo/db"
+import { getCookie, clearAuthCookies } from "@/lib/cookies"
+
+type CategoryStatus = 'connected' | 'not_connected' | 'pending'
+
+interface Category {
+  id: string
+  href: string
+  icon: React.ReactNode
+  title: string
+  description: string
+  status?: CategoryStatus
+  statusLabel?: string
+  danger?: boolean
+}
+
+const ICON_CLASS = "w-5 h-5"
+const ICON_WRAPPER = "w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const [tenant, setTenant] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState({
-    defaultAction: "whatsapp",
-    printFormat: "thermal80",
-    autoPrint: false,
-  });
-
-  const [form, setForm] = useState({
-    name: '',
-    phone: '',
-    address: '',
-    gstin: '',
-    pan: '',
-    upiId: '',
-    bankName: '',
-    accountNumber: '',
-    ifsc: '',
-    accountHolder: '',
-    whiteLabel: false,
-    autoMode: true,
-  });
+  const router = useRouter()
+  const { theme, toggleTheme } = useTheme()
+  const [tenant, setTenant] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      const tenantId = getTenantId();
-      const userId = getCookie('bz_user_id');
-      if (!tenantId || !userId) {
-        router.push("/auth");
-        return;
+    const load = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const tenantId = getCookie('bz_tenant')
+        const userId = getCookie('bz_user_id')
+        if (!tenantId || !userId) { router.push('/auth'); return }
+        const data = await db().tenants.get(tenantId)
+        setTenant(data)
+      } catch {
+        setError('Failed to load settings')
+      } finally {
+        setLoading(false)
       }
+    }
+    load()
+  }, [router])
 
-      const data = await db().tenants.get(tenantId);
-      setTenant(data);
-
-      if (data) {
-        setForm({
-          name: data.name || '',
-          phone: data.phone || '',
-          address: data.address || '',
-          gstin: data.gstin || '',
-          pan: data.pan || '',
-          upiId: data.upiId || '',
-          bankName: data.bankDetails?.bankName || '',
-          accountNumber: data.bankDetails?.accountNumber || '',
-          ifsc: data.bankDetails?.ifsc || '',
-          accountHolder: data.bankDetails?.accountHolder || '',
-          whiteLabel: data.whiteLabel || false,
-          autoMode: data.autoMode !== false,
-        });
+  // Keyboard shortcut: / to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement !== searchRef.current) {
+        e.preventDefault()
+        searchRef.current?.focus()
       }
-
-      const savedPrefs = getCookie('bz_prefs');
-      if (savedPrefs) {
-        try {
-          setPrefs(JSON.parse(savedPrefs));
-        } catch {
-          // ignore parse errors
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load settings:", error);
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const updatePref = (key: string, value: any) => {
-    const newPrefs = { ...prefs, [key]: value };
-    setPrefs(newPrefs);
-    setCookie('bz_prefs', JSON.stringify(newPrefs));
-  };
-
-  const saveBusinessDetails = async () => {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-    setSaving('business');
-    try {
-      await db().tenants.update(tenantId, {
-        name: form.name,
-        phone: form.phone || undefined,
-        address: form.address || undefined,
-        gstin: form.gstin || undefined,
-        pan: form.pan || undefined,
-        upiId: form.upiId || undefined,
-        updatedAt: new Date().toISOString(),
-      });
-      setCookie('bz_tenant_name', form.name);
-      setTenant((prev: any) => ({ ...prev, name: form.name, phone: form.phone }));
-      setTimeout(() => setSaving(null), 1500);
-    } catch (err) {
-      console.error('Failed to save:', err);
-      setSaving(null);
-    }
-  };
-
-  const saveBankDetails = async () => {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-    setSaving('bank');
-    try {
-      await db().tenants.update(tenantId, {
-        bankDetails: {
-          bankName: form.bankName || undefined,
-          accountNumber: form.accountNumber || undefined,
-          ifsc: form.ifsc || undefined,
-          accountHolder: form.accountHolder || undefined,
-        },
-        updatedAt: new Date().toISOString(),
-      });
-      setTimeout(() => setSaving(null), 1500);
-    } catch (err) {
-      console.error('Failed to save bank details:', err);
-      setSaving(null);
-    }
-  };
-
-  const saveInvoicePrefs = async () => {
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-    setSaving('prefs');
-    try {
-      await db().tenants.update(tenantId, {
-        whiteLabel: form.whiteLabel,
-        autoMode: form.autoMode,
-        updatedAt: new Date().toISOString(),
-      });
-      setTimeout(() => setSaving(null), 1500);
-    } catch (err) {
-      console.error('Failed to save invoice prefs:', err);
-      setSaving(null);
-    }
-  };
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const handleSignOut = () => {
-    clearAuthCookies();
-    localStorage.clear();
-    router.push("/auth");
-  };
+    clearAuthCookies()
+    localStorage.clear()
+    router.push('/auth')
+  }
 
-  const actionOpts: { key: string; label: string }[] = [
-    { key: "whatsapp", label: "Send WhatsApp" },
-    { key: "print", label: "Print" },
-    { key: "ask", label: "Ask every time" },
-  ];
+  const categories: Category[] = useMemo(() => [
+    {
+      id: 'business',
+      href: '/settings/business',
+      icon: <Store className={ICON_CLASS} />,
+      title: 'Business Profile',
+      description: 'Shop name, address, GST, PAN, UPI ID',
+    },
+    {
+      id: 'billing',
+      href: '/settings/billing',
+      icon: <Receipt className={ICON_CLASS} />,
+      title: 'Billing & Invoice',
+      description: 'Default actions, print format, white-label',
+    },
+    {
+      id: 'whatsapp',
+      href: '/settings/whatsapp',
+      icon: <MessageCircle className={ICON_CLASS} />,
+      title: 'WhatsApp',
+      description: 'Connect WhatsApp, manage templates, auto-send',
+      status: tenant?.whatsappConfig?.whatsappProvider ? 'connected' as CategoryStatus : 'not_connected' as CategoryStatus,
+      statusLabel: tenant?.whatsappConfig?.whatsappProvider ? 'Connected' : 'Not Connected',
+    },
+    {
+      id: 'recovery',
+      href: '/settings/recovery',
+      icon: <Clock className={ICON_CLASS} />,
+      title: 'UDHARI Recovery',
+      description: 'Auto-reminders, business hours, reminder tone',
+    },
+    {
+      id: 'team',
+      href: '/settings/team',
+      icon: <Users className={ICON_CLASS} />,
+      title: 'Team & Access',
+      description: 'Users, roles, permissions',
+    },
+    {
+      id: 'network',
+      href: '/settings/network',
+      icon: <Wifi className={ICON_CLASS} />,
+      title: 'Network & Sync',
+      description: 'Connection status, offline queue, sync health',
+    },
+    {
+      id: 'data',
+      href: '/settings/data',
+      icon: <Download className={ICON_CLASS} />,
+      title: 'Data & Privacy',
+      description: 'Export data, manage storage',
+      danger: true,
+    },
+  ], [tenant])
 
-  const formatOpts: { key: string; label: string }[] = [
-    { key: "thermal80", label: "Thermal 80mm" },
-    { key: "thermal58", label: "Thermal 58mm" },
-    { key: "a4", label: "A4" },
-  ];
+  const filtered = useMemo(() => {
+    if (!q.trim()) return categories
+    const query = q.toLowerCase()
+    return categories.filter(c =>
+      c.title.toLowerCase().includes(query) ||
+      c.description.toLowerCase().includes(query)
+    )
+  }, [categories, q])
+
+  const STATUS_STYLES: Record<CategoryStatus, string> = {
+    connected: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    not_connected: 'bg-amber-50 text-amber-700 border-amber-200',
+    pending: 'bg-slate-50 text-slate-500 border-slate-200',
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+          <div className="h-16 bg-white border border-slate-200 rounded-lg animate-pulse" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-28 bg-white border border-slate-200 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </div>
       </div>
-    );
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-8">
+        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
+          <div className="bg-white border border-rose-200 rounded-lg p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
+            <p className="text-sm text-rose-600 mb-4">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Again</Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-2xl mx-auto space-y-6">
-      <div className="rounded-2xl border border-border bg-card p-5 flex items-center gap-4">
-        <div className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xl font-bold">
-          {tenant?.name?.charAt(0) || "M"}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold">{tenant?.name || "My Shop"}</div>
-          <div className="text-xs text-muted-foreground">{tenant?.phone || "+91 98765 43210"} · {tenant?.plan || "Starter"} plan</div>
-        </div>
-        <span className="rounded-full bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1">Active</span>
-      </div>
+    <div className="min-h-screen bg-slate-50 pb-8">
+      <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
 
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Delivery & Print</div>
-        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
-                <Send className="h-4 w-4" />
+        {/* Shop identity banner */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-full bg-slate-900 text-white flex items-center justify-center text-base font-bold shrink-0">
+            {tenant?.name?.charAt(0) || 'S'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate">{tenant?.name || 'My Shop'}</p>
+            <p className="text-xs text-slate-500">{tenant?.phone || ''}{tenant?.plan ? ` · ${tenant.plan}` : ''}</p>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+            Active
+          </span>
+        </div>
+
+        {/* Quick Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Search settings... (/)"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+          />
+        </div>
+
+        {/* Category grid */}
+        {filtered.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-lg p-8 text-center">
+            <p className="text-sm text-slate-400">No settings match &ldquo;{q}&rdquo;</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filtered.map(cat => (
+              <Link
+                key={cat.id}
+                href={cat.href}
+                className={`bg-white border rounded-lg p-4 transition-colors hover:border-slate-300 ${
+                  cat.danger ? 'border-rose-200 hover:border-rose-300' : 'border-slate-200'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`${ICON_WRAPPER} ${
+                    cat.danger ? 'bg-rose-50 text-rose-500' :
+                    cat.id === 'whatsapp' ? 'bg-emerald-50 text-emerald-600' :
+                    cat.id === 'recovery' ? 'bg-amber-50 text-amber-600' :
+                    'bg-slate-50 text-slate-500'
+                  }`}>
+                    {cat.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-slate-900">{cat.title}</p>
+                      {cat.status && cat.statusLabel && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[cat.status]}`}>
+                          {cat.statusLabel}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{cat.description}</p>
+                  </div>
+                  <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-rose-300' : 'text-slate-300'}`} />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Appearance */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-slate-50 text-slate-500">
+              {theme === 'light' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900">Appearance</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Currently {theme === 'light' ? 'Light' : 'Dark'} mode
+              </p>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'
+              }`}
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transform transition-transform ${
+                  theme === 'dark' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Danger zone */}
+        <div className="border-t border-rose-200 pt-4 mt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="w-4 h-4 text-rose-400" />
+            <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">Danger Zone</p>
+          </div>
+          <div className="bg-white border border-rose-200 rounded-lg divide-y divide-rose-100 overflow-hidden">
+            <button
+              onClick={handleSignOut}
+              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-rose-50 transition-colors"
+            >
+              <LogOut className="w-5 h-5 text-rose-500" />
+              <div>
+                <p className="text-sm font-medium text-rose-700">Sign out</p>
+                <p className="text-xs text-rose-500">End your current session</p>
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-semibold">Default action after billing</div>
-                <div className="text-xs text-muted-foreground">What happens the moment a sale is done</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {actionOpts.map((o) => (
-                <button
-                  key={o.key}
-                  onClick={() => updatePref("defaultAction", o.key)}
-                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-colors ${
-                    prefs.defaultAction === o.key ? "border-primary bg-primary/5 text-primary" : "border-input hover:border-primary/40"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
-                <Printer className="h-4 w-4" />
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-semibold">Default print format</div>
-                <div className="text-xs text-muted-foreground">Used for auto-print and quick print</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {formatOpts.map((o) => (
-                <button
-                  key={o.key}
-                  onClick={() => updatePref("printFormat", o.key)}
-                  className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-colors ${
-                    prefs.printFormat === o.key ? "border-primary bg-primary/5 text-primary" : "border-input hover:border-primary/40"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <label className="p-4 flex items-center gap-3 cursor-pointer hover:bg-muted/40">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
-              <Printer className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">Auto-print after billing</div>
-              <div className="text-xs text-muted-foreground">Triggers print dialog on sale completion</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={prefs.autoPrint}
-              onChange={(e) => updatePref("autoPrint", e.target.checked)}
-              className="h-5 w-5 accent-primary"
-            />
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Business Details</div>
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Business Name</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
-              <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Address (shown on invoice)</label>
-            <textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">GSTIN</label>
-              <input value={form.gstin} onChange={e => setForm(f => ({ ...f, gstin: e.target.value.toUpperCase() }))} maxLength={15} placeholder="27ABCDE1234F1Z5" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">PAN</label>
-              <input value={form.pan} onChange={e => setForm(f => ({ ...f, pan: e.target.value.toUpperCase() }))} maxLength={10} placeholder="ABCDE1234F" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">UPI ID (for QR code on invoice)</label>
-            <input value={form.upiId} onChange={e => setForm(f => ({ ...f, upiId: e.target.value }))} placeholder="shop@upi" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <Button onClick={saveBusinessDetails} loading={saving === 'business'}>
-            <Save className="h-4 w-4" /> Save Business Details
-          </Button>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Bank Details (shown on invoice)</div>
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Account Holder Name</label>
-            <input value={form.accountHolder} onChange={e => setForm(f => ({ ...f, accountHolder: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Bank Name</label>
-              <input value={form.bankName} onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))} placeholder="HDFC Bank" className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Account Number</label>
-              <input value={form.accountNumber} onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">IFSC Code</label>
-            <input value={form.ifsc} onChange={e => setForm(f => ({ ...f, ifsc: e.target.value.toUpperCase() }))} placeholder="HDFC0001234" maxLength={11} className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <Button variant="secondary" onClick={saveBankDetails} loading={saving === 'bank'}>
-            <Save className="h-4 w-4" /> Save Bank Details
-          </Button>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Automation</div>
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <label className="p-4 flex items-center gap-3 cursor-pointer hover:bg-muted/40 border-b border-border">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-primary">
-              <SwitchCamera className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">White-Label Invoice</div>
-              <div className="text-xs text-muted-foreground">Remove "Powered by BillZo" branding from customer invoices</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={form.whiteLabel}
-              onChange={e => { setForm(f => ({ ...f, whiteLabel: e.target.checked })); saveInvoicePrefs(); }}
-              className="h-5 w-5 accent-primary"
-            />
-          </label>
-          <label className="p-4 flex items-center gap-3 cursor-pointer hover:bg-muted/40">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-green-100 text-green-600">
-              <Zap className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">Auto Recovery Mode</div>
-              <div className="text-xs text-muted-foreground">Automatically send reminders and recover unpaid invoices without manual intervention</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={form.autoMode}
-              onChange={e => { setForm(f => ({ ...f, autoMode: e.target.checked })); saveInvoicePrefs(); }}
-              className="h-5 w-5 accent-primary"
-            />
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Infrastructure</div>
-        <ConnectionDashboard />
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Business</div>
-        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-          <Link href="/settings/whatsapp" className="w-full p-4 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-green-100 text-green-600">
-              <MessageCircle className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">WhatsApp</div>
-              <div className="text-xs text-muted-foreground">API key, templates, auto-send</div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Account</div>
-        <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
-          <div className="w-full p-4 flex items-center gap-3 text-left opacity-50 cursor-not-allowed">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-400">
-              <Users className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">Users & roles</div>
-              <div className="text-xs text-muted-foreground">Coming soon</div>
-            </div>
-          </div>
-          <div className="w-full p-4 flex items-center gap-3 text-left opacity-50 cursor-not-allowed">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-400">
-              <Shield className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">Security</div>
-              <div className="text-xs text-muted-foreground">Coming soon</div>
-            </div>
+            </button>
           </div>
         </div>
-      </div>
 
-      <Button variant="danger" className="w-full" onClick={handleSignOut}>
-        <LogOut className="h-4 w-4" /> Sign out
-      </Button>
+      </div>
     </div>
-  );
+  )
 }

@@ -1,21 +1,19 @@
 'use client'
 
 import { FileText, Loader2, PackagePlus } from 'lucide-react'
-import { Scan } from '@/components/billzo/Scan'
+import { Button } from '@/components/billzo/Button'
 import { EmptyState } from '@/components/billzo/EmptyState'
 import { useBillzo } from '@/components/billzo/useBillzo'
 import { formatINR } from '@/lib/utils'
 
 export default function PurchasesPage() {
-  const { state, loading, error } = useBillzo()
+  const { state, loading, error, refresh } = useBillzo()
 
   return (
     <div className="space-y-8">
       <section>
         <p className="text-sm text-muted-foreground">Scan supplier invoices, review OCR output, and update stock in one flow.</p>
       </section>
-
-      <Scan />
 
       <section className="space-y-4">
         <div>
@@ -28,8 +26,11 @@ export default function PurchasesPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            {error}
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={() => refresh()}>
+              Retry
+            </Button>
           </div>
         ) : !state || state.purchases.length === 0 ? (
           <EmptyState

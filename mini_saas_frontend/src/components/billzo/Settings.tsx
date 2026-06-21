@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { RefreshCcw, ShieldCheck, Smartphone, Wifi } from 'lucide-react'
+import { CreditCard, RefreshCcw, ShieldCheck, Smartphone, Wifi } from 'lucide-react'
 import { syncPendingQueue } from '@/lib/billzo/actions'
 import { useBillzo } from './useBillzo'
 
@@ -53,75 +53,91 @@ export function Settings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header>
-        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Testing mode</p>
-        <h1 className="text-2xl font-black">Settings</h1>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Testing mode</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Settings</h1>
       </header>
 
-      <section className="space-y-3">
-        <div className="row-card">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-5 w-5 text-success" />
-            <div>
-              <p className="font-black">Mock login</p>
-              <p className="text-sm font-bold text-muted-foreground">{state.session.tenantId}</p>
+      <section className="space-y-4">
+        <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Integrations & System</h2>
+        <div className="space-y-3">
+          <div className="row-card">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10 text-success">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Mock login</p>
+                <p className="text-xs font-medium text-muted-foreground">{state.session.tenantId}</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-success-soft border border-success/20 px-3 py-1 text-[11px] font-bold text-success uppercase tracking-wide">on</span>
+          </div>
+
+          <div className="row-card">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <CreditCard className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Razorpay</p>
+                <p className="text-xs font-medium text-muted-foreground">Payment integration configured</p>
+              </div>
+            </div>
+            <button className="rounded-lg border border-border bg-white px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted" onClick={() => {}}>Configure</button>
+          </div>
+
+          <div className="row-card">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Wifi className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Offline queue</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {state.snapshot.queueCount} pending - {state.snapshot.failedQueueCount} retrying
+                </p>
+              </div>
+            </div>
+            <button className="icon-button" onClick={() => syncPendingQueue()}>
+              <RefreshCcw className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="row-card">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Smartphone className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Push Notifications</p>
+                <p className="text-xs font-medium text-muted-foreground">Enable alerts for payments & stock</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                className="primary-button" 
+                disabled={pushBusy}
+                onClick={enablePush}
+              >
+                {pushBusy ? 'Working...' : 'Enable'}
+              </button>
+              <button
+                className="rounded-lg border border-border bg-white px-4 py-2 text-xs font-bold text-foreground transition-all hover:bg-muted"
+                disabled={pushBusy}
+                onClick={sendTestPush}
+              >
+                Test
+              </button>
             </div>
           </div>
-          <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-black text-success">on</span>
-        </div>
-        <div className="row-card">
-          <div className="flex items-center gap-3">
-            <Smartphone className="h-5 w-5" />
-            <div>
-              <p className="font-black">Razorpay</p>
-              <p className="text-sm font-bold text-muted-foreground">Payment integration configured</p>
-            </div>
-          </div>
-          <button className="primary-button" onClick={() => {}}>Configure</button>
-        </div>
-        <div className="row-card">
-          <div className="flex items-center gap-3">
-            <Wifi className="h-5 w-5" />
-            <div>
-              <p className="font-black">Offline queue</p>
-              <p className="text-sm font-bold text-muted-foreground">
-                {state.snapshot.queueCount} pending - {state.snapshot.failedQueueCount} retrying
-              </p>
-            </div>
-          </div>
-          <button className="primary-button" onClick={() => syncPendingQueue()}>
-            <RefreshCcw className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="row-card">
-          <div className="flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-            <div>
-              <p className="font-black">Push Notifications</p>
-              <p className="text-sm font-bold text-muted-foreground">Enable alerts for payments & stock</p>
-            </div>
-          </div>
-          <button 
-            className="primary-button" 
-            disabled={pushBusy}
-            onClick={enablePush}
-          >
-            {pushBusy ? 'Working...' : 'Enable'}
-          </button>
-          <button
-            className="primary-button"
-            disabled={pushBusy}
-            onClick={sendTestPush}
-          >
-            Test
-          </button>
         </div>
       </section>
 
-      <section className="rounded-lg border bg-white p-4">
-        <p className="section-label">Supabase RLS Contract</p>
-        <p className="mt-2 text-sm font-bold text-muted-foreground">
+      <section className="rounded-2xl border border-border bg-muted/30 p-6">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Supabase RLS Contract</h3>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground font-medium">
           All local records carry tenantId. Sync upserts use idempotency keys and must land in tenant-scoped RLS tables.
         </p>
       </section>

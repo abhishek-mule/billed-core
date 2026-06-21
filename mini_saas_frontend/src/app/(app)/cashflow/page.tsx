@@ -106,10 +106,40 @@ export default function CashflowPage() {
 
       setInvoices(invData)
       if (recoveryRes) {
-        const data = recoveryRes as QueueApiResponse
-        setSummary(data.summary)
-        setPriorityItem(data.items.find(i => i.recommendedAction.id !== "wait" && i.recommendedAction.id !== "record_payment") || null)
-        setRecentEvents(data.recentEvents || [])
+        // Handle both preview and full response
+        if (recoveryRes.access === 'preview') {
+          const preview = recoveryRes.data || {}
+          setSummary({
+            collectibleToday: 0,
+            outstanding: preview.totalOverdue || 0,
+            activeCases: preview.overdueCount || 0,
+            recoveredToday: 0,
+            recoveredThisWeek: 0,
+            recoveredThisMonth: 0,
+            recoveredAttributed: 0,
+            totalCollectedToday: 0,
+            dueToday: 0,
+            queueSize: preview.overdueCount || 0,
+            todaySales: 0,
+            monthSales: 0,
+            lowStockItems: 0,
+            totalCustomers: 0,
+            vipCustomers: 0,
+            blockedRemindersToday: 0,
+            stuckMoneyTotal: preview.totalOverdue || 0,
+            customersNeedingAction: 0,
+            collectedAfterFollowup: 0,
+            casesResolvedThisMonth: 0,
+            priorityCases: [],
+          } as QueueApiSummary)
+          setPriorityItem(null)
+          setRecentEvents([])
+        } else {
+          const data = recoveryRes as QueueApiResponse
+          setSummary(data.summary)
+          setPriorityItem(data.items.find(i => i.recommendedAction.id !== "wait" && i.recommendedAction.id !== "record_payment") || null)
+          setRecentEvents(data.recentEvents || [])
+        }
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Failed to load data"
@@ -122,7 +152,7 @@ export default function CashflowPage() {
 
   // ── derived from invoices ──
   const groups = useMemo(() => {
-    const overdue = invoices.filter(i => i.status === "overdue" || i.status === "partial")
+    const overdue = invoices.filter(i => i.status === "overdue" || i.status === "partial" || i.status === "unpaid")
     const map = new Map<string, any[]>()
     for (const inv of overdue) {
       const key = inv.customerId || inv.customerName
@@ -284,11 +314,11 @@ export default function CashflowPage() {
            ════════════════════════════════════════ */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Cashflow</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500">
               {totals.customerCount} customers &middot; {totals.count} invoices &middot; {formatINR(totals.outstanding)} outstanding
             </p>
           </div>
+
           <button
             onClick={() => setSearchOpen(!searchOpen)}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50"

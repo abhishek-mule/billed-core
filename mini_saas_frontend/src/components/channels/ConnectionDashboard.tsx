@@ -8,7 +8,6 @@ type Channel = {
   channel_type: string
   provider: string
   phone_number: string | null
-  display_name: string | null
   connection_state: string
   quality_score: number | null
   delivery_success_rate: number | null
@@ -204,7 +203,7 @@ export default function ConnectionDashboard() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold truncate">
-                        {ch.display_name || ch.phone_number || `${ch.provider} channel`}
+                        {ch.phone_number || `${ch.provider} channel`}
                       </span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none flex items-center gap-1 ${stateColor(ch.connection_state)}`}>
                         {stateIcon(ch.connection_state)}
