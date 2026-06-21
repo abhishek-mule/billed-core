@@ -158,7 +158,7 @@ export function PaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 space-y-4">
+      <div className="w-full max-w-md bg-card rounded-xl shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] border border-border p-6 space-y-4">
 
         {/* ── FORM STEP ── */}
         {step === 'form' && (
@@ -168,7 +168,7 @@ export function PaymentModal({
                 <CreditCard className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Record Payment</h2>
+                <h2 className="text-lg font-bold text-foreground">Record Payment</h2>
                 <p className="text-sm text-slate-500">{customerName}</p>
               </div>
             </div>
@@ -182,7 +182,7 @@ export function PaymentModal({
 
             <div className="rounded-lg bg-slate-50 border border-slate-100 px-4 py-3">
               <p className="text-xs text-slate-500 font-medium">Outstanding</p>
-              <p className="text-xl font-bold text-slate-900 tabular-nums">{formatINR(amount)}</p>
+              <p className="text-xl font-bold text-foreground tabular-nums">{formatINR(amount)}</p>
             </div>
 
             <div>
@@ -194,18 +194,18 @@ export function PaymentModal({
                 value={paymentAmount ?? ""}
                 onChange={e => setPaymentAmount(e.target.value ? Number(e.target.value) : null)}
                 placeholder="Enter amount"
-                className="w-full mt-1 h-12 rounded-lg border border-slate-200 bg-white px-3 text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-200 tabular-nums placeholder:text-slate-300"
+                className="w-full mt-1 h-12 rounded-lg border border-border bg-card px-3 text-lg font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 tabular-nums placeholder:text-muted-foreground"
                 min={1}
                 max={amount}
                 step={1}
               />
               {paymentAmount !== null && paymentAmount > 0 && paymentAmount < amount && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Remaining after this: {formatINR(actualRemaining)}
                 </p>
               )}
               {openInvoiceCount > 1 && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {openInvoiceCount} open invoices — amount applied to oldest invoice.
                 </p>
               )}
@@ -226,7 +226,7 @@ export function PaymentModal({
                       className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
                         selected
                           ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                          : "bg-card text-muted-foreground border-border hover:border-border"
                       }`}
                     >
                       <Icon size={14} />
@@ -246,7 +246,7 @@ export function PaymentModal({
                 value={reference}
                 onChange={e => setReference(e.target.value)}
                 placeholder="e.g. UPI ref / cheque no."
-                className="w-full mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                className="w-full mt-1 h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -254,7 +254,7 @@ export function PaymentModal({
               <button
                 onClick={onClose}
                 disabled={saving}
-                className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50"
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -278,7 +278,7 @@ export function PaymentModal({
                 <Bell className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">{formatINR(recordedAmount)} received</h2>
+                <h2 className="text-lg font-bold text-foreground">{formatINR(recordedAmount)} received</h2>
                 <p className="text-sm text-slate-500">{customerName}</p>
               </div>
             </div>
@@ -294,7 +294,7 @@ export function PaymentModal({
                 <button
                   onClick={handleNoCommit}
                   disabled={followUpSaving}
-                  className="flex-1 h-11 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  className="flex-1 h-11 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted disabled:opacity-50"
                 >
                   No
                 </button>
@@ -306,7 +306,7 @@ export function PaymentModal({
                   Yes
                 </button>
               </div>
-              <p className="text-xs text-slate-400 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 If No, auto follow-up in 3 days ({autoFollowupDate})
               </p>
             </div>
@@ -321,7 +321,7 @@ export function PaymentModal({
                 <CalendarDays className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Customer committed</h2>
+                <h2 className="text-lg font-bold text-foreground">Customer committed</h2>
                 <p className="text-sm text-slate-500">{customerName} · {formatINR(remainingAmount)} remaining</p>
               </div>
             </div>
@@ -335,7 +335,7 @@ export function PaymentModal({
                 value={promiseDate}
                 onChange={e => setPromiseDate(e.target.value)}
                 min={new Date().toISOString().slice(0, 10)}
-                className="w-full mt-1 h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                className="w-full mt-1 h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -346,7 +346,7 @@ export function PaymentModal({
               <select
                 value={promiseTime}
                 onChange={e => setPromiseTime(e.target.value)}
-                className="w-full mt-1 h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                className="w-full mt-1 h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {TIME_SLOTS.map(t => (
                   <option key={t} value={t}>{t}</option>
@@ -358,7 +358,7 @@ export function PaymentModal({
               <button
                 onClick={() => setStep('followup_choice')}
                 disabled={followUpSaving}
-                className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50"
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted disabled:opacity-50"
               >
                 Back
               </button>
@@ -380,7 +380,7 @@ export function PaymentModal({
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
               <CheckCircle2 size={32} className="text-emerald-600" />
             </div>
-            <p className="font-bold text-slate-900 text-lg">Done</p>
+            <p className="font-bold text-foreground text-lg">Done</p>
             <p className="text-sm text-slate-500 text-center">
               {formatINR(recordedAmount)} received · {formatINR(remainingAmount)} remaining
             </p>
@@ -393,7 +393,7 @@ export function PaymentModal({
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
               <CheckCircle2 size={32} className="text-emerald-600" />
             </div>
-            <p className="font-bold text-slate-900 text-lg">Payment Recorded</p>
+            <p className="font-bold text-foreground text-lg">Payment Recorded</p>
             <p className="text-sm text-slate-500">
               {formatINR(recordedAmount)} via {methodLabel}
             </p>

@@ -14,7 +14,7 @@ export function Toaster(props: ToasterProps) {
     <SonnerToaster
       {...TOASTER_DEFAULTS}
       toastOptions={{
-        className: 'text-sm border-border shadow-lg',
+        className: 'text-sm border-border shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.4)]',
         ...props.toastOptions,
       }}
       {...props}

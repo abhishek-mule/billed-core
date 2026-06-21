@@ -105,8 +105,8 @@ function MagicLinkForm() {
     const msg = errorMessage || error
     return (
       <div className="space-y-3">
-        <div role="alert" className="px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg text-red-500 text-xs">{msg}</div>
-        <button onClick={() => window.location.reload()} className="w-full py-2.5 border border-gray-200 text-gray-500 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+        <div role="alert" className="px-3 py-2.5 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-xs">{msg}</div>
+        <button onClick={() => window.location.reload()} className="w-full py-2.5 border border-border text-muted-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors">
           Try again
         </button>
       </div>
@@ -117,32 +117,32 @@ function MagicLinkForm() {
     <div className="space-y-3">
       {sent ? (
         <div className="space-y-3">
-          <div className="py-6 bg-violet-50 rounded-xl text-center border border-violet-100">
-            <Mail className="w-7 h-7 text-violet-500 mx-auto mb-2" />
-            <p className="text-xs text-violet-700 font-medium">Check your inbox — click the link to sign in.</p>
+          <div className="py-6 bg-primary/5 rounded-xl text-center border border-primary/10">
+            <Mail className="w-7 h-7 text-primary mx-auto mb-2" />
+            <p className="text-xs text-primary font-medium">Check your inbox — click the link to sign in.</p>
           </div>
-          <button onClick={() => { setSent(false); setEmail("") }} className="w-full py-2.5 border border-gray-200 text-gray-500 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+          <button onClick={() => { setSent(false); setEmail("") }} className="w-full py-2.5 border border-border text-muted-foreground rounded-lg text-sm font-medium hover:bg-muted transition-colors">
             Use a different email
           </button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="email-input" className="block text-xs text-gray-400 mb-1.5 font-medium tracking-wide">Email Address</label>
+            <label htmlFor="email-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Email Address</label>
             <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" aria-hidden="true" />
+              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
                 id="email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 placeholder-gray-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:bg-white outline-none transition-all"
+                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-card outline-none transition-all"
                 aria-label="Email address"
               />
             </div>
           </div>
-          <button type="submit" disabled={loading} className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm shadow-violet-200" aria-busy={loading}>
+          <button type="submit" disabled={loading} className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             {loading ? "Sending link..." : "Continue with Email"}
           </button>
@@ -194,45 +194,45 @@ function PasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {error && <div role="alert" className="px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg text-red-500 text-xs">{error}</div>}
+      {error && <div role="alert" className="px-3 py-2.5 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-xs">{error}</div>}
       <div>
-        <label htmlFor="pw-email" className="block text-xs text-gray-400 mb-1.5 font-medium tracking-wide">Email Address</label>
+        <label htmlFor="pw-email" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Email Address</label>
         <input
           id="pw-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 placeholder-gray-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:bg-white outline-none transition-all"
+          className="w-full px-4 py-2.5 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-card outline-none transition-all"
         />
       </div>
       <div>
-        <label htmlFor="pw-password" className="block text-xs text-gray-400 mb-1.5 font-medium tracking-wide">Password</label>
+        <label htmlFor="pw-password" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Password</label>
         <div className="relative">
-          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" aria-hidden="true" />
+          <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             id="pw-password"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter your password"
-            className="w-full pl-9 pr-10 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 placeholder-gray-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:bg-white outline-none transition-all"
+            className="w-full pl-9 pr-10 py-2.5 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-card outline-none transition-all"
           />
-          <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors" tabIndex={-1} aria-label={showPassword ? "Hide password" : "Show password"}>
+          <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" tabIndex={-1} aria-label={showPassword ? "Hide password" : "Show password"}>
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
       </div>
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-1.5 cursor-pointer">
-          <button type="button" onClick={() => setRemember(v => !v)} className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${remember ? 'bg-violet-600 border-violet-600 text-white' : 'border-gray-300 bg-white'}`} aria-checked={remember} role="checkbox">
+          <button type="button" onClick={() => setRemember(v => !v)} className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${remember ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card'}`} aria-checked={remember} role="checkbox">
             {remember && <Check className="w-3 h-3" strokeWidth={3} />}
           </button>
-          <span className="text-xs text-gray-400">Remember me</span>
+          <span className="text-xs text-muted-foreground">Remember me</span>
         </label>
-        <button type="button" className="text-xs text-violet-600 hover:text-violet-700 hover:underline transition-colors">Forgot password?</button>
+        <button type="button" className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors">Forgot password?</button>
       </div>
-      <button type="submit" disabled={loading} className="w-full py-2.5 bg-gray-900 hover:bg-gray-950 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
+      <button type="submit" disabled={loading} className="w-full py-2.5 bg-foreground hover:bg-foreground/90 text-background rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
         {loading ? "Signing in..." : "Sign In"}
       </button>
@@ -290,36 +290,36 @@ function PhoneOtpForm() {
 
   return (
     <div className="space-y-3">
-      {error && <div role="alert" className="px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg text-red-500 text-xs">{error}</div>}
+      {error && <div role="alert" className="px-3 py-2.5 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-xs">{error}</div>}
       <div>
-        <label htmlFor="phone-input" className="block text-xs text-gray-400 mb-1.5 font-medium tracking-wide">Mobile Number</label>
+        <label htmlFor="phone-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Mobile Number</label>
         <div className="relative">
-          <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" aria-hidden="true" />
-          <span className="absolute left-9 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium border-r border-gray-200 pr-2">+91</span>
+          <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <span className="absolute left-9 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium border-r border-border pr-2">+91</span>
           <input
             id="phone-input" type="tel" value={phone}
             onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
             placeholder="9876543210" maxLength={10} disabled={step === 'otp'}
-            className="w-full pl-[4.5rem] pr-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 placeholder-gray-300 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:bg-white outline-none transition-all disabled:opacity-50"
+            className="w-full pl-[4.5rem] pr-4 py-2.5 rounded-lg border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-card outline-none transition-all disabled:opacity-50"
           />
         </div>
       </div>
       {step === 'otp' && (
         <div>
-          <label htmlFor="otp-input" className="block text-xs text-gray-400 mb-1.5 font-medium tracking-wide">Enter OTP</label>
+          <label htmlFor="otp-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Enter OTP</label>
           <input
             id="otp-input" type="text" value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="• • • • • •" maxLength={6}
-            className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:border-violet-400 focus:ring-2 focus:ring-violet-100 focus:bg-white outline-none transition-all text-center text-xl tracking-[0.5em] font-mono text-gray-700"
+            placeholder="\u2022 \u2022 \u2022 \u2022 \u2022 \u2022" maxLength={6}
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-muted text-sm focus:border-primary focus:ring-2 focus:ring-primary/15 focus:bg-card outline-none transition-all text-center text-xl tracking-[0.5em] font-mono text-foreground"
           />
-          <button onClick={handleResend} className="mt-1.5 text-xs text-violet-600 hover:text-violet-700 hover:underline transition-colors">Resend OTP</button>
+          <button onClick={handleResend} className="mt-1.5 text-xs text-primary hover:text-primary/80 hover:underline transition-colors">Resend OTP</button>
         </div>
       )}
       <button
         onClick={step === 'otp' ? handleVerify : handleSendOtp}
         disabled={sending || verifying || (step === 'phone' ? phone.length !== 10 : otp.length < 4)}
-        className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm shadow-violet-200"
+        className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm"
         aria-busy={sending || verifying}
       >
         {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
@@ -337,15 +337,15 @@ function SocialButtons() {
   return (
     <div className="space-y-2">
       <div className="relative my-4">
-        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-        <div className="relative flex justify-center"><span className="px-2 bg-white text-[11px] text-gray-300 font-medium tracking-wide">OR CONTINUE WITH</span></div>
+        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+        <div className="relative flex justify-center"><span className="px-2 bg-card text-[11px] text-muted-foreground font-medium tracking-wide">OR CONTINUE WITH</span></div>
       </div>
       <div className="flex gap-2">
-        <button onClick={() => handleSocial('google')} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">
+        <button onClick={() => handleSocial('google')} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-border rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:border-border transition-all">
           <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
           Google
         </button>
-        <button onClick={() => handleSocial('apple')} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">
+        <button onClick={() => handleSocial('apple')} className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-border rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:border-border transition-all">
           <Apple className="w-4 h-4" />
           Apple
         </button>
@@ -370,14 +370,14 @@ function AuthForm() {
         <div className="flex justify-center mb-3">
           <Image src="/logo_new.png" alt="BillZo" width={40} height={40} className="object-contain" />
         </div>
-        <h1 className="text-lg font-bold text-gray-800">Welcome back</h1>
-        <p className="text-xs text-gray-400 mt-0.5">Sign in to your BillZo dashboard</p>
+        <h1 className="text-lg font-bold text-white">Welcome back</h1>
+        <p className="text-xs text-white/60 mt-0.5">Sign in to your BillZo dashboard</p>
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+      <div className="bg-card rounded-2xl border border-border p-5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.45)]">
         {/* Tab switcher */}
-        <div role="tablist" aria-label="Login method" className="flex gap-0 rounded-lg bg-gray-100 p-0.5 mb-4">
+        <div role="tablist" aria-label="Login method" className="flex gap-0 rounded-lg bg-muted p-0.5 mb-4">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -385,7 +385,7 @@ function AuthForm() {
               aria-selected={tab === id}
               onClick={() => setTab(id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                tab === id ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-400 hover:text-gray-500'
+                tab === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="h-3 w-3" aria-hidden="true" /> {label}
@@ -403,11 +403,11 @@ function AuthForm() {
       </div>
 
       {/* Footer */}
-      <p className="text-center text-[11px] text-gray-300 mt-5">
+      <p className="text-center text-[11px] text-white/40 mt-5">
         By signing in, you agree to the{' '}
-        <a href="#" className="text-gray-400 hover:text-gray-600 underline">Terms of Service</a>
+        <a href="#" className="text-white/60 hover:text-white/80 underline">Terms of Service</a>
         {' '}and{' '}
-        <a href="#" className="text-gray-400 hover:text-gray-600 underline">Privacy Policy</a>
+        <a href="#" className="text-white/60 hover:text-white/80 underline">Privacy Policy</a>
       </p>
     </div>
   )
@@ -431,7 +431,7 @@ export default function AuthPage() {
 
       {/* Right: login card panel */}
       <div className="flex-1 flex items-center justify-center p-6 bg-[#0a0e27]">
-        <Suspense fallback={<div className="flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-violet-400" /></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div>}>
           <AuthForm />
         </Suspense>
       </div>

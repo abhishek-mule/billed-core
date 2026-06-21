@@ -244,7 +244,7 @@ export function Dashboard() {
         </span>
       </header>
 
-      <section className="rounded-2xl border bg-white p-6 shadow-sm ring-1 ring-border/50">
+      <section className="rounded-2xl border bg-card p-6 shadow-sm dark:shadow-md ring-1 ring-border/50">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -263,7 +263,7 @@ export function Dashboard() {
           <button
             onClick={() => loadDailyBrief(true)}
             disabled={briefLoading}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-white text-muted-foreground transition-all hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-all hover:bg-muted hover:text-foreground disabled:opacity-50"
             title="Refresh smart brief"
           >
             <RefreshCcw className={`h-4 w-4 ${briefLoading ? 'animate-spin' : ''}`} />
@@ -280,7 +280,7 @@ export function Dashboard() {
                   ? 'border-destructive/20 bg-destructive/[0.02] hover:bg-destructive/[0.04]'
                   : action.priority === 'medium'
                     ? 'border-warning/20 bg-warning/[0.02] hover:bg-warning/[0.04]'
-                    : 'border-border bg-white hover:border-primary/20 hover:bg-muted/30'
+                    : 'border-border bg-card hover:border-primary/20 hover:bg-muted/30'
               }`}
             >
               <span className={`text-[10px] font-bold uppercase tracking-widest ${
@@ -320,11 +320,11 @@ export function Dashboard() {
               <span>+12% from last month</span>
             </div>
           </div>
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-card p-6 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Cases Recovered</p>
             <p className="mt-2 text-3xl font-bold tracking-tight">{recoveryStats.recoveredCasesCount}</p>
           </div>
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-card p-6 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Recovery Rate</p>
             <p className="mt-2 text-3xl font-bold tracking-tight">{Math.round(recoveryStats.recoveryRate)}%</p>
           </div>
@@ -333,8 +333,8 @@ export function Dashboard() {
 
       {/* Broken Promises */}
       {brokenPromises.length > 0 && (
-        <section className="rounded-2xl border border-rose-200 bg-rose-50/50 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-rose-700 mb-3">
+        <section className="rounded-2xl border border-destructive/20 bg-destructive/5 p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-destructive mb-3">
             <AlertTriangle className="h-5 w-5" />
             <p className="text-xs font-bold uppercase tracking-wider">
               {brokenPromises.length} Broken Promise{brokenPromises.length > 1 ? 's' : ''}
@@ -342,17 +342,17 @@ export function Dashboard() {
           </div>
           <div className="space-y-2">
             {brokenPromises.map((bp) => (
-              <div key={bp.customerId} className="flex items-center justify-between rounded-xl bg-white border border-rose-200 px-4 py-3">
+              <div key={bp.customerId} className="flex items-center justify-between rounded-xl bg-card border border-destructive/20 px-4 py-3">
                 <div>
-                  <p className="font-semibold text-slate-900">{bp.customerName}</p>
-                  <p className="text-xs text-rose-600">
+                  <p className="font-semibold text-foreground">{bp.customerName}</p>
+                  <p className="text-xs text-destructive/80">
                     Promised by {new Date(bp.promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     {new Date(bp.promiseDate) < new Date() && (
                       <> — overdue by {Math.floor((Date.now() - new Date(bp.promiseDate).getTime()) / 86400000)}d</>
                     )}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-slate-900 tabular-nums">₹{bp.amount.toLocaleString('en-IN')}</span>
+                <span className="text-sm font-bold text-foreground tabular-nums">₹{bp.amount.toLocaleString('en-IN')}</span>
               </div>
             ))}
           </div>
@@ -407,7 +407,7 @@ export function Dashboard() {
         <div className="space-y-4">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Recovery Queue</h2>
           {unpaid.length === 0 ? (
-            <div className="rounded-xl border border-dashed bg-white p-10 text-center shadow-sm">
+            <div className="rounded-xl border border-dashed bg-card p-10 text-center shadow-sm">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-success/10 text-success">
                 <CheckCircle2 className="h-6 w-6" />
               </div>
@@ -456,7 +456,7 @@ export function Dashboard() {
         <div className="space-y-4">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Activity</h2>
           {state.activity.length === 0 ? (
-            <div className="rounded-xl border border-dashed bg-white p-10 text-center shadow-sm">
+            <div className="rounded-xl border border-dashed bg-card p-10 text-center shadow-sm">
               <p className="text-sm text-muted-foreground">No recent activity found.</p>
             </div>
           ) : (
@@ -527,7 +527,7 @@ function PaywallOverlay({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl ring-1 ring-border">
+      <div className="w-full max-w-md rounded-2xl bg-card p-8 text-center shadow-2xl ring-1 ring-border">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <TrendingUp className="h-8 w-8" />
         </div>
@@ -582,7 +582,7 @@ function Attention({ icon, text, cta, onClick }: { icon: React.ReactNode; text: 
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm transition-all hover:border-primary/20">
+    <div className="rounded-xl border bg-card p-4 shadow-sm transition-all hover:border-primary/20">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">{label}</p>
       <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">{value}</p>
     </div>
@@ -591,7 +591,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function LoadingState() {
   return (
-    <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-dashed bg-white p-8 text-center shadow-sm">
+    <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-dashed bg-card p-8 text-center shadow-sm">
       <Loader className="mb-4" />
       <div className="text-lg font-semibold text-foreground">Syncing your dashboard...</div>
       <p className="mt-1 text-sm text-muted-foreground">Fetching latest recovery data and signals</p>
@@ -616,7 +616,7 @@ function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) 
 
 function NoSessionState({ onLogin }: { onLogin: () => void }) {
   return (
-    <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
+    <div className="rounded-2xl border bg-card p-10 text-center shadow-sm">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning">
         <AlertTriangle className="h-6 w-6" />
       </div>

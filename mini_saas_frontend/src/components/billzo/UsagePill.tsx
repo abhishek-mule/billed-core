@@ -49,7 +49,7 @@ export function UsagePill() {
   return (
     <div 
       onClick={() => router.push("/pricing")}
-      className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full border bg-white border-border shadow-sm cursor-pointer transition-all hover:border-primary/30"
+      className="inline-flex items-center gap-3 px-3 py-1.5 rounded-full border bg-card border-border shadow-sm cursor-pointer transition-all hover:border-primary/30"
     >
       <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
         <Zap className="h-3.5 w-3.5 text-primary" />

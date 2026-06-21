@@ -68,13 +68,13 @@ export function PauseModal({ customerId, customerName, caseId, onClose, onSucces
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 space-y-4">
+      <div className="w-full max-w-md bg-card rounded-xl shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] border border-border p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
             <Pause className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Pause Automation</h2>
+            <h2 className="text-lg font-bold text-foreground">Pause Automation</h2>
             <p className="text-sm text-slate-500">{customerName}</p>
           </div>
         </div>
@@ -104,7 +104,7 @@ export function PauseModal({ customerId, customerName, caseId, onClose, onSucces
                     className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
                       selectedOption === opt.days
                         ? "bg-amber-50 text-amber-700 border-amber-300"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                        : "bg-card text-muted-foreground border-border hover:border-border"
                     } ${opt.days === null ? "opacity-50" : ""}`}
                   >
                     {opt.label}
@@ -123,7 +123,7 @@ export function PauseModal({ customerId, customerName, caseId, onClose, onSucces
               <button
                 onClick={onClose}
                 disabled={saving}
-                className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50"
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted disabled:opacity-50"
               >
                 Cancel
               </button>

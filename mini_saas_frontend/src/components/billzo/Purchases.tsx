@@ -43,7 +43,7 @@ export function Purchases() {
       <section className="space-y-4">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Purchase Scans</h2>
         {state.purchases.length === 0 ? (
-          <div className="rounded-xl border border-dashed bg-white p-10 text-center shadow-sm">
+          <div className="rounded-xl border border-dashed bg-card p-10 text-center shadow-sm">
             <p className="text-sm text-muted-foreground font-medium">No purchase scans recorded yet.</p>
           </div>
         ) : (

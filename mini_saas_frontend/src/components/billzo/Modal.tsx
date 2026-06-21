@@ -69,7 +69,7 @@ export const Modal = forwardRef<HTMLDivElement, ModalProps>(
           aria-modal="true"
           aria-label={title}
           className={cn(
-            'relative z-10 w-full rounded-xl border border-border bg-card text-card-foreground shadow-xl animate-scale-in',
+            'relative z-10 w-full rounded-xl border border-border bg-card text-card-foreground shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] animate-scale-in',
             sizes[size],
             className,
           )}

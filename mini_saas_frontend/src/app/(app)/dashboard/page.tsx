@@ -344,7 +344,7 @@ export default function BillZoHome() {
           <h3 className="font-semibold text-lg mb-1">Welcome to BillZo!</h3>
           <p className="text-primary-foreground/80 text-sm mb-4">Start by adding your first product or customer.</p>
           <div className="flex gap-2">
-            <Link href="/products/add" className="bg-white text-primary px-4 py-2 rounded-lg text-xs font-semibold">Add Product</Link>
+            <Link href="/products/add" className="bg-card text-primary px-4 py-2 rounded-lg text-xs font-semibold">Add Product</Link>
             <Link href="/parties/add" className="bg-primary-foreground/20 text-white px-4 py-2 rounded-lg text-xs font-semibold">Add Customer</Link>
           </div>
         </div>
@@ -365,7 +365,7 @@ export default function BillZoHome() {
         <p className="text-4xl font-bold tabular-nums tracking-tight">
           {formatINR(summary.stuckMoneyTotal)}
         </p>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-white/60 mt-1">
           {summary.collectedAfterFollowup > 0
             ? `₹${summary.collectedAfterFollowup.toLocaleString('en-IN')} recovered this month`
             : 'Track and recover outstanding payments'}
@@ -387,7 +387,7 @@ export default function BillZoHome() {
               : pc.oldestOverdueDays > 0 ? `${pc.oldestOverdueDays} days overdue`
               : 'Due today'
             const signalCls = pc.brokenPromises > 0 || pc.oldestOverdueDays > 30
-              ? 'text-rose-600' : 'text-amber-600'
+              ? 'text-destructive' : 'text-warning-foreground'
             return (
               <div key={pc.caseId} className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -526,7 +526,7 @@ export default function BillZoHome() {
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          r.isPending ? 'bg-rose-100 text-rose-700 animate-pulse' : isUrgent ? 'bg-warning-soft text-warning-foreground' : 'bg-muted text-muted-foreground'
+                          r.isPending ? 'bg-destructive/15 text-destructive animate-pulse' : isUrgent ? 'bg-warning-soft text-warning-foreground' : 'bg-muted text-muted-foreground'
                         }`}>
                           {when}
                         </span>

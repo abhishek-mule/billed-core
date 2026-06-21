@@ -65,13 +65,13 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 p-6 space-y-4">
+      <div className="w-full max-w-md bg-card rounded-xl shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] border border-border p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-700">
             <Calendar className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Customer Promise</h2>
+            <h2 className="text-lg font-bold text-foreground">Customer Promise</h2>
             <p className="text-sm text-slate-500">{customerName} · {formatINR(amount)} outstanding</p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
         {success ? (
           <div className="flex flex-col items-center gap-2 py-6 text-emerald-700">
             <CheckCircle2 size={40} />
-            <p className="font-semibold text-slate-900">Promise recorded!</p>
+            <p className="font-semibold text-foreground">Promise recorded!</p>
             <p className="text-xs text-slate-500">
               Reminder on {new Date(dueDate + "T" + reminderTime).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} at {reminderTime}
             </p>
@@ -99,20 +99,20 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
                 type="number"
                 value={promiseAmount}
                 onChange={e => setPromiseAmount(Number(e.target.value))}
-                className="w-full mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                className="w-full mt-1 h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Promise date</label>
               <div className="relative mt-1">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <input
                   type="date"
                   value={dueDate}
                   onChange={e => setDueDate(e.target.value)}
                   min={new Date().toISOString().slice(0, 10)}
-                  className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                  className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>
@@ -120,18 +120,18 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
             <div>
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reminder time</label>
               <div className="relative mt-1">
-                <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <select
                   value={reminderTime}
                   onChange={e => setReminderTime(e.target.value)}
-                  className="w-full h-10 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-200 appearance-none"
+                  className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none"
                 >
                   {TIME_SLOTS.map(t => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Reminder will be sent at this time on the promise date
               </p>
             </div>
@@ -143,7 +143,7 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
                 onChange={e => setNotes(e.target.value)}
                 placeholder="e.g. Payment after salary release"
                 rows={2}
-                className="w-full mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-200 resize-none"
+                className="w-full mt-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
               />
             </div>
 
@@ -151,7 +151,7 @@ export function PromiseModal({ customerId, customerName, amount, caseId, onClose
               <button
                 onClick={onClose}
                 disabled={saving}
-                className="flex-1 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50"
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground bg-card hover:bg-muted disabled:opacity-50"
               >
                 Cancel
               </button>
