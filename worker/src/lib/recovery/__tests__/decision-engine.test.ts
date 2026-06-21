@@ -48,7 +48,7 @@ describe('canSendReminder', () => {
     expect(result.allowed).toBe(true)
     expect(result.decision).toBe('send')
     expect(result.reason).toBe('All checks passed')
-    expect(result.rules).toHaveLength(14)
+    expect(result.rules).toHaveLength(15)
     expect(result.rules.every(r => r.passed)).toBe(true)
   })
 
@@ -164,7 +164,7 @@ describe('canSendReminder', () => {
     expect(result.decision).toBe('pending_approval')
   })
 
-  it('logs all 14 rules in output', () => {
+  it('logs all 15 rules in output', () => {
     const result = canSendReminder(makeInput())
     expect(result.rules.map(r => r.rule)).toEqual([
       'outstanding_positive',
@@ -180,6 +180,7 @@ describe('canSendReminder', () => {
       'under_total_cap',
       'engagement_cooldown',
       'business_hours',
+      'customer_cooldown',
       'merchant_intervention_trigger',
     ])
     expect(result.rulesSnapshot).toEqual({
@@ -197,6 +198,7 @@ describe('canSendReminder', () => {
       under_total_cap: true,
       engagement_cooldown: true,
       business_hours: true,
+      customer_cooldown: true,
       merchant_intervention_trigger: true,
     })
   })
@@ -270,7 +272,7 @@ describe('canSendReminder', () => {
     }))
     // Override rule not in rules array (only active overrides appear)
     expect(result.rules.every(r => r.rule !== 'merchant_override')).toBe(true)
-    expect(result.rules.length).toBe(14)
+    expect(result.rules.length).toBe(15)
     expect(result.rules[0].rule).toBe('outstanding_positive')
     // Snapshot reflects inactive override
     expect(result.rulesSnapshot.merchant_override).toBe(false)
