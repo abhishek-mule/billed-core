@@ -38,6 +38,7 @@ function CallbackContent() {
           const res = await fetch("/api/auth/callback-exchange", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ tokenHash, type, code }),
           })
           const data = await res.json()
@@ -75,6 +76,7 @@ function CallbackContent() {
           const res = await fetch("/api/auth/supabase", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ accessToken }),
           })
           const data = await res.json()

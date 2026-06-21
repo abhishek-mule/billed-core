@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { ServiceWorkerRegister } from '@/components/billzo/ServiceWorkerRegister';
+import { ThemeProvider } from '@/lib/billzo/theme';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -20,20 +21,30 @@ export const viewport: Viewport = {
   themeColor: '#146c4b',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/logo_new.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('billzo-theme');
+                if (t === 'dark') document.documentElement.classList.add('dark');
+              } catch(e) {}
+            `,
+          }}
+        />
       </head>
       <body>
         <ServiceWorkerRegister />
-        <Toaster position="top-center" richColors />
-        {children}
+        <ThemeProvider>
+          <Toaster position="top-center" richColors />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

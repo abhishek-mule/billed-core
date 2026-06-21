@@ -12,7 +12,9 @@ function getCookie(name: string) {
 
 function setCookie(name: string, value: string, days = 30) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString()
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+  const cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === "production" ? "; Secure" : ""}`
+  console.log(`[AuthResolve] Setting cookie: ${name}=${value}`)
+  document.cookie = cookie
 }
 
 function syncSession(userId: string, tenantId: string, tenantName: string) {
@@ -38,6 +40,28 @@ export default function AuthResolvePage() {
         return
       }
 
+      // Check server-side tenant membership first (source of truth)
+      try {
+        const res = await fetch('/api/tenants/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopName: '' }),
+        })
+        const data = await res.json()
+
+        if (data.tenantId && data.alreadyExists) {
+          console.log("[AuthResolve] Server membership found, tenant:", data.tenantId)
+          setCookie('bz_tenant', data.tenantId)
+          setCookie('bz_tenant_name', data.tenantName || 'My Shop')
+          syncSession(userId, data.tenantId, data.tenantName || 'My Shop')
+          window.location.href = '/dashboard'
+          return
+        }
+      } catch (e) {
+        console.log("[AuthResolve] Server membership check failed, falling back:", e)
+      }
+
+      // Fallback: check cookie
       const tenantId = getCookie("bz_tenant")
       const tenantName = getCookie("bz_tenant_name") || "My Shop"
 
@@ -48,10 +72,23 @@ export default function AuthResolvePage() {
         return
       }
 
+      // Fallback: check localStorage
+      const lsTenantId = localStorage.getItem("tenantId")
+      const lsTenantName = localStorage.getItem("tenantName") || "My Shop"
+      if (lsTenantId) {
+        console.log("[AuthResolve] Found tenant in localStorage, rehydrating cookie")
+        setCookie("bz_tenant", lsTenantId)
+        setCookie("bz_tenant_name", lsTenantName)
+        syncSession(userId, lsTenantId, lsTenantName)
+        window.location.href = "/dashboard"
+        return
+      }
+
+      // Fallback: check IndexedDB (Dexie)
       try {
         const tenant = await db().tenants.orderBy("createdAt").first()
         if (tenant) {
-          console.log("[AuthResolve] Found tenant in DB, syncing and going to /dashboard")
+          console.log("[AuthResolve] Found tenant in IndexedDB, syncing and going to /dashboard")
           setCookie("bz_tenant", tenant.id)
           setCookie("bz_tenant_name", tenant.name || "My Shop")
           syncSession(userId, tenant.id, tenant.name || "My Shop")
@@ -59,10 +96,10 @@ export default function AuthResolvePage() {
           return
         }
       } catch (e) {
-        console.log("[AuthResolve] DB error:", e)
+        console.log("[AuthResolve] IndexedDB error:", e)
       }
 
-      console.log("[AuthResolve] No tenant, going to /onboarding")
+      console.log("[AuthResolve] No tenant found anywhere, going to /onboarding")
       localStorage.setItem("userId", userId)
       window.location.href = "/onboarding"
     }
