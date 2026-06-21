@@ -2,17 +2,17 @@ import { cn } from '@/lib/utils'
 import { forwardRef, type ButtonHTMLAttributes } from 'react'
 
 const variants = {
-  primary: 'bg-primary text-primary-foreground hover:opacity-90',
-  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border',
-  ghost: 'text-foreground hover:bg-secondary',
-  danger: 'bg-destructive text-destructive-foreground hover:opacity-90',
-  outline: 'border-2 border-border bg-transparent text-foreground hover:bg-secondary',
+  primary: 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm',
+  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border shadow-sm',
+  ghost: 'text-foreground hover:bg-secondary transition-colors',
+  danger: 'bg-destructive text-destructive-foreground hover:opacity-90 shadow-sm',
+  outline: 'border border-border bg-transparent text-foreground hover:bg-secondary shadow-sm',
 }
 
 const sizes = {
-  sm: 'h-9 px-3 text-xs rounded-lg gap-1.5',
-  md: 'h-11 px-5 text-sm rounded-lg gap-2',
-  lg: 'h-13 px-6 text-base rounded-xl gap-2',
+  sm: 'h-8 px-3 text-xs rounded-md gap-1.5',
+  md: 'h-10 px-4 text-sm rounded-lg gap-2',
+  lg: 'h-12 px-6 text-base rounded-lg gap-2',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -28,7 +28,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          'inline-flex items-center justify-center font-bold transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+          'inline-flex items-center justify-center font-semibold transition-all active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
           variants[variant],
           sizes[size],
           className,

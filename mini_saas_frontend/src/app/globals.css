@@ -4,33 +4,67 @@
 
 @layer base {
   :root {
-    --background: 210 30% 98%;
-    --foreground: 220 28% 10%;
+    --background: 210 40% 99%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 220 28% 10%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 28% 10%;
-    --primary: 160 70% 28%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 226 70% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 160 74% 38%;
-    --success: 150 64% 32%;
+    --primary-glow: 226 70% 65%;
+    --success: 160 84% 39%;
     --success-foreground: 0 0% 100%;
-    --success-soft: 150 70% 93%;
-    --warning: 38 92% 48%;
+    --success-soft: 160 84% 96%;
+    --warning: 38 92% 50%;
     --warning-foreground: 30 60% 12%;
-    --warning-soft: 42 95% 92%;
-    --secondary: 210 24% 94%;
-    --secondary-foreground: 220 28% 10%;
-    --muted: 210 24% 94%;
-    --muted-foreground: 218 14% 40%;
-    --accent: 190 60% 93%;
-    --accent-foreground: 190 74% 18%;
-    --destructive: 0 72% 50%;
+    --warning-soft: 42 95% 94%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 160 70% 28%;
-    --radius: 0.5rem;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 226 70% 55%;
+    --radius: 0.6rem;
+
+    --sidebar-w: 220px;
+    --sidebar-collapsed: 64px;
+    --topbar-h: 52px;
+    --bottom-nav-h: 60px;
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 226 70% 65%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 226 70% 75%;
+    --success: 160 84% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 160 84% 10%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 30 60% 12%;
+    --warning-soft: 42 95% 8%;
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 25% 15%;
+    --muted-foreground: 215 16% 60%;
+    --accent: 215 25% 15%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 25% 18%;
+    --input: 215 25% 18%;
+    --ring: 226 70% 65%;
   }
 
   * { @apply border-border; }
@@ -39,200 +73,52 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "tnum";
+    font-feature-settings: "tnum", "cv02", "cv05", "cv08";
   }
 
-  button, a { @apply transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2; }
+  button, a {
+    @apply transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+
+  button:not(:disabled):not(.no-scale) { @apply active:scale-[0.98]; }
+  a:not(.no-scale) { @apply active:scale-[0.98]; }
 
   [role="button"] { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2; }
 }
 
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
 @layer components {
-  .action-tile {
-    @apply flex min-h-28 items-center justify-center gap-3 rounded-lg border bg-white p-4 text-base font-black shadow-sm;
+  .bz-action-tile {
+    @apply flex min-h-[112px] items-center justify-center gap-3 rounded-xl border bg-card p-4 text-base font-bold shadow-sm transition-all hover:border-primary/30 hover:shadow-md;
   }
-
-  .row-card {
-    @apply flex items-center justify-between gap-4 rounded-lg border bg-white p-4 shadow-sm;
-  }
-
-  .icon-button {
-    @apply grid h-10 w-10 place-items-center rounded-lg border bg-white text-foreground;
-  }
-
-  .primary-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-black text-primary-foreground;
-  }
-
-  .section-label {
-    @apply text-xs font-black uppercase tracking-widest text-muted-foreground;
-  }
-
-  .tab {
-    @apply flex items-center justify-center gap-2 rounded-md px-3 py-3 text-sm font-black text-muted-foreground;
-  }
-
-  .tab-active {
-    @apply flex items-center justify-center gap-2 rounded-md bg-white px-3 py-3 text-sm font-black text-foreground shadow-sm;
+  .bz-row-card {
+    @apply flex items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:border-primary/20;
   }
 }
 
-.loader {
-  animation: rotate 1s infinite;
-  height: 50px;
-  width: 50px;
-  display: inline-block;
-  position: relative;
+@keyframes bz-fade-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.loader:before,
-.loader:after {
-  border-radius: 50%;
-  content: "";
-  display: block;
-  height: 20px;
-  width: 20px;
-}
-.loader:before {
-  animation: ball1 1s infinite;
-  background-color: #fff;
-  box-shadow: 30px 0 0 #ff3d00;
-  margin-bottom: 10px;
-}
-.loader:after {
-  animation: ball2 1s infinite;
-  background-color: #ff3d00;
-  box-shadow: 30px 0 0 #fff;
-}
-
-@keyframes rotate {
-  0% { transform: rotate(0deg) scale(0.8) }
-  50% { transform: rotate(360deg) scale(1.2) }
-  100% { transform: rotate(720deg) scale(0.8) }
-}
-
-@keyframes ball1 {
-  0% {
-    box-shadow: 30px 0 0 #ff3d00;
-  }
-  50% {
-    box-shadow: 0 0 0 #ff3d00;
-    margin-bottom: 0;
-    transform: translate(15px, 15px);
-  }
-  100% {
-    box-shadow: 30px 0 0 #ff3d00;
-    margin-bottom: 10px;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 
-@keyframes ball2 {
-  0% {
-    box-shadow: 30px 0 0 #fff;
-  }
-  50% {
-    box-shadow: 0 0 0 #fff;
-    margin-top: -20px;
-    transform: translate(15px, 15px);
-  }
-  100% {
-    box-shadow: 30px 0 0 #fff;
-    margin-top: 0;
-  }
+@media print {
+  .bz-no-print { display: none !important; }
+  body { background: #fff !important; }
 }
-
-/* Three-body loader (uiverse.io by dovatgabriel) */
-.three-body {
-  --uib-size: 35px;
-  --uib-speed: 0.8s;
-  --uib-color: #5D3FD3;
-  position: relative;
-  display: inline-block;
-  height: var(--uib-size);
-  width: var(--uib-size);
-  animation: spin78236 calc(var(--uib-speed) * 2.5) infinite linear;
-}
-
-.three-body__dot {
-  position: absolute;
-  height: 100%;
-  width: 30%;
-}
-
-.three-body__dot:after {
-  content: '';
-  position: absolute;
-  height: 0%;
-  width: 100%;
-  padding-bottom: 100%;
-  background-color: var(--uib-color);
-  border-radius: 50%;
-}
-
-.three-body__dot:nth-child(1) {
-  bottom: 5%;
-  left: 0;
-  transform: rotate(60deg);
-  transform-origin: 50% 85%;
-}
-
-.three-body__dot:nth-child(1)::after {
-  bottom: 0;
-  left: 0;
-  animation: wobble1 var(--uib-speed) infinite ease-in-out;
-  animation-delay: calc(var(--uib-speed) * -0.3);
-}
-
-.three-body__dot:nth-child(2) {
-  bottom: 5%;
-  right: 0;
-  transform: rotate(-60deg);
-  transform-origin: 50% 85%;
-}
-
-.three-body__dot:nth-child(2)::after {
-  bottom: 0;
-  left: 0;
-  animation: wobble1 var(--uib-speed) infinite
-    calc(var(--uib-speed) * -0.15) ease-in-out;
-}
-
-.three-body__dot:nth-child(3) {
-  bottom: -5%;
-  left: 0;
-  transform: translateX(116.666%);
-}
-
-.three-body__dot:nth-child(3)::after {
-  top: 0;
-  left: 0;
-  animation: wobble2 var(--uib-speed) infinite ease-in-out;
-}
-
-@keyframes spin78236 {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes wobble1 {
-  0%, 100% {
-    transform: translateY(0%) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(-66%) scale(0.65);
-    opacity: 0.8;
-  }
-}
-
-@keyframes wobble2 {
-  0%, 100% {
-    transform: translateY(0%) scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(66%) scale(0.65);
-    opacity: 0.8;
-  }
-}
-

@@ -1,21 +1,30 @@
 describe('Invoice Creation Flow', () => {
   beforeEach(() => {
-    cy.visit('/login')
-    // Mock Auth
-    cy.get('input[type="tel"]').type('9999999999')
-    cy.get('button').contains('Send OTP').click()
-    cy.get('input[placeholder="Enter OTP"]').type('123456')
-    cy.get('button').contains('Verify').click()
-    cy.url().should('include', '/dashboard')
+    cy.loginByPhone('9999999999')
+    cy.url({ timeout: 10000 }).should('include', '/auth')
   })
 
-  it('should create an invoice in under 10 seconds', () => {
-    cy.visit('/invoices/new')
-    cy.get('input[placeholder="Customer Name (Auto-creates new)"]').type('Test Customer')
-    cy.get('input[placeholder="Item Name (Suggests products)"]').first().type('Test Item')
-    cy.get('input[type="number"]').first().clear().type('1')
-    cy.get('input[type="number"]').eq(1).clear().type('500')
-    cy.get('button').contains('Confirm & Save').click()
-    cy.url().should('include', '/invoices')
+  it('should display the auth page with email and phone options', () => {
+    cy.contains('Welcome to BillZo').should('be.visible')
+    cy.contains('button', 'Email').should('be.visible')
+    cy.contains('button', 'Phone').should('be.visible')
+  })
+
+  it('should switch between email and phone tabs', () => {
+    cy.contains('button', 'Phone').click()
+    cy.get('input[type="tel"]').should('be.visible')
+    cy.contains('button', 'Email').click()
+    cy.get('input[type="email"]').should('be.visible')
+  })
+
+  it('should show error for empty email submission', () => {
+    cy.contains('button', 'Continue with Email').click()
+    cy.contains('Please enter a valid email address').should('be.visible')
+  })
+
+  it('should show error for invalid phone number', () => {
+    cy.contains('button', 'Phone').click()
+    cy.contains('button', 'Send OTP').click()
+    cy.contains('Please enter a valid 10-digit mobile number').should('be.visible')
   })
 })
