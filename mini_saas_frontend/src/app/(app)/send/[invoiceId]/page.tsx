@@ -754,15 +754,12 @@ export default function InvoiceSendPage() {
       return (
         <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center space-y-3">
           <Hand className="h-12 w-12 text-success mx-auto" />
-          <h2 className="text-xl font-bold">Promise Saved</h2>
-          <p className="text-sm text-muted-foreground">
-            {new Date(promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {TIME_LABELS[promiseTime]}
-          </p>
+          <h2 className="text-xl font-bold">Recovery Plan Updated</h2>
+          <p className="text-sm text-muted-foreground">Promise — {new Date(promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {TIME_LABELS[promiseTime]}</p>
           <p className="text-xs text-muted-foreground">
-            Reminder: {getPromiseRemindLabel()}
+            Next Action: Wait for promise &middot; {getPromiseRemindLabel()}
             {promiseAutoFollowup && ' · Auto follow-up enabled'}
           </p>
-          <p className="text-xs text-muted-foreground">Status: Awaiting promise</p>
         </div>
       )
     }
@@ -887,16 +884,16 @@ export default function InvoiceSendPage() {
       return (
         <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center space-y-3">
           <CalendarClock className="h-12 w-12 text-success mx-auto" />
-          <h2 className="text-xl font-bold">Reminder Scheduled</h2>
+          <h2 className="text-xl font-bold">Recovery Plan Updated</h2>
           <p className="text-sm text-muted-foreground">
-            {new Date(scheduleDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {scheduleTime}
+            Scheduled Reminder — {new Date(scheduleDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {scheduleTime}
           </p>
           {scheduleRepeat !== 'once' && (
             <p className="text-xs text-muted-foreground">
               Repeats {scheduleRepeat === 'daily' ? 'daily' : scheduleRepeat === 'weekly' ? 'weekly' : 'every 2 days'}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">Status: Scheduled</p>
+          <p className="text-xs text-muted-foreground">Next Action: Send reminder (automatic)</p>
         </div>
       )
     }

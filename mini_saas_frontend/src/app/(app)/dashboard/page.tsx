@@ -100,6 +100,7 @@ export default function BillZoHome() {
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [completedCase, setCompletedCase] = useState<string | null>(null)
+  const [expandedWhy, setExpandedWhy] = useState<string | null>(null)
   const [shopName, setShopName] = useState("")
   const [userName, setUserName] = useState("")
   const [upcoming, setUpcoming] = useState<{ customerName: string; amount: number; stage: string; nextRecoveryAt: string | null; isPending: boolean }[]>([])
@@ -413,6 +414,14 @@ export default function BillZoHome() {
               : 'Due today'
             const signalCls = pc.brokenPromises > 0 || pc.oldestOverdueDays > 30
               ? 'text-destructive' : 'text-warning-foreground'
+            const confidence = Math.min(100, Math.max(10, Math.round(pc.attentionScore * 100)))
+            const reasons: string[] = []
+            if (pc.oldestOverdueDays > 0) reasons.push(`${pc.oldestOverdueDays} days overdue`)
+            if (pc.brokenPromises > 0) reasons.push(`${pc.brokenPromises} broken promise${pc.brokenPromises > 1 ? 's' : ''}`)
+            if (pc.ignoredReminders > 0) reasons.push(`${pc.ignoredReminders} unread reminder${pc.ignoredReminders > 1 ? 's' : ''}`)
+            if (pc.promiseToPayDate) reasons.push('Has active promise')
+            if (pc.automationMode === 'full_auto') reasons.push('Auto-recovery active')
+            else if (pc.automationMode === 'muted') reasons.push('Recovery muted')
             return (
               <div key={pc.caseId} className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -431,6 +440,33 @@ export default function BillZoHome() {
                       )}
                     </div>
                     <p className={`text-xs font-medium mt-0.5 ${signalCls}`}>{signal}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-[120px]">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${confidence}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{confidence}%</span>
+                    </div>
+                    {/* Why reasoning */}
+                    {reasons.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => setExpandedWhy(expandedWhy === pc.caseId ? null : pc.caseId)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1"
+                        >
+                          {expandedWhy === pc.caseId ? 'Hide' : 'Why?'}
+                        </button>
+                        {expandedWhy === pc.caseId && (
+                          <div className="mt-2 space-y-1">
+                            {reasons.map((r, i) => (
+                              <p key={i} className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                                {r}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
