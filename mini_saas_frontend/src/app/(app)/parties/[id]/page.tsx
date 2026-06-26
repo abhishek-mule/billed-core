@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Phone, MessageSquare, MapPin, Hash, Plus, CreditCard, Loader2,
   ExternalLink, Receipt, Calendar, Settings2, CheckCircle2, AlertCircle, RefreshCw,
-  Mail, MoreHorizontal, Wallet, TrendingUp,
+  Mail, MoreHorizontal, Wallet, TrendingUp, Hand, CalendarClock,
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
@@ -330,34 +330,135 @@ export default function PartyDetailPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setSelectedInvoiceId(null)
-              setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
-              setShowWAModal(true)
-            }}
-            disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-50 bg-foreground text-background hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground"
-          >
-            <MessageSquare className="w-4 h-4" />
-            {customer.automationMode === 'muted' ? 'Reminders Paused' : 'Send Reminder'}
-          </button>
-          <button
-            onClick={() => router.push(`/pos?customerId=${id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium border border-border text-foreground hover:bg-muted"
-          >
-            <Plus className="w-4 h-4" />
-            New Invoice
-          </button>
-          <button
-            onClick={() => router.push(`/pulse?payInvoice=${id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-          >
-            <Wallet className="w-4 h-4" />
-            Record Payment
-          </button>
+        {/* Communication Timeline */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="p-4 space-y-3">
+            {/* Outstanding — biggest number */}
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</span>
+              <span className={`text-xl font-bold tabular-nums ${pending > 0 ? 'text-foreground' : 'text-emerald-600'}`}>
+                {formatINR(pending)}
+              </span>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Timeline rows */}
+            <div className="space-y-2.5">
+              {/* Promise — shown if any invoice has a promise date */}
+              {(() => {
+                const promisedInv = invoices.find((i: any) => i.nextRecoveryAt && i.recoveryStage === 't0_soft')
+                if (!promisedInv) return null
+                return (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="text-muted-foreground">Promise</span>
+                    </div>
+                    <span className="font-medium text-amber-600 text-xs">
+                      {new Date(promisedInv.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                )
+              })()}
+
+              {/* Next Reminder */}
+              {(() => {
+                const nextInv = unpaidInvoices.find((i: any) => i.nextRecoveryAt)
+                if (!nextInv) return null
+                return (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                      <span className="text-muted-foreground">Next Reminder</span>
+                    </div>
+                    <span className="font-medium text-xs">
+                      {new Date(nextInv.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot;{' '}
+                      {new Date(nextInv.nextRecoveryAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )
+              })()}
+
+              {/* Last Reminder */}
+              {(() => {
+                const lastInv = [...invoices].sort((a: any, b: any) => new Date(b.lastReminderAt || 0).getTime() - new Date(a.lastReminderAt || 0).getTime())[0]
+                if (!lastInv?.lastReminderAt) return null
+                return (
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="text-muted-foreground">Last Reminder</span>
+                    </div>
+                    <span className="font-medium text-xs text-muted-foreground">
+                      {new Date(lastInv.lastReminderAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      {lastInv.lastWhatsAppStatus === 'read' ? ' · Seen ✓✓' : lastInv.lastWhatsAppStatus === 'delivered' ? ' · ✓✓' : ''}
+                    </span>
+                  </div>
+                )
+              })()}
+
+              {/* Last Payment */}
+              {payments.length > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-muted-foreground">Last Payment</span>
+                  </div>
+                  <span className="font-medium text-xs text-emerald-600">
+                    {formatINR(payments[0].amount)} &middot;{' '}
+                    {new Date(payments[0].createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+              )}
+
+              {/* No activity */}
+              {invoices.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">No activity yet</p>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="border-t border-border p-3">
+            <div className="grid grid-cols-5 gap-1.5">
+              <QuickAction
+                icon={MessageSquare}
+                label="Send"
+                onClick={() => {
+                  setSelectedInvoiceId(null)
+                  setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
+                  setShowWAModal(true)
+                }}
+                disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
+              />
+              <QuickAction
+                icon={CalendarClock}
+                label="Schedule"
+                onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_reminder`)}
+                disabled={unpaidInvoices.length === 0}
+              />
+              <QuickAction
+                icon={Hand}
+                label="Promise"
+                onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_promise`)}
+                disabled={unpaidInvoices.length === 0}
+              />
+              <QuickAction
+                icon={Wallet}
+                label="Payment"
+                onClick={() => router.push(`/pulse?payInvoice=${id}`)}
+              />
+              <QuickAction
+                icon={Phone}
+                label="Call"
+                onClick={() => {
+                  if (customer.phone) window.location.href = `tel:${customer.phone}`
+                }}
+                disabled={!customer.phone}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Recovery Intelligence */}
@@ -617,5 +718,28 @@ export default function PartyDetailPage() {
 
       </div>
     </div>
+  )
+}
+
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: any
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-0.5 rounded-lg py-2 text-center text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+    >
+      <Icon size={16} />
+      {label}
+    </button>
   )
 }

@@ -382,7 +382,7 @@ export default function POSPage() {
             ) : ([
               { l: "UPI", desc: "QR / link to customer", method: "upi" as const },
               { l: "Cash", desc: "Mark as paid", method: "cash" as const },
-              { l: "Udhar (Credit)", desc: "Add to ledger", method: "udhar" as const },
+              { l: "Credit (Udhar)", desc: "Customer will pay later", method: "udhar" as const },
             ]).map((m) => (
               <button
                 key={m.l}
@@ -670,7 +670,7 @@ function CartPanel({
             <Row label="Total" value={formatINR(total)} bold />
           </div>
           <button className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90" onClick={onPay}>
-            Generate & Send
+            Create Invoice
           </button>
         </div>
       )}

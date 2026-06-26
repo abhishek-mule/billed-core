@@ -351,25 +351,39 @@ export default function BillZoHome() {
         </div>
       )}
 
-      {/* ─── SECTION 1: Recoverable Today ─────────── */}
+      {/* ─── SECTION 1: Outstanding Primary ─────────── */}
       <div className="bg-foreground text-background rounded-2xl p-5 lg:p-6 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
-            Recoverable Today
+            Outstanding
           </span>
           {summary.customersNeedingAction > 0 && (
             <span className="bg-rose-500/20 text-rose-300 text-xs font-medium px-2 py-0.5 rounded-full">
-              {summary.customersNeedingAction} customer{summary.customersNeedingAction > 1 ? 's' : ''}
+              {summary.customersNeedingAction} need action
             </span>
           )}
         </div>
         <p className="text-4xl font-bold tabular-nums tracking-tight">
-          {formatINR(summary.stuckMoneyTotal)}
+          {formatINR(summary.stuckMoneyTotal + summary.collectibleToday)}
         </p>
-        <p className="text-sm text-white/60 mt-1">
+        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Recoverable Today</p>
+            <p className="text-lg font-bold mt-0.5">{formatINR(summary.collectibleToday)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Today&apos;s Actions</p>
+            <p className="text-lg font-bold mt-0.5">{summary.activeCases}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Collected Today</p>
+            <p className="text-lg font-bold mt-0.5">{formatINR(summary.totalCollectedToday)}</p>
+          </div>
+        </div>
+        <p className="text-xs text-white/50 mt-3">
           {summary.collectedAfterFollowup > 0
             ? `₹${summary.collectedAfterFollowup.toLocaleString('en-IN')} recovered this month`
-            : 'Track and recover outstanding payments'}
+            : 'Total money your customers owe you'}
         </p>
       </div>
 
