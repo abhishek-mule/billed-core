@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const { name, phone, whatsapp_number, gstin, email, address, notes, opt_in } = body
 
     // Validate required fields
-    const required = validateRequired(body, ['name', 'phone'])
+    const required = validateRequired(body, ['name'])
     if (!required.valid) {
       return errorResponse(
         `Missing required fields: ${Object.keys(required.errors!).join(', ')}`,
@@ -97,17 +97,15 @@ export async function POST(request: NextRequest) {
       return errorResponse('Name must be a non-empty string', 400)
     }
 
-    if (typeof phone !== 'string' || !phone.trim()) {
-      return errorResponse('Phone must be a non-empty string', 400)
+    let normalizedPhone = ''
+    if (phone && typeof phone === 'string' && phone.trim()) {
+      const phoneValidation = validatePhone(phone)
+      if (!phoneValidation.valid) {
+        return errorResponse(phoneValidation.error!, 400)
+      }
+      normalizedPhone = normalizePhone(phone)
     }
-
-    const phoneValidation = validatePhone(phone)
-    if (!phoneValidation.valid) {
-      return errorResponse(phoneValidation.error!, 400)
-    }
-
-    const normalizedPhone = normalizePhone(phone)
-    if (!normalizedPhone) {
+    if (phone && typeof phone === 'string' && phone.trim() && !normalizedPhone) {
       return errorResponse('Could not normalize phone number', 400)
     }
 

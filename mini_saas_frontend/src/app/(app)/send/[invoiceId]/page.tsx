@@ -12,6 +12,7 @@ import {
   Download, Repeat, Sun, Sunrise, Sunset, Moon,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
+import { toast } from "sonner"
 import { db } from "@/lib/billzo/db"
 import { getCookie } from "@/lib/cookies"
 import { getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
@@ -101,6 +102,9 @@ export default function InvoiceSendPage() {
   const [scheduleRepeat, setScheduleRepeat] = useState("once")
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleSaved, setScheduleSaved] = useState(false)
+
+  // Share fallback sheet
+  const [showNoPhoneSheet, setShowNoPhoneSheet] = useState(false)
 
   // Send flow fields
   const [includePaymentLink, setIncludePaymentLink] = useState(true)
@@ -206,10 +210,6 @@ export default function InvoiceSendPage() {
 
   const handleSendNow = async () => {
     if (!invoice) return
-    if (!customerPhone) {
-      setError("Please enter a customer phone number for WhatsApp")
-      return
-    }
     setSending(true)
     setError(null)
 
@@ -473,7 +473,6 @@ export default function InvoiceSendPage() {
                 <p className="text-xs text-amber-600">{formatINR(customerOutstanding)} previous outstanding</p>
               )}
             </div>
-            {phoneVerified && <CheckCircle2 size={16} className="text-emerald-500" />}
           </div>
           <div className="flex items-center gap-2">
             <Phone size={14} className="text-muted-foreground shrink-0" />
@@ -484,7 +483,13 @@ export default function InvoiceSendPage() {
               type="tel"
               className="flex-1 text-sm bg-transparent border-b border-border focus:outline-none focus:border-primary py-1 placeholder:text-muted-foreground/60"
             />
-            {phoneVerified && <span className="text-[10px] text-emerald-600 font-medium shrink-0">Verified</span>}
+          </div>
+          {/* Communication status */}
+          <div className={`flex items-center gap-2 text-xs ${customerPhone ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            <span className={`w-2 h-2 rounded-full ${customerPhone ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+            {customerPhone
+              ? `WhatsApp · ${customerPhone.replace(/\d(?=\d{4})/g, 'x')}`
+              : 'No WhatsApp number — share manually'}
           </div>
         </section>
 
@@ -506,13 +511,17 @@ export default function InvoiceSendPage() {
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Recommended Action</p>
           <button
             onClick={() => {
-              setShowMessagePreview(true)
-              setActionView('send_now')
+              if (!customerPhone) {
+                setShowNoPhoneSheet(true)
+              } else {
+                setShowMessagePreview(true)
+                setActionView('send_now')
+              }
             }}
             className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
           >
             <Send size={18} />
-            Send WhatsApp
+            {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
           </button>
         </div>
 
@@ -657,12 +666,12 @@ export default function InvoiceSendPage() {
 
         <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-center">
           <Send className="h-8 w-8 text-primary mx-auto mb-2" />
-          <h2 className="text-lg font-bold">Send Invoice on WhatsApp</h2>
+          <h2 className="text-lg font-bold">{customerPhone ? 'Send Invoice on WhatsApp' : 'Share Invoice'}</h2>
         </div>
 
         {!customerPhone && (
           <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200">
-            Enter customer number above to send directly, or invoice goes to <strong>your</strong> WhatsApp to forward.
+            No customer WhatsApp number. We'll open your WhatsApp so you can forward the invoice manually.
           </div>
         )}
 
@@ -1034,6 +1043,90 @@ export default function InvoiceSendPage() {
           {actionView === 'schedule_promise' && renderPromiseView()}
           {actionView === 'schedule_reminder' && renderScheduleReminderView()}
         </>
+      )}
+
+      {/* ──────────── No Phone Fallback Sheet ──────────── */}
+      {showNoPhoneSheet && invoice && (
+        <div className="fixed inset-0 z-50 flex items-end lg:items-center lg:justify-center bg-background/70 backdrop-blur animate-in fade-in" onClick={() => setShowNoPhoneSheet(false)}>
+          <div
+            className="w-full lg:max-w-sm bg-card lg:rounded-2xl rounded-t-3xl border border-border shadow-lg p-6 animate-in slide-in-from-bottom space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-center">
+              <Phone size={28} className="mx-auto text-muted-foreground mb-2" />
+              <h3 className="font-bold text-lg">No WhatsApp Number</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                {invoice.customerName} has no WhatsApp number saved. Choose how to share.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => { setShowNoPhoneSheet(false); setShowMessagePreview(true); setActionView('send_now') }}
+                className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
+              >
+                <Send size={18} className="text-primary shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Open WhatsApp & Forward</p>
+                  <p className="text-[10px] text-muted-foreground">Message goes to your WhatsApp to forward</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setShowNoPhoneSheet(false) }}
+                className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
+              >
+                <Phone size={18} className="text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Add WhatsApp Number</p>
+                  <p className="text-[10px] text-muted-foreground">Save customer phone for direct sending</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  const msg = getDefaultMessage
+                  navigator.clipboard.writeText(msg)
+                  setShowNoPhoneSheet(false)
+                  toast.success('Invoice message copied')
+                }}
+                className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
+              >
+                <svg className="w-[18px] h-[18px] text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium">Copy Message</p>
+                  <p className="text-[10px] text-muted-foreground">Copy invoice text to clipboard</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNoPhoneSheet(false)
+                  window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')
+                }}
+                className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
+              >
+                <svg className="w-[18px] h-[18px] text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium">Share PDF</p>
+                  <p className="text-[10px] text-muted-foreground">Open invoice PDF to share</p>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowNoPhoneSheet(false)}
+              className="w-full py-3 rounded-xl border border-border text-sm font-semibold hover:bg-secondary transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

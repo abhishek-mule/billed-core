@@ -59,8 +59,7 @@ export default function AddCustomerPage() {
   const validate = (): boolean => {
     const e: Errors = {}
     if (!form.name.trim()) e.name = 'Name is required'
-    if (!form.phone.trim()) e.phone = 'Phone is required'
-    else if (!isValidPhone(form.phone)) e.phone = 'Enter a valid 10-digit phone number'
+    if (form.phone.trim() && !isValidPhone(form.phone)) e.phone = 'Enter a valid 10-digit phone number'
     if (form.whatsapp_number && !isValidPhone(form.whatsapp_number)) e.whatsapp = 'Invalid WhatsApp number'
     if (form.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(form.gstin)) e.gstin = 'Invalid GSTIN format'
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format'
