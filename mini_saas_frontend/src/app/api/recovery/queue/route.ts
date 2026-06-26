@@ -53,24 +53,29 @@ export async function GET(request: NextRequest) {
     if (!gate.allowed) {
       const { data: previewData } = await supabaseAdmin
         .from('invoices')
-        .select('outstanding_amount, due_at, customer_id, customers!inner(customer_name)')
+        .select('total, paid_amount, due_at, customer_id, customers!inner(customer_name)')
         .eq('tenant_id', tenantId!)
-        .gt('outstanding_amount', 0)
+        .in('status', ['unpaid', 'overdue', 'partial'])
         .order('due_at', { ascending: true })
 
-      const totalOverdue = (previewData || []).reduce(
-        (s: number, r: any) => s + (parseFloat(r.outstanding_amount) || 0), 0,
-      )
-      const overdueCount = (previewData || []).length
       const now = new Date()
-      const oldestDue = (previewData || []).reduce((oldest: number, r: any) => {
+      const enriched = (previewData || []).map((r: any) => ({
+        ...r,
+        outstanding: Math.max((parseFloat(r.total) || 0) - (parseFloat(r.paid_amount) || 0), 0),
+      })).filter(r => r.outstanding > 0)
+
+      const totalOverdue = enriched.reduce(
+        (s: number, r: any) => s + r.outstanding, 0,
+      )
+      const overdueCount = enriched.length
+      const oldestDue = enriched.reduce((oldest: number, r: any) => {
         const d = r.due_at ? new Date(r.due_at).getTime() : now.getTime()
         return d < oldest ? d : oldest
       }, now.getTime())
 
-      const samples = (previewData || []).slice(0, 3).map((r: any, i: number) => ({
+      const samples = enriched.slice(0, 3).map((r: any, i: number) => ({
         customer: `Customer ${String.fromCharCode(65 + i)}`,
-        amount: parseFloat(r.outstanding_amount) || 0,
+        amount: r.outstanding,
         daysOverdue: r.due_at
           ? Math.floor((now.getTime() - new Date(r.due_at).getTime()) / (1000 * 60 * 60 * 24))
           : 0,
