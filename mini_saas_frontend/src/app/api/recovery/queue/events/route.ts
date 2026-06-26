@@ -16,6 +16,15 @@ const VALID_EVENTS = new Set([
   'QUEUE_COMPLETED',
 ])
 
+const REASON_LABELS: Record<string, string> = {
+  VIEW_QUEUE: 'Merchant viewed the recovery queue',
+  SEND_REMINDER: 'Merchant triggered a reminder',
+  MARK_PROMISE: 'Merchant recorded a promise to pay',
+  RECORD_PAYMENT: 'Merchant recorded a payment',
+  OPEN_HISTORY: 'Merchant viewed case history',
+  QUEUE_COMPLETED: 'Merchant completed all queue actions',
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyRequest(request)
@@ -32,12 +41,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Invalid event type: ${eventType}` }, { status: 400 })
     }
 
+    const caseId = ((metadata?.caseId as string) || '').trim()
+    if (!caseId) {
+      // Queue-level events (VIEW_QUEUE, QUEUE_COMPLETED) without a case — skip
+      return NextResponse.json({ success: true })
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey)
-    const { error } = await supabase.from('recovery_queue_events').insert({
-      tenant_id: auth.tenantId,
-      customer_id: customerId || null,
+    const { error } = await supabase.from('recovery_case_events').insert({
+      case_id: caseId,
       event_type: eventType,
-      metadata: metadata || {},
+      reason: REASON_LABELS[eventType] || `Queue event: ${eventType}`,
+      trigger: metadata || {},
     })
 
     if (error) {

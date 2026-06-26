@@ -402,7 +402,7 @@ export default function RecoveryQueuePage() {
                         onSend={handleSend}
                         onPromise={(c) => { markActioned(c.customerId); setPromiseFor(c) }}
                         onPayment={(c) => { markActioned(c.customerId); setPaymentFor(c) }}
-                        onHistory={(c) => { trackQueueEvent(E.open_history, c.customerId); setHistoryFor(c) }}
+                        onHistory={(c) => { trackQueueEvent(E.open_history, c.customerId, { caseId: c.caseId }); setHistoryFor(c) }}
                         signalColor={signalColor(c)}
                         formatSignal={formatSignal(c)}
                       />
@@ -604,7 +604,7 @@ function CustomerCard({
       {/* Actions */}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
         <button
-          onClick={() => { trackQueueEvent(E.record_payment, c.customerId); onPayment(c) }}
+          onClick={() => { trackQueueEvent(E.record_payment, c.customerId, { caseId: c.caseId }); onPayment(c) }}
           disabled={isSending}
           className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all active:scale-[0.97]"
         >
@@ -624,7 +624,7 @@ function CustomerCard({
           Send Reminder
         </button>
         <button
-          onClick={() => { trackQueueEvent(E.mark_promise, c.customerId); onPromise(c) }}
+          onClick={() => { trackQueueEvent(E.mark_promise, c.customerId, { caseId: c.caseId }); onPromise(c) }}
           disabled={isSending}
           className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 text-xs font-semibold transition-all active:scale-[0.97] disabled:opacity-50"
         >
