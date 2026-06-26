@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     if (!gate.allowed) {
       const { data: previewData } = await supabaseAdmin
         .from('invoices')
-        .select('total, paid_amount, due_at, customer_id, customers!inner(customer_name)')
+        .select('total, paid_amount, due_at, customer_id, customer_name')
         .eq('tenant_id', tenantId!)
         .in('status', ['unpaid', 'overdue', 'partial'])
         .order('due_at', { ascending: true })
