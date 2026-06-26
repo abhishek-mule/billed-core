@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
-    const { error } = await supabase.from('recovery_case_events').insert({
+    const { error } = await supabase.from('recovery_queue_events').insert({
       tenant_id: auth.tenantId,
       customer_id: customerId || null,
       event_type: eventType,
