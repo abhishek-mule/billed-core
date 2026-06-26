@@ -206,13 +206,14 @@ export default function BillZoHome() {
         }
       }
 
+      const s = serverData.summary
       if (localOutstanding > 0 || localToday > 0 || localMonth > 0) {
         setSummary(prev => prev ? {
           ...prev,
-          todaySales: serverData.summary.todaySales + localToday,
-          monthSales: serverData.summary.monthSales + localMonth,
-          collectibleToday: (serverData.summary.collectibleToday || 0) + localOutstanding,
-          activeCases: (serverData.summary.activeCases || 0) + localCaseCount,
+          todaySales: (s?.todaySales || 0) + localToday,
+          monthSales: (s?.monthSales || 0) + localMonth,
+          collectibleToday: (s?.collectibleToday || 0) + localOutstanding,
+          activeCases: (s?.activeCases || 0) + localCaseCount,
         } : null)
       }
 
