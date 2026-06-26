@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Phone, MessageSquare, MapPin, Hash, Plus, CreditCard, Loader2,
   ExternalLink, Receipt, Calendar, Settings2, CheckCircle2, AlertCircle, RefreshCw,
-  Mail, MoreHorizontal, Wallet, TrendingUp, Hand, CalendarClock,
+  Mail, MoreHorizontal, Wallet, TrendingUp, Hand, CalendarClock, IndianRupee,
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
@@ -330,6 +330,40 @@ export default function PartyDetailPage() {
           </div>
         </div>
 
+        {/* Udhar Summary Card */}
+        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <IndianRupee size={14} />
+            Udhar Summary
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Invoices</p>
+              <p className="text-lg font-bold">{unpaidInvoices.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Oldest Due</p>
+              <p className="text-lg font-bold">
+                {(() => {
+                  const oldest = unpaidInvoices.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
+                  if (!oldest) return '—'
+                  const days = Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                  return `${days}d`
+                })()}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Lifetime</p>
+              <p className="text-lg font-bold">{formatINR(totalInvoiced)}</p>
+            </div>
+          </div>
+          {pending > 0 && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-amber-600">{formatINR(pending)}</span> outstanding across {unpaidInvoices.length} invoice{unpaidInvoices.length !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
+
         {/* Communication Timeline */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="p-4 space-y-3">
@@ -417,6 +451,28 @@ export default function PartyDetailPage() {
                 <p className="text-xs text-muted-foreground text-center py-2">No activity yet</p>
               )}
             </div>
+          </div>
+
+          {/* Status indicator */}
+          <div className="border-t border-border px-4 py-3 bg-muted/30">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-medium">Current Status</span>
+              <span className={`font-semibold flex items-center gap-1 ${
+                pending === 0 ? 'text-emerald-600' : unpaidInvoices.length > 0 ? 'text-amber-600' : 'text-muted-foreground'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  pending === 0 ? 'bg-emerald-500' : unpaidInvoices.length > 0 ? 'bg-amber-500' : 'bg-muted-foreground'
+                }`} />
+                {pending === 0 ? 'All Paid' : unpaidInvoices.length > 0 ? `${unpaidInvoices.length} unpaid` : 'Inactive'}
+              </span>
+            </div>
+            {pending > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {unpaidInvoices.some((i: any) => i.nextRecoveryAt)
+                  ? `Next action: ${new Date(unpaidInvoices.find((i: any) => i.nextRecoveryAt)?.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : 'No reminder scheduled'}
+              </p>
+            )}
           </div>
 
           {/* Quick Actions */}

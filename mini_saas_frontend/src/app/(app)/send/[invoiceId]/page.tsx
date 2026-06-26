@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import {
-  ArrowLeft, Phone, User, CheckCircle2,
+  ArrowLeft, Phone, CheckCircle2,
   Loader2, AlertTriangle, Send, IndianRupee,
   Clock, ExternalLink, FileText, CreditCard,
-  Bell, Ban, MessageSquare, Hand,
+  Bell, MessageSquare, Hand,
   CalendarClock, Copy, Check,
-  MoreHorizontal, X,
+  Download, Repeat, Sun, Sunrise, Sunset, Moon,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { db } from "@/lib/billzo/db"
@@ -32,6 +32,39 @@ interface InvoiceDataFull {
 }
 
 type ActionView = 'main' | 'send_now' | 'schedule_promise' | 'schedule_reminder' | 'mark_paid'
+
+const TIME_LABELS: Record<string, string> = {
+  morning: 'Morning (9 AM)',
+  afternoon: 'Afternoon (2 PM)',
+  evening: 'Evening (6 PM)',
+  night: 'Night (9 PM)',
+}
+
+const TIME_ICONS: Record<string, any> = {
+  morning: Sunrise,
+  afternoon: Sun,
+  evening: Sunset,
+  night: Moon,
+}
+
+function getNextSunday(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7))
+  return d.toISOString().split('T')[0]
+}
+
+function getDefaultTiming(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'afternoon'
+  if (h < 17) return 'evening'
+  return 'night'
+}
+
+function getTomorrow(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
 
 export default function InvoiceSendPage() {
   const router = useRouter()
@@ -56,6 +89,8 @@ export default function InvoiceSendPage() {
   const [promiseAmount, setPromiseAmount] = useState(0)
   const [promiseDate, setPromiseDate] = useState("")
   const [promiseTime, setPromiseTime] = useState("evening")
+  const [promiseRemindWhen, setPromiseRemindWhen] = useState("at_promise_time")
+  const [promiseAutoFollowup, setPromiseAutoFollowup] = useState(true)
   const [promiseNotes, setPromiseNotes] = useState("")
   const [promiseSaving, setPromiseSaving] = useState(false)
   const [promiseSaved, setPromiseSaved] = useState(false)
@@ -63,22 +98,17 @@ export default function InvoiceSendPage() {
   // Schedule fields
   const [scheduleDate, setScheduleDate] = useState("")
   const [scheduleTime, setScheduleTime] = useState("18:30")
+  const [scheduleRepeat, setScheduleRepeat] = useState("once")
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleSaved, setScheduleSaved] = useState(false)
 
   // Send flow fields
   const [includePaymentLink, setIncludePaymentLink] = useState(true)
   const [customMessage, setCustomMessage] = useState("")
+  const [showMessagePreview, setShowMessagePreview] = useState(false)
 
   const isUdhar = paymentMethod === "udhar" || (invoice ? invoice.status !== "paid" && invoice.paidAmount === 0 : false)
   const totalExposure = invoice ? invoice.total + customerOutstanding : 0
-
-  // Pre-fill promise date to upcoming Sunday
-  function getNextSunday(): string {
-    const d = new Date()
-    d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7))
-    return d.toISOString().split('T')[0]
-  }
 
   const loadData = useCallback(async () => {
     if (!invoiceId) { setError("No invoice ID"); setLoading(false); return }
@@ -87,7 +117,6 @@ export default function InvoiceSendPage() {
       if (!inv) { setError("Invoice not found"); setLoading(false); return }
 
       const items = await db().invoiceItems.where("invoiceId").equals(invoiceId).toArray()
-      const outstanding = (inv.total || 0) - (inv.paidAmount || 0)
 
       const allUnpaid = await db().invoices
         .where("customerId").equals(inv.customerId)
@@ -157,21 +186,23 @@ export default function InvoiceSendPage() {
     }
   }
 
-  const buildMessage = (): string => {
+  const buildMessage = (withLink?: string): string => {
     const shopName = getCookie("bz_tenant_name") || "My Shop"
     const inv = invoice
     if (!inv) return ""
-
     if (customMessage) return customMessage
 
+    const link = withLink || (includePaymentLink && paymentLinkUrl ? paymentLinkUrl : null)
     const paymentNote = isUdhar
-      ? paymentLinkUrl
-        ? `\n\nPay here: ${paymentLinkUrl}`
+      ? link
+        ? `\n\nPay here: ${link}`
         : ""
       : "\n\nPayment received. Thank you!"
 
     return `Namaste ${inv.customerName},\n\nYour invoice ${inv.invoiceNumber || inv.id.slice(0, 8)} of ${formatINR(inv.total)} is ready.${paymentNote}\n\nThank you,\n${shopName}`
   }
+
+  const getDefaultMessage = buildMessage()
 
   const handleSendNow = async () => {
     if (!invoice) return
@@ -187,7 +218,8 @@ export default function InvoiceSendPage() {
         await generatePaymentLink()
       }
 
-      const message = buildMessage()
+      const finalLink = includePaymentLink && isUdhar ? paymentLinkUrl : null
+      const message = buildMessage(finalLink || undefined)
       const businessName = getCookie("bz_tenant_name") || "My Shop"
       const subtotal = invoice.items.reduce((s, i) => s + (i.price * i.qty * 100 / (100 + (i.gstRate || 0))), 0)
       const waData: InvoiceData = {
@@ -271,6 +303,7 @@ export default function InvoiceSendPage() {
           payload: {
             dueDate: dueDate.toISOString(),
             amount: invoice.total - invoice.paidAmount,
+            repeat: scheduleRepeat !== 'once' ? scheduleRepeat : undefined,
             notes: customMessage || undefined,
           },
         }),
@@ -304,8 +337,7 @@ export default function InvoiceSendPage() {
     setPromiseSaving(true)
     setError(null)
     try {
-      const timeMap: Record<string, string> = { morning: '09:00', afternoon: '14:00', evening: '18:00', night: '21:00' }
-      const [h, m] = (timeMap[promiseTime] || '18:00').split(':').map(Number)
+      const [h, m] = getTimeFromTiming(promiseTime).split(':').map(Number)
       const dueDate = new Date(promiseDate)
       dueDate.setHours(h, m, 0, 0)
 
@@ -320,10 +352,28 @@ export default function InvoiceSendPage() {
           payload: {
             dueDate: dueDate.toISOString(),
             amount: promiseAmount,
+            remindWhen: promiseRemindWhen,
+            autoFollowup: promiseAutoFollowup,
             notes: promiseNotes || `Promise on invoice ${invoice.invoiceNumber || invoice.id.slice(0, 8)}`,
           },
         }),
       })
+
+      if (promiseAutoFollowup) {
+        await fetch("/api/recovery/case", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            invoiceId: invoice.id,
+            customerId: invoice.customerId,
+            amount: invoice.total - invoice.paidAmount,
+            customerName: invoice.customerName,
+            customerPhone: customerPhone || undefined,
+            autoFollowup: true,
+          }),
+        })
+      }
 
       setPromiseSaved(true)
       setTimeout(() => { setPromiseSaved(false); setActionView('main') }, 2000)
@@ -346,7 +396,30 @@ export default function InvoiceSendPage() {
     }
   }
 
-  // ────────────────────────────────────
+  function getTimeFromTiming(timing: string): string {
+    const map: Record<string, string> = { morning: '09:00', afternoon: '14:00', evening: '18:00', night: '21:00' }
+    return map[timing] || '18:00'
+  }
+
+  function formatTimeFromTiming(timing: string): string {
+    const time = getTimeFromTiming(timing)
+    const [h, m] = time.split(':').map(Number)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
+  }
+
+  function getPromiseRemindLabel(): string {
+    const labels: Record<string, string> = {
+      at_promise_time: `At promise time (${formatTimeFromTiming(promiseTime)})`,
+      thirty_min_before: '30 min before',
+      one_hour_before: '1 hour before',
+      next_morning: 'Next morning (9 AM)',
+    }
+    return labels[promiseRemindWhen] || labels.at_promise_time
+  }
+
+  // ──────────────────── LOADING / ERROR / NULL ────────────────────
 
   if (loading) {
     return (
@@ -370,25 +443,25 @@ export default function InvoiceSendPage() {
   }
 
   if (!invoice) return null
-  const inv = invoice
 
-  // ──────────────────── SUB-VIEWS ────────────────────
+  // ──────────────────── MAIN VIEW ────────────────────
 
   function renderMainView() {
     const i = invoice
     if (!i) return null
+    const phoneVerified = !!customerPhone
+
     return (
-      <>
-        {/* Success header */}
+      <div className="space-y-4">
+        {/* Success header with amount */}
         <div className="rounded-xl bg-success/10 border border-success/20 p-6 text-center">
-          <CheckCircle2 className="h-10 w-10 text-success mx-auto mb-2" />
-          <h1 className="text-xl font-bold">Invoice Created</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            #{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()} &middot; {formatINR(i.total)}
-          </p>
+          <CheckCircle2 className="h-8 w-8 text-success mx-auto mb-2" />
+          <h1 className="text-lg font-bold">Invoice Created</h1>
+          <p className="text-xl font-bold mt-1 text-foreground">{formatINR(i.total)}</p>
+          <p className="text-xs text-muted-foreground">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
         </div>
 
-        {/* Customer summary */}
+        {/* Customer & Phone */}
         <section className="bg-card border border-border rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
@@ -400,6 +473,7 @@ export default function InvoiceSendPage() {
                 <p className="text-xs text-amber-600">{formatINR(customerOutstanding)} previous outstanding</p>
               )}
             </div>
+            {phoneVerified && <CheckCircle2 size={16} className="text-emerald-500" />}
           </div>
           <div className="flex items-center gap-2">
             <Phone size={14} className="text-muted-foreground shrink-0" />
@@ -410,31 +484,151 @@ export default function InvoiceSendPage() {
               type="tel"
               className="flex-1 text-sm bg-transparent border-b border-border focus:outline-none focus:border-primary py-1 placeholder:text-muted-foreground/60"
             />
+            {phoneVerified && <span className="text-[10px] text-emerald-600 font-medium shrink-0">Verified</span>}
           </div>
         </section>
 
-        {/* Invoice summary */}
-        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <FileText size={14} />
-            Invoice Summary
+        {/* Invoice summary — compact sidebar */}
+        <section className="bg-card border border-border rounded-xl p-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground text-xs">Items</span><p className="font-medium">{i.items.length} products</p></div>
+            <div className="text-right"><span className="text-muted-foreground text-xs">Total</span><p className="font-bold text-lg">{formatINR(i.total)}</p></div>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs">Items</p>
-              <p className="font-medium">{i.items.length} products</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Total</p>
-              <p className="font-bold text-lg">{formatINR(i.total)}</p>
-            </div>
-          </div>
-          <div className={`text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 ${
+          <div className={`mt-2 text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 ${
             isUdhar ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
           }`}>
             {isUdhar ? "UDHARI" : "PAID"}
           </div>
         </section>
+
+        {/* ────── Recommended Action ────── */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Recommended Action</p>
+          <button
+            onClick={() => {
+              setShowMessagePreview(true)
+              setActionView('send_now')
+            }}
+            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+          >
+            <Send size={18} />
+            Send WhatsApp
+          </button>
+        </div>
+
+        {/* ────── Communication ────── */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Communication</p>
+          <div className="grid grid-cols-2 gap-2">
+            <SecondaryAction
+              icon={CalendarClock}
+              label="Schedule Reminder"
+              onClick={() => {
+                setScheduleDate(getTomorrow())
+                setScheduleTime("18:30")
+                setActionView('schedule_reminder')
+              }}
+            />
+            <SecondaryAction
+              icon={Hand}
+              label="Record Promise"
+              onClick={() => setActionView('schedule_promise')}
+            />
+          </div>
+        </div>
+
+        {/* ────── Payments ────── */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Payments</p>
+          <div className="grid grid-cols-2 gap-2">
+            <SecondaryAction
+              icon={CheckCircle2}
+              label="Record Payment"
+              onClick={handleMarkPaid}
+            />
+            <SecondaryAction
+              icon={paymentLinkLoading ? Loader2 : (paymentLinkUrl ? Check : ExternalLink)}
+              label={paymentLinkUrl ? "Copy Payment Link" : "Create Payment Link"}
+              description={paymentLinkUrl ? "Tap to copy" : "UPI, card, bank transfer"}
+              onClick={async () => {
+                if (paymentLinkUrl) {
+                  copyPaymentLink()
+                } else {
+                  await generatePaymentLink()
+                }
+              }}
+              loading={paymentLinkLoading}
+            />
+          </div>
+          {paymentLinkUrl && copied && (
+            <p className="text-xs text-emerald-600 font-medium text-center">Copied!</p>
+          )}
+        </div>
+
+        {/* ────── Documents ────── */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Documents</p>
+          <div className="grid grid-cols-2 gap-2">
+            <SecondaryAction
+              icon={FileText}
+              label="Share PDF"
+              onClick={() => window.open(`/api/invoices/${i.id}/pdf`, '_blank')}
+            />
+            <SecondaryAction
+              icon={Download}
+              label="Download PDF"
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = `/api/invoices/${i.id}/pdf`
+                a.download = `invoice-${i.invoiceNumber || i.id}.pdf`
+                a.click()
+              }}
+            />
+          </div>
+        </div>
+
+        {/* ────── Current Status ────── */}
+        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Current Status</p>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">WhatsApp Send</span>
+              <span className={`text-xs font-medium ${phoneVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {phoneVerified ? 'Ready' : 'Add phone'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Reminder Scheduled</span>
+              <span className="text-xs text-muted-foreground">No</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Promise Recorded</span>
+              <span className="text-xs text-muted-foreground">No</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Payment Link</span>
+              <span className={`text-xs font-medium ${paymentLinkUrl ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {paymentLinkUrl ? 'Ready' : 'Not created'}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Bottom nav */}
+        <div className="flex gap-3 pt-1">
+          <Link
+            href="/dashboard"
+            className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-center hover:bg-secondary transition-colors"
+          >
+            Dashboard
+          </Link>
+          <Link
+            href={`/invoices/${invoiceId}`}
+            className="flex-1 py-3 rounded-xl bg-foreground text-background text-sm font-semibold text-center hover:opacity-90 transition-all"
+          >
+            View Invoice
+          </Link>
+        </div>
 
         {/* Credit exposure warning */}
         {totalExposure > 50000 && isUdhar && (
@@ -446,154 +640,100 @@ export default function InvoiceSendPage() {
             </div>
           </div>
         )}
-
-        {/* Action Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <ActionButton
-            icon={Send}
-            label="Send Now"
-            description="WhatsApp invoice to customer"
-            onClick={() => setActionView('send_now')}
-            color="text-primary"
-            bg="bg-primary/5 hover:bg-primary/10"
-          />
-          <ActionButton
-            icon={CalendarClock}
-            label="Schedule Reminder"
-            description="Set a date & time to send"
-            onClick={() => {
-              const d = new Date()
-              d.setDate(d.getDate() + 1)
-              setScheduleDate(d.toISOString().split('T')[0])
-              setScheduleTime("18:30")
-              setActionView('schedule_reminder')
-            }}
-            color="text-violet-600"
-            bg="bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-100 dark:hover:bg-violet-950/50"
-          />
-          <ActionButton
-            icon={Hand}
-            label="Record Promise"
-            description="Customer committed to pay"
-            onClick={() => setActionView('schedule_promise')}
-            color="text-amber-600"
-            bg="bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50"
-          />
-          <ActionButton
-            icon={CheckCircle2}
-            label="Mark Paid"
-            description="Record as paid now"
-            onClick={handleMarkPaid}
-            color="text-emerald-600"
-            bg="bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
-          />
-          <ActionButton
-            icon={FileText}
-            label="Share PDF"
-            description="Download or share invoice PDF"
-            onClick={() => {
-              const pdfUrl = `/api/invoices/${i.id}/pdf`
-              window.open(pdfUrl, '_blank')
-            }}
-            color="text-blue-600"
-            bg="bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50"
-          />
-          {isUdhar && (
-            <ActionButton
-              icon={paymentLinkLoading ? Loader2 : (paymentLinkUrl ? Check : CreditCard)}
-              label={paymentLinkUrl ? "Payment Link Ready" : "Create Payment Link"}
-              description={paymentLinkUrl ? "Copy link to share" : "UPI, card, bank transfer"}
-              onClick={async () => {
-                if (paymentLinkUrl) {
-                  copyPaymentLink()
-                } else {
-                  await generatePaymentLink()
-                }
-              }}
-              loading={paymentLinkLoading}
-              color="text-indigo-600"
-              bg="bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50"
-            />
-          )}
-        </div>
-
-        {paymentLinkUrl && copied && (
-          <div className="text-xs text-center text-emerald-600 font-medium">Payment link copied!</div>
-        )}
-
-        {/* Bottom: Done / View Invoice */}
-        <div className="flex gap-3 pt-2">
-          <Link
-            href="/dashboard"
-            className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-center hover:bg-secondary transition-colors"
-          >
-            Go to Dashboard
-          </Link>
-          <Link
-            href={`/invoices/${invoiceId}`}
-            className="flex-1 py-3 rounded-xl bg-foreground text-background text-sm font-semibold text-center hover:opacity-90 transition-all"
-          >
-            View Invoice
-          </Link>
-        </div>
-      </>
+      </div>
     )
   }
 
   // ────── SEND NOW VIEW ──────
 
   function renderSendNowView() {
+    const i = invoice
+    if (!i) return null
     return (
       <>
         <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back to actions
+          <ArrowLeft size={16} /> Back
         </button>
 
         <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-center">
           <Send className="h-8 w-8 text-primary mx-auto mb-2" />
-          <h2 className="text-lg font-bold">Send Invoice via WhatsApp</h2>
+          <h2 className="text-lg font-bold">Send Invoice on WhatsApp</h2>
         </div>
 
         {!customerPhone && (
           <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200">
-            No customer phone. Enter number above to send directly, or the invoice will be sent to <strong>your</strong> WhatsApp to forward.
+            Enter customer number above to send directly, or invoice goes to <strong>your</strong> WhatsApp to forward.
           </div>
         )}
 
-        <section className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <label className="flex items-center justify-between cursor-pointer">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                  includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
-                }`}
-                onClick={() => setIncludePaymentLink(!includePaymentLink)}
-              >
-                {includePaymentLink && <CheckCircle2 size={14} className="text-white" />}
+        {/* Message preview — shown directly before send */}
+        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Message Preview</p>
+            <button
+              onClick={() => setCustomMessage(getDefaultMessage !== customMessage ? '' : ' ')}
+              className="text-[10px] font-medium text-primary hover:underline"
+            >
+              {customMessage ? 'Reset' : 'Edit'}
+            </button>
+          </div>
+          <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <MessageSquare size={14} className="text-green-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">To: {i.customerName}</p>
+                <p className="text-xs text-green-700 dark:text-green-300 whitespace-pre-wrap">
+                  {customMessage || getDefaultMessage}
+                </p>
+                {isUdhar && includePaymentLink && (
+                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                    <ExternalLink size={10} />
+                    {paymentLinkUrl ? '✓ Payment link included' : 'Payment link will be attached'}
+                  </p>
+                )}
               </div>
-              <span className="text-sm font-medium">Include Payment Link</span>
             </div>
-          </label>
-          {includePaymentLink && paymentLinkUrl && (
-            <div className="flex items-center gap-2 text-xs text-primary font-medium">
-              <ExternalLink size={12} />
-              <span className="truncate flex-1">{paymentLinkUrl}</span>
-              <button onClick={copyPaymentLink} className="shrink-0 hover:text-primary/80">
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-              </button>
-            </div>
+          </div>
+          {customMessage && (
+            <textarea
+              value={customMessage}
+              onChange={e => setCustomMessage(e.target.value)}
+              className="w-full text-xs bg-muted/50 rounded-lg p-3 border border-border focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              rows={4}
+              placeholder="Type your message..."
+            />
           )}
         </section>
 
-        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Message</div>
-          <textarea
-            value={customMessage || buildMessage()}
-            onChange={e => setCustomMessage(e.target.value)}
-            className="w-full text-sm bg-muted/50 rounded-lg p-3 border border-border focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-            rows={5}
-          />
-        </section>
+        {/* Payment link — bundled into send, not separate */}
+        {isUdhar && (
+          <section className="bg-card border border-border rounded-xl p-4 space-y-2">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                    includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
+                  }`}
+                  onClick={() => setIncludePaymentLink(!includePaymentLink)}
+                >
+                  {includePaymentLink && <CheckCircle2 size={14} className="text-white" />}
+                </div>
+                <span className="text-sm font-medium">Include Payment Link</span>
+              </div>
+              {paymentLinkLoading && <Loader2 size={14} className="animate-spin" />}
+            </label>
+            {includePaymentLink && paymentLinkUrl && (
+              <button
+                onClick={copyPaymentLink}
+                className="flex items-center gap-2 text-xs text-primary font-medium"
+              >
+                <Copy size={12} />
+                {copied ? 'Copied!' : 'Copy payment link'}
+              </button>
+            )}
+            <p className="text-[10px] text-muted-foreground">Customer can pay via UPI, Card, or Bank Transfer.</p>
+          </section>
+        )}
 
         <button
           onClick={handleSendNow}
@@ -601,13 +741,13 @@ export default function InvoiceSendPage() {
           className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
         >
           {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-          {sending ? "Sending..." : "Send Now"}
+          {sending ? 'Sending...' : 'Send Now'}
         </button>
       </>
     )
   }
 
-  // ────── SCHEDULE PROMISE VIEW ──────
+  // ────── PROMISE VIEW ──────
 
   function renderPromiseView() {
     if (promiseSaved) {
@@ -616,7 +756,11 @@ export default function InvoiceSendPage() {
           <Hand className="h-12 w-12 text-success mx-auto" />
           <h2 className="text-xl font-bold">Promise Saved</h2>
           <p className="text-sm text-muted-foreground">
-            Next reminder: {new Date(promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {promiseTime === 'morning' ? '9:00 AM' : promiseTime === 'afternoon' ? '2:00 PM' : promiseTime === 'evening' ? '6:00 PM' : '9:00 PM'}
+            {new Date(promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {TIME_LABELS[promiseTime]}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Reminder: {getPromiseRemindLabel()}
+            {promiseAutoFollowup && ' · Auto follow-up enabled'}
           </p>
           <p className="text-xs text-muted-foreground">Status: Awaiting promise</p>
         </div>
@@ -626,12 +770,12 @@ export default function InvoiceSendPage() {
     return (
       <>
         <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back to actions
+          <ArrowLeft size={16} /> Back
         </button>
 
         <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4">
           <h2 className="font-bold flex items-center gap-2"><Hand size={18} className="text-amber-600" /> Promise to Pay</h2>
-          <p className="text-xs text-muted-foreground mt-1">Customer said they will pay. We'll remind them on the promise date.</p>
+          <p className="text-xs text-muted-foreground mt-1">Customer committed to pay. BillZo will remind them.</p>
         </div>
 
         <section className="bg-card border border-border rounded-xl p-4 space-y-4">
@@ -659,16 +803,56 @@ export default function InvoiceSendPage() {
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Expected Time</label>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {['morning', 'afternoon', 'evening', 'night'].map(t => {
+                const Icon = TIME_ICONS[t]
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setPromiseTime(t)}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
+                      promiseTime === t
+                        ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-700'
+                        : 'border-border text-muted-foreground hover:border-amber-200'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {TIME_LABELS[t].split(' (')[0]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Remind When?</label>
             <select
-              value={promiseTime}
-              onChange={e => setPromiseTime(e.target.value)}
+              value={promiseRemindWhen}
+              onChange={e => setPromiseRemindWhen(e.target.value)}
               className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
             >
-              <option value="morning">Morning (9 AM)</option>
-              <option value="afternoon">Afternoon (2 PM)</option>
-              <option value="evening">Evening (6 PM)</option>
-              <option value="night">Night (9 PM)</option>
+              <option value="at_promise_time">At promise time ({formatTimeFromTiming(promiseTime)})</option>
+              <option value="thirty_min_before">30 minutes before</option>
+              <option value="one_hour_before">1 hour before</option>
+              <option value="next_morning">Next morning (9 AM)</option>
             </select>
+          </div>
+          <div>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                    promiseAutoFollowup ? "bg-amber-600 border-amber-600" : "border-muted-foreground/30"
+                  }`}
+                  onClick={() => setPromiseAutoFollowup(!promiseAutoFollowup)}
+                >
+                  {promiseAutoFollowup && <CheckCircle2 size={14} className="text-white" />}
+                </div>
+                <div>
+                  <span className="text-sm font-medium">Auto Follow-up</span>
+                  <p className="text-[10px] text-muted-foreground">If unpaid, send reminder next day</p>
+                </div>
+              </div>
+            </label>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Notes (optional)</label>
@@ -688,7 +872,7 @@ export default function InvoiceSendPage() {
           className="w-full py-4 bg-amber-600 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-amber-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {promiseSaving ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
-          {promiseSaving ? "Saving..." : "Save Promise"}
+          {promiseSaving ? 'Saving...' : 'Save Promise'}
         </button>
       </>
     )
@@ -697,6 +881,8 @@ export default function InvoiceSendPage() {
   // ────── SCHEDULE REMINDER VIEW ──────
 
   function renderScheduleReminderView() {
+    const i = invoice
+    if (!i) return null
     if (scheduleSaved) {
       return (
         <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center space-y-3">
@@ -705,6 +891,11 @@ export default function InvoiceSendPage() {
           <p className="text-sm text-muted-foreground">
             {new Date(scheduleDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {scheduleTime}
           </p>
+          {scheduleRepeat !== 'once' && (
+            <p className="text-xs text-muted-foreground">
+              Repeats {scheduleRepeat === 'daily' ? 'daily' : scheduleRepeat === 'weekly' ? 'weekly' : 'every 2 days'}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">Status: Scheduled</p>
         </div>
       )
@@ -713,12 +904,12 @@ export default function InvoiceSendPage() {
     return (
       <>
         <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back to actions
+          <ArrowLeft size={16} /> Back
         </button>
 
         <div className="rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 p-4">
           <h2 className="font-bold flex items-center gap-2"><CalendarClock size={18} className="text-violet-600" /> Schedule Reminder</h2>
-          <p className="text-xs text-muted-foreground mt-1">Set when to remind this customer. BillZo handles rate limits.</p>
+          <p className="text-xs text-muted-foreground mt-1">BillZo sends at the scheduled time. Rate limits handled automatically.</p>
         </div>
 
         <section className="bg-card border border-border rounded-xl p-4 space-y-4">
@@ -742,22 +933,46 @@ export default function InvoiceSendPage() {
             />
           </div>
           <div>
+            <label className="text-xs font-medium text-muted-foreground">Repeat</label>
+            <div className="grid grid-cols-4 gap-2 mt-1">
+              {[
+                { value: 'once', label: 'Once' },
+                { value: 'daily', label: 'Daily' },
+                { value: 'every_2_days', label: '2 Days' },
+                { value: 'weekly', label: 'Weekly' },
+              ].map(r => (
+                <button
+                  key={r.value}
+                  onClick={() => setScheduleRepeat(r.value)}
+                  className={`rounded-lg border py-2 text-xs font-medium transition-all ${
+                    scheduleRepeat === r.value
+                      ? 'border-violet-400 bg-violet-50 dark:bg-violet-950/30 text-violet-700'
+                      : 'border-border text-muted-foreground hover:border-violet-200'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               <MessageSquare size={14} />
               Message
             </div>
             <textarea
-              value={customMessage || buildMessage()}
+              value={customMessage || getDefaultMessage}
               onChange={e => setCustomMessage(e.target.value)}
               className="w-full text-sm bg-muted/50 rounded-lg p-3 border border-border focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              rows={4}
+              rows={3}
             />
           </div>
           <label className="flex items-center justify-between cursor-pointer">
             <div className="flex items-center gap-2">
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
-              }`}
+              <div
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                  includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
+                }`}
                 onClick={() => setIncludePaymentLink(!includePaymentLink)}
               >
                 {includePaymentLink && <CheckCircle2 size={14} className="text-white" />}
@@ -773,7 +988,7 @@ export default function InvoiceSendPage() {
           className="w-full py-4 bg-violet-600 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-violet-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {scheduleSaving ? <Loader2 size={18} className="animate-spin" /> : <CalendarClock size={18} />}
-          {scheduleSaving ? "Scheduling..." : "Schedule Reminder"}
+          {scheduleSaving ? 'Scheduling...' : 'Schedule Reminder'}
         </button>
       </>
     )
@@ -782,15 +997,15 @@ export default function InvoiceSendPage() {
   // ──────────────────── MAIN RENDER ────────────────────
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 pb-40 space-y-4">
+    <div className="max-w-lg mx-auto px-4 py-6 pb-10 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="p-2 -ml-2 rounded-lg hover:bg-secondary">
+        <button onClick={() => actionView !== 'main' ? setActionView('main') : router.back()} className="p-2 -ml-2 rounded-lg hover:bg-secondary">
           <ArrowLeft size={20} />
         </button>
-        <div>
-          <h1 className="text-lg font-bold">{actionView === 'main' ? 'Invoice' : 'Back to Actions'}</h1>
-        </div>
+        <h1 className="text-lg font-bold">
+          {actionView === 'main' ? '' : actionView === 'send_now' ? 'Send WhatsApp' : actionView === 'schedule_promise' ? 'Record Promise' : actionView === 'schedule_reminder' ? 'Schedule Reminder' : ''}
+        </h1>
       </div>
 
       {/* Error */}
@@ -801,7 +1016,6 @@ export default function InvoiceSendPage() {
         </div>
       )}
 
-      {/* Action-specific views */}
       {sent ? (
         <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center">
           <CheckCircle2 className="h-12 w-12 text-success mx-auto mb-2" />
@@ -828,38 +1042,36 @@ export default function InvoiceSendPage() {
   )
 }
 
-// ──────────────────── SUB-COMPONENTS ────────────────────
+// ──────────────────── SECONDARY ACTION BUTTON ────────────────────
 
-function ActionButton({
+function SecondaryAction({
   icon: Icon,
   label,
   description,
   onClick,
-  color,
-  bg,
   loading,
 }: {
   icon: any
   label: string
-  description: string
+  description?: string
   onClick: () => void
-  color: string
-  bg: string
   loading?: boolean
 }) {
   return (
     <button
       onClick={onClick}
       disabled={loading}
-      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl p-4 text-center transition-all active:scale-[0.98] border border-border ${bg} ${loading ? 'opacity-50' : ''}`}
+      className={`flex items-center gap-2 rounded-xl border border-border p-3 text-left transition-all hover:bg-muted active:scale-[0.98] ${loading ? 'opacity-50' : ''}`}
     >
       {loading ? (
-        <Loader2 size={22} className={`animate-spin ${color}`} />
+        <Loader2 size={18} className="animate-spin text-muted-foreground shrink-0" />
       ) : (
-        <Icon size={22} className={color} />
+        <Icon size={18} className="text-muted-foreground shrink-0" />
       )}
-      <span className="text-xs font-semibold">{label}</span>
-      <span className="text-[10px] text-muted-foreground leading-tight">{description}</span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {description && <p className="text-[10px] text-muted-foreground truncate">{description}</p>}
+      </div>
     </button>
   )
 }

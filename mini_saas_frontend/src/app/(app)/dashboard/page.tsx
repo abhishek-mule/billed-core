@@ -366,24 +366,34 @@ export default function BillZoHome() {
         <p className="text-4xl font-bold tabular-nums tracking-tight">
           {formatINR(summary.stuckMoneyTotal + summary.collectibleToday)}
         </p>
-        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10">
+        <div className="grid grid-cols-3 gap-4 mt-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Recoverable Today</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Today's Recovery</p>
+            <p className="text-lg font-bold mt-0.5">{formatINR(summary.totalCollectedToday)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Recoverable</p>
             <p className="text-lg font-bold mt-0.5">{formatINR(summary.collectibleToday)}</p>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Today&apos;s Actions</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Actions</p>
             <p className="text-lg font-bold mt-0.5">{summary.activeCases}</p>
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-white/10">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Collected Today</p>
-            <p className="text-lg font-bold mt-0.5">{formatINR(summary.totalCollectedToday)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Overdue</p>
+            <p className="text-lg font-bold mt-0.5">{formatINR(summary.stuckMoneyTotal)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Not Yet Due</p>
+            <p className="text-lg font-bold mt-0.5">{formatINR(summary.dueToday)}</p>
           </div>
         </div>
         <p className="text-xs text-white/50 mt-3">
           {summary.collectedAfterFollowup > 0
             ? `₹${summary.collectedAfterFollowup.toLocaleString('en-IN')} recovered this month`
-            : 'Total money your customers owe you'}
+            : 'Overdue vs upcoming — know exactly what to chase'}
         </p>
       </div>
 
