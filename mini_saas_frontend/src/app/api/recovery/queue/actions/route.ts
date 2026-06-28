@@ -135,7 +135,6 @@ export async function POST(request: NextRequest) {
     let recoveryCase: any = null
     if (action === 'schedule_reminder') {
       if (!customerId) {
-        // Fall back to invoice's customer_id
         const invoiceId = body.invoiceId || payload?.invoiceId
         if (invoiceId) {
           const { data: inv } = await supabase
@@ -146,17 +145,16 @@ export async function POST(request: NextRequest) {
           customerId = inv?.customer_id || undefined
         }
       }
-      if (!customerId) {
-        return errorResponse('customerId required for schedule_reminder', 400)
+      if (customerId) {
+        const { data: existingCase } = await supabase
+          .from('recovery_cases')
+          .select('*, customers(customer_name, phone)')
+          .eq('tenant_id', tid)
+          .eq('customer_id', customerId)
+          .limit(1)
+          .maybeSingle()
+        recoveryCase = existingCase
       }
-      const { data: existingCase } = await supabase
-        .from('recovery_cases')
-        .select('*, customers(customer_name, phone)')
-        .eq('tenant_id', tid)
-        .eq('customer_id', customerId)
-        .limit(1)
-        .maybeSingle()
-      recoveryCase = existingCase
     } else {
       if (!caseId) {
         return errorResponse('caseId required for this action', 400)
@@ -392,9 +390,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
       }
 
-      // Create recovery case if one doesn't exist
+      // Create recovery case if one doesn't exist (requires a customerId)
       let effectiveCaseId = recoveryCase?.id
-      if (!effectiveCaseId) {
+      if (!effectiveCaseId && customerId) {
         effectiveCaseId = crypto.randomUUID()
         const { error: createErr } = await supabase
           .from('recovery_cases')
@@ -430,7 +428,7 @@ export async function POST(request: NextRequest) {
         tenantId: tid,
         entityId: invoiceId,
         payload: {
-          customerId: recoveryCase?.customer_id || customerId,
+          customerId: recoveryCase?.customer_id || customerId || null,
           invoiceId,
           dueDate,
           repeat: payload?.repeat || 'once',
