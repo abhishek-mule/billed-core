@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyRequest } from '@/lib/billzo/api-middleware'
+import { verifyRequest, validateJsonBody } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,14 +30,17 @@ export async function POST(request: NextRequest) {
     const auth = await verifyRequest(request)
     if (auth.response) return auth.response
 
-    const body = await request.json()
-    const { eventType, customerId, metadata } = body as {
+    const body = await validateJsonBody<{
       eventType: string
       customerId?: string
       metadata?: Record<string, unknown>
-    }
+    }>(request, {
+      fields: { eventType: { required: true, type: 'string' } },
+    })
+    if (body.response) return body.response
+    const { eventType, customerId, metadata } = body.data!
 
-    if (!eventType || !VALID_EVENTS.has(eventType)) {
+    if (!VALID_EVENTS.has(eventType)) {
       return NextResponse.json({ error: `Invalid event type: ${eventType}` }, { status: 400 })
     }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,9 +9,13 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === 'production') {
       return NextResponse.json({ error: 'Not available in production' }, { status: 404 })
     }
-    const tenantId = request.cookies.get('bz_tenant')?.value
+    const secretKey = request.headers.get('x-dev-key')
+    if (secretKey !== process.env.DEV_API_KEY) {
+      return NextResponse.json({ error: 'Forbidden: Invalid or missing dev API key' }, { status: 403 })
+    }
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized — missing bz_tenant cookie. Visit /auth/resolve first.' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Update tenant plan to 'pro' in Supabase

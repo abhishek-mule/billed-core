@@ -109,7 +109,7 @@ export function PaymentModal({
   async function handleNoCommit() {
     setFollowUpSaving(true)
     try {
-      await fetch("/api/recovery/queue/actions", {
+      const res = await fetch("/api/recovery/queue/actions", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -120,10 +120,12 @@ export function PaymentModal({
           payload: { delayDays: 3 },
         }),
       })
+      if (res.ok) {
+        setStep('followup_done')
+        setTimeout(() => { onSuccess(); onClose() }, 1200)
+      }
     } catch { } finally {
       setFollowUpSaving(false)
-      setStep('followup_done')
-      setTimeout(() => { onSuccess(); onClose() }, 1200)
     }
   }
 

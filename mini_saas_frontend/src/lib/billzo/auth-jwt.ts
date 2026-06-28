@@ -6,10 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 function requireSecret(): string {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('[BillZo] JWT_SECRET env var is required in production')
-  }
-  return 'dev-secret-do-not-use-in-production'
+  throw new Error('[BillZo] JWT_SECRET env var is required')
 }
 
 const HEADER_B64 = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
@@ -261,9 +258,8 @@ export function getVerifiedTenantIdFromRequest(request: NextRequest): string | n
   const payload = getAuthPayloadFromRequest(request)
   if (!payload) return null
 
-  const cookieTenantId = getTenantFromRequest(request)
-  if (payload.tenantId && cookieTenantId && payload.tenantId !== cookieTenantId) return null
-  return payload.tenantId || cookieTenantId || null
+  if (payload.tenantId) return payload.tenantId
+  return null
 }
 
 export function getVerifiedUserIdFromRequest(request: NextRequest): string | null {

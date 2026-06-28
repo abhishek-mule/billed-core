@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       .select('billzo_message_id, invoice_id, tenant_id')
       .or(`provider_message_id.eq.${safeId},id.eq.${safeId}`)
       .limit(1)
+    // Note: safeId is sanitized to [a-zA-Z0-9_\-\.] above — prevents Supabase filter injection
 
     if (!existing || existing.length === 0) {
       console.log('[WhatsAppWebhook] No existing event found, storing as new message')

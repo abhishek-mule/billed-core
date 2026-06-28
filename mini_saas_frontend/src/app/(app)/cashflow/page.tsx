@@ -127,11 +127,15 @@ export default function CashflowPage() {
             vipCustomers: 0,
             blockedRemindersToday: 0,
             stuckMoneyTotal: preview.totalOverdue || 0,
-            customersNeedingAction: 0,
-            collectedAfterFollowup: 0,
-            casesResolvedThisMonth: 0,
-            priorityCases: [],
-          } as QueueApiSummary)
+          customersNeedingAction: 0,
+          collectedAfterFollowup: 0,
+          casesResolvedThisMonth: 0,
+          totalActions: 0,
+          completedActions: 0,
+          pendingActions: 0,
+          promiseSummary: { dueToday: 0, overdue: 0, upcoming: 0 },
+          priorityCases: [],
+        } as QueueApiSummary)
           setPriorityItem(null)
           setRecentEvents([])
         } else {

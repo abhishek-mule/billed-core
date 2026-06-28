@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,17 +20,20 @@ function money(value: unknown): string {
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const invoiceId = params.id
-    const tenantId = request.nextUrl.searchParams.get('tenantId')
+    const tenantId = getVerifiedTenantIdFromRequest(request)
+    if (!tenantId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    const query = supabase
+    const invoiceId = params.id
+
+    const { data: invoice, error } = await supabase
       .from('invoices')
       .select('*')
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .single()
 
-    if (tenantId) query.eq('tenant_id', tenantId)
-
-    const { data: invoice, error } = await query.single()
     if (error || !invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }

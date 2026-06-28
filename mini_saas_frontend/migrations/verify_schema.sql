@@ -12,7 +12,7 @@ WITH expected_tables (tbl) AS (
     ('whatsapp_events'), ('whatsapp_messages'),
     ('recovery_cases'), ('recovery_attributions'),
     ('recovery_decisions'), ('recovery_attempts'),
-    ('recovery_case_events'), ('recovery_queue_events'),
+    ('recovery_case_events'), ('recovery_queue_events'), -- SUPERSEDED — replaced by recovery_case_events
     ('outbox'), ('processed_jobs'),
     ('device_tokens'), ('queue'),
     ('feature_trials'), ('trial_previews'),
@@ -71,5 +71,5 @@ ORDER BY ordinal_position;
 --   030_fix_outbox_schema.sql         → outbox
 --   047_feature_trials.sql            → feature_trials
 --   048_trial_previews.sql            → trial_previews
---   051_recovery_queue_events.sql     → recovery_queue_events
+--   051_recovery_queue_events.sql     → recovery_queue_events (SUPERSEDED — use recovery_case_events instead)
 --   024_messaging_channels.sql        → messaging_channels

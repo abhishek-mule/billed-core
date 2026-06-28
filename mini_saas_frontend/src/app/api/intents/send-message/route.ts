@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { EventType } from '@billzo/shared'
 
@@ -10,19 +11,18 @@ export async function POST(request: NextRequest) {
     const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { customerId, invoiceId, templateKey, vars, personalNote, clientCorrelationId } = body as {
+    const body = await validateJsonBody<{
       customerId?: string
       invoiceId?: string
       templateKey?: string
       vars?: Record<string, string | number>
       personalNote?: string
       clientCorrelationId?: string
-    }
-
-    if (!customerId) {
-      return NextResponse.json({ error: 'customerId is required' }, { status: 400 })
-    }
+    }>(request, {
+      fields: { customerId: { required: true, type: 'string' } },
+    })
+    if (body.response) return body.response
+    const { customerId, invoiceId, templateKey, vars, personalNote, clientCorrelationId } = body.data!
 
     const eventId = await writeOutboxEvent({
       type: EventType.SEND_MESSAGE_INTENDED,

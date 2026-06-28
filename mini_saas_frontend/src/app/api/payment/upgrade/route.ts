@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { verifyRequest } from '@/lib/billzo/api-middleware'
+import { verifyRequest, validateJsonBody } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,10 +10,13 @@ export async function POST(request: NextRequest) {
   const tenantId = auth.tenantId!
 
   try {
-    const body = await request.json()
-    const { plan } = body as { plan: string }
+    const body = await validateJsonBody<{ plan: string }>(request, {
+      fields: { plan: { required: true, type: 'string', message: 'Plan is required (pro or growth)' } },
+    })
+    if (body.response) return body.response
+    const { plan } = body.data!
 
-    if (!plan || !['pro', 'growth'].includes(plan)) {
+    if (!['pro', 'growth'].includes(plan)) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 

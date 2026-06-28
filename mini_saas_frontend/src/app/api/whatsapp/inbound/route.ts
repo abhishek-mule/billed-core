@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, uuid } from '@/lib/billzo/db'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { parseWhatsAppInvoice } from '@/lib/billzo/whatsapp-parser'
 import { createInvoiceFromWhatsApp } from '@/lib/billzo/whatsapp-actions'
 
@@ -7,10 +8,25 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await validateJsonBody<{
+      phone?: string
+      from?: string
+      sender?: string
+      message?: string
+      text?: string
+      content?: string
+    }>(request, {
+      fields: {
+        phone: { type: 'string' },
+        from: { type: 'string' },
+        message: { type: 'string' },
+      },
+    })
+    if (body.response) return body.response
+    const raw = body.data!
 
-    const phoneFrom = body.phone || body.from || body.sender || ''
-    const messageText = body.message || body.text || body.content || ''
+    const phoneFrom = raw.phone || raw.from || raw.sender || ''
+    const messageText = raw.message || raw.text || raw.content || ''
 
     if (!phoneFrom || !messageText) {
       return NextResponse.json({ error: 'Missing phone or message' }, { status: 400 })

@@ -39,6 +39,10 @@ const zeroSummary = () => ({
   customersNeedingAction: 0,
   collectedAfterFollowup: 0,
   casesResolvedThisMonth: 0,
+  totalActions: 0,
+  completedActions: 0,
+  pendingActions: 0,
+  promiseSummary: { dueToday: 0, overdue: 0, upcoming: 0 },
   priorityCases: [],
 })
 
@@ -115,6 +119,7 @@ export async function GET(request: NextRequest) {
       vipRes,
       blockedRes,
       eventsRes,
+      todayEventsRes,
     ] = await Promise.all([
       supabase
         .from('recovery_cases')
@@ -172,6 +177,12 @@ export async function GET(request: NextRequest) {
         .eq('recovery_cases.tenant_id', tenantId)
         .order('occurred_at', { ascending: false })
         .limit(5),
+      supabase
+        .from('recovery_case_events')
+        .select('case_id, recovery_cases!inner(tenant_id)')
+        .eq('recovery_cases.tenant_id', tenantId)
+        .gte('occurred_at', fmt(todayStart))
+        .limit(200),
     ])
 
     // ── Process results ──
@@ -277,6 +288,28 @@ export async function GET(request: NextRequest) {
       ['send_reminder', 'call', 'follow_up_call'].includes(c.next_action_type)
     ).length
 
+    // ── Queue action counts (for "Today's Queue" progress) ──
+    const totalActions = allCases.length
+    const todayCaseIds = new Set(allCases.map((c: any) => c.id))
+    const completedActions = [...new Set(
+      (todayEventsRes.data || []).map((e: any) => e.case_id)
+    )].filter(id => todayCaseIds.has(id)).length
+    const pendingActions = Math.max(0, totalActions - completedActions)
+
+    // ── Promise summary ──
+    const promiseSummary = { dueToday: 0, overdue: 0, upcoming: 0 }
+    for (const c of allCases) {
+      if (!c.promise_to_pay_date) continue
+      const pd = new Date(c.promise_to_pay_date)
+      if (pd >= todayStart && pd < new Date(todayStart.getTime() + 86400000)) {
+        promiseSummary.dueToday++
+      } else if (pd < todayStart) {
+        promiseSummary.overdue++
+      } else {
+        promiseSummary.upcoming++
+      }
+    }
+
     const dueToday = allCases.filter((c: any) => {
       if (!c.promise_to_pay_date) return false
       const d = new Date(c.promise_to_pay_date)
@@ -333,6 +366,10 @@ export async function GET(request: NextRequest) {
         customersNeedingAction,
         collectedAfterFollowup,
         casesResolvedThisMonth: casesResolvedThisMonth || 0,
+        totalActions,
+        completedActions,
+        pendingActions,
+        promiseSummary,
         priorityCases: priorityCases.map(pc => ({
           caseId: pc.caseId,
           customerId: pc.customerId,

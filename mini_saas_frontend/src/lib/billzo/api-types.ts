@@ -90,6 +90,10 @@ export interface QueueApiSummary {
   customersNeedingAction: number
   collectedAfterFollowup: number
   casesResolvedThisMonth: number
+  totalActions: number
+  completedActions: number
+  pendingActions: number
+  promiseSummary: PromiseSummary
   priorityCases: Array<{
     caseId: string
     customerId: string
@@ -111,6 +115,12 @@ export interface RecentEvent {
   reason: string
   eventType: string
   occurredAt: string
+}
+
+export interface PromiseSummary {
+  dueToday: number
+  overdue: number
+  upcoming: number
 }
 
 export interface QueueApiResponse {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest, getVerifiedUserIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { db } from '@/lib/billzo/db'
 
 export const dynamic = 'force-dynamic'
@@ -10,11 +11,20 @@ export async function POST(request: NextRequest) {
     const userId = getVerifiedUserIdFromRequest(request)
     if (!tenantId || !userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { invoiceId, amount, customerName, customerPhone, purpose } = body
-
-    if (!amount || amount <= 0) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
-    if (!invoiceId) return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
+    const body = await validateJsonBody<{
+      invoiceId: string
+      amount: number
+      customerName?: string
+      customerPhone?: string
+      purpose?: string
+    }>(request, {
+      fields: {
+        invoiceId: { required: true, type: 'string' },
+        amount: { required: true, type: 'number', min: 1 },
+      },
+    })
+    if (body.response) return body.response
+    const { invoiceId, amount, customerName, customerPhone, purpose } = body.data!
 
     const tenant = await db().tenants.get(tenantId)
     if (!tenant) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })

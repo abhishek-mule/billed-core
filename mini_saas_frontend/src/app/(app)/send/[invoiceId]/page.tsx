@@ -95,6 +95,7 @@ export default function InvoiceSendPage() {
   const [promiseNotes, setPromiseNotes] = useState("")
   const [promiseSaving, setPromiseSaving] = useState(false)
   const [promiseSaved, setPromiseSaved] = useState(false)
+  const [promiseRecorded, setPromiseRecorded] = useState(false)
 
   // Schedule fields
   const [scheduleDate, setScheduleDate] = useState("")
@@ -102,6 +103,7 @@ export default function InvoiceSendPage() {
   const [scheduleRepeat, setScheduleRepeat] = useState("once")
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleSaved, setScheduleSaved] = useState(false)
+  const [reminderScheduled, setReminderScheduled] = useState(false)
 
   // Share fallback sheet
   const [showNoPhoneSheet, setShowNoPhoneSheet] = useState(false)
@@ -292,7 +294,7 @@ export default function InvoiceSendPage() {
       const dueDate = new Date(scheduleDate)
       dueDate.setHours(h, m, 0, 0)
 
-      await fetch("/api/recovery/queue/actions", {
+      const res = await fetch("/api/recovery/queue/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -309,20 +311,14 @@ export default function InvoiceSendPage() {
         }),
       })
 
-      await fetch("/api/recovery/case", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          invoiceId: invoice.id,
-          customerId: invoice.customerId,
-          amount: invoice.total - invoice.paidAmount,
-          customerName: invoice.customerName,
-          customerPhone: customerPhone || undefined,
-        }),
-      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Failed to schedule reminder")
+      }
 
+      toast.success("Reminder scheduled")
       setScheduleSaved(true)
+      setReminderScheduled(true)
       setTimeout(() => { setScheduleSaved(false); setActionView('main') }, 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to schedule")
@@ -376,6 +372,7 @@ export default function InvoiceSendPage() {
       }
 
       setPromiseSaved(true)
+      setPromiseRecorded(true)
       setTimeout(() => { setPromiseSaved(false); setActionView('main') }, 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save promise")
@@ -608,11 +605,15 @@ export default function InvoiceSendPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Reminder Scheduled</span>
-              <span className="text-xs text-muted-foreground">No</span>
+              <span className={`text-xs font-medium ${reminderScheduled ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {reminderScheduled ? 'Yes' : 'No'}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Promise Recorded</span>
-              <span className="text-xs text-muted-foreground">No</span>
+              <span className={`text-xs font-medium ${promiseRecorded ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                {promiseRecorded ? 'Yes' : 'No'}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Payment Link</span>

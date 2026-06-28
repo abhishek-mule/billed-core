@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import {
   Loader2, Send, Hand, RefreshCw,
   AlertTriangle, CheckCircle2, History, Banknote,
@@ -232,8 +233,20 @@ export default function RecoveryQueuePage() {
           payload: { origin: "recovery_queue" },
         }),
       })
-      if (res.ok) load()
-    } catch { } finally {
+      if (res.ok) {
+        toast.success("Reminder sent")
+        load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        if (data.error === "FEATURE_LOCKED") {
+          toast.error("Upgrade to Pro to send reminders from the queue")
+        } else {
+          toast.error(data.error || "Failed to send reminder")
+        }
+      }
+    } catch {
+      toast.error("Network error — could not send reminder")
+    } finally {
       setSending(null)
     }
   }

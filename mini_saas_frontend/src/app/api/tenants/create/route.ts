@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { getVerifiedUserIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
+import { checkRateLimit, incrementRateLimit } from '@/lib/billzo/auth-store'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,12 +12,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { shopName, phone, upiId, gstin } = body
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rl = await checkRateLimit(`tenant_create:ip:${ip}`, 3, 3600)
+    if (!rl.allowed) return NextResponse.json({ error: rl.reason }, { status: 429 })
+    await incrementRateLimit(`tenant_create:ip:${ip}`, 3600)
 
-    if (!shopName || !shopName.trim()) {
-      return NextResponse.json({ error: 'Shop name is required' }, { status: 400 })
-    }
+    const body = await validateJsonBody<{
+      shopName: string
+      phone?: string
+      upiId?: string
+      gstin?: string
+    }>(request, {
+      fields: { shopName: { required: true, type: 'string', message: 'Shop name is required' } },
+    })
+    if (body.response) return body.response
+    const { shopName, phone, upiId, gstin } = body.data!
 
     // Check if user already has an active tenant membership
     const { data: existingMembership, error: membershipError } = await supabaseAdmin
@@ -39,10 +51,10 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         tenantId: tenant?.id || existingMembership.tenant_id,
-        tenantName: tenant?.name || shopName.trim(),
-        onboardingState: tenant?.onboarding_state || 'incomplete',
-        role: existingMembership.role,
-        alreadyExists: true
+      tenantName: tenant?.name || shopName!.trim(),
+      onboardingState: tenant?.onboarding_state || 'incomplete',
+      role: existingMembership.role,
+      alreadyExists: true
       })
     }
 

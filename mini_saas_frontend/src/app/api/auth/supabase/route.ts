@@ -29,15 +29,12 @@ async function upsertSession(userId: string, data: { email?: string; tenantId?: 
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('[Auth/Supabase] POST received')
-
     if (!supabaseUrl || !supabaseAuthKey) {
       console.error('[Auth/Supabase] Missing config: url=', !!supabaseUrl, 'key=', !!supabaseAuthKey)
       return NextResponse.json({ error: 'Auth not configured' }, { status: 503 })
     }
 
     const body = await request.json()
-    console.log('[Auth/Supabase] Body keys:', Object.keys(body))
     const { email, password, accessToken: supabaseAccessToken } = body
 
     const supabase = createClient(supabaseUrl, supabaseAuthKey, {
@@ -45,7 +42,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (supabaseAccessToken) {
-      console.log('[Auth/Supabase] Validating access token')
       const { data, error } = await supabase.auth.getUser(supabaseAccessToken)
 
       if (error) {
@@ -53,11 +49,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid Supabase session: ' + error.message }, { status: 401 })
       }
       if (!data.user) {
-        console.error('[Auth/Supabase] No user in session')
         return NextResponse.json({ error: 'Invalid Supabase session' }, { status: 401 })
       }
-
-      console.log('[Auth/Supabase] User:', data.user.id, data.user.email)
 
       const userId = data.user.id
       const userEmail = data.user.email || undefined

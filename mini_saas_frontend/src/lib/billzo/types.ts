@@ -41,6 +41,48 @@ export type BankDetails = {
   accountHolder?: string
 }
 
+// ── New identity model (053) ──────────────────────────────────────────
+export type User = {
+  id: string
+  email: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type Merchant = {
+  id: string
+  businessName: string
+  phone: string
+  email?: string
+  gstin?: string
+  category?: string
+  plan: 'starter' | 'growth' | 'pro'
+  subdomain?: string
+  isActive: boolean
+  upiId?: string
+  address?: string
+  pan?: string
+  bankDetails?: BankDetails
+  autoMode: boolean
+  invoiceCount: number
+  reminderCount: number
+  onboardingState: 'incomplete' | 'active'
+  onboardingCompletedAt?: string
+  whatsappConfig?: TenantWhatsAppConfig
+  createdAt: string
+  updatedAt: string
+}
+
+export type Membership = {
+  id: string
+  userId: string
+  merchantId: string
+  role: 'owner' | 'manager' | 'cashier' | 'accountant' | 'staff'
+  isActive: boolean
+  createdAt: string
+}
+
+// ── Legacy (kept for sync compatibility) ───────────────────────────────
 export type Tenant = {
   id: string
   name: string

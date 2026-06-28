@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { verifyRequest } from '@/lib/billzo/api-middleware'
+import { verifyRequest, validateJsonBody } from '@/lib/billzo/api-middleware'
 import { submitIntent } from '@/lib/authority/transport'
 import { recordPayment } from '@/lib/billzo/record-payment'
 
@@ -20,9 +20,17 @@ interface VerifyRequest {
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyRequest(request)
-    const body: VerifyRequest = await request.json()
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount, tenantId: bodyTenantId } = body
-    const tenantId = bodyTenantId || auth.tenantId
+    if (auth.response) return auth.response
+    const body = await validateJsonBody<VerifyRequest>(request, {
+      fields: {
+        razorpay_order_id: { required: true, type: 'string' },
+        razorpay_payment_id: { required: true, type: 'string' },
+        razorpay_signature: { required: true, type: 'string' },
+      },
+    })
+    if (body.response) return body.response
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, invoiceId, amount } = body.data!
+    const tenantId = auth.tenantId
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json(
@@ -52,7 +60,7 @@ export async function POST(request: NextRequest) {
       const pmtAmount = amount || 0
 
       // Resolve customerId — prefer explicit, fall back to invoice lookup
-      let resolvedCustomerId = body.customerId
+      let resolvedCustomerId = body.data!.customerId
       if (!resolvedCustomerId) {
         const { data: inv } = await supabaseAdmin
           .from('invoices')

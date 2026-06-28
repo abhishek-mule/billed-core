@@ -41,11 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (sbError || !sbSession?.user) {
-      // Record failed login event
       try {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        })
         await supabase.from('login_events').insert({
           user_id: null,
           email: body.email || null,
@@ -53,24 +49,48 @@ export async function POST(request: NextRequest) {
           user_agent: request.headers.get('user-agent') || null,
           success: false,
         })
-      } catch (e) {
-        // Non-critical
-      }
+      } catch { /* non-critical */ }
       return NextResponse.json({ error: sbError?.message || 'Auth failed' }, { status: 401 })
     }
 
     const userId = sbSession.user.id
-    const email = sbSession.user.email || undefined
+    const email = sbSession.user.email || ''
 
-    const existingSessions = await findSessionsByUserId(userId)
-    const existingWithTenant = existingSessions.find((s) => s.tenantId)
-    const existingTenantId = existingWithTenant?.tenantId || undefined
-
-    // Record successful login event
+    // ── Upsert user into the new users table (migration 053 not yet applied; non-critical) ──
+    const now = new Date().toISOString()
     try {
-      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
+      await supabase.from('users').upsert(
+        { id: userId, email, updated_at: now },
+        { onConflict: 'id', ignoreDuplicates: false },
+      )
+    } catch { /* users table may not exist yet; non-critical */ }
+
+    // ── Check if user has an existing membership (tenant_memberships is the live table) ──
+    let resolvedMerchantId: string | undefined = undefined
+    let merchantName = ''
+
+    const { data: membership } = await supabase
+      .from('tenant_memberships')
+      .select('tenant_id, tenants(id, name)')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+
+    if (membership) {
+      resolvedMerchantId = membership.tenant_id
+      merchantName = (membership as any).tenants?.name || ''
+    }
+
+    // ── Also check Redis sessions as final fallback ──
+    if (!resolvedMerchantId) {
+      const existingSessions = await findSessionsByUserId(userId)
+      const existingWithTenant = existingSessions.find((s) => s.tenantId)
+      resolvedMerchantId = existingWithTenant?.tenantId || undefined
+    }
+
+    // ── Record login event ──
+    try {
       await supabase.from('login_events').insert({
         user_id: userId,
         email,
@@ -78,36 +98,39 @@ export async function POST(request: NextRequest) {
         user_agent: request.headers.get('user-agent') || null,
         success: true,
       })
-    } catch (e) {
-      // Non-critical
-    }
+    } catch { /* non-critical */ }
 
+    // ── Create Redis session ──
     const sessionId = crypto.randomBytes(32).toString('hex')
-
     await setSession(sessionId, {
       userId,
       sessionId,
-      tenantId: existingTenantId || null,
-      isPaid: existingWithTenant?.isPaid || false,
+      tenantId: resolvedMerchantId || null,
+      isPaid: false,
       email,
       createdAt: Date.now(),
     })
 
+    // ── Issue tokens ──
     const accessToken = createAccessToken({
       sessionId,
       userId,
-      tenantId: existingTenantId,
+      tenantId: resolvedMerchantId,
       email,
     })
     const refreshToken = createRefreshToken({ sessionId, userId })
 
+    const redirectTo = resolvedMerchantId ? '/dashboard' : '/onboarding'
+
     const response = NextResponse.json({
       success: true,
       userId,
-      redirectTo: existingTenantId ? '/dashboard' : '/onboarding',
+      merchantId: resolvedMerchantId,
+      merchantName,
+      redirectTo,
     })
 
-    setAuthCookies(response, accessToken, refreshToken, existingTenantId)
+    setAuthCookies(response, accessToken, refreshToken, resolvedMerchantId)
 
     response.cookies.set('bz_user_id', userId, {
       httpOnly: false,

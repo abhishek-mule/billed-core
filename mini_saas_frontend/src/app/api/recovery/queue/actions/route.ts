@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { recordPayment } from '@/lib/billzo/record-payment'
@@ -24,7 +25,7 @@ const ACTIONS_WITH_OUTBOX_EVENT: Record<string, string> = {
   mark_resolved: 'merchant.mark_closed',
 }
 
-const VALID_ACTIONS = new Set([...Object.keys(ACTIONS_WITH_OUTBOX_EVENT), 'send_reminder', 'record_payment'])
+const VALID_ACTIONS = new Set([...Object.keys(ACTIONS_WITH_OUTBOX_EVENT), 'send_reminder', 'record_payment', 'schedule_reminder'])
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
@@ -97,12 +98,12 @@ export async function POST(request: NextRequest) {
     const tid = authResult.tenantId!
     const userId = authResult.userId
 
-    // Mutations on the recovery queue require pro+ plan
-    const gate = await requireFeature(tid, 'recovery_queue', 'POST')
+    // Sending manual reminders is a starter+ feature; other actions (record_payment etc.) fall under manual_reminders too
+    const gate = await requireFeature(tid, 'manual_reminders', 'POST')
     if (!gate.allowed) {
       return NextResponse.json({
         error: 'FEATURE_LOCKED',
-        feature: 'recovery_queue',
+        feature: 'manual_reminders',
         upgradeTo: 'pro',
       }, { status: 403 })
     }
@@ -111,15 +112,15 @@ export async function POST(request: NextRequest) {
     if (bodyResult.response) return bodyResult.response
     const body = bodyResult.data!
 
-    const { caseId, action, payload } = body as {
-      caseId: string
+    const { caseId, customerId, action, payload } = body as {
+      caseId?: string
+      customerId?: string
       action: string
       payload?: Record<string, any>
     }
 
-    const required = validateRequired(body, ['caseId', 'action'])
-    if (!required.valid) {
-      return errorResponse(`Missing required fields: ${Object.keys(required.errors!).join(', ')}`, 400)
+    if (!action) {
+      return errorResponse('Missing required field: action', 400)
     }
 
     if (!VALID_ACTIONS.has(action)) {
@@ -130,17 +131,36 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Look up the case for customer info
-    const { data: recoveryCase, error: caseErr } = await supabase
-      .from('recovery_cases')
-      .select('*, customers(customer_name, phone)')
-      .eq('id', caseId)
-      .eq('tenant_id', tid)
-      .single()
+    // schedule_reminder resolves case by customerId (send page may not have caseId yet)
+    let recoveryCase: any = null
+    if (action === 'schedule_reminder') {
+      if (!customerId) {
+        return errorResponse('customerId required for schedule_reminder', 400)
+      }
+      const { data: existingCase } = await supabase
+        .from('recovery_cases')
+        .select('*, customers(customer_name, phone)')
+        .eq('tenant_id', tid)
+        .eq('customer_id', customerId)
+        .limit(1)
+        .maybeSingle()
+      recoveryCase = existingCase
+    } else {
+      if (!caseId) {
+        return errorResponse('caseId required for this action', 400)
+      }
+      const { data: rc, error: caseErr } = await supabase
+        .from('recovery_cases')
+        .select('*, customers(customer_name, phone)')
+        .eq('id', caseId)
+        .eq('tenant_id', tid)
+        .single()
 
-    if (caseErr || !recoveryCase) {
-      console.error('[QueueAction] Case lookup failed:', JSON.stringify({ caseErr, caseId, tenantId: tid, recoveryCase }))
-      return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+      if (caseErr || !rc) {
+        console.error('[QueueAction] Case lookup failed:', JSON.stringify({ caseErr, caseId, tenantId: tid, rc }))
+        return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+      }
+      recoveryCase = rc
     }
 
     // Track TTFA (Time To First Action)
@@ -327,6 +347,97 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // ── schedule_reminder: set next_recovery_at on invoice for worker to pick up ──
+    if (action === 'schedule_reminder') {
+      let dueDate = payload?.dueDate
+      if (!dueDate && payload?.delayDays) {
+        const d = new Date()
+        d.setDate(d.getDate() + payload.delayDays)
+        dueDate = d.toISOString()
+      }
+      if (!dueDate) {
+        return NextResponse.json({ error: 'dueDate or delayDays required in payload' }, { status: 400 })
+      }
+
+      const invoiceId = body.invoiceId || payload?.invoiceId || recoveryCase?.invoice_id
+      if (!invoiceId) {
+        return NextResponse.json({ error: 'invoiceId required in payload or on recovery case' }, { status: 400 })
+      }
+
+      // Update next_recovery_at on the invoice
+      const { error: updateErr } = await supabase
+        .from('invoices')
+        .update({
+          next_recovery_at: dueDate,
+          recovery_stage: 'scheduled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tid)
+
+      if (updateErr) {
+        console.error('[QueueAction] schedule_reminder update failed:', updateErr)
+        return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
+      }
+
+      // Create recovery case if one doesn't exist
+      let effectiveCaseId = recoveryCase?.id
+      if (!effectiveCaseId) {
+        effectiveCaseId = crypto.randomUUID()
+        const { error: createErr } = await supabase
+          .from('recovery_cases')
+          .insert({
+            id: effectiveCaseId,
+            tenant_id: tid,
+            customer_id: customerId,
+            status: 'open',
+            invoice_count: 1,
+            open_invoice_count: 1,
+            total_outstanding: payload?.amount || 0,
+            recovery_state_v2: 'active',
+            engagement_state_v2: 'unseen',
+            attention_score: Math.round((payload?.amount || 0) / 1000),
+            version: 1,
+            last_activity_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+
+        if (createErr) {
+          console.error('[QueueAction] schedule_reminder case create failed:', createErr)
+        }
+      }
+
+      if (effectiveCaseId) {
+        await markCaseActivity(supabase, effectiveCaseId)
+      }
+
+      // Write audit event
+      await writeOutboxEvent({
+        type: EventType.RECOVERY_REMINDER_SENT,
+        tenantId: tid,
+        entityId: invoiceId,
+        payload: {
+          customerId: recoveryCase?.customer_id || customerId,
+          invoiceId,
+          dueDate,
+          repeat: payload?.repeat || 'once',
+          notes: payload?.notes || null,
+          origin: 'manual_schedule',
+        },
+        correlationId: `recovery:${recoveryCase?.id || invoiceId}`,
+      })
+
+      return NextResponse.json({
+        success: true,
+        action,
+        invoiceId,
+        dueDate,
+        repeat: payload?.repeat || 'once',
+        refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
+      })
+    }
+
     // ── Standard outbox actions ──
     if (ACTIONS_WITH_OUTBOX_EVENT[action]) {
       const outboxPayload: Record<string, any> = {
@@ -383,7 +494,8 @@ async function resolveInvoiceIdForCase(supabase: any, tenantId: string, recovery
   return data?.id || null
 }
 
-async function markCaseActivity(supabase: any, caseId: string): Promise<void> {
+async function markCaseActivity(supabase: any, caseId: string | undefined): Promise<void> {
+  if (!caseId) return
   await supabase
     .from('recovery_cases')
     .update({ last_activity_at: new Date().toISOString(), updated_at: new Date().toISOString() })

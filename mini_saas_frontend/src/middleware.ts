@@ -129,5 +129,5 @@ async function tryRefresh(request: NextRequest, refreshToken: string): Promise<N
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth|api/events|api/tenants|auth/callback).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/auth|api/events|api/tenants|api/merchants|auth/callback).*)'],
 }

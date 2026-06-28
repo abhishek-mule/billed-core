@@ -1,19 +1,15 @@
 import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { supabase } from '@/lib/billzo/supabase'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { submitIntent } from '@/lib/authority/transport'
 
 export const dynamic = 'force-dynamic'
 
-function getTenantId(): string | null {
-  const cookieStore = cookies()
-  return cookieStore.get('bz_tenant')?.value || null
-}
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (!supabase) return NextResponse.json({ tenant: null })
@@ -33,11 +29,30 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { name, phone, email, address, upiId, gstin, pan } = body
+    const body = await validateJsonBody<{
+      name?: string
+      phone?: string
+      email?: string
+      address?: string
+      upiId?: string
+      gstin?: string
+      pan?: string
+    }>(request, {
+      fields: {
+        name: { type: 'string' },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        address: { type: 'string' },
+        upiId: { type: 'string' },
+        gstin: { type: 'string' },
+        pan: { type: 'string' },
+      },
+    })
+    if (body.response) return body.response
+    const { name, phone, email, address, upiId, gstin, pan } = body.data!
 
     if (!supabase) return NextResponse.json({ error: 'Database not available' }, { status: 503 })
 

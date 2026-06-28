@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
 import { EventType } from '@billzo/shared'
@@ -11,9 +12,8 @@ export async function POST(request: NextRequest) {
     const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { customerId, customerPhone, invoiceId, templateKey, vars, personalNote, message } = body as {
-      customerId?: string
+    const body = await validateJsonBody<{
+      customerId: string
       customerPhone?: string
       invoiceId?: string
       templateKey?: string
@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
       message?: string
       personalNote?: string
       clientCorrelationId?: string
-    }
-
-    if (!customerId) {
-      return NextResponse.json({ error: 'customerId is required' }, { status: 400 })
-    }
+    }>(request, {
+      fields: { customerId: { required: true, type: 'string' } },
+    })
+    if (body.response) return body.response
+    const { customerId, customerPhone, invoiceId, templateKey, vars, personalNote, message } = body.data!
 
     // Try immediate send
     const result = await sendDirectWhatsApp(tenantId, customerId, message || '', {

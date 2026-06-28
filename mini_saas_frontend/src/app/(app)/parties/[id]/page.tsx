@@ -16,6 +16,7 @@ import { getCookie } from "@/lib/cookies"
 import type { AutomationMode } from "@/lib/billzo/types"
 import { scheduleBackgroundSync } from "@/lib/billzo/sync"
 import { CustomerIntelligencePanel } from "@/components/billzo/CustomerIntelligencePanel"
+import { RecoveryPlanCard, type RecoveryPlanData, type RecoveryPlanMode, type RecoveryPlanAction } from "@/components/billzo/RecoveryPlanCard"
 
 const MODE_LABELS: Record<AutomationMode, string> = {
   full_auto: "Auto",
@@ -156,6 +157,81 @@ export default function PartyDetailPage() {
       </div>
     )
   }
+
+  // Build recovery plan from state
+  function buildRecoveryPlan(): RecoveryPlanData {
+    const nextReminderInv = unpaidInvoices.find((i: any) => i.nextRecoveryAt)
+    const promisedInv = invoices.find((i: any) => i.nextRecoveryAt && i.recoveryStage === 't0_soft')
+    const lastReminderInv = [...invoices].sort((a: any, b: any) => new Date(b.lastReminderAt || 0).getTime() - new Date(a.lastReminderAt || 0).getTime())[0]
+
+    let mode: RecoveryPlanMode = 'none'
+    let modeLabel = 'No Recovery Plan'
+    let executionAt: string | null = null
+    let afterExecution = ''
+    let status: RecoveryPlanData['status'] = 'completed'
+    const nextAction: RecoveryPlanAction = { type: 'No action needed', at: null, isAutomatic: true, reason: 'Invoice paid' }
+    const history: RecoveryPlanData['history'] = []
+
+    if (pending > 0) {
+      status = 'waiting'
+      if (promisedInv) {
+        mode = 'promise'
+        modeLabel = 'Awaiting Promise'
+        executionAt = promisedInv.nextRecoveryAt
+        afterExecution = 'Mark as paid or resume recovery'
+        nextAction.type = 'Wait for customer'
+        nextAction.at = promisedInv.nextRecoveryAt
+        nextAction.reason = 'Customer promised to pay'
+        nextAction.isAutomatic = false
+      } else if (nextReminderInv) {
+        mode = 'scheduled_reminder'
+        modeLabel = 'Scheduled Reminder'
+        executionAt = nextReminderInv.nextRecoveryAt
+        afterExecution = 'Auto recovery resumes'
+        nextAction.type = 'Send reminder'
+        nextAction.at = nextReminderInv.nextRecoveryAt
+        nextAction.reason = `${unpaidInvoices.length} invoice${unpaidInvoices.length > 1 ? 's' : ''} unpaid`
+        nextAction.isAutomatic = true
+      } else if (customer.automationMode === 'muted') {
+        mode = 'paused'
+        modeLabel = 'Paused'
+        afterExecution = 'Manual only'
+        nextAction.type = 'Waiting for merchant'
+        nextAction.reason = 'Recovery paused by merchant'
+        nextAction.isAutomatic = false
+      } else {
+        mode = 'auto_recovery'
+        modeLabel = 'Auto Recovery'
+        afterExecution = 'Decision engine manages'
+        nextAction.type = 'Pending decision'
+        nextAction.reason = `${formatINR(pending)} outstanding`
+        nextAction.isAutomatic = true
+      }
+    }
+
+    // Build history from payments and last reminder
+    if (lastReminderInv?.lastReminderAt) {
+      history.push({
+        date: lastReminderInv.lastReminderAt,
+        event: 'Reminder Sent',
+        detail: lastReminderInv.lastWhatsAppStatus === 'read' ? 'Customer read the message' : 'Delivered to customer',
+        reason: lastReminderInv.lastWhatsAppStatus === 'read' ? '' : 'No response yet',
+        type: 'reminder',
+      })
+    }
+    for (const p of payments.slice(0, 3)) {
+      history.push({
+        date: p.createdAt,
+        event: 'Payment Received',
+        detail: `${formatINR(p.amount)} received`,
+        type: 'payment',
+      })
+    }
+
+    return { mode, modeLabel, executionAt, afterExecution, status, nextAction, history }
+  }
+
+  const recoveryPlan = buildRecoveryPlan()
 
   if (loading) {
     return (
@@ -364,156 +440,54 @@ export default function PartyDetailPage() {
           )}
         </div>
 
-        {/* Communication Timeline */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="p-4 space-y-3">
-            {/* Outstanding — biggest number */}
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outstanding</span>
-              <span className={`text-xl font-bold tabular-nums ${pending > 0 ? 'text-foreground' : 'text-emerald-600'}`}>
-                {formatINR(pending)}
-              </span>
-            </div>
+        {/* Recovery Plan */}
+        <RecoveryPlanCard
+          plan={recoveryPlan}
+          onEdit={() => {
+            if (unpaidInvoices[0]) router.push(`/send/${unpaidInvoices[0].id}`)
+          }}
+          onPause={() => setShowAutomationModal(true)}
+          onCancel={pending > 0 ? undefined : undefined}
+        />
 
-            <div className="h-px bg-border" />
-
-            {/* Timeline rows */}
-            <div className="space-y-2.5">
-              {/* Promise — shown if any invoice has a promise date */}
-              {(() => {
-                const promisedInv = invoices.find((i: any) => i.nextRecoveryAt && i.recoveryStage === 't0_soft')
-                if (!promisedInv) return null
-                return (
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-amber-500" />
-                      <span className="text-muted-foreground">Promise</span>
-                    </div>
-                    <span className="font-medium text-amber-600 text-xs">
-                      {new Date(promisedInv.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    </span>
-                  </div>
-                )
-              })()}
-
-              {/* Next Reminder */}
-              {(() => {
-                const nextInv = unpaidInvoices.find((i: any) => i.nextRecoveryAt)
-                if (!nextInv) return null
-                return (
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-primary" />
-                      <span className="text-muted-foreground">Next Reminder</span>
-                    </div>
-                    <span className="font-medium text-xs">
-                      {new Date(nextInv.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot;{' '}
-                      {new Date(nextInv.nextRecoveryAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                )
-              })()}
-
-              {/* Last Reminder */}
-              {(() => {
-                const lastInv = [...invoices].sort((a: any, b: any) => new Date(b.lastReminderAt || 0).getTime() - new Date(a.lastReminderAt || 0).getTime())[0]
-                if (!lastInv?.lastReminderAt) return null
-                return (
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-muted-foreground">Last Reminder</span>
-                    </div>
-                    <span className="font-medium text-xs text-muted-foreground">
-                      {new Date(lastInv.lastReminderAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                      {lastInv.lastWhatsAppStatus === 'read' ? ' · Seen ✓✓' : lastInv.lastWhatsAppStatus === 'delivered' ? ' · ✓✓' : ''}
-                    </span>
-                  </div>
-                )
-              })()}
-
-              {/* Last Payment */}
-              {payments.length > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-muted-foreground">Last Payment</span>
-                  </div>
-                  <span className="font-medium text-xs text-emerald-600">
-                    {formatINR(payments[0].amount)} &middot;{' '}
-                    {new Date(payments[0].createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  </span>
-                </div>
-              )}
-
-              {/* No activity */}
-              {invoices.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-2">No activity yet</p>
-              )}
-            </div>
-          </div>
-
-          {/* Status indicator */}
-          <div className="border-t border-border px-4 py-3 bg-muted/30">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Current Status</span>
-              <span className={`font-semibold flex items-center gap-1 ${
-                pending === 0 ? 'text-emerald-600' : unpaidInvoices.length > 0 ? 'text-amber-600' : 'text-muted-foreground'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  pending === 0 ? 'bg-emerald-500' : unpaidInvoices.length > 0 ? 'bg-amber-500' : 'bg-muted-foreground'
-                }`} />
-                {pending === 0 ? 'All Paid' : unpaidInvoices.length > 0 ? `${unpaidInvoices.length} unpaid` : 'Inactive'}
-              </span>
-            </div>
-            {pending > 0 && (
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                {unpaidInvoices.some((i: any) => i.nextRecoveryAt)
-                  ? `Next action: ${new Date(unpaidInvoices.find((i: any) => i.nextRecoveryAt)?.nextRecoveryAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                  : 'No reminder scheduled'}
-              </p>
-            )}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="border-t border-border p-3">
-            <div className="grid grid-cols-5 gap-1.5">
-              <QuickAction
-                icon={MessageSquare}
-                label="Send"
-                onClick={() => {
-                  setSelectedInvoiceId(null)
-                  setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
-                  setShowWAModal(true)
-                }}
-                disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
-              />
-              <QuickAction
-                icon={CalendarClock}
-                label="Schedule"
-                onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_reminder`)}
-                disabled={unpaidInvoices.length === 0}
-              />
-              <QuickAction
-                icon={Hand}
-                label="Promise"
-                onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_promise`)}
-                disabled={unpaidInvoices.length === 0}
-              />
-              <QuickAction
-                icon={Wallet}
-                label="Payment"
-                onClick={() => router.push(`/pulse?payInvoice=${id}`)}
-              />
-              <QuickAction
-                icon={Phone}
-                label="Call"
-                onClick={() => {
-                  if (customer.phone) window.location.href = `tel:${customer.phone}`
-                }}
-                disabled={!customer.phone}
-              />
-            </div>
+        {/* Quick Actions */}
+        <div className="bg-card border border-border rounded-xl p-3">
+          <div className="grid grid-cols-5 gap-1.5">
+            <QuickAction
+              icon={MessageSquare}
+              label="Send"
+              onClick={() => {
+                setSelectedInvoiceId(null)
+                setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
+                setShowWAModal(true)
+              }}
+              disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
+            />
+            <QuickAction
+              icon={CalendarClock}
+              label="Schedule"
+              onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_reminder`)}
+              disabled={unpaidInvoices.length === 0}
+            />
+            <QuickAction
+              icon={Hand}
+              label="Promise"
+              onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_promise`)}
+              disabled={unpaidInvoices.length === 0}
+            />
+            <QuickAction
+              icon={Wallet}
+              label="Payment"
+              onClick={() => router.push(`/pulse?payInvoice=${id}`)}
+            />
+            <QuickAction
+              icon={Phone}
+              label="Call"
+              onClick={() => {
+                if (customer.phone) window.location.href = `tel:${customer.phone}`
+              }}
+              disabled={!customer.phone}
+            />
           </div>
         </div>
 

@@ -57,7 +57,25 @@ export default function InvoicesPage() {
       if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setActionsOpen(false)
     }
     document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
+    const onSync = () => loadInvoices()
+    window.addEventListener("billzo:changed", onSync)
+    return () => {
+      document.removeEventListener("mousedown", handler)
+      window.removeEventListener("billzo:changed", onSync)
+    }
+  }, [])
+
+  // ── server-side sales data for fallback ──
+  const [serverTodaySales, setServerTodaySales] = useState(0)
+  useEffect(() => {
+    fetch("/api/recovery/queue")
+      .then(r => r.json())
+      .then(data => {
+        if (data?.summary?.todaySales !== undefined) {
+          setServerTodaySales(data.summary.todaySales)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const loadInvoices = async () => {
@@ -94,10 +112,11 @@ export default function InvoicesPage() {
   // ── revenue dashboard metrics ──
   const todaySales = useMemo(() => {
     const t = new Date(); t.setHours(0, 0, 0, 0)
-    return invoices
-      .filter(i => new Date(i.createdAt) >= t)
+    const local = invoices
+      .filter(i => i.createdAt && new Date(i.createdAt) >= t)
       .reduce((s, i) => s + i.total, 0)
-  }, [invoices])
+    return local || serverTodaySales
+  }, [invoices, serverTodaySales])
 
   const monthSales = useMemo(() => {
     const m = new Date(); m.setDate(1); m.setHours(0, 0, 0, 0)

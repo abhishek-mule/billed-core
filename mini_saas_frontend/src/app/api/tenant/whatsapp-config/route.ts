@@ -1,16 +1,12 @@
 import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { supabase } from '@/lib/billzo/supabase'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
+import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 import { submitIntent } from '@/lib/authority/transport'
 
 export const dynamic = 'force-dynamic'
-
-function getTenantId(): string | null {
-  const cookieStore = cookies()
-  return cookieStore.get('bz_tenant')?.value || null
-}
 
 const DEFAULT_CONFIG: TenantWhatsAppConfig = {
   autoSend: false,
@@ -22,7 +18,7 @@ const DEFAULT_CONFIG: TenantWhatsAppConfig = {
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     if (!supabase) {
@@ -50,13 +46,16 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const tenantId = getTenantId()
+    const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json()
-    const { config } = body as { config: Partial<TenantWhatsAppConfig> }
-
-    if (!config) return NextResponse.json({ error: 'Config required' }, { status: 400 })
+    const body = await validateJsonBody<{ config: Partial<TenantWhatsAppConfig> }>(request, {
+      fields: {
+        config: { required: true, type: 'object', message: 'Config object is required' },
+      },
+    })
+    if (body.response) return body.response
+    const { config } = body.data!
 
     if (!supabase) {
       return NextResponse.json({ error: 'Database not available' }, { status: 503 })
@@ -85,7 +84,6 @@ export async function PUT(request: NextRequest) {
     if (config.gupshupAppName === '') updated.gupshupAppName = undefined
     if (config.sourceNumber === '') updated.sourceNumber = undefined
 
-    // authority:governed tenant.update_whatsapp_config
     const intentResult = await submitIntent({
       intentId: crypto.randomUUID(),
       intentType: 'tenant.update_whatsapp_config',

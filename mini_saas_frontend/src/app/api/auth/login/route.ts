@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
-import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
+import { setSession, findSessionsByUserId, checkRateLimit, incrementRateLimit } from '@/lib/billzo/auth-store'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export async function POST(request: NextRequest) {
@@ -12,6 +12,23 @@ export async function POST(request: NextRequest) {
     if (!email && !uid) {
       return NextResponse.json({ error: 'Missing credentials' }, { status: 400 })
     }
+
+    // Rate limiting: 10 attempts per 15 min per IP, 5 per 15 min per email
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const ipLimit = await checkRateLimit(`login:ip:${ip}`, 10, 900)
+    if (!ipLimit.allowed) {
+      return NextResponse.json({ error: ipLimit.reason }, { status: 429 })
+    }
+    if (email) {
+      const emailLimit = await checkRateLimit(`login:email:${email}`, 5, 900)
+      if (!emailLimit.allowed) {
+        return NextResponse.json({ error: emailLimit.reason }, { status: 429 })
+      }
+    }
+
+    // Increment rate limit counters on every attempt
+    await incrementRateLimit(`login:ip:${ip}`, 900)
+    if (email) await incrementRateLimit(`login:email:${email}`, 900)
 
     // Verify user exists in database
     if (uid) {

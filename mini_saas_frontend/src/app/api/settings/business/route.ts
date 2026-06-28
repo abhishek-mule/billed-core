@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
+    const body = await validateJsonBody(request)
+    if (body.response) return body.response
 
     const allowedFields = [
       'autoSend', 'paymentLinkEnabled', 'paymentLinkExpiry',
@@ -53,8 +55,8 @@ export async function PATCH(request: NextRequest) {
 
     const updates: Record<string, any> = {}
     for (const key of allowedFields) {
-      if (body[key] !== undefined) {
-        updates[key] = body[key]
+      if (body.data![key] !== undefined) {
+        updates[key] = body.data![key]
       }
     }
 

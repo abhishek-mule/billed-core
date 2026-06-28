@@ -189,6 +189,31 @@ export async function incrementMagicLinkCounters(email: string, ip: string): Pro
   await multi.exec()
 }
 
+// ── Generic Rate Limiter ──
+
+export async function checkRateLimit(
+  key: string,
+  maxAttempts: number,
+  windowSeconds: number,
+): Promise<{ allowed: boolean; reason?: string }> {
+  const redis = getRedis()
+  const redisKey = `bz:ratelimit:${key}`
+  const current = await redis.get(redisKey)
+  const count = current ? parseInt(current) : 0
+  if (count >= maxAttempts) {
+    return { allowed: false, reason: 'Too many attempts. Please try again later.' }
+  }
+  return { allowed: true }
+}
+
+export async function incrementRateLimit(key: string, windowSeconds: number): Promise<void> {
+  const redis = getRedis()
+  const redisKey = `bz:ratelimit:${key}`
+  const multi = redis.multi().incr(redisKey)
+  multi.expire(redisKey, windowSeconds)
+  await multi.exec()
+}
+
 export async function recordLoginEvent(params: {
   userId?: string
   email?: string

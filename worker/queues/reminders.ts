@@ -844,6 +844,23 @@ export async function enqueueOverdueReminders(): Promise<number> {
   let skippedManual = 0
   let skippedLocked = 0
 
+  // Don't enqueue outside business hours (9 AM – 8 PM IST) — the decision
+  // engine blocks them anyway, so skip the wasted work. Next poll cycle
+  // (5 min) will re-evaluate.
+  const tz = 'Asia/Kolkata'
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date()),
+    10,
+  )
+  if (hour < 9 || hour >= 20) {
+    logger.info({ hour, tz }, 'Outside business hours — skipping reminder enqueue')
+    return 0
+  }
+
   const { data: invoices, error } = await supabaseAdmin
     .from('invoices')
     .select(`

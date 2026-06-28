@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { deleteDeviceTokens, getDeviceTokens } from '@/lib/billzo/supabase-admin'
 import { getFirebaseMessaging } from '@/lib/billzo/firebase-admin'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
+import { validateJsonBody } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,12 +13,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { title, body: message, icon, type, url } = body
-
-    if (!title || !message) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
+    const body = await validateJsonBody<{
+      title?: string
+      body?: string
+      icon?: string
+      type?: string
+      url?: string
+    }>(request, {
+      fields: {
+        title: { required: true, type: 'string' },
+        body: { required: true, type: 'string' },
+      },
+    })
+    if (body.response) return body.response
+    const { title, body: message, icon, type, url } = body.data!
 
     // 1. Get tokens from Supabase
     const tokens = await getDeviceTokens(tenantId)

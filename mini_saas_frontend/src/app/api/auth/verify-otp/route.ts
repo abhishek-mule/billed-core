@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[Phone/verify] Verified:', e164)
+    const redactedPhone = e164.slice(0, 5) + '****' + e164.slice(-4)
+    console.log('[Phone/verify] Verified:', redactedPhone)
 
     let userId: string
     let existingTenantId: string | undefined

@@ -97,6 +97,7 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         total: payload.total,
         grand_total: payload.total,
         payment_mode: payload.paymentMode ?? (payload.paidAmount > 0 ? 'cash' : 'udhar'),
+        paid_amount: payload.paidAmount ?? 0,
         payment_status: payload.status === 'paid' ? 'paid' : payload.paidAmount > 0 ? 'partial' : 'unpaid',
         status: payload.status?.toLowerCase() || 'unpaid',
         invoice_number: payload.invoiceNumber || payload.id,
