@@ -43,6 +43,7 @@ export default function POSPage() {
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
   const [showCustomer, setShowCustomer] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
   const [showPay, setShowPay] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [success, setSuccess] = useState<POSSuccessResult | null>(null);
@@ -401,21 +402,36 @@ export default function POSPage() {
       )}
 
       {showCustomer && (
-        <Sheet onClose={() => setShowCustomer(false)} title="Select customer">
-          <div className="space-y-1">
+        <Sheet onClose={() => { setShowCustomer(false); setCustomerSearch(""); }} title="Select customer">
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              value={customerSearch}
+              onChange={e => setCustomerSearch(e.target.value)}
+              placeholder="Search by name or phone…"
+              autoFocus
+              className="w-full rounded-xl border border-input bg-background pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors"
+            />
+          </div>
+          <div className="space-y-1 max-h-80 overflow-y-auto">
             <button
               onClick={() => {
                 setCustomer("Walk-in Customer");
                 setCustomerId("");
                 setCustomerPhone(undefined);
                 setShowCustomer(false);
+                setCustomerSearch("");
               }}
               className="w-full text-left rounded-lg p-3 hover:bg-secondary"
             >
               <div className="font-medium text-sm">Walk-in Customer</div>
               <div className="text-xs text-muted-foreground">No details</div>
             </button>
-            {customers.map((p) => (
+            {customers.filter(p => {
+              if (!customerSearch.trim()) return true;
+              const q = customerSearch.toLowerCase();
+              return p.name?.toLowerCase().includes(q) || p.phone?.toLowerCase().includes(q);
+            }).map((p) => (
               <button
                 key={p.id}
                 onClick={() => {
@@ -423,18 +439,27 @@ export default function POSPage() {
                   setCustomerId(p.id);
                   setCustomerPhone(p.phone.replace(/\s/g, ""));
                   setShowCustomer(false);
+                  setCustomerSearch("");
                 }}
                 className="w-full text-left rounded-lg p-3 hover:bg-secondary flex justify-between items-center"
               >
                 <div>
                   <div className="font-medium text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">{p.phone}</div>
+                  <div className="text-xs text-muted-foreground">{p.phone || "No phone"}</div>
                 </div>
                 {p.pending > 0 && (
                   <span className="text-xs font-semibold text-yellow-600">{formatINR(p.pending)} due</span>
                 )}
               </button>
             ))}
+            {customerSearch.trim() && customers.filter(p => {
+              const q = customerSearch.toLowerCase();
+              return p.name?.toLowerCase().includes(q) || p.phone?.toLowerCase().includes(q);
+            }).length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No parties match "{customerSearch}"
+              </div>
+            )}
           </div>
         </Sheet>
       )}

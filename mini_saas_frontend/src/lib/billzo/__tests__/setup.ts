@@ -1,5 +1,9 @@
 import { vi } from 'vitest'
 
+process.env.JWT_SECRET = 'test-jwt-secret-for-vitest'
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+
 const mockSubmitIntent = vi.fn(async (intent: any) => {
   if (intent.intentType === 'recovery.record_attribution') {
     const { supabaseAdmin } = await import('../supabase-admin')

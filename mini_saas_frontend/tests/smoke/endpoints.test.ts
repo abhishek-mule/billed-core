@@ -1,12 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { NextRequest } from 'next/server'
+import { createAccessToken } from '@/lib/billzo/auth-jwt'
 
 // ── Mock factory helpers ──
 const mockTenantId = 'tenant_test_123'
 const mockUserId = 'user_test_456'
 
 function mockAuthedRequest(url: string, opts?: RequestInit): NextRequest {
+  const accessToken = createAccessToken({ sessionId: 'test_session', userId: mockUserId, tenantId: mockTenantId })
   const req = new NextRequest(url, opts)
+  req.cookies.set('bz_access', accessToken)
   req.cookies.set('bz_tenant', mockTenantId)
   req.cookies.set('bz_user_id', mockUserId)
   return req
@@ -24,7 +27,7 @@ describe('GET /api/recovery/queue', () => {
     const res = await GET(req)
     expect(res.status).toBe(401)
     const body = await res.json()
-    expect(body.error).toMatch(/Missing tenant/)
+    expect(body.error).toMatch(/Unauthorized/)
   })
 })
 
