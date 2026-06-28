@@ -112,12 +112,12 @@ export async function POST(request: NextRequest) {
     if (bodyResult.response) return bodyResult.response
     const body = bodyResult.data!
 
-    const { caseId, customerId, action, payload } = body as {
+    const { caseId, action, payload } = body as {
       caseId?: string
-      customerId?: string
       action: string
       payload?: Record<string, any>
     }
+    let customerId = (body as any).customerId as string | undefined
 
     if (!action) {
       return errorResponse('Missing required field: action', 400)
@@ -134,6 +134,18 @@ export async function POST(request: NextRequest) {
     // schedule_reminder resolves case by customerId (send page may not have caseId yet)
     let recoveryCase: any = null
     if (action === 'schedule_reminder') {
+      if (!customerId) {
+        // Fall back to invoice's customer_id
+        const invoiceId = body.invoiceId || payload?.invoiceId
+        if (invoiceId) {
+          const { data: inv } = await supabase
+            .from('invoices')
+            .select('customer_id')
+            .eq('id', invoiceId)
+            .maybeSingle()
+          customerId = inv?.customer_id || undefined
+        }
+      }
       if (!customerId) {
         return errorResponse('customerId required for schedule_reminder', 400)
       }
