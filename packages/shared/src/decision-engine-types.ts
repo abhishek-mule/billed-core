@@ -55,6 +55,9 @@ export interface CanSendReminderOutput {
   allowed: boolean
   decision: Decision
   reason: string
+  reasons: string[]
+  overridden: boolean
+  reminderId?: string
   confidence: number
   rules: DecisionRuleResult[]
   rulesSnapshot: Record<string, boolean>

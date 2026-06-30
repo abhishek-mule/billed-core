@@ -33,6 +33,15 @@ export interface PaymentEvidence {
   notes?: string
 }
 
+export const PAYMENT_LIFECYCLE_STATUSES = [
+  'created',
+  'synced',
+  'processed',
+  'projected',
+  'visible',
+] as const
+export type PaymentLifecycleStatus = (typeof PAYMENT_LIFECYCLE_STATUSES)[number]
+
 export interface PaymentRecord {
   id: string
   tenantId: string
@@ -40,7 +49,9 @@ export interface PaymentRecord {
   amount: number
   paymentMode: string
   source: PaymentSource
+  sourceId?: string
   status: string
+  lifecycleStatus: PaymentLifecycleStatus
   actor: PaymentActor
   evidence: PaymentEvidence
   notes?: string
@@ -53,7 +64,9 @@ export interface RecordPaymentInput {
   invoiceId: string
   amount: number
   source: PaymentSource
+  sourceId?: string
   actor: PaymentActor
+  existingPaymentId?: string
   evidence?: PaymentEvidence
   notes?: string
 }
