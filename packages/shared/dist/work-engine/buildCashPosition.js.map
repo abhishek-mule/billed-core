@@ -1,0 +1,1 @@
+{"version":3,"file":"buildCashPosition.js","sourceRoot":"","sources":["../../src/work-engine/buildCashPosition.ts"],"names":[],"mappings":";;AASA,8CAOC;AAPD,SAAgB,iBAAiB,CAAC,KAAqB,EAAE,QAAqB;IAC5E,OAAO;QACL,WAAW,EAAE,KAAK,CAAC,WAAW;QAC9B,cAAc,EAAE,KAAK,CAAC,cAAc;QACpC,aAAa,EAAE,KAAK,CAAC,QAAQ;QAC7B,aAAa,EAAE,KAAK,CAAC,aAAa;KACnC,CAAA;AACH,CAAC"}

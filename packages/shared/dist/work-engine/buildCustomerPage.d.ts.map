@@ -1,0 +1,1 @@
+{"version":3,"file":"buildCustomerPage.d.ts","sourceRoot":"","sources":["../../src/work-engine/buildCustomerPage.ts"],"names":[],"mappings":"AAAA,OAAO,EAAqB,KAAK,YAAY,EAAE,MAAM,qBAAqB,CAAA;AAC1E,OAAO,KAAK,EAAE,YAAY,EAAE,WAAW,EAAE,MAAM,SAAS,CAAA;AAExD,MAAM,MAAM,gBAAgB,GAAG,YAAY,CAAA;AAE3C,wBAAgB,iBAAiB,CAAC,IAAI,EAAE,YAAY,EAAE,OAAO,EAAE,WAAW,GAAG,gBAAgB,CAE5F"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"buildDashboardView.js","sourceRoot":"","sources":["../../src/work-engine/buildDashboardView.ts"],"names":[],"mappings":";;AAQA,gDAMC;AAND,SAAgB,kBAAkB,CAAC,KAAqB;IACtD,OAAO;QACL,IAAI,EAAE,KAAK,CAAC,IAAI;QAChB,IAAI,EAAE,KAAK,CAAC,IAAI;QAChB,QAAQ,EAAE,KAAK,CAAC,QAAQ;KACzB,CAAA;AACH,CAAC"}

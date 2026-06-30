@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from '@/components/billzo/AppShell'
 import { ErrorBoundary } from '@/components/billzo/ErrorBoundary'
 import { LoadingScreen } from '@/components/billzo/LoadingScreen'
+import { SessionProvider } from '@/lib/billzo/session'
 
 export default function BillzoLayout({ children }: { children: React.ReactNode }) {
   const [isMounted, setIsMounted] = useState(false)
@@ -18,7 +19,9 @@ export default function BillzoLayout({ children }: { children: React.ReactNode }
 
   return (
     <ErrorBoundary>
-      <AppShell>{children}</AppShell>
+      <SessionProvider>
+        <AppShell>{children}</AppShell>
+      </SessionProvider>
     </ErrorBoundary>
   )
 }

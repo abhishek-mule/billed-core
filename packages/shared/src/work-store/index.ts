@@ -3,7 +3,8 @@ import { buildCustomerPage } from '../work-engine/buildCustomerPage'
 import { buildCashPosition } from '../work-engine/buildCashPosition'
 import { buildActivity } from '../work-engine/buildActivity'
 import { buildDashboardView } from '../work-engine/buildDashboardView'
-import type { DashboardView } from '../work-engine/types'
+import { buildDashboardSections } from '../work-engine/buildDashboardSections'
+import type { DashboardView, AnyDashboardSection } from '../work-engine/types'
 import type { CustomerPageView } from '../work-engine/buildCustomerPage'
 import type { WorkContext } from '../work-engine/types'
 import type { LoadCustomerSnapshot } from '../repositories/customer'
@@ -19,13 +20,13 @@ export interface WorkStoreDeps {
 }
 
 export interface WorkStore {
-  getDashboard(): Promise<DashboardView>
+  getDashboard(): Promise<{ sections: AnyDashboardSection[] }>
   getCustomer(id: string): Promise<CustomerPageView>
 }
 
 export function createWorkStore(deps: WorkStoreDeps): WorkStore {
   return {
-    async getDashboard(): Promise<DashboardView> {
+    async getDashboard(): Promise<{ sections: AnyDashboardSection[] }> {
       const [cases, events, finance] = await Promise.all([
         deps.loadQueueCases(),
         deps.loadRecentActivity(),
@@ -38,11 +39,13 @@ export function createWorkStore(deps: WorkStoreDeps): WorkStore {
         locale: 'en-IN',
       }
 
-      return buildDashboardView({
+      const view = buildDashboardView({
         work: buildTodayWork(cases, context),
         cash: buildCashPosition(finance, context),
         activity: buildActivity(events, context),
       })
+
+      return { sections: buildDashboardSections(view, context) }
     },
 
     async getCustomer(id: string): Promise<CustomerPageView> {

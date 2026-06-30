@@ -13,7 +13,7 @@
 // table.
 // ============================================================
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PAYMENT_SOURCES = void 0;
+exports.PAYMENT_LIFECYCLE_STATUSES = exports.PAYMENT_SOURCES = void 0;
 exports.PAYMENT_SOURCES = [
     'cash',
     'razorpay',
@@ -21,5 +21,12 @@ exports.PAYMENT_SOURCES = [
     'cheque',
     'adjustment',
     'upi',
+];
+exports.PAYMENT_LIFECYCLE_STATUSES = [
+    'created',
+    'synced',
+    'processed',
+    'projected',
+    'visible',
 ];
 //# sourceMappingURL=payment-types.js.map

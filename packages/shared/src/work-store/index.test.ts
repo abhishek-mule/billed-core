@@ -4,6 +4,7 @@ import type { QueueCaseInput } from '../work-engine/buildTodayWork'
 import type { ActivityEventInput } from '../work-engine/buildActivity'
 import type { FinancialInput } from '../work-engine/buildCashPosition'
 import type { CustomerSnapshot } from '../repositories/customer'
+import type { AnyDashboardSection } from '../work-engine/types'
 
 function mockDeps(overrides?: Partial<ReturnType<typeof buildMocks>>) {
   const defaults = buildMocks()
@@ -52,64 +53,109 @@ function buildMocks() {
   }
 }
 
+function isTodaySection(section: AnyDashboardSection): section is AnyDashboardSection & { type: 'today'; payload: { items: any[]; empty?: any } } {
+  return section.type === 'today'
+}
+
+function isCashSection(section: AnyDashboardSection): section is AnyDashboardSection & { type: 'cash'; payload: { metrics: any[] } } {
+  return section.type === 'cash'
+}
+
+function isActivitySection(section: AnyDashboardSection): section is AnyDashboardSection & { type: 'activity'; payload: { events: any[] } } {
+  return section.type === 'activity'
+}
+
+function getTodaySection(sections: AnyDashboardSection[]) {
+  return sections.find(isTodaySection)
+}
+
+function getCashSection(sections: AnyDashboardSection[]) {
+  return sections.find(isCashSection)
+}
+
+function getActivitySection(sections: AnyDashboardSection[]) {
+  return sections.find(isActivitySection)
+}
+
 describe('WorkStore', () => {
   describe('getDashboard', () => {
-    it('returns a DashboardView with work, cash, and activity', async () => {
+    it('returns sections with today, cash, and activity', async () => {
       const store = createWorkStore(mockDeps())
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result).toHaveProperty('work')
-      expect(result).toHaveProperty('cash')
-      expect(result).toHaveProperty('activity')
+      const todaySection = getTodaySection(sections)
+      const cashSection = getCashSection(sections)
+      const activitySection = getActivitySection(sections)
+
+      expect(todaySection).toBeDefined()
+      expect(cashSection).toBeDefined()
+      expect(activitySection).toBeDefined()
     })
 
-    it('builds work from queue cases', async () => {
+    it('builds work items in today section from queue cases', async () => {
       const store = createWorkStore(mockDeps())
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result.work).toHaveLength(1)
-      expect(result.work[0].customerName).toBe('Ankit')
-      expect(result.work[0].moneyImpact).toBe(15000)
+      const todaySection = getTodaySection(sections)
+      expect(todaySection?.payload.items).toHaveLength(1)
+      expect(todaySection?.payload.items[0].customerName).toBe('Ankit')
+      expect(todaySection?.payload.items[0].moneyImpact).toBe(15000)
     })
 
-    it('builds cash position from financial summary', async () => {
+    it('builds cash position in cash section from financial summary', async () => {
       const store = createWorkStore(mockDeps())
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result.cash.outstanding).toBe(15000)
-      expect(result.cash.collectedToday).toBe(5000)
-      expect(result.cash.expectedToday).toBe(15000)
+      const cashSection = getCashSection(sections)
+      expect(cashSection?.payload.metrics).toHaveLength(3)
+      const outstanding = cashSection?.payload.metrics.find(m => m.label === 'Outstanding')
+      const collectedToday = cashSection?.payload.metrics.find(m => m.label === 'Collected Today')
+      const expectedToday = cashSection?.payload.metrics.find(m => m.label === 'Expected Today')
+      expect(outstanding?.value).toContain('15,000')
+      expect(collectedToday?.value).toContain('5,000')
+      expect(expectedToday?.value).toContain('15,000')
     })
 
-    it('builds activity from recent events', async () => {
+    it('builds activity in activity section from recent events', async () => {
       const store = createWorkStore(mockDeps())
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result.activity).toHaveLength(1)
-      expect(result.activity[0].label).toContain('payment received')
+      const activitySection = getActivitySection(sections)
+      expect(activitySection?.payload.events).toHaveLength(1)
+      expect(activitySection?.payload.events[0].label).toContain('payment received')
     })
 
-    it('returns empty work when no queue cases', async () => {
+    it('returns empty today section when no queue cases', async () => {
       const deps = mockDeps({
         loadQueueCases: async () => [],
       })
       const store = createWorkStore(deps)
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result.work).toHaveLength(0)
-      expect(result.cash.outstanding).toBe(15000)
-      expect(result.activity).toHaveLength(1)
+      const todaySection = getTodaySection(sections)
+      expect(todaySection?.payload.items).toHaveLength(0)
+      expect(todaySection?.payload.empty).toBeDefined()
+      expect(todaySection?.payload.empty?.headline).toBe("Today's work is complete")
+
+      const cashSection = getCashSection(sections)
+      expect(cashSection?.payload.metrics).toHaveLength(3)
+
+      const activitySection = getActivitySection(sections)
+      expect(activitySection?.payload.events).toHaveLength(1)
     })
 
-    it('returns empty activity when no recent events', async () => {
+    it('returns empty activity section when no recent events', async () => {
       const deps = mockDeps({
         loadRecentActivity: async () => [],
       })
       const store = createWorkStore(deps)
-      const result = await store.getDashboard()
+      const { sections } = await store.getDashboard()
 
-      expect(result.work).toHaveLength(1)
-      expect(result.activity).toHaveLength(0)
+      const todaySection = getTodaySection(sections)
+      expect(todaySection?.payload.items).toHaveLength(1)
+
+      const activitySection = getActivitySection(sections)
+      expect(activitySection?.payload.events).toHaveLength(0)
     })
   })
 
