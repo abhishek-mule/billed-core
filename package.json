@@ -11,7 +11,8 @@
     "test": "pnpm -r --sequential test",
     "test:frontend": "pnpm --filter mini_saas_frontend test",
     "test:worker": "pnpm --filter billzo-worker test",
-    "test:shared": "pnpm --filter @billzo/shared test"
+    "test:shared": "pnpm --filter @billzo/shared test",
+    "validate:system": "pnpm --filter billzo-worker validate:system"
   },
   "dependencies": {
     "commander": "^14.0.3"
