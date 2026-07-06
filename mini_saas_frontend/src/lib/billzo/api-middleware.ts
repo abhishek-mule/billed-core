@@ -157,7 +157,7 @@ export function validateRequired(
   const errors: Record<string, string> = {}
 
   for (const field of fields) {
-    if (!data[field]) {
+    if (data[field] === undefined || data[field] === null) {
       errors[field] = `${field} is required`
     }
   }

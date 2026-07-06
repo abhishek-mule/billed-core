@@ -1,6 +1,6 @@
 import { writeOutboxEvent, type OutboxWriteOptions } from './outbox'
 import { generateCorrelationId } from './idempotency'
-import { EventType, type EventProducer, type BillzoEvent } from '@billzo/shared'
+import { EventType, type BillzoEvent } from '@billzo/shared'
 
 // ============================================================
 // EVENT EMISSION

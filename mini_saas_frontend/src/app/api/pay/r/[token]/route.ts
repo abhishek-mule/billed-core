@@ -20,6 +20,10 @@ export async function GET(
 
   const { invoiceId, tenantId, amount, upiId } = payload
 
+  if (!upiId) {
+    return NextResponse.json({ error: 'Payment link is misconfigured — missing UPI ID' }, { status: 400 })
+  }
+
   const now = new Date().toISOString()
 
   // Find the latest billzo_message_id for this invoice

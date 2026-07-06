@@ -16,14 +16,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
     }
 
-    const session = await getSession(oldPayload.sessionId)
+    // Redis lookup (non-critical)
+    let tenantId: string | undefined
+    try {
+      const session = await getSession(oldPayload.sessionId)
+      tenantId = session?.tenantId || undefined
+    } catch {
+      console.warn('[Refresh] Redis unavailable, proceeding with JWT-only data')
+    }
 
-    const newAccessToken = createAccessToken({
-      sessionId: oldPayload.sessionId,
-      userId: oldPayload.userId,
-      tenantId: session?.tenantId || undefined,
-    })
-    const newRefreshToken = createRefreshToken(oldPayload)
+    // JWT creation
+    let newAccessToken: string, newRefreshToken: string
+    try {
+      newAccessToken = createAccessToken({
+        sessionId: oldPayload.sessionId,
+        userId: oldPayload.userId,
+        tenantId,
+      })
+      newRefreshToken = createRefreshToken(oldPayload)
+    } catch (jwtErr: any) {
+      console.error('[Refresh] JWT creation failed:', jwtErr?.message)
+      return NextResponse.json({ error: 'Auth configuration error' }, { status: 500 })
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -32,10 +46,14 @@ export async function POST(request: NextRequest) {
       expiresIn: 14 * 24 * 3600,
     })
 
-    setAuthCookies(response, newAccessToken, newRefreshToken, session?.tenantId || undefined)
+    setAuthCookies(response, newAccessToken, newRefreshToken, tenantId)
     return response
-  } catch (error) {
-    console.error('[Refresh] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } catch (error: any) {
+    const msg = error?.message || String(error)
+    console.error('[Refresh] Error:', msg)
+    if (msg.includes('JWT_SECRET')) {
+      return NextResponse.json({ error: 'Auth configuration error' }, { status: 500 })
+    }
+    return NextResponse.json({ error: 'Session refresh failed' }, { status: 500 })
   }
 }

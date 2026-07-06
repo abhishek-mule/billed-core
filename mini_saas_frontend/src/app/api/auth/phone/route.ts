@@ -66,8 +66,12 @@ export async function POST(request: NextRequest) {
       message: `OTP sent to ${e164.slice(0, 5)}******${e164.slice(-4)}`,
       provider: 'msg91',
     })
-  } catch (error) {
-    console.error('[Phone/send] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } catch (error: any) {
+    const msg = error?.message || String(error)
+    console.error('[Phone/send] Error:', msg)
+    if (msg.includes('Redis') || msg.includes('connect')) {
+      return NextResponse.json({ error: 'Service temporarily unavailable' }, { status: 503 })
+    }
+    return NextResponse.json({ error: 'Failed to send OTP' }, { status: 500 })
   }
 }

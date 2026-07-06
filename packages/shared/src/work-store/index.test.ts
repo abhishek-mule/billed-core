@@ -108,12 +108,12 @@ describe('WorkStore', () => {
 
       const cashSection = getCashSection(sections)
       expect(cashSection?.payload.metrics).toHaveLength(3)
-      const outstanding = cashSection?.payload.metrics.find(m => m.label === 'Outstanding')
-      const collectedToday = cashSection?.payload.metrics.find(m => m.label === 'Collected Today')
+      const outstanding = cashSection?.payload.metrics.find(m => m.label === 'Money to Collect')
+      const collectedToday = cashSection?.payload.metrics.find(m => m.label === 'Received Today')
       const expectedToday = cashSection?.payload.metrics.find(m => m.label === 'Expected Today')
-      expect(outstanding?.value).toContain('15,000')
-      expect(collectedToday?.value).toContain('5,000')
-      expect(expectedToday?.value).toContain('15,000')
+      expect(outstanding?.value).toBe('₹15,000')
+      expect(collectedToday?.value).toBe('₹5,000')
+      expect(expectedToday?.value).toBe('₹15,000')
     })
 
     it('builds activity in activity section from recent events', async () => {
@@ -135,7 +135,7 @@ describe('WorkStore', () => {
       const todaySection = getTodaySection(sections)
       expect(todaySection?.payload.items).toHaveLength(0)
       expect(todaySection?.payload.empty).toBeDefined()
-      expect(todaySection?.payload.empty?.headline).toBe("Today's work is complete")
+      expect(todaySection?.payload.empty?.headline).toBe("Nothing needs your attention right now")
 
       const cashSection = getCashSection(sections)
       expect(cashSection?.payload.metrics).toHaveLength(3)
