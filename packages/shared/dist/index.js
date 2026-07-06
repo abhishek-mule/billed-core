@@ -33,4 +33,6 @@ __exportStar(require("./repositories/index"), exports);
 __exportStar(require("./work-store/index"), exports);
 __exportStar(require("./transports/index"), exports);
 __exportStar(require("./system/index"), exports);
+__exportStar(require("./scenarios/index"), exports);
+__exportStar(require("./recovery/index"), exports);
 //# sourceMappingURL=index.js.map

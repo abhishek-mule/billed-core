@@ -17,4 +17,6 @@ export * from './repositories/index';
 export * from './work-store/index';
 export * from './transports/index';
 export * from './system/index';
+export * from './scenarios/index';
+export * from './recovery/index';
 //# sourceMappingURL=index.d.ts.map

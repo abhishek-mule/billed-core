@@ -64,6 +64,30 @@ export async function GET(
     timestamp: now,
   })
 
+  // Dual-write: log payment_request to collection_actions
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('customer_id')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  await supabaseAdmin.from('collection_actions').insert({
+    id: `CA_${crypto.randomUUID()}`,
+    tenant_id: tenantId,
+    customer_id: invoice?.customer_id || null,
+    invoice_ids: [invoiceId],
+    action_type: 'payment_request',
+    status: 'completed',
+    source: 'customer',
+    provider: 'upi',
+    amount,
+    completed_at: now,
+    reason: 'Customer clicked UPI payment link',
+    priority: 5,
+    metadata: { billzoMessageId, whatsappEventId: eventId },
+  }).maybeSingle()
+
   const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent('BillZo')}`
   return NextResponse.redirect(upiUrl, 302)
 }
