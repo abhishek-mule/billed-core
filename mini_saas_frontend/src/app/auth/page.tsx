@@ -413,8 +413,8 @@ function LeftPanel() {
         <div className="relative h-full flex flex-col items-center justify-center px-10 text-white">
           {/* Logo + branding */}
           <div className="flex flex-col items-center mb-6">
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)] mb-2">
-              <span className="text-lg font-bold text-white/90">B</span>
+            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.4)] mb-2">
+              <Image src="/logo_new.png" alt="BillZo" width={32} height={32} className="object-contain" />
             </div>
             <div className="text-xs font-bold text-white/80 tracking-wide">BillZo</div>
             <div className="text-[9px] text-white/40 tracking-[0.2em] uppercase">Recovery OS</div>
