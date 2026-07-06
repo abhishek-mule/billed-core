@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Loader2, Mail, ArrowRight, BellRing, Zap, BarChart3, IndianRupee } from "lucide-react"
+import { Loader2, Mail, ArrowRight, IndianRupee, Zap, Clock, Users, TrendingUp } from "lucide-react"
 
 function MagicLinkForm() {
   const [email, setEmail] = useState("")
@@ -117,7 +117,7 @@ function MagicLinkForm() {
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Email Address</label>
+            <label htmlFor="email-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Business Email</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <input
@@ -125,7 +125,7 @@ function MagicLinkForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="you@company.com"
                 className="w-full pl-9 pr-4 py-2.5 rounded border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 focus:bg-card outline-none transition-all"
                 aria-label="Email address"
               />
@@ -136,7 +136,7 @@ function MagicLinkForm() {
             {loading ? "Sending link..." : "Continue with Email"}
           </button>
           <p className="text-center text-[11px] text-muted-foreground">
-            We&apos;ll send you a magic link — no password needed.
+            We&apos;ll send a secure magic link.
           </p>
         </form>
       )}
@@ -197,31 +197,106 @@ function IndiaPattern() {
   )
 }
 
-// ── Feature cards with micro-statistics ──
+// ── Live Recovery Journey Preview ──
 
-const FEATURES = [
-  {
-    icon: BellRing,
-    title: "Smart Reminders",
-    description: "Automated WhatsApp follow-ups that adapt to customer behaviour.",
-    stat: "30% Faster Recovery",
-    statLabel: "avg. time to collect",
-  },
-  {
-    icon: Zap,
-    title: "Instant Payments",
-    description: "UPI deep links embedded in every message — zero friction to pay.",
-    stat: "₹2.3Cr+",
-    statLabel: "collected via BillZo",
-  },
-  {
-    icon: BarChart3,
-    title: "Recovery Intelligence",
-    description: "Know who will pay, when, and which action works best.",
-    stat: "500+ Merchants",
-    statLabel: "trust BillZo daily",
-  },
+const RECOVERY_STEPS = [
+  { label: "Invoice Created", status: "done" },
+  { label: "Reminder Scheduled", status: "done" },
+  { label: "Customer Read", status: "done" },
+  { label: "Waiting Payment", status: "active" },
+  { label: "Payment Received", status: "future" },
 ]
+
+function RecoveryJourneyPreview() {
+  return (
+    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
+        <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Live Recovery Journey</span>
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-0">
+        {RECOVERY_STEPS.map((step, i) => (
+          <div key={step.label} className="flex items-start gap-3">
+            <div className="flex flex-col items-center">
+              <div
+                className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center text-[9px] font-bold transition-all ${
+                  step.status === "done"
+                    ? "bg-green-500/20 border-green-400/60 text-green-400"
+                    : step.status === "active"
+                      ? "bg-blue-500/20 border-blue-400 text-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.4)]"
+                      : "border-white/[0.15] text-white/20"
+                }`}
+              >
+                {step.status === "done" ? "✓" : step.status === "active" ? "●" : "○"}
+              </div>
+              {i < RECOVERY_STEPS.length - 1 && (
+                <div
+                  className={`w-px h-5 ${
+                    i < 3 ? "bg-white/[0.08]" : "bg-white/[0.04]"
+                  }`}
+                />
+              )}
+            </div>
+            <div
+              className={`text-xs py-[1px] ${
+                step.status === "done"
+                  ? "text-white/60"
+                  : step.status === "active"
+                    ? "text-white/90 font-medium"
+                    : "text-white/25"
+              }`}
+            >
+              {step.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Recovery Engine Status ──
+
+const ENGINE_METRICS = [
+  { icon: IndianRupee, value: "₹17,460", label: "Recovering" },
+  { icon: Users, value: "12", label: "Active Customers" },
+  { icon: TrendingUp, value: "82%", label: "Likely to Pay" },
+]
+
+function RecoveryEngineStatus() {
+  return (
+    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-blue-400" />
+          <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Recovery Engine</span>
+        </div>
+        <span className="text-[10px] text-white/30 font-mono">● Monitoring</span>
+      </div>
+
+      {/* Metrics */}
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        {ENGINE_METRICS.map((m) => (
+          <div key={m.label}>
+            <div className="text-sm font-bold text-white">{m.value}</div>
+            <div className="text-[10px] text-white/40">{m.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Next action */}
+      <div className="flex items-center gap-1.5 pt-3 border-t border-white/[0.06]">
+        <Clock className="w-3 h-3 text-white/40" />
+        <span className="text-[10px] text-white/40 font-mono">Next reminder:</span>
+        <span className="text-[10px] text-white/70 font-medium">Today · 7:30 PM</span>
+      </div>
+    </div>
+  )
+}
 
 function LeftPanel() {
   return (
@@ -246,41 +321,25 @@ function LeftPanel() {
         <div className="relative h-full flex flex-col items-center justify-center px-10 text-white">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-              <Image src="/logo_new.png" alt="BillZo" width={48} height={48} className="object-contain" />
+            <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+              <Image src="/logo_new.png" alt="BillZo" width={40} height={40} className="object-contain" />
             </div>
           </div>
 
           {/* Headline — extra-bold */}
-          <h2 className="text-3xl lg:text-4xl font-extrabold mb-4 tracking-tight text-white drop-shadow-lg">
+          <h2 className="text-3xl lg:text-4xl font-extrabold mb-3 tracking-tight text-white drop-shadow-lg">
             Recovery OS for Indian Merchants
           </h2>
 
-          {/* Body text — reduced opacity */}
-          <p className="text-base lg:text-lg text-white/60 mb-10 leading-relaxed max-w-xl drop-shadow">
-            Turn overdue invoices into collected cash. Automated reminders, payment links, and smart recovery workflows — all in one dashboard.
+          {/* Tagline */}
+          <p className="text-sm lg:text-base text-white/60 mb-8 leading-relaxed max-w-lg drop-shadow">
+            BillZo doesn&apos;t stop at billing. It automatically helps you recover every unpaid invoice.
           </p>
 
-          {/* Feature cards grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
-            {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="group bg-white/[0.06] backdrop-blur-sm border border-white/[0.10] p-4 hover:bg-white/[0.10] transition-all"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 bg-white/[0.10] rounded">
-                    <f.icon className="w-3.5 h-3.5 text-white/80" />
-                  </div>
-                  <span className="text-sm font-semibold text-white/90">{f.title}</span>
-                </div>
-                <p className="text-xs text-white/50 leading-relaxed mb-3">{f.description}</p>
-                <div>
-                  <div className="text-base font-bold text-white">{f.stat}</div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-wider">{f.statLabel}</div>
-                </div>
-              </div>
-            ))}
+          {/* Recovery Journey + Engine side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
+            <RecoveryJourneyPreview />
+            <RecoveryEngineStatus />
           </div>
         </div>
       </div>
@@ -320,10 +379,10 @@ export default function AuthPage() {
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-4">
-                <Image src="/logo_new.png" alt="BillZo" width={40} height={40} className="object-contain" />
+                <Image src="/logo_new.png" alt="BillZo" width={36} height={36} className="object-contain" />
               </div>
-              <h1 className="text-lg font-bold text-card-foreground">Welcome to BillZo</h1>
-              <p className="text-xs text-muted-foreground mt-1">Sign in with your email — no password needed</p>
+              <h1 className="text-lg font-bold text-card-foreground">Welcome back</h1>
+              <p className="text-xs text-muted-foreground mt-1">Continue managing your business.</p>
             </div>
 
             {/* Card — no border-radius, deeper shadow, more padding */}
