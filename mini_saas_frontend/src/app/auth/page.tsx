@@ -131,7 +131,7 @@ function MagicLinkForm() {
               />
             </div>
           </div>
-          <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
+          <button type="submit" disabled={loading} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
             {loading ? "Sending link..." : "Send Magic Link"}
           </button>
@@ -246,7 +246,7 @@ const RECOVERY_STEPS = [
   { label: "Invoice Created", status: "done", detail: null },
   { label: "Reminder Sent", status: "done", detail: null },
   { label: "Customer Read", status: "done", detail: "2 min ago" },
-  { label: "Waiting for Payment", status: "active", detail: "Estimated probability: 82%" },
+  { label: "Waiting for Payment", status: "active", detail: "82% chance of payment today" },
   { label: "Payment Received", status: "future", detail: null },
 ]
 
@@ -310,11 +310,11 @@ function RecoveryJourneyPreview() {
 // ── Recovery Engine Status ──
 
 const STATUS_MESSAGES = [
-  "Monitoring customer payments",
-  "Optimizing reminder timing",
-  "Learning payment behavior",
-  "Preparing next follow-up",
-  "Analyzing recovery patterns",
+  "Analyzing payment behavior...",
+  "Optimizing reminder timing...",
+  "Preparing next follow-up...",
+  "Monitoring active recoveries...",
+  "Learning from payment patterns...",
 ]
 
 function RecoveryEngineStatus() {
@@ -335,7 +335,7 @@ function RecoveryEngineStatus() {
           <Zap className="w-3.5 h-3.5 text-blue-400" />
           <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Recovery Engine</span>
         </div>
-        <span className="text-[10px] text-white/30 font-mono">● Live</span>
+        <span className="text-[10px] text-white/30 font-mono">● Monitoring</span>
       </div>
 
       {/* Hero metric */}
@@ -364,11 +364,11 @@ function RecoveryEngineStatus() {
 
       {/* Next action */}
       <div className="pt-3 border-t border-white/[0.06] mb-3">
-        <div className="text-[10px] text-white/40 mb-1">Next Action</div>
+        <div className="text-[10px] text-white/40 mb-1">Next Automatic Action</div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <Clock className="w-3 h-3 text-blue-400" />
-            <span className="text-xs text-white/70 font-medium">Reminder</span>
+            <span className="text-xs text-white/70 font-medium">WhatsApp Reminder</span>
           </div>
           <span className="text-[10px] text-white/50">Today · 7:30 PM</span>
         </div>
@@ -413,11 +413,11 @@ function LeftPanel() {
         <div className="relative h-full flex flex-col items-center justify-center px-10 text-white">
           {/* Logo + branding */}
           <div className="flex flex-col items-center mb-6">
-            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-lg mb-2">
-              <Image src="/logo_new.png" alt="BillZo" width={32} height={32} className="object-contain" />
+            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center p-2 shadow-lg mb-2.5">
+              <Image src="/logo_new.png" alt="BillZo" width={38} height={38} className="object-contain" />
             </div>
-            <div className="text-xs font-bold text-white/80 tracking-wide">BillZo</div>
-            <div className="text-[9px] text-white/40 tracking-[0.2em] uppercase">Recovery OS</div>
+            <div className="text-sm font-bold text-white/80 tracking-wide">BillZo</div>
+            <div className="text-[11px] text-white/40 tracking-[0.2em] uppercase">Recovery OS</div>
           </div>
 
           {/* Headline — extra-bold */}
@@ -426,9 +426,20 @@ function LeftPanel() {
           </h2>
 
           {/* Tagline */}
-          <p className="text-sm lg:text-base text-white/60 mb-8 leading-relaxed max-w-lg drop-shadow">
+          <p className="text-sm lg:text-base text-white/60 mb-5 leading-relaxed max-w-lg drop-shadow">
             From invoice to payment — BillZo manages the entire recovery journey.
           </p>
+
+          {/* Trust bar */}
+          <div className="flex items-center gap-1.5 mb-8">
+            <div className="flex -space-x-1.5">
+              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">A</div>
+              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">K</div>
+              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">R</div>
+              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">M</div>
+            </div>
+            <span className="text-[10px] text-white/40">Trusted by growing Indian businesses</span>
+          </div>
 
           {/* Recovery Journey + Engine side by side */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
@@ -442,7 +453,7 @@ function LeftPanel() {
       <div className="absolute bottom-5 left-0 right-0 flex justify-center">
         <div className="inline-flex items-center gap-1.5 bg-white/[0.06] backdrop-blur-sm px-3 py-1.5 border border-white/[0.10]">
           <IndianRupee className="w-3 h-3 text-white/60" />
-          <span className="text-[11px] text-white/50 font-medium tracking-wide">Built for Indian MSMEs</span>
+          <span className="text-[11px] text-white/50 font-medium tracking-wide">Proudly Built for Indian MSMEs</span>
         </div>
       </div>
     </div>
@@ -453,7 +464,9 @@ function MobileLogoBar() {
   return (
     <div className="lg:hidden flex flex-col items-center gap-1 p-5 border-b border-border bg-gradient-to-r from-[#0a1628] to-[#162d50]">
       <div className="flex items-center gap-2">
-        <Image src="/logo_new.png" alt="BillZo" width={28} height={28} className="object-contain" />
+        <div className="w-8 h-8 bg-white/95 rounded-lg flex items-center justify-center p-1.5 shadow">
+          <Image src="/logo_new.png" alt="BillZo" width={22} height={22} className="object-contain" />
+        </div>
         <span className="font-bold text-white text-sm">BillZo</span>
       </div>
       <p className="text-[11px] text-white/60">Recovery OS for Indian Merchants</p>
@@ -473,7 +486,7 @@ export default function AuthPage() {
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex justify-center mb-4">
-                <Image src="/logo_new.png" alt="BillZo" width={36} height={36} className="object-contain" />
+                <Image src="/logo_new.png" alt="BillZo" width={44} height={44} className="object-contain" />
               </div>
               <h1 className="text-lg font-bold text-card-foreground">Welcome back</h1>
               <p className="text-xs text-muted-foreground mt-1">Continue managing your business.</p>
