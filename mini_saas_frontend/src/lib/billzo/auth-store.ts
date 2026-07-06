@@ -221,17 +221,21 @@ export async function recordLoginEvent(params: {
   userAgent?: string
   success?: boolean
 }): Promise<void> {
-  const { createClient } = await import('@supabase/supabase-js')
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) return
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    if (!url || !key) return
 
-  const supabase = createClient(url, key)
-  await supabase.from('login_events').insert({
-    user_id: params.userId || null,
-    email: params.email || null,
-    ip: params.ip || null,
-    user_agent: params.userAgent || null,
-    success: params.success ?? true,
-  }).maybeSingle()
+    const supabase = createClient(url, key)
+    await supabase.from('login_events').insert({
+      user_id: params.userId || null,
+      email: params.email || null,
+      ip: params.ip || null,
+      user_agent: params.userAgent || null,
+      success: params.success ?? true,
+    }).maybeSingle()
+  } catch (err) {
+    console.error('[recordLoginEvent] Failed to record event:', err)
+  }
 }
