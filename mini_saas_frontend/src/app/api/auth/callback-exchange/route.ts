@@ -82,11 +82,15 @@ export async function POST(request: NextRequest) {
       merchantName = (membership as any).tenants?.name || ''
     }
 
-    // ── Also check Redis sessions as final fallback ──
+    // ── Also check Redis sessions as final fallback (non-critical) ──
     if (!resolvedMerchantId) {
-      const existingSessions = await findSessionsByUserId(userId)
-      const existingWithTenant = existingSessions.find((s) => s.tenantId)
-      resolvedMerchantId = existingWithTenant?.tenantId || undefined
+      try {
+        const existingSessions = await findSessionsByUserId(userId)
+        const existingWithTenant = existingSessions.find((s) => s.tenantId)
+        resolvedMerchantId = existingWithTenant?.tenantId || undefined
+      } catch {
+        console.warn('[Auth/Callback-Exchange] Redis lookup failed, proceeding without cached tenant')
+      }
     }
 
     // ── Record login event ──
@@ -100,25 +104,35 @@ export async function POST(request: NextRequest) {
       })
     } catch { /* non-critical */ }
 
-    // ── Create Redis session ──
+    // ── Create Redis session (non-critical; tokens are in cookies) ──
     const sessionId = crypto.randomBytes(32).toString('hex')
-    await setSession(sessionId, {
-      userId,
-      sessionId,
-      tenantId: resolvedMerchantId || null,
-      isPaid: false,
-      email,
-      createdAt: Date.now(),
-    })
+    try {
+      await setSession(sessionId, {
+        userId,
+        sessionId,
+        tenantId: resolvedMerchantId || null,
+        isPaid: false,
+        email,
+        createdAt: Date.now(),
+      })
+    } catch {
+      console.warn('[Auth/Callback-Exchange] Redis session storage failed, proceeding with cookie-only auth')
+    }
 
     // ── Issue tokens ──
-    const accessToken = createAccessToken({
-      sessionId,
-      userId,
-      tenantId: resolvedMerchantId,
-      email,
-    })
-    const refreshToken = createRefreshToken({ sessionId, userId })
+    let accessToken: string, refreshToken: string
+    try {
+      accessToken = createAccessToken({
+        sessionId,
+        userId,
+        tenantId: resolvedMerchantId,
+        email,
+      })
+      refreshToken = createRefreshToken({ sessionId, userId })
+    } catch (jwtErr: any) {
+      console.error('[Auth/Callback-Exchange] JWT creation failed:', jwtErr?.message)
+      return NextResponse.json({ error: 'Auth configuration error — JWT secret not set' }, { status: 500 })
+    }
 
     const redirectTo = resolvedMerchantId ? '/dashboard' : '/onboarding'
 
@@ -142,7 +156,11 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error: any) {
-    console.error('[Auth/Callback-Exchange] Error:', error?.message || error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const msg = error?.message || String(error)
+    console.error('[Auth/Callback-Exchange] Error:', msg)
+    if (msg.includes('JWT_SECRET')) {
+      return NextResponse.json({ error: 'Auth configuration error — JWT secret not set' }, { status: 500 })
+    }
+    return NextResponse.json({ error: 'Login failed. Please try again.' }, { status: 500 })
   }
 }

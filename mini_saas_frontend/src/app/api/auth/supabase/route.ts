@@ -54,23 +54,46 @@ export async function POST(request: NextRequest) {
 
       const userId = data.user.id
       const userEmail = data.user.email || undefined
-      const existingSessions = await findSessionsByUserId(userId)
-      const existingWithTenant = existingSessions.find(s => s.tenantId)
-      const existingTenantId = existingWithTenant?.tenantId || undefined
 
-      const sessionId = await upsertSession(userId, {
-        email: userEmail,
-        tenantId: existingTenantId,
-        isPaid: existingWithTenant?.isPaid || false,
-      })
+      // Redis lookup (non-critical)
+      let existingTenantId: string | undefined
+      let isPaid = false
+      try {
+        const existingSessions = await findSessionsByUserId(userId)
+        const existingWithTenant = existingSessions.find(s => s.tenantId)
+        existingTenantId = existingWithTenant?.tenantId || undefined
+        isPaid = existingWithTenant?.isPaid || false
+      } catch {
+        console.warn('[Auth/Supabase] Redis lookup failed, proceeding without cached session')
+      }
 
-      const billzoAccessToken = createAccessToken({
-        sessionId,
-        userId,
-        tenantId: existingTenantId,
-        email: userEmail,
-      })
-      const billzoRefreshToken = createRefreshToken({ sessionId, userId })
+      // Redis session storage (non-critical)
+      let sessionId: string
+      try {
+        sessionId = await upsertSession(userId, {
+          email: userEmail,
+          tenantId: existingTenantId,
+          isPaid,
+        })
+      } catch {
+        console.warn('[Auth/Supabase] Redis session storage failed, generating session id anyway')
+        sessionId = crypto.randomBytes(32).toString('hex')
+      }
+
+      // JWT creation
+      let billzoAccessToken: string, billzoRefreshToken: string
+      try {
+        billzoAccessToken = createAccessToken({
+          sessionId,
+          userId,
+          tenantId: existingTenantId,
+          email: userEmail,
+        })
+        billzoRefreshToken = createRefreshToken({ sessionId, userId })
+      } catch (jwtErr: any) {
+        console.error('[Auth/Supabase] JWT creation failed:', jwtErr?.message)
+        return NextResponse.json({ error: 'Auth configuration error — JWT secret not set' }, { status: 500 })
+      }
 
       const response = NextResponse.json({
         success: true,
@@ -105,23 +128,46 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = sbSession.user.id
-    const existingSessions = await findSessionsByUserId(userId)
-    const existingWithTenant = existingSessions.find(s => s.tenantId)
-    const existingTenantId = existingWithTenant?.tenantId || undefined
 
-    const sessionId = await upsertSession(userId, {
-      email,
-      tenantId: existingTenantId,
-      isPaid: existingWithTenant?.isPaid || false,
-    })
+    // Redis lookup (non-critical)
+    let existingTenantId: string | undefined
+    let isPaid = false
+    try {
+      const existingSessions = await findSessionsByUserId(userId)
+      const existingWithTenant = existingSessions.find(s => s.tenantId)
+      existingTenantId = existingWithTenant?.tenantId || undefined
+      isPaid = existingWithTenant?.isPaid || false
+    } catch {
+      console.warn('[Auth/Supabase] Redis lookup failed, proceeding without cached session')
+    }
 
-    const accessToken = createAccessToken({
-      sessionId,
-      userId,
-      tenantId: existingTenantId ?? undefined,
-      email,
-    })
-    const refreshToken = createRefreshToken({ sessionId, userId })
+    // Redis session storage (non-critical)
+    let sessionId: string
+    try {
+      sessionId = await upsertSession(userId, {
+        email,
+        tenantId: existingTenantId,
+        isPaid,
+      })
+    } catch {
+      console.warn('[Auth/Supabase] Redis session storage failed, generating session id anyway')
+      sessionId = crypto.randomBytes(32).toString('hex')
+    }
+
+    // JWT creation
+    let accessToken: string, refreshToken: string
+    try {
+      accessToken = createAccessToken({
+        sessionId,
+        userId,
+        tenantId: existingTenantId ?? undefined,
+        email,
+      })
+      refreshToken = createRefreshToken({ sessionId, userId })
+    } catch (jwtErr: any) {
+      console.error('[Auth/Supabase] JWT creation failed:', jwtErr?.message)
+      return NextResponse.json({ error: 'Auth configuration error — JWT secret not set' }, { status: 500 })
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -140,8 +186,12 @@ export async function POST(request: NextRequest) {
     })
     return response
   } catch (error: any) {
-    console.error('[Auth/Supabase] UNCAUGHT:', error?.message || error)
+    const msg = error?.message || String(error)
+    console.error('[Auth/Supabase] UNCAUGHT:', msg)
     console.error('[Auth/Supabase] Stack:', error?.stack)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    if (msg.includes('JWT_SECRET')) {
+      return NextResponse.json({ error: 'Auth configuration error — JWT secret not set' }, { status: 500 })
+    }
+    return NextResponse.json({ error: 'Login failed. Please try again.' }, { status: 500 })
   }
 }
