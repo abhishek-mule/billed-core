@@ -18,4 +18,6 @@ __exportStar(require("./types"), exports);
 __exportStar(require("./policies"), exports);
 __exportStar(require("./planner"), exports);
 __exportStar(require("./providers/interface"), exports);
+__exportStar(require("./timeline-types"), exports);
+__exportStar(require("./timeline-builder"), exports);
 //# sourceMappingURL=index.js.map

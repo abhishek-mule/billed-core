@@ -7,7 +7,7 @@ import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, Al
 import { Button } from "@/components/billzo/Button";
 import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
-import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline";
+import RecoveryJourney from "@/components/recovery/RecoveryJourney";
 import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
 import { formatINR } from "@/lib/utils";
 import { getCookie } from "@/lib/cookies";
@@ -33,10 +33,7 @@ export default function InvoiceDetailPage() {
   const [missingPhone, setMissingPhone] = useState('');
   const [genLinkLoading, setGenLinkLoading] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
-  const [recoveryTimeline, setRecoveryTimeline] = useState<any[]>([]);
   const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideBlockedReason, setOverrideBlockedReason] = useState('');
@@ -58,7 +55,7 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => {
     loadInvoice();
-    loadRecoveryData();
+    loadAttribution();
   }, [id]);
 
   const loadInvoice = async () => {
@@ -87,32 +84,16 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const loadRecoveryData = async () => {
+  const loadAttribution = async () => {
     try {
-      setTimelineLoading(true);
-      setTimelineError(null);
       const res = await fetch(`/api/recovery/timeline?invoiceId=${id}`, {
         credentials: 'include',
       });
-      
-      if (!res.ok) {
-        let errorMsg = `HTTP ${res.status}`;
-        try {
-          const data = await res.json();
-          errorMsg = data.error || errorMsg;
-        } catch { console.error('[InvoiceDetail] Failed to parse error response', errorMsg) }
-        throw new Error(errorMsg);
-      }
-      
+      if (!res.ok) return;
       const data = await res.json();
-      setRecoveryTimeline(data.events || []);
       setRecoveryAttribution(data.attribution);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Failed to load recovery data';
-      console.error("Failed to load recovery data:", error);
-      setTimelineError(errorMsg);
-    } finally {
-      setTimelineLoading(false);
+    } catch {
+      // attribution is non-critical
     }
   };
 
@@ -146,7 +127,7 @@ export default function InvoiceDetailPage() {
       setShowWAModal(false)
       setMissingPhone('')
       setPersonalNote('')
-      loadRecoveryData()
+      loadAttribution()
       setTimeout(() => setWaSuccess(false), 3000)
     } catch (err: any) {
       setWaError(err.message)
@@ -237,7 +218,7 @@ export default function InvoiceDetailPage() {
 
       if (data.applied || data.success) {
         setOverrideSuccess(true)
-        loadRecoveryData()
+        loadAttribution()
         setTimeout(() => {
           setShowOverrideModal(false)
           setOverrideSuccess(false)
@@ -276,7 +257,7 @@ export default function InvoiceDetailPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to record payment');
       setRecordPaymentSuccess(true);
       loadInvoice();
-      loadRecoveryData();
+      loadAttribution();
     } catch (err: any) {
       setRecordPaymentError(err.message);
     } finally {
@@ -389,7 +370,7 @@ export default function InvoiceDetailPage() {
               amount={total}
               customerName={invoice.customerName}
               customerPhone={invoice.customerPhone}
-              onPaymentSuccess={() => { loadInvoice(); loadRecoveryData(); }}
+              onPaymentSuccess={() => { loadInvoice(); loadAttribution(); }}
               className="rounded-2xl py-4"
             />
           )}
@@ -568,18 +549,8 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Recovery Timeline */}
-      {timelineLoading ? (
-        <div className="rounded-2xl border border-border bg-card p-5 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <RecoveryTimeline
-          events={recoveryTimeline}
-          recoveredAmount={paid && recoveryAttribution?.attributed ? total : 0}
-          onOverride={handleOverride}
-        />
-      )}
+      {/* Recovery Journey */}
+      <RecoveryJourney invoiceId={id} />
 
       {/* Override Modal */}
       {showOverrideModal && (
