@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Loader2, Mail, ArrowRight, IndianRupee, Zap, Clock, Users, TrendingUp } from "lucide-react"
+import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, ShieldCheck, Lock } from "lucide-react"
 
 function MagicLinkForm() {
   const [email, setEmail] = useState("")
@@ -132,12 +132,14 @@ function MagicLinkForm() {
             </div>
           </div>
           <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-            {loading ? "Sending link..." : "Continue with Email"}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            {loading ? "Sending link..." : "Send Magic Link"}
           </button>
-          <p className="text-center text-[11px] text-muted-foreground">
-            We&apos;ll send a secure magic link.
-          </p>
+          <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1"><Lock className="w-3 h-3" />Passwordless</span>
+            <span className="flex items-center gap-1"><Zap className="w-3 h-3" />Offline First</span>
+            <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" />Secure</span>
+          </div>
         </form>
       )}
     </div>
@@ -197,21 +199,62 @@ function IndiaPattern() {
   )
 }
 
+// ── Animated Background Nodes ──
+
+function AnimatedBackground() {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none"
+      viewBox="0 0 800 600"
+      preserveAspectRatio="xMidYMid slice"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+      </defs>
+      {/* Dotted network lines */}
+      <line x1="120" y1="80" x2="250" y2="200" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
+      <line x1="250" y1="200" x2="400" y2="150" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
+      <line x1="400" y1="150" x2="550" y2="280" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
+      <line x1="550" y1="280" x2="680" y2="220" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
+      <line x1="120" y1="80" x2="300" y2="420" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
+      <line x1="680" y1="220" x2="500" y2="450" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
+      {/* Nodes */}
+      <circle cx="120" cy="80" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
+      <circle cx="250" cy="200" r="2.5" fill="white" opacity="0.3" />
+      <circle cx="400" cy="150" r="3" fill="white" opacity="0.35" filter="url(#glow)" />
+      <circle cx="550" cy="280" r="2" fill="white" opacity="0.25" />
+      <circle cx="680" cy="220" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
+      <circle cx="300" cy="420" r="2.5" fill="white" opacity="0.3" />
+      <circle cx="500" cy="450" r="2" fill="white" opacity="0.25" />
+      {/* Floating micro particles (very small) */}
+      <circle cx="180" cy="140" r="1" fill="white" opacity="0.2" />
+      <circle cx="450" cy="90" r="1" fill="white" opacity="0.15" />
+      <circle cx="620" cy="350" r="1" fill="white" opacity="0.2" />
+      <circle cx="340" cy="380" r="1" fill="white" opacity="0.15" />
+      <circle cx="80" cy="280" r="1" fill="white" opacity="0.2" />
+      <circle cx="720" cy="100" r="1" fill="white" opacity="0.15" />
+      <circle cx="200" cy="480" r="1.2" fill="white" opacity="0.2" />
+      <circle cx="600" cy="500" r="1" fill="white" opacity="0.15" />
+    </svg>
+  )
+}
+
 // ── Live Recovery Journey Preview ──
 
 const RECOVERY_STEPS = [
-  { label: "Invoice Created", status: "done" },
-  { label: "Reminder Scheduled", status: "done" },
-  { label: "Customer Read", status: "done" },
-  { label: "Waiting Payment", status: "active" },
-  { label: "Payment Received", status: "future" },
+  { label: "Invoice Created", status: "done", detail: null },
+  { label: "Reminder Sent", status: "done", detail: null },
+  { label: "Customer Read", status: "done", detail: "2 min ago" },
+  { label: "Waiting for Payment", status: "active", detail: "Estimated probability: 82%" },
+  { label: "Payment Received", status: "future", detail: null },
 ]
 
 function RecoveryJourneyPreview() {
   return (
     <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-5">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
         <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Live Recovery Journey</span>
       </div>
@@ -226,7 +269,7 @@ function RecoveryJourneyPreview() {
                   step.status === "done"
                     ? "bg-green-500/20 border-green-400/60 text-green-400"
                     : step.status === "active"
-                      ? "bg-blue-500/20 border-blue-400 text-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.4)]"
+                      ? "bg-blue-500/20 border-blue-400 text-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]"
                       : "border-white/[0.15] text-white/20"
                 }`}
               >
@@ -234,22 +277,28 @@ function RecoveryJourneyPreview() {
               </div>
               {i < RECOVERY_STEPS.length - 1 && (
                 <div
-                  className={`w-px h-5 ${
+                  className={`w-px min-h-[18px] flex-1 ${
                     i < 3 ? "bg-white/[0.08]" : "bg-white/[0.04]"
                   }`}
+                  style={{ height: step.detail ? "28px" : "18px" }}
                 />
               )}
             </div>
-            <div
-              className={`text-xs py-[1px] ${
-                step.status === "done"
-                  ? "text-white/60"
-                  : step.status === "active"
-                    ? "text-white/90 font-medium"
-                    : "text-white/25"
-              }`}
-            >
-              {step.label}
+            <div className="pt-px">
+              <div
+                className={`text-xs leading-tight ${
+                  step.status === "done"
+                    ? "text-white/60"
+                    : step.status === "active"
+                      ? "text-white/90 font-medium"
+                      : "text-white/25"
+                }`}
+              >
+                {step.label}
+              </div>
+              {step.detail && (
+                <div className="text-[10px] text-white/40 mt-0.5">{step.detail}</div>
+              )}
             </div>
           </div>
         ))}
@@ -260,39 +309,79 @@ function RecoveryJourneyPreview() {
 
 // ── Recovery Engine Status ──
 
-const ENGINE_METRICS = [
-  { icon: IndianRupee, value: "₹17,460", label: "Recovering" },
-  { icon: Users, value: "12", label: "Active Customers" },
-  { icon: TrendingUp, value: "82%", label: "Likely to Pay" },
+const STATUS_MESSAGES = [
+  "Monitoring customer payments",
+  "Optimizing reminder timing",
+  "Learning payment behavior",
+  "Preparing next follow-up",
+  "Analyzing recovery patterns",
 ]
 
 function RecoveryEngineStatus() {
+  const [statusIndex, setStatusIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStatusIndex((prev) => (prev + 1) % STATUS_MESSAGES.length)
+    }, 3500)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
-    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5">
+    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5 flex flex-col justify-between">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Zap className="w-3.5 h-3.5 text-blue-400" />
           <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Recovery Engine</span>
         </div>
-        <span className="text-[10px] text-white/30 font-mono">● Monitoring</span>
+        <span className="text-[10px] text-white/30 font-mono">● Live</span>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
-        {ENGINE_METRICS.map((m) => (
-          <div key={m.label}>
-            <div className="text-sm font-bold text-white">{m.value}</div>
-            <div className="text-[10px] text-white/40">{m.label}</div>
+      {/* Hero metric */}
+      <div className="mb-4">
+        <div className="text-[10px] text-white/40 mb-0.5">Recovering</div>
+        <div className="text-xl font-bold text-white tracking-tight">₹17,460</div>
+      </div>
+
+      {/* Secondary metrics */}
+      <div className="space-y-2 mb-4">
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+          <span className="text-[10px] text-white/40">Active Customers</span>
+          <div className="flex items-center gap-1">
+            <Users className="w-3 h-3 text-white/40" />
+            <span className="text-xs font-medium text-white/70">12</span>
           </div>
-        ))}
+        </div>
+        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+          <span className="text-[10px] text-white/40">Likely to Pay Today</span>
+          <div className="flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-green-400" />
+            <span className="text-xs font-medium text-green-400">82%</span>
+          </div>
+        </div>
       </div>
 
       {/* Next action */}
-      <div className="flex items-center gap-1.5 pt-3 border-t border-white/[0.06]">
-        <Clock className="w-3 h-3 text-white/40" />
-        <span className="text-[10px] text-white/40 font-mono">Next reminder:</span>
-        <span className="text-[10px] text-white/70 font-medium">Today · 7:30 PM</span>
+      <div className="pt-3 border-t border-white/[0.06] mb-3">
+        <div className="text-[10px] text-white/40 mb-1">Next Action</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3 h-3 text-blue-400" />
+            <span className="text-xs text-white/70 font-medium">Reminder</span>
+          </div>
+          <span className="text-[10px] text-white/50">Today · 7:30 PM</span>
+        </div>
+      </div>
+
+      {/* Rotating status */}
+      <div className="pt-2 border-t border-white/[0.06]">
+        <div className="flex items-center gap-1.5 transition-all duration-500">
+          <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse shrink-0" />
+          <span className="text-[10px] text-white/35 font-mono truncate transition-all duration-500" key={statusIndex}>
+            {STATUS_MESSAGES[statusIndex]}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -307,6 +396,9 @@ function LeftPanel() {
       {/* Geometric India pattern overlay */}
       <IndiaPattern />
 
+      {/* Animated nodes network */}
+      <AnimatedBackground />
+
       {/* Subtle tricolor accent stripe at the top */}
       <div className="absolute top-0 left-0 right-0 h-1 flex">
         <div className="flex-1 bg-[#FF9933]" />
@@ -319,11 +411,13 @@ function LeftPanel() {
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none" />
 
         <div className="relative h-full flex flex-col items-center justify-center px-10 text-white">
-          {/* Logo */}
-          <div className="flex justify-center mb-6">
-            <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-              <Image src="/logo_new.png" alt="BillZo" width={40} height={40} className="object-contain" />
+          {/* Logo + branding */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)] mb-2">
+              <span className="text-lg font-bold text-white/90">B</span>
             </div>
+            <div className="text-xs font-bold text-white/80 tracking-wide">BillZo</div>
+            <div className="text-[9px] text-white/40 tracking-[0.2em] uppercase">Recovery OS</div>
           </div>
 
           {/* Headline — extra-bold */}
@@ -333,7 +427,7 @@ function LeftPanel() {
 
           {/* Tagline */}
           <p className="text-sm lg:text-base text-white/60 mb-8 leading-relaxed max-w-lg drop-shadow">
-            BillZo doesn&apos;t stop at billing. It automatically helps you recover every unpaid invoice.
+            From invoice to payment — BillZo manages the entire recovery journey.
           </p>
 
           {/* Recovery Journey + Engine side by side */}
@@ -344,11 +438,11 @@ function LeftPanel() {
         </div>
       </div>
 
-      {/* Made in India badge */}
+      {/* Built for Indian MSMEs badge */}
       <div className="absolute bottom-5 left-0 right-0 flex justify-center">
         <div className="inline-flex items-center gap-1.5 bg-white/[0.06] backdrop-blur-sm px-3 py-1.5 border border-white/[0.10]">
           <IndianRupee className="w-3 h-3 text-white/60" />
-          <span className="text-[11px] text-white/50 font-medium tracking-wide">Made in India · Built for MSMEs</span>
+          <span className="text-[11px] text-white/50 font-medium tracking-wide">Built for Indian MSMEs</span>
         </div>
       </div>
     </div>
