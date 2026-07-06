@@ -7,7 +7,7 @@ import { verifyRequest, validateJsonBody, validateRequired, errorResponse, logAp
 import { signUpiToken } from '@/lib/billzo/crypto'
 import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
 import { requireFeature } from '@/lib/auth/feature-gate'
-import { EventType } from '@billzo/shared'
+import { EventType, PAYMENT_SOURCES } from '@billzo/shared'
 import type { PaymentSource } from '@billzo/shared'
 
 export const dynamic = 'force-dynamic'
@@ -84,10 +84,10 @@ function buildConsolidatedMessage(input: {
 }
 
 function normalizePaymentSource(value: unknown): PaymentSource {
-  if (value === 'cash' || value === 'razorpay' || value === 'bank_transfer' || value === 'cheque' || value === 'adjustment' || value === 'upi') {
-    return value
+  if (PAYMENT_SOURCES.includes(value as any)) {
+    return value as PaymentSource
   }
-  return 'adjustment'
+  return 'cash'
 }
 
 export async function POST(request: NextRequest) {
@@ -167,10 +167,29 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (caseErr || !rc) {
-        console.error('[QueueAction] Case lookup failed:', JSON.stringify({ caseErr, caseId, tenantId: tid, rc }))
-        return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+        // Synthetic case (no recovery_case row yet) — fall back to customerId
+        if (customerId) {
+          const { data: cust } = await supabase
+            .from('customers')
+            .select('id, customer_name, phone')
+            .eq('id', customerId)
+            .eq('tenant_id', tid)
+            .maybeSingle()
+          if (cust) {
+            recoveryCase = {
+              id: caseId || null,
+              customer_id: cust.id,
+              customers: { customer_name: cust.customer_name, phone: cust.phone },
+            }
+          }
+        }
+        if (!recoveryCase) {
+          console.error('[QueueAction] Case lookup failed:', JSON.stringify({ caseErr, caseId, tenantId: tid, rc }))
+          return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+        }
+      } else {
+        recoveryCase = rc
       }
-      recoveryCase = rc
     }
 
     // Track TTFA (Time To First Action)
@@ -238,6 +257,7 @@ export async function POST(request: NextRequest) {
 
       // Use oldest invoice for payment link tracking
       const oldestInvoice = unpaidInvoices[0]
+      const reminderStage = oldestInvoice.recovery_stage || 't0_soft'
       const totalOverdue = unpaidInvoices.reduce(
         (sum, inv) => sum + (Number(inv.outstanding_amount ?? inv.total ?? 0)), 
         0
@@ -287,13 +307,16 @@ export async function POST(request: NextRequest) {
             message,
             paymentUrl,
             amount: totalOverdue,
-            stage: recoveryCase.next_action_type || 'manual_reminder',
+            stage: reminderStage,
             origin: payload?.origin || 'manual_recovery_queue',
             consolidated: true,
             invoiceCount: unpaidInvoices.length,
+            messageType: 'reminder',
+            trigger: 'manual',
+            override: true,
           },
           correlationId: `recovery:${caseId}`,
-          idempotencyKey: payload?.clientCorrelationId || `recovery:send:${caseId}:${new Date().toISOString().slice(0, 10)}`,
+          idempotencyKey: payload?.clientCorrelationId || `recovery:send:${caseId}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`,
         })
 
         await writeOutboxEvent({

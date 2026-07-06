@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { db, uuid, notifyChanged } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
+import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
 import type { Customer, Invoice } from "@/lib/billzo/types"
 
@@ -195,6 +196,7 @@ export default function PulsePage() {
         amount: parseFloat(pmtAmount),
         status: "success",
         collectedVia: "manual",
+        lifecycleStatus: "created",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         syncStatus: "pending",
@@ -317,7 +319,7 @@ export default function PulsePage() {
             onClick={() => { setShowRecord(true); resetRecord() }}
             className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-xs font-medium rounded-lg hover:bg-foreground/90"
           >
-            <Plus className="h-3.5 w-3.5" /> Record Payment
+            <Plus className="h-3.5 w-3.5" /> {MerchantLanguage.payment.recordPayment}
           </button>
         </div>
 
@@ -326,7 +328,7 @@ export default function PulsePage() {
            ═══════════════════════════ */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-card border border-border rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-muted-foreground font-medium">Today collected</p>
+            <p className="text-[11px] text-muted-foreground font-medium">{MerchantLanguage.payment.todayCollected}</p>
             <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
               {formatINR(todayCollected)}
             </p>
@@ -335,14 +337,14 @@ export default function PulsePage() {
             </p>
           </div>
           <div className="bg-card border border-border rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-muted-foreground font-medium">This month</p>
+            <p className="text-[11px] text-muted-foreground font-medium">{MerchantLanguage.payment.thisMonth}</p>
             <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
               {formatINR(monthCollected)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{successPmts.length} total collections</p>
           </div>
           <div className="bg-card border border-border rounded-lg px-4 py-3.5">
-            <p className="text-[11px] text-muted-foreground font-medium">Pending UDHARI</p>
+            <p className="text-[11px] text-muted-foreground font-medium">Pending Udhar</p>
             <p className="text-xl font-bold tabular-nums tracking-tight text-amber-700 mt-0.5">
               {formatINR(pendingUdhaari)}
             </p>

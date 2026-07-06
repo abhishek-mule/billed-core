@@ -11,6 +11,7 @@ import {
 import type { TenantWhatsAppConfig, WhatsAppProvider } from "@/lib/billzo/types"
 import QRCode from "qrcode"
 import { getCookie } from "@/lib/cookies"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
 const QR_TIMEOUT_SECONDS = 60
 
@@ -74,13 +75,10 @@ export default function WhatsAppSettingsPage() {
     setError("")
     setSaved(false)
     try {
-      const res = await fetch("/api/tenant/whatsapp-config", {
+      await fetchWithAuth("/api/tenant/whatsapp-config", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ config }),
       })
-      if (!res.ok) throw new Error("Failed to save")
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
@@ -114,15 +112,7 @@ export default function WhatsAppSettingsPage() {
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
     try {
-      const res = await fetch("/api/whatsapp/pair", {
-        method: "POST",
-        credentials: "include",
-      })
-      if (!res.ok) {
-        let errorMsg = "Failed to start pairing"
-        try { const data = await res.json(); errorMsg = data.error || errorMsg } catch {}
-        throw new Error(errorMsg)
-      }
+      await fetchWithAuth("/api/whatsapp/pair", { method: "POST" })
 
       pollInterval = setInterval(async () => {
         try {
@@ -147,7 +137,7 @@ export default function WhatsAppSettingsPage() {
             if (pollInterval) clearInterval(pollInterval)
             setPairingInProgress(false)
           }
-        } catch {}
+        } catch { console.error('[WhatsAppSettings] Poll error') }
       }, 1500)
 
       setPairPollInterval(pollInterval)
@@ -161,11 +151,10 @@ export default function WhatsAppSettingsPage() {
 
   const disconnectBaileys = async () => {
     try {
-      await fetch("/api/whatsapp/pair", {
+      await fetchWithAuth("/api/whatsapp/pair", {
         method: "DELETE",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
+        autoRedirect: false,
       })
     } catch (err: any) {
       setError(err.message || "Failed to disconnect")

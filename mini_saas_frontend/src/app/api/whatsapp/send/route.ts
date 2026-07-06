@@ -49,6 +49,9 @@ export async function POST(request: NextRequest) {
           templateKey: templateKey || null,
           message: message || null,
           personalNote: personalNote || null,
+          messageType: 'reminder',
+          trigger: 'manual',
+          override: true,
         },
       })
 
@@ -71,6 +74,9 @@ export async function POST(request: NextRequest) {
             templateKey: templateKey || null,
             message: message || null,
             personalNote: personalNote || null,
+            messageType: 'reminder',
+            trigger: 'manual',
+            override: true,
           },
         })
       }

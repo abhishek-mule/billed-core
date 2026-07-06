@@ -57,10 +57,10 @@ export async function GET(request: NextRequest) {
     if (!gate.allowed) {
       const { data: previewData } = await supabaseAdmin
         .from('invoices')
-        .select('total, paid_amount, due_at, customer_id, customer_name')
+        .select('total, paid_amount, due_date, customer_id, customer_name')
         .eq('tenant_id', tenantId!)
         .in('status', ['unpaid', 'overdue', 'partial'])
-        .order('due_at', { ascending: true })
+        .order('due_date', { ascending: true })
 
       const now = new Date()
       const enriched = (previewData || []).map((r: any) => ({
@@ -73,15 +73,15 @@ export async function GET(request: NextRequest) {
       )
       const overdueCount = enriched.length
       const oldestDue = enriched.reduce((oldest: number, r: any) => {
-        const d = r.due_at ? new Date(r.due_at).getTime() : now.getTime()
+        const d = r.due_date ? new Date(r.due_date).getTime() : now.getTime()
         return d < oldest ? d : oldest
       }, now.getTime())
 
       const samples = enriched.slice(0, 3).map((r: any, i: number) => ({
         customer: `Customer ${String.fromCharCode(65 + i)}`,
         amount: r.outstanding,
-        daysOverdue: r.due_at
-          ? Math.floor((now.getTime() - new Date(r.due_at).getTime()) / (1000 * 60 * 60 * 24))
+        daysOverdue: r.due_date
+          ? Math.floor((now.getTime() - new Date(r.due_date).getTime()) / (1000 * 60 * 60 * 24))
           : 0,
       }))
 
@@ -92,6 +92,16 @@ export async function GET(request: NextRequest) {
           overdueCount,
           oldestDueDays: Math.floor((now.getTime() - oldestDue) / (1000 * 60 * 60 * 24)),
           samples,
+        },
+        recentEvents: [],
+        summary: {
+          outstanding: totalOverdue,
+          activeCases: overdueCount,
+          totalCollectedToday: 0,
+          dueToday: 0,
+          queueSize: 0,
+          recoveredToday: 0,
+          collectibleToday: 0,
         },
       })
     }
@@ -127,7 +137,7 @@ export async function GET(request: NextRequest) {
         .eq('tenant_id', tenantId)
         .gt('total_outstanding', 0)
         .order('attention_score', { ascending: false })
-        .limit(50),
+        .limit(500),
       supabase
         .from('invoices')
         .select('*, customers(id, customer_name, phone, customer_tier)')
@@ -207,6 +217,13 @@ export async function GET(request: NextRequest) {
         const overdue = invs.filter(i => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
           .reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
         
+        const dueDates = invs
+          .filter(i => i.due_date && new Date(i.due_date) < now)
+          .map(i => new Date(i.due_date).getTime())
+        const oldestOverdueDays = dueDates.length > 0
+          ? Math.floor((now.getTime() - Math.min(...dueDates)) / (1000 * 60 * 60 * 24))
+          : 0
+        
         synthesizedCases.push({
           id: `virtual-${custId}`,
           tenant_id: tenantId,
@@ -214,11 +231,13 @@ export async function GET(request: NextRequest) {
           status: 'open',
           total_outstanding: total,
           total_overdue: overdue,
+          oldest_overdue_days: oldestOverdueDays,
           recovery_state_v2: overdue > 0 ? 'overdue' : 'active',
+          next_action_type: overdue > 0 ? 'send_reminder' : 'wait',
           engagement_state_v2: 'unseen',
           reminder_count: invs.reduce((s, i) => s + (i.reminder_count || 0), 0),
           last_activity_at: first.created_at,
-          attention_score: overdue > 0 ? 50 : 10,
+          attention_score: overdue > 0 ? Math.min(50 + oldestOverdueDays, 100) : 10,
           customers: first.customers,
         })
       }
@@ -272,8 +291,33 @@ export async function GET(request: NextRequest) {
       occurredAt: e.occurred_at,
     }))
 
-    // ── NEW: Fetch priority cases ──
-    const priorityCases = await fetchPriorityCases(tenantId!, 5)
+    // ── NEW: Fetch priority cases (Udhar page shows all of them, so fetch generously) ──
+    const priorityCases = await fetchPriorityCases(tenantId!, 200)
+
+    // Merge synthesized cases into priority cases (RPC only queries recovery_cases table, misses virtual cases)
+    const priorityCustIds = new Set(priorityCases.map(pc => pc.customerId))
+    for (const sc of synthesizedCases) {
+      if (priorityCustIds.has(sc.customer_id)) continue
+      const cust = (sc.customers || {}) as any
+      priorityCases.push({
+        caseId: sc.id,
+        customerId: sc.customer_id,
+        customerName: cust.customer_name || 'Unknown',
+        phone: cust.phone || '',
+        totalOverdue: sc.total_overdue || sc.total_outstanding || 0,
+        oldestOverdueDays: sc.oldest_overdue_days || 0,
+        attentionScore: sc.attention_score || 10,
+        nextActionType: (sc.total_overdue || 0) > 0 ? 'send_reminder' : 'wait',
+        promiseToPayDate: null,
+        ignoredReminders: sc.reminder_count || 0,
+        brokenPromises: 0,
+        openInvoiceCount: (groupedInvoices.get(sc.customer_id) || []).length,
+        automationMode: 'manual' as const,
+      })
+    }
+
+    // Re-sort so most important cases come first regardless of origin
+    priorityCases.sort((a, b) => b.attentionScore - a.attentionScore)
 
     // ── Summary ──
     const outstanding = allCases.reduce(
@@ -289,12 +333,15 @@ export async function GET(request: NextRequest) {
     ).length
 
     // ── Queue action counts (for "Today's Queue" progress) ──
-    const totalActions = allCases.length
-    const todayCaseIds = new Set(allCases.map((c: any) => c.id))
+    // Only count real recovery cases — virtual cases can't have events yet
+    const realCases = activeCases
+    const virtualCount = synthesizedCases.length
+    const totalActions = realCases.length
+    const realCaseIds = new Set(realCases.map((c: any) => c.id))
     const completedActions = [...new Set(
       (todayEventsRes.data || []).map((e: any) => e.case_id)
-    )].filter(id => todayCaseIds.has(id)).length
-    const pendingActions = Math.max(0, totalActions - completedActions)
+    )].filter(id => realCaseIds.has(id)).length
+    const pendingActions = Math.max(0, totalActions - completedActions) + virtualCount
 
     // ── Promise summary ──
     const promiseSummary = { dueToday: 0, overdue: 0, upcoming: 0 }

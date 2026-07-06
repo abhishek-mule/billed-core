@@ -49,7 +49,7 @@ function tableFor(item: QueueItem) {
     payment: 'payments',
     whatsapp_event: 'whatsapp_events',
     recovery_attempt: 'recovery_attempts',
-    promise: 'promises',
+    promise: 'payment_promises',
   }
   return tables[item.entity]
 }
@@ -93,21 +93,16 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         customer_id: payload.customerId || null,
         customer_name: payload.customerName,
         customer_phone: payload.customerPhone || null,
-        subtotal: payload.total,
         total: payload.total,
         grand_total: payload.total,
-        payment_mode: payload.paymentMode ?? (payload.paidAmount > 0 ? 'cash' : 'udhar'),
         paid_amount: payload.paidAmount ?? 0,
-        payment_status: payload.status === 'paid' ? 'paid' : payload.paidAmount > 0 ? 'partial' : 'unpaid',
         status: payload.status?.toLowerCase() || 'unpaid',
         invoice_number: payload.invoiceNumber || payload.id,
         due_date: payload.dueAt ? String(payload.dueAt).slice(0, 10) : null,
         recovery_stage: payload.recoveryStage || 't0_soft',
         next_recovery_at: payload.nextRecoveryAt || null,
-        is_pos: !payload.customerId,
         created_at: payload.createdAt,
         updated_at: payload.updatedAt,
-        idempotency_key: `${payload.tenantId}:${payload.id}`,
       }
     case 'invoice_item':
       return {
@@ -145,10 +140,10 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         status: payload.status === 'success' ? 'paid' : (payload.status ?? 'pending'),
         razorpay_payment_id: payload.providerPaymentId ?? null,
         razorpay_order_id: payload.razorpayOrderId ?? null,
-        collected_via: payload.collectedVia ?? 'manual',
-        platform_fee: payload.platformFee ?? 0,
         notes: payload.notes ?? null,
         paid_at: payload.paidAt ?? null,
+        lifecycle_status: payload.lifecycleStatus ?? 'created',
+        source_id: payload.sourceId ?? null,
         created_at: payload.createdAt,
         updated_at: payload.updatedAt,
       }
@@ -173,7 +168,7 @@ export async function syncPendingQueue() {
     const pending = await db()
       .queue.where('[tenantId+status]')
       .anyOf([tenantId, 'pending'], [tenantId, 'failed'], [tenantId, 'conflict'])
-      .filter((item) => item.nextAttemptAt <= due && item.attempts < 10)
+      .filter((item) => item.nextAttemptAt <= due)
       .sortBy('createdAt')
 
     if (pending.length === 0) return
@@ -209,6 +204,14 @@ export async function syncPendingQueue() {
       const { error, status } = await supabase.from(tableFor(item)).upsert(payload as Record<string, unknown>, { onConflict: 'id' })
       if (!error) {
         await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
+        
+        // Payment entities: emit payment.completed so the worker processes it
+        // Skip negative amounts (reversals) — worker handles those separately
+        if (item.entity === 'payment' && (item.payload as any)?.amount > 0) {
+          const p = item.payload as any
+          syncPaymentEvent(p).catch(() => {})
+        }
+        
         continue
       }
 
@@ -320,6 +323,8 @@ async function reconcileFromServer() {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
           syncStatus: 'synced',
+          lifecycleStatus: row.lifecycle_status || undefined,
+          sourceId: row.source_id || undefined,
         } satisfies Payment)
       } else if (table === 'customers') {
         await db().customers.put({
@@ -400,6 +405,36 @@ async function reconcileFromServer() {
   if (newestTs > since) {
     setLastReconciledAt(newestTs)
     notifyChanged()
+  }
+}
+
+// Fire payment.completed outbox event via server API.
+// Called after a payment is successfully upserted during offline sync.
+async function syncPaymentEvent(p: any): Promise<boolean> {
+  try {
+    const res = await fetch('/api/recovery/sync-payment-event', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentId: p.id,
+        invoiceId: p.invoiceId || p.invoice_id,
+        customerId: p.customerId || p.customer_id,
+        amount: p.amount || 0,
+        source: p.provider || p.source || 'cash',
+        sourceId: p.sourceId || p.providerPaymentId || null,
+        actor: 'merchant',
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      console.warn('[SyncPaymentEvent] API error:', data.error || res.status)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.warn('[SyncPaymentEvent] Network error:', err)
+    return false
   }
 }
 

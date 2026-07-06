@@ -47,7 +47,7 @@ function makeInvoice(overrides: Partial<InvoiceOrchestrationState> = {}): Invoic
 
 const ALL_HOURS: OperatingHoursConfig = {
   enabled: true,
-  windows: [{ start: '00:00', end: '23:59' }],
+  windows: [{ start: '00:00', end: '24:00' }],
   quietDays: [],
   quietAfter: '',
 }

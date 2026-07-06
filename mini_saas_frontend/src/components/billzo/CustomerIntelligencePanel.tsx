@@ -5,6 +5,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, Send, Phone,
   Calendar, BarChart3, Receipt, Loader2, Zap, Pause, Hand,
 } from "lucide-react"
+import { toast } from "sonner"
 import { formatINR, formatOverdueDays } from "@/lib/utils"
 import { PromiseModal } from "./PromiseModal"
 import { PauseModal } from "./PauseModal"
@@ -58,6 +59,9 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
   const [data, setData] = useState<RecoveryCaseResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
+  const [showPromise, setShowPromise] = useState(false)
+  const [showPause, setShowPause] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -127,10 +131,6 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
     )
   }
 
-  const [sending, setSending] = useState<string | null>(null)
-  const [showPromise, setShowPromise] = useState(false)
-  const [showPause, setShowPause] = useState(false)
-
   const stateKey = data.case.recovery_state_v2 || 'active'
   const stateLabel = STATE_LABELS[stateKey] || stateKey
   const stateColor = STATE_COLORS[stateKey] || STATE_COLORS.active
@@ -140,7 +140,7 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
     if (!data) return
     setSending(action)
     try {
-      await fetch('/api/recovery/queue/actions', {
+      const res = await fetch('/api/recovery/queue/actions', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -151,8 +151,12 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
           tenantId: data.case.tenant_id,
         }),
       })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        toast.error(errData.error || 'Action failed')
+      }
     } catch {
-      // silent — recovery queue handles retries
+      toast.error('Network error — could not send reminder')
     } finally {
       setSending(null)
     }

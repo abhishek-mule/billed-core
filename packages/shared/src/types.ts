@@ -167,6 +167,34 @@ export function computeTransportHash(params: {
 
 export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue'
 
+// ============================================================
+// INVOICE RECOVERY STATE — Reminder lifecycle FSM
+// ============================================================
+// This state machine governs the automated reminder lifecycle at the
+// invoice level. It replaces the overloaded meaning of next_recovery_at = NULL.
+//
+// States:
+//   pending        — New invoice, never processed by reminder worker
+//   scheduled      — Active automation, worker processes based on next_recovery_at
+//   paused         — Merchant snoozed/halted automated reminders
+//   manual_review  — All automatic stages exhausted, needs merchant action
+//   completed      — Settled (paid/waived)
+//   disputed       — Contested, halt all automation
+//
+// Worker processes only: pending, scheduled
+// Worker ignores:        paused, manual_review, completed, disputed
+
+export const INVOICE_RECOVERY_STATES = [
+  'pending',
+  'scheduled',
+  'paused',
+  'manual_review',
+  'completed',
+  'disputed',
+] as const
+
+export type InvoiceRecoveryState = (typeof INVOICE_RECOVERY_STATES)[number]
+
 export function isOverdue(
   status: InvoiceStatus,
   dueDate: string | Date | null | undefined,

@@ -42,37 +42,22 @@ function stageIndex(stage: string): number {
 // canSendReminder — Evaluate all pre-send rules
 // ============================================================
 
-export function canSendReminder(input: CanSendReminderInput): CanSendReminderOutput {
+export function canSendReminder(
+  input: CanSendReminderInput,
+  options?: { override?: boolean; reminderId?: string },
+): CanSendReminderOutput {
   const now = input.now || new Date().toISOString()
   const nowMs = new Date(now).getTime()
+  const explicitOverride = options?.override === true
 
-  // ── Pre-check: Merchant override (bypass all checks) ──
-  let overrideActive = false
+  // ── Pre-check: Merchant override (from DB field OR explicit param) ──
+  let dbOverrideActive = false
   if (input.invoice.overrideSend && input.invoice.overrideAt) {
     const hoursSinceOverride = (nowMs - new Date(input.invoice.overrideAt).getTime()) / 3600000
-    overrideActive = hoursSinceOverride < 24
+    dbOverrideActive = hoursSinceOverride < 24
   }
 
-  if (overrideActive) {
-    return {
-      allowed: true,
-      decision: 'send',
-      reason: `Merchant override: ${input.invoice.overrideReason || 'approved'}`,
-      confidence: 1.0,
-      rules: [{
-        rule: 'merchant_override',
-        passed: true,
-        detail: `Merchant override active (reason: ${input.invoice.overrideReason || 'not specified'})`,
-        override: true,
-        overrideReason: input.invoice.overrideReason || undefined,
-      }],
-      rulesSnapshot: { merchant_override: true },
-      checksPassed: 1,
-      totalChecks: 1,
-      nextReviewAt: null,
-      merchantInterventionTriggered: false,
-    }
-  }
+  const overrideActive = explicitOverride || dbOverrideActive
 
   const rules: DecisionRuleResult[] = []
 
@@ -312,8 +297,12 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
     }
   }
 
+  // Collect ALL failing reasons (not just the first)
+  const failingRules = rules.filter(r => !r.passed)
+  const reasons = failingRules.map(r => r.detail)
+
   // Confidence: 1.0 if all pass, penalized per failing rule
-  const failingCount = rules.filter(r => !r.passed).length
+  const failingCount = failingRules.length
   const confidence = allPassed ? 1.0 : Math.max(0.1, 1.0 - failingCount * 0.15)
 
   const passedCount = rules.filter(r => r.passed).length
@@ -356,10 +345,33 @@ export function canSendReminder(input: CanSendReminderInput): CanSendReminderOut
     rulesSnapshot[r.rule] = r.passed
   }
 
+  // When override is active, allow send but preserve full audit trail
+  if (overrideActive) {
+    return {
+      allowed: true,
+      decision: 'send',
+      reason: `Override: ${reasons.length > 0 ? 'blocked by ' + reasons.length + ' rule(s) but merchant approved' : 'all rules passed (override unnecessary)'}`,
+      reasons,
+      overridden: true,
+      reminderId: options?.reminderId,
+      confidence: 1.0,
+      rules,
+      rulesSnapshot,
+      checksPassed: totalCount,
+      totalChecks: totalCount,
+      nextReviewAt,
+      merchantInterventionTriggered,
+      recommendedAction: 'send',
+    }
+  }
+
   return {
     allowed: allPassed,
     decision,
     reason,
+    reasons,
+    overridden: false,
+    reminderId: options?.reminderId,
     confidence,
     rules,
     rulesSnapshot,

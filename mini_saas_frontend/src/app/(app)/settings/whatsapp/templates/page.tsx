@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, MessageCircle, Plus, CheckCircle2, AlertCircle, Loader2, Clock, X } from 'lucide-react'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
+import { fetchWithAuth } from '@/lib/fetch-with-auth'
 
 const TEMPLATE_TYPES = [
   { key: 'invoice', label: 'Invoice Notification', desc: 'Sent when a new invoice is created for a customer', placeholder: 'Hello {{1}}, your invoice #{{2}} for ₹{{3}} is ready. Pay now: {{4}}' },
@@ -62,13 +63,10 @@ export default function WhatsAppTemplatesPage() {
     setError('')
     try {
       const newTemplates = { ...templates, [createType]: createBody.trim() }
-      const res = await fetch(`/api/tenant/whatsapp-config`, {
+      await fetchWithAuth(`/api/tenant/whatsapp-config`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ config: { templateNames: newTemplates } }),
       })
-      if (!res.ok) throw new Error('Failed to save')
       setTemplates(newTemplates)
       setShowCreate(false)
       setCreateType('')
@@ -87,13 +85,13 @@ export default function WhatsAppTemplatesPage() {
     delete newTemplates[key]
     setSaving(true)
     try {
-      await fetch(`/api/tenant/whatsapp-config`, {
+      await fetchWithAuth(`/api/tenant/whatsapp-config`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ config: { templateNames: newTemplates } }),
       })
       setTemplates(newTemplates)
+    } catch {
+      // fetchWithAuth already shows error; state reverted by leaving templates unchanged
     } finally {
       setSaving(false)
     }

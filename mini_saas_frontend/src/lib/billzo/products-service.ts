@@ -123,12 +123,10 @@ export async function deleteProduct(productId: string, tenantId: string): Promis
 }
 
 export async function retryProductSync(): Promise<number> {
-  const due = new Date().toISOString()
   const failed = await db()
     .queue
     .where('status')
     .anyOf('failed', 'conflict')
-    .filter((item) => item.nextAttemptAt <= due && item.attempts < 10)
     .toArray()
 
   for (const item of failed) {
@@ -136,6 +134,7 @@ export async function retryProductSync(): Promise<number> {
       status: 'pending',
       nextAttemptAt: now(),
       lastError: undefined,
+      attempts: 0,
       updatedAt: now(),
     })
   }

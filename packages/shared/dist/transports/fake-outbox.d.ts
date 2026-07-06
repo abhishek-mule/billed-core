@@ -6,7 +6,8 @@ export declare class FakeOutboxPublisher implements OutboxPublisher {
     setFailNext(fail: boolean): void;
     publish(event: Omit<OutboxEvent, 'status' | 'createdAt' | 'processedAt'>): Promise<string>;
     getStatus(eventId: string): Promise<OutboxEvent | null>;
-    markProcessed(eventId: string, status: 'processed' | 'dead_letter'): void;
+    setStatus(eventId: string, status: OutboxEvent['status']): void;
+    markProcessed(eventId: string, status: 'processing' | 'processed' | 'dead_letter'): void;
     getEvents(): OutboxEvent[];
     getPending(): OutboxEvent[];
     clear(): void;

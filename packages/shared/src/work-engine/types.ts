@@ -16,6 +16,21 @@ export interface Action {
   target?: ActionTarget
 }
 
+export type MemoryCategory = 'timing' | 'channel' | 'payment' | 'response' | 'reliability'
+
+export interface MerchantMemory {
+  category: MemoryCategory
+  confidence: number
+  observation: string
+  customerName?: string
+  observedPayments?: number
+}
+
+export interface BusinessInsight {
+  observation: string
+  type?: 'trend' | 'pattern' | 'improvement' | 'alert'
+}
+
 export type Severity = 'critical' | 'high' | 'normal' | 'low'
 
 export const SeverityWeight: Record<Severity, number> = {
@@ -49,12 +64,20 @@ export interface CashMetric {
   label: string
   value: string
   tone: 'positive' | 'negative' | 'neutral'
+  subtitle?: string
+  emptyLabel?: string
 }
 
 export interface TodaySectionPayload {
   items: WorkItem[]
   empty?: {
     headline: string
+    subtitle?: string
+    checklist?: string[]
+    autoActions?: string[]
+    nextAction?: { when: string; label: string; customerName?: string; type: 'reminder' | 'call' | 'review' | 'wait'; status: string; reason?: string }
+    statusFallback?: { headline: string; subtitle: string }
+    scheduleLink?: string
     action?: Action
   }
 }
@@ -71,10 +94,11 @@ export interface ActivityEvent {
 
 export interface ActivitySectionPayload {
   events: ActivityEvent[]
+  hasWorkItems?: boolean
 }
 
 export interface DashboardSection<T = unknown> {
-  type: 'today' | 'cash' | 'activity'
+  type: 'today' | 'cash' | 'activity' | 'memories'
   priority: number
   title: string
   payload: T
@@ -85,6 +109,7 @@ export type AnyDashboardSection =
   | DashboardSection<TodaySectionPayload>
   | DashboardSection<CashSectionPayload>
   | DashboardSection<ActivitySectionPayload>
+  | DashboardSection<MemoriesSectionPayload>
 
 export interface CashPosition {
   outstanding: number
@@ -93,10 +118,29 @@ export interface CashPosition {
   customerCount: number
 }
 
+export interface AutomationPlanItem {
+  customerId: string
+  customerName: string
+  status: 'scheduled' | 'waiting' | 'manual_required' | 'completed'
+  nextAction: {
+    type: 'reminder' | 'call' | 'review' | 'wait'
+    scheduledAt?: string
+    reason: string
+  }
+}
+
 export interface DashboardView {
   work: WorkItem[]
   cash: CashPosition
   activity: ActivityItem[]
+  memories?: MerchantMemory[]
+  insights?: BusinessInsight[]
+  automationPlan: AutomationPlanItem[]
+}
+
+export interface MemoriesSectionPayload {
+  memories: MerchantMemory[]
+  insights?: BusinessInsight[]
 }
 
 export interface CustomerView {

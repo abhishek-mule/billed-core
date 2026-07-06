@@ -3,59 +3,68 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
+import { syncSessionFromCookies } from '@/lib/billzo/tenant'
 import {
-  Bell, Search, Home, ShoppingCart, Receipt, TrendingUp, Activity,
-  Users, Package, Settings,
-  MoreHorizontal, Menu, LogOut, PanelLeftClose, PanelLeft,
-  User, HelpCircle, Clock, MessageSquare,
+  Search, Home, ShoppingCart,
+  Users, Package, Settings, FileText,
+  Menu, LogOut, PanelLeftClose, PanelLeft,
+  User, HelpCircle, IndianRupee, Plus, X,
+  UserPlus, CreditCard,
 } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
 
-const NAV_WORKSPACE = [
-  { href: '/dashboard', label: 'Home',       icon: Home        },
-  { href: '/cashflow',  label: 'Cashflow',   icon: TrendingUp  },
-  { href: '/pulse',     label: 'Payments',   icon: Activity    },
-  { href: '/invoices',  label: 'Invoices',   icon: Receipt     },
-  { href: '/pos',       label: 'POS',        icon: ShoppingCart },
-]
+// ─── Navigation structure ────────────────────────────────────────────────────
+// Product doctrine: flat IA around merchant intent, not internal modules.
 
-const NAV_MANAGE = [
-  { href: '/parties',   label: 'Parties',  icon: Users       },
-  { href: '/products',  label: 'Products', icon: Package     },
-]
-
-const NAV_RECOVERY = [
-  { href: '/recovery/queue',   label: 'Recovery Queue',   icon: Clock        },
-  { href: '/recovery/history', label: 'Recovery History', icon: MessageSquare },
-]
-
-const NAV_SYSTEM = [
-  { href: '/settings', label: 'Settings', icon: Settings    },
+const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Dashboard', icon: Home, activeOn: ['/dashboard'] },
+  { href: '/sales', label: 'Sales', icon: ShoppingCart, activeOn: ['/sales', '/pos', '/invoices', '/send'] },
+  { href: '/udhar', label: 'Udhar', icon: IndianRupee, activeOn: ['/udhar', '/recovery', '/pulse'] },
+  { href: '/parties', label: 'Customers', icon: Users, activeOn: ['/parties'] },
+  { href: '/products', label: 'Products', icon: Package, activeOn: ['/products'] },
+  { href: '/reports', label: 'Reports', icon: FileText, activeOn: ['/reports', '/cashflow'] },
+  { href: '/settings', label: 'Settings', icon: Settings, activeOn: ['/settings'] },
 ]
 
 const MODULE_NAMES: Record<string, string> = {
-  '/dashboard': 'Home',
-  '/cashflow': 'Cashflow',
-  '/pulse': 'Payments',
-  '/invoices': 'Invoices',
-  '/pos': 'POS',
-  '/parties': 'Parties',
+  '/dashboard': 'Dashboard',
+  '/sales': 'Sales',
+  '/pos': 'Sales',
+  '/invoices': 'Sales',
+  '/send': 'Sales',
+  '/udhar': 'Udhar',
+  '/recovery': 'Udhar',
+  '/pulse': 'Udhar',
+  '/parties': 'Customers',
   '/products': 'Products',
   '/reports': 'Reports',
-  '/recovery': 'Recovery',
+  '/cashflow': 'Reports',
   '/settings': 'Settings',
-  '/more': 'More',
 }
 
 const MOBILE_NAV = [
-  { href: '/dashboard', label: 'Home',     icon: Home,           primary: false },
-  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp,     primary: false },
-  { href: '/pos',       label: 'POS',      icon: ShoppingCart,   primary: true  },
-  { href: '/invoices',  label: 'Invoices', icon: Receipt,        primary: false },
-  { href: '/parties',   label: 'Parties',  icon: Users,          primary: false },
-  { href: '/more',      label: 'More',     icon: MoreHorizontal, primary: false },
+  { href: '/dashboard', label: 'Home', icon: Home, primary: false, activeOn: ['/dashboard'] },
+  { href: '/sales', label: 'Sales', icon: ShoppingCart, primary: false, activeOn: ['/sales', '/pos', '/invoices', '/send'] },
+  { href: '/pos', label: 'New', icon: Plus, primary: true, activeOn: ['/pos'] },
+  { href: '/udhar', label: 'Udhar', icon: IndianRupee, primary: false, activeOn: ['/udhar', '/recovery', '/pulse'] },
+  { href: '/parties', label: 'Customers', icon: Users, primary: false, activeOn: ['/parties'] },
 ]
+
+const FAB_ACTIONS = [
+  { href: '/pos', label: 'New Invoice', icon: ShoppingCart },
+  { href: '/pulse', label: 'Receive Payment', icon: IndianRupee },
+  { href: '/parties/add', label: 'Add Customer', icon: UserPlus },
+  { href: '/products/add', label: 'Add Product', icon: Package },
+  { href: '/invoices', label: 'Payment Link', icon: CreditCard },
+  { href: '/dashboard', label: 'Search', icon: Search },
+]
+
+function isNavActive(pathname: string, href: string, activeOn?: string[]) {
+  return (activeOn || [href]).some(path => pathname === path || pathname.startsWith(`${path}/`))
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getCookie(name: string) {
   if (typeof document === 'undefined') return null
@@ -73,13 +82,10 @@ function doLogout() {
   window.location.href = '/auth'
 }
 
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
+
 function Sidebar({
-  pathname,
-  collapsed,
-  onToggle,
-  onLogout,
-  userName,
-  userEmail,
+  pathname, collapsed, onToggle, onLogout, userName, userEmail,
 }: {
   pathname: string
   collapsed: boolean
@@ -115,38 +121,26 @@ function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 scrollbar-none">
-        {[
-          { label: 'Workspace', items: NAV_WORKSPACE },
-          { label: 'Manage', items: NAV_MANAGE },
-          { label: 'Recovery', items: NAV_RECOVERY },
-          { label: 'System', items: NAV_SYSTEM },
-        ].map((section, si) => (
-          <div key={section.label} className={cn(si > 0 && 'mt-2 pt-2 border-t border-border')}>
-            {!collapsed && (
-              <span className="text-[10.5px] font-semibold tracking-widest uppercase px-2 py-1.5 text-muted-foreground whitespace-nowrap block">
-                {section.label}
-              </span>
-            )}
-            {section.items.map(({ href, label, icon: Icon }) => {
-              const active = pathname.startsWith(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    'flex items-center gap-2 h-[34px] px-2 rounded text-xs font-medium text-muted-foreground no-underline whitespace-nowrap transition-colors hover:bg-secondary hover:text-foreground',
-                    active && 'bg-primary/10 text-primary font-semibold',
-                    collapsed && 'justify-center px-0',
-                  )}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  <Icon size={18} strokeWidth={collapsed ? 2 : 1.8} className="shrink-0" />
-                  {!collapsed && <span className="overflow-hidden text-ellipsis">{label}</span>}
-                </Link>
-              )
-            })}
-          </div>
-        ))}
+        <div className="flex flex-col gap-0.5">
+          {NAV_ITEMS.map(({ href, label, icon: Icon, activeOn }) => {
+            const active = isNavActive(pathname, href, activeOn)
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-2 h-[34px] px-2 rounded text-xs font-medium text-muted-foreground no-underline whitespace-nowrap transition-colors hover:bg-secondary hover:text-foreground',
+                  active && 'bg-primary/10 text-primary font-semibold',
+                  collapsed && 'justify-center px-0',
+                )}
+                aria-current={active ? 'page' : undefined}
+              >
+                <Icon size={18} strokeWidth={collapsed ? 2 : 1.8} className="shrink-0" />
+                {!collapsed && <span className="overflow-hidden text-ellipsis">{label}</span>}
+              </Link>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Footer */}
@@ -179,10 +173,10 @@ function Sidebar({
   )
 }
 
+// ─── TopBar ──────────────────────────────────────────────────────────────────
+
 function TopBar({
-  onMobileMenu,
-  userName,
-  onLogout,
+  onMobileMenu, userName, onLogout,
 }: {
   onMobileMenu: () => void
   userName?: string
@@ -229,19 +223,11 @@ function TopBar({
           <Search size={14} className="shrink-0 text-muted-foreground" />
           <input
             className="flex-1 min-w-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-            placeholder="Search\u2026"
-            aria-label="Search invoices, parties, products"
+            placeholder="Search..."
+            aria-label="Search customers, invoices, products"
           />
           <kbd className="hidden sm:block text-[10.5px] font-mono text-muted-foreground bg-card border border-border px-1 rounded">⌘K</kbd>
         </div>
-
-        <Link
-          href="/pulse"
-          className="flex items-center justify-center w-8 h-8 border border-border rounded-md bg-card text-muted-foreground hover:bg-secondary hover:text-foreground shrink-0 no-scale"
-          aria-label="View payments"
-        >
-          <Bell size={16} />
-        </Link>
 
         <div className="relative">
           <button
@@ -301,21 +287,13 @@ function TopBar({
   )
 }
 
-function MobileDrawer({
-  open,
-  onClose,
-  pathname,
-}: {
-  open: boolean
-  onClose: () => void
-  pathname: string
-}) {
+// ─── Mobile Drawer ───────────────────────────────────────────────────────────
+
+function MobileDrawer({ open, onClose, pathname }: { open: boolean; onClose: () => void; pathname: string }) {
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [open])
-
-  const allNav = [...NAV_WORKSPACE, ...NAV_MANAGE, ...NAV_RECOVERY, ...NAV_SYSTEM]
 
   return (
     <div
@@ -349,8 +327,8 @@ function MobileDrawer({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-2.5 flex flex-col gap-0.5 scrollbar-none">
-          {allNav.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href)
+          {NAV_ITEMS.map(({ href, label, icon: Icon, activeOn }) => {
+            const active = isNavActive(pathname, href, activeOn)
             return (
               <Link
                 key={href}
@@ -372,7 +350,7 @@ function MobileDrawer({
         <div className="flex-shrink-0 border-t border-border p-3 px-2.5">
           <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="w-1.5 h-1.5 rounded-full bg-success" />
-            All synced \u00b7 just now
+            All synced · just now
           </span>
         </div>
       </div>
@@ -380,11 +358,13 @@ function MobileDrawer({
   )
 }
 
+// ─── Bottom Nav (Mobile) ─────────────────────────────────────────────────────
+
 function BottomNav({ pathname }: { pathname: string }) {
   return (
     <nav className="flex items-stretch h-bottom-nav bg-card border-t border-border pb-safe flex-shrink-0 lg:hidden">
-      {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
-        const active = pathname.startsWith(href)
+      {MOBILE_NAV.map(({ href, label, icon: Icon, primary, activeOn }) => {
+        const active = isNavActive(pathname, href, activeOn)
         return (
           <Link
             key={href}
@@ -412,13 +392,49 @@ function BottomNav({ pathname }: { pathname: string }) {
   )
 }
 
-export function AppShell({
-  children,
-  title,
-}: {
-  children: React.ReactNode
-  title?: string
-}) {
+function FloatingActionMenu() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="fixed right-5 bottom-[calc(var(--bottom-nav-h)+1.25rem)] lg:bottom-6 z-30">
+      {open && (
+        <>
+          <button
+            aria-label="Close quick actions"
+            className="fixed inset-0 bg-transparent cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute bottom-14 right-0 w-[220px] bg-card border border-border rounded-xl p-1.5 shadow-drawer dark:shadow-drawer-dark animate-fade-scale-in">
+            {FAB_ACTIONS.map(({ href, label, icon: Icon }) => (
+              <Link
+                key={label}
+                href={href}
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-semibold text-foreground no-underline hover:bg-secondary transition-colors"
+              >
+                <Icon size={15} className="text-muted-foreground shrink-0" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+      <button
+        type="button"
+        aria-label={open ? 'Close quick actions' : 'Open quick actions'}
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+        className="w-12 h-12 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 flex items-center justify-center transition-transform active:scale-95 hover:bg-primary/95"
+      >
+        {open ? <X size={20} /> : <Plus size={22} />}
+      </button>
+    </div>
+  )
+}
+
+// ─── AppShell ────────────────────────────────────────────────────────────────
+
+export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -429,6 +445,7 @@ export function AppShell({
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   useEffect(() => {
+    syncSessionFromCookies()
     setIsOnline(navigator.onLine)
     const goOnline = () => {
       setIsOnline(true)
@@ -447,7 +464,7 @@ export function AppShell({
           const payload = JSON.parse(atob(token.split('.')[1]))
           email = payload.email
         }
-      } catch {}
+      } catch { console.error('[AppShell] Failed to parse token') }
       setUserData({
         userName: name ? decodeURIComponent(name) : undefined,
         userEmail: email,
@@ -542,6 +559,8 @@ export function AppShell({
           <BottomNav pathname={pathname} />
         </div>
       </div>
+
+      <FloatingActionMenu />
 
       {showLogoutConfirm && (
         <div

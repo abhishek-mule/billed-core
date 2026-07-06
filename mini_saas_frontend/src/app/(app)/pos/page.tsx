@@ -370,7 +370,7 @@ export default function POSPage() {
               <input
                 value={customerPhone || ''}
                 onChange={e => setCustomerPhone(e.target.value)}
-                placeholder="Phone (optional — for WhatsApp invoice)"
+                placeholder={customerId ? "WhatsApp number (from party)" : "Phone (optional — for WhatsApp invoice)"}
                 type="tel"
                 className="flex-1 bg-transparent text-sm focus:outline-none"
               />
@@ -437,7 +437,7 @@ export default function POSPage() {
                 onClick={() => {
                   setCustomer(p.name);
                   setCustomerId(p.id);
-                  setCustomerPhone(p.phone.replace(/\s/g, ""));
+                  setCustomerPhone((p.whatsapp_number || p.phone || "").replace(/\s/g, ""));
                   setShowCustomer(false);
                   setCustomerSearch("");
                 }}
@@ -445,7 +445,7 @@ export default function POSPage() {
               >
                 <div>
                   <div className="font-medium text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">{p.phone || "No phone"}</div>
+                  <div className="text-xs text-muted-foreground">{p.whatsapp_number || p.phone || "No phone"}{p.whatsapp_number ? " 📱" : ""}</div>
                 </div>
                 {p.pending > 0 && (
                   <span className="text-xs font-semibold text-yellow-600">{formatINR(p.pending)} due</span>
@@ -495,7 +495,7 @@ export default function POSPage() {
                 <input
                   value={success.partyPhone || ''}
                   onChange={e => setSuccess({ ...success, partyPhone: e.target.value })}
-                  placeholder="Add phone for WhatsApp"
+                  placeholder={success.partyPhone ? "WhatsApp number" : "Add phone for WhatsApp"}
                   type="tel"
                   className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
                 />

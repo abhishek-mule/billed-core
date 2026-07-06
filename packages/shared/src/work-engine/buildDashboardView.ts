@@ -1,4 +1,4 @@
-import type { DashboardView, WorkItem, CashPosition, ActivityItem } from './types'
+import type { DashboardView, WorkItem, CashPosition, ActivityItem, AutomationPlanItem } from './types'
 
 export interface DashboardInput {
   work: WorkItem[]
@@ -6,10 +6,11 @@ export interface DashboardInput {
   activity: ActivityItem[]
 }
 
-export function buildDashboardView(input: DashboardInput): DashboardView {
+export function buildDashboardView(input: DashboardInput, automationPlan?: AutomationPlanItem[]): DashboardView {
   return {
     work: input.work,
     cash: input.cash,
     activity: input.activity,
+    automationPlan: automationPlan || [],
   }
 }

@@ -80,7 +80,7 @@ export function QueueActionList() {
 
   useEffect(() => { fetchQueue() }, [fetchQueue])
 
-  const performAction = useCallback(async (caseId: string, action: string, actionPayload?: Record<string, any>) => {
+  const performAction = useCallback(async (caseId: string, action: string, actionPayload?: Record<string, any>, customerId?: string) => {
     setActingCase(caseId)
     setActionError(null)
 
@@ -96,6 +96,7 @@ export function QueueActionList() {
           caseId,
           action,
           payload: actionPayload,
+          customerId,
           ttfa,
         }),
       })
@@ -132,17 +133,17 @@ export function QueueActionList() {
       if (item.customer.phone) {
         window.open(`tel:${item.customer.phone}`, '_self')
       }
-      performAction(item.caseId, 'call')
+      performAction(item.caseId, 'call', undefined, item.customerId)
       return
     }
 
-    performAction(item.caseId, action)
+    performAction(item.caseId, action, undefined, item.customerId)
   }, [performAction])
 
-  const handleRecordPayment = useCallback((caseId: string) => {
+  const handleRecordPayment = useCallback((caseId: string, customerId?: string) => {
     const amount = parseFloat(paymentAmount)
     if (!amount || amount <= 0) return
-    performAction(caseId, 'record_payment', { amount, method: paymentMethod })
+    performAction(caseId, 'record_payment', { amount, source: paymentMethod }, customerId)
   }, [paymentAmount, paymentMethod, performAction])
 
   // ── Loading state ──
@@ -282,7 +283,7 @@ export function QueueActionList() {
                                 if (sa.id === 'call' && item.customer.phone) {
                                   window.open(`tel:${item.customer.phone}`, '_self')
                                 }
-                                performAction(item.caseId, sa.id)
+                                performAction(item.caseId, sa.id, undefined, item.customerId)
                               }}
                               disabled={actingCase === item.caseId}
                               className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-50"
@@ -320,12 +321,12 @@ export function QueueActionList() {
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
                       <option value="bank_transfer">Bank Transfer</option>
-                      <option value="other">Other</option>
+                      <option value="adjustment">Adjustment</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleRecordPayment(item.caseId)}
+                      onClick={() => handleRecordPayment(item.caseId, item.customerId)}
                       disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || actingCase === item.caseId}
                       className="flex-1 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
                     >

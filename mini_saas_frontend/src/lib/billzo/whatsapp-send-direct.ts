@@ -29,12 +29,12 @@ export async function sendDirectWhatsApp(
   if (!phone) {
     const { data: customer } = await supabaseAdmin
       .from('customers')
-      .select('whatsapp_number, phone, customer_name, name')
+      .select('phone, customer_name')
       .eq('id', customerId)
       .single()
     if (!customer) return { success: false, sentVia: 'none', error: 'Customer not found' }
-    phone = customer.whatsapp_number || customer.phone || ''
-    customerName = customer.customer_name || customer.name || 'Customer'
+    phone = customer.phone || ''
+    customerName = customer.customer_name || 'Customer'
   }
 
   const cleanPhone = phone.replace(/\D/g, '')

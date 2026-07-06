@@ -100,7 +100,7 @@ export default function InvoiceDetailPage() {
         try {
           const data = await res.json();
           errorMsg = data.error || errorMsg;
-        } catch {}
+        } catch { console.error('[InvoiceDetail] Failed to parse error response', errorMsg) }
         throw new Error(errorMsg);
       }
       
@@ -277,13 +277,6 @@ export default function InvoiceDetailPage() {
       setRecordPaymentSuccess(true);
       loadInvoice();
       loadRecoveryData();
-      setTimeout(() => {
-        setShowRecordPaymentModal(false);
-        setRecordPaymentSuccess(false);
-        setRecordAmount('');
-        setRecordNotes('');
-        setRecordSource('cash');
-      }, 2000);
     } catch (err: any) {
       setRecordPaymentError(err.message);
     } finally {
@@ -424,13 +417,15 @@ export default function InvoiceDetailPage() {
             </button>
           )}
 
-          <button
-            onClick={() => setShowRecordPaymentModal(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
-          >
-            <Banknote className="h-4 w-4" />
-            Record Payment
-          </button>
+          {!paid && (
+            <button
+              onClick={() => setShowRecordPaymentModal(true)}
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Banknote className="h-4 w-4" />
+              Record Payment
+            </button>
+          )}
         </div>
 
         {(paymentLink || invoice?.paymentLinkUrl) && (
@@ -682,12 +677,29 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="p-5 space-y-4">
               {recordPaymentSuccess ? (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 font-medium">Payment recorded! Outstanding amount updated.</span>
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
+                    <CheckCircle2 size={32} className="text-emerald-600" />
+                  </div>
+                  <p className="font-bold text-foreground text-lg">Payment Recorded</p>
+                  <p className="text-sm text-muted-foreground text-center">
+                    {formatINR(parseFloat(recordAmount) || 0)} via {recordSource.replace('_', ' ')}
+                  </p>
+                  <button
+                    onClick={() => { setShowRecordPaymentModal(false); setRecordPaymentSuccess(false); setRecordAmount(''); setRecordNotes(''); setRecordSource('cash'); }}
+                    className="mt-2 px-6 h-10 rounded-lg bg-foreground text-background text-sm font-bold"
+                  >
+                    Close
+                  </button>
                 </div>
               ) : (
                 <>
+                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 mb-4">
+                    <p className="text-xs text-slate-500 font-medium">Outstanding</p>
+                    <p className="text-xl font-bold text-foreground tabular-nums">
+                      {formatINR(Math.max(0, (parseFloat(invoice?.total) || 0) - (parseFloat(invoice?.paidAmount) || 0)))}
+                    </p>
+                  </div>
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground mb-1 block">Amount (₹)</label>
                     <input

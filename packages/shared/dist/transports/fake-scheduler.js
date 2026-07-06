@@ -5,16 +5,13 @@ class FakeScheduler {
     constructor() {
         this.name = 'fake';
         this.jobs = new Map();
-        this.autoFire = true;
+        this.autoFire = false;
     }
     setAutoFire(fire) {
         this.autoFire = fire;
     }
     async schedule(job) {
         this.jobs.set(job.id, { ...job, fired: false });
-        if (this.autoFire && job.runAt <= new Date()) {
-            await this.fire(job.id);
-        }
     }
     async cancel(jobId) {
         this.jobs.delete(jobId);
@@ -41,7 +38,7 @@ class FakeScheduler {
     }
     clear() {
         this.jobs.clear();
-        this.autoFire = true;
+        this.autoFire = false;
     }
 }
 exports.FakeScheduler = FakeScheduler;

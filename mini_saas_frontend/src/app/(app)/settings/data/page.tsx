@@ -8,6 +8,7 @@ import {
   Loader2, CheckCircle2, AlertCircle, ChevronRight,
 } from "lucide-react"
 import { getCookie, clearAuthCookies } from "@/lib/cookies"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
 export default function DataPrivacyPage() {
   const router = useRouter()
@@ -24,8 +25,7 @@ export default function DataPrivacyPage() {
       const tenantId = getCookie("bz_tenant")
       if (!tenantId) throw new Error("Not authenticated")
 
-      const res = await fetch(`/api/tenant/export?format=${format}`, { credentials: "include" })
-      if (!res.ok) throw new Error("Export failed")
+      const res = await fetchWithAuth(`/api/tenant/export?format=${format}`)
 
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

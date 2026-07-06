@@ -53,12 +53,12 @@ export async function GET(request: NextRequest) {
         customers!inner(customer_name, phone),
         total,
         outstanding_amount,
-        due_at,
+        due_date,
         created_at
       `)
       .eq('tenant_id', tenantId)
       .gt('outstanding_amount', 0)
-      .order('due_at', { ascending: true })
+      .order('due_date', { ascending: true })
 
     if (!eligible || eligible.length === 0) {
       return NextResponse.json({
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       customerId: r.customer_id,
       invoiceId: r.id,
       outstandingAmount: parseFloat(r.outstanding_amount) || 0,
-      dueAt: r.due_at,
+      dueAt: r.due_date,
     }))
 
     // Stale preview dedup: DELETE old before INSERT

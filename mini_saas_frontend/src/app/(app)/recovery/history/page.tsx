@@ -6,6 +6,7 @@ import {
   RefreshCw, MessageSquare, CheckCircle2,
   Clock, AlertCircle, XCircle, Loader2, Phone, Hand, CreditCard,
 } from "lucide-react"
+import { MerchantLanguage } from "@billzo/shared"
 import { formatINR } from "@/lib/utils"
 
 interface HistoryEvent {
@@ -181,7 +182,7 @@ export default function RecoveryHistoryPage() {
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-foreground">Recovery History</h1>
+            <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.history}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {tab === "reminders" ? `${total} events tracked` : `${total} timeline events`}
             </p>
@@ -190,7 +191,7 @@ export default function RecoveryHistoryPage() {
             onClick={() => tab === "reminders" ? loadReminders(page, search, statusFilter) : loadTimeline()}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+            <RefreshCw className="h-3.5 w-3.5" /> {MerchantLanguage.common.refresh}
           </button>
         </div>
 
@@ -267,7 +268,7 @@ export default function RecoveryHistoryPage() {
             {tab === "timeline" && timeline.length === 0 && (
               <div className="bg-card border border-dashed border-border rounded-lg p-12 text-center">
                 <Clock className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                <p className="font-semibold text-foreground">No recovery activity yet</p>
+                <p className="font-semibold text-foreground">No activity yet</p>
                 <p className="text-xs text-muted-foreground mt-1">Promises, payments, calls, and reminders will appear here.</p>
               </div>
             )}

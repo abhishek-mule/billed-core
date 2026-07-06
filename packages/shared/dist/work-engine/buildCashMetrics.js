@@ -4,12 +4,13 @@ exports.buildCashMetrics = buildCashMetrics;
 function buildCashMetrics(cash, context) {
     return [
         {
-            label: 'Outstanding',
+            label: 'Money to Collect',
             value: formatAmount(cash.outstanding),
             tone: cash.outstanding > 0 ? 'negative' : 'neutral',
+            subtitle: cash.customerCount > 0 ? `Across ${cash.customerCount} customer${cash.customerCount === 1 ? '' : 's'}\nCollection is in progress` : undefined,
         },
         {
-            label: 'Collected Today',
+            label: 'Received Today',
             value: formatAmount(cash.collectedToday),
             tone: cash.collectedToday > 0 ? 'positive' : 'neutral',
         },
@@ -17,6 +18,7 @@ function buildCashMetrics(cash, context) {
             label: 'Expected Today',
             value: formatAmount(cash.expectedToday),
             tone: 'neutral',
+            emptyLabel: cash.expectedToday === 0 ? "No payments expected today" : undefined,
         },
     ];
 }

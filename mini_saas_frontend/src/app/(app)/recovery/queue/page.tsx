@@ -10,6 +10,7 @@ import {
   CreditCard, CalendarDays,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
+import { MerchantLanguage } from "@billzo/shared"
 import { trackQueueEvent, events as E } from "@/lib/billzo/analytics"
 import { PromiseModal } from "@/components/billzo/PromiseModal"
 import { PaymentModal } from "@/components/billzo/PaymentModal"
@@ -89,7 +90,7 @@ function formatSignal(c: PriorityCase): string {
     const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     return `Promise in ${diff}d`
   }
-  if (c.ignoredReminders >= 3) return 'Ghosting'
+  if (c.ignoredReminders >= 3) return 'Needs call'
   if (c.oldestOverdueDays > 0) return `Overdue by ${c.oldestOverdueDays}d`
   return 'Pending'
 }
@@ -219,7 +220,6 @@ export default function RecoveryQueuePage() {
 
   const handleSend = async (c: PriorityCase) => {
     trackQueueEvent(E.send_reminder, c.customerId, { caseId: c.caseId })
-    markActioned(c.customerId)
     setSending(c.caseId)
     try {
       const res = await fetch("/api/recovery/queue/actions", {
@@ -234,6 +234,7 @@ export default function RecoveryQueuePage() {
         }),
       })
       if (res.ok) {
+        markActioned(c.customerId)
         toast.success("Reminder sent")
         load()
       } else {
@@ -267,15 +268,15 @@ export default function RecoveryQueuePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-foreground">Recovery Queue</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Cash collection workbench</p>
+            <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.queue}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Today's collection</p>
           </div>
           <button
             onClick={load}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            {MerchantLanguage.common.refresh}
           </button>
         </div>
 
@@ -303,7 +304,7 @@ export default function RecoveryQueuePage() {
             <div className="bg-foreground text-background rounded-2xl p-5 lg:p-6 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                 <Banknote size={14} />
-                <span className="uppercase tracking-wider font-semibold">Recoverable Today</span>
+                <span className="uppercase tracking-wider font-semibold">To collect</span>
               </div>
               <p className="text-3xl lg:text-4xl font-bold tabular-nums tracking-tight">
                 {formatINR(totalOverdue)}
@@ -413,8 +414,8 @@ export default function RecoveryQueuePage() {
                         customer={c}
                         sending={sending}
                         onSend={handleSend}
-                        onPromise={(c) => { markActioned(c.customerId); setPromiseFor(c) }}
-                        onPayment={(c) => { markActioned(c.customerId); setPaymentFor(c) }}
+                        onPromise={(c) => { setPromiseFor(c) }}
+                        onPayment={(c) => { setPaymentFor(c) }}
                         onHistory={(c) => { trackQueueEvent(E.open_history, c.customerId, { caseId: c.caseId }); setHistoryFor(c) }}
                         signalColor={signalColor(c)}
                         formatSignal={formatSignal(c)}

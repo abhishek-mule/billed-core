@@ -11,6 +11,7 @@ import { Button } from "@/components/billzo/Button"
 import { EmptyState } from "@/components/billzo/EmptyState"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
+import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
 
 type Customer = {
@@ -103,19 +104,19 @@ function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
     <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
       <div className="grid grid-cols-3 gap-4 lg:gap-6">
         <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Receivables</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.totalReceivables}</p>
           <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {formatINR(totalReceivables)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Payables</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.totalPayables}</p>
           <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {formatINR(totalPayables)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Active Parties</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.activeCustomers}</p>
           <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
             {activeParties}
           </p>
@@ -197,7 +198,7 @@ function PartyDetail({ party, onBack }: {
       {/* Back button (mobile) */}
       {onBack && (
         <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to parties
+          <ArrowLeft className="w-4 h-4" /> Back to customers
         </button>
       )}
 
@@ -228,7 +229,7 @@ function PartyDetail({ party, onBack }: {
             className="flex-1"
             onClick={() => window.open(`tel:${party.phone}`, '_blank')}
           >
-            <Phone className="w-4 h-4 mr-1.5" /> Call
+            <Phone className="w-4 h-4 mr-1.5" /> {MerchantLanguage.customer.call}
           </Button>
         )}
         {(party.whatsapp_number || party.phone) && (
@@ -250,7 +251,7 @@ function PartyDetail({ party, onBack }: {
           className="flex-1"
           onClick={() => router.push(`/parties/${party.id}`)}
         >
-          <MoreHorizontal className="w-4 h-4 mr-1.5" /> Profile
+          <MoreHorizontal className="w-4 h-4 mr-1.5" /> {MerchantLanguage.customer.profile}
         </Button>
       </div>
 
@@ -276,7 +277,7 @@ function PartyDetail({ party, onBack }: {
       <div className="bg-card border border-border rounded-lg">
         <div className="px-4 py-3 border-b border-border">
           <h3 className="text-sm font-medium text-foreground">
-            Pending Invoices {pendingInvoices.length > 0 && `(${pendingInvoices.length})`}
+            {MerchantLanguage.customer.pendingInvoices} {pendingInvoices.length > 0 && `(${pendingInvoices.length})`}
           </h3>
         </div>
         {pendingInvoices.length === 0 ? (
@@ -355,7 +356,7 @@ export default function PartiesPage() {
         setInvoices(invs as unknown as Invoice[])
         setPayments(pays as unknown as Payment[])
       } catch (err) {
-        setError('Failed to load parties. Please try again.')
+        setError(MerchantLanguage.customer.failedToLoad)
       } finally {
         setLoading(false)
       }
@@ -493,7 +494,7 @@ export default function PartiesPage() {
             <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-              Try Again
+              {MerchantLanguage.common.retry}
             </Button>
           </div>
         </div>
@@ -510,16 +511,16 @@ export default function PartiesPage() {
             <div className="w-14 h-14 rounded-full bg-muted border border-border flex items-center justify-center mx-auto mb-4">
               <Users className="w-6 h-6 text-muted-foreground" />
             </div>
-            <h2 className="text-lg font-semibold text-foreground mb-2">No parties yet</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-2">{MerchantLanguage.customer.noCustomersYet}</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Start managing your business relationships. Import from your contacts or add a party manually.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button onClick={() => router.push('/parties/import')}>
-                <Download className="w-4 h-4 mr-1.5" /> Import from Contacts
+                <Download className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.import}
               </Button>
               <Button variant="outline" onClick={() => router.push('/parties/add')}>
-                <UserPlus className="w-4 h-4 mr-1.5" /> Add Party Manually
+                <UserPlus className="w-4 h-4 mr-1.5" /> Add Customer
               </Button>
             </div>
           </div>
@@ -553,10 +554,10 @@ export default function PartiesPage() {
             />
           </div>
           <Button variant="outline" size="sm" onClick={() => router.push('/parties/import')}>
-            <Upload className="w-4 h-4 mr-1.5" /> Import
+            <Upload className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.import}
           </Button>
           <Button size="sm" onClick={() => router.push('/parties/add')}>
-            <Plus className="w-4 h-4 mr-1.5" /> Add Party
+            <Plus className="w-4 h-4 mr-1.5" /> Add Customer
           </Button>
         </div>
 
@@ -571,7 +572,7 @@ export default function PartiesPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search parties..."
+                  placeholder="Search..."
                   value={q}
                   onChange={e => setQ(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
@@ -588,7 +589,7 @@ export default function PartiesPage() {
             {/* Party count */}
             <div className="flex items-center justify-between px-1">
               <p className="text-xs text-muted-foreground font-medium">
-                {filtered.length} {filtered.length === 1 ? 'party' : 'parties'}
+                {filtered.length} {filtered.length === 1 ? 'customer' : 'customers'}
                 {q && filtered.length !== parties.length && ` (of ${parties.length})`}
               </p>
             </div>
@@ -596,7 +597,7 @@ export default function PartiesPage() {
             {/* Party list */}
             {filtered.length === 0 ? (
               <div className="bg-card border border-border rounded-lg p-6 text-center">
-                <p className="text-sm text-muted-foreground">No parties match your search</p>
+                <p className="text-sm text-muted-foreground">No customers match your search</p>
               </div>
             ) : (
               <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
@@ -627,7 +628,7 @@ export default function PartiesPage() {
                 <div className="w-12 h-12 rounded-full bg-muted border border-border flex items-center justify-center mb-3">
                   <Users className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <p className="text-sm text-muted-foreground">Select a party to view details</p>
+                <p className="text-sm text-muted-foreground">{MerchantLanguage.customer.selectACustomer}</p>
               </div>
             )}
           </div>

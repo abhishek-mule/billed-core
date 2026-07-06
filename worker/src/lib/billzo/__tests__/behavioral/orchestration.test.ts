@@ -15,7 +15,7 @@ import { DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 // Operating hours that cover all times for deterministic testing
 const ALL_HOURS: OperatingHoursConfig = {
   enabled: true,
-  windows: [{ start: '00:00', end: '23:59' }],
+  windows: [{ start: '00:00', end: '24:00' }],
   quietDays: [],
   quietAfter: '',
 }

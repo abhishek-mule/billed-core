@@ -274,6 +274,8 @@ export type Payment = {
   createdAt: string
   updatedAt: string
   syncStatus: SyncStatus
+  lifecycleStatus?: string
+  sourceId?: string
 }
 
 export type WhatsAppEvent = {

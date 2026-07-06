@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FakeOutboxPublisher = exports.FakeClock = exports.FakeScheduler = exports.FakeMessageTransport = void 0;
+exports.createTestHarness = exports.PipelineExpectation = exports.SystemTestHarness = exports.FakeWorker = exports.FakeTimeline = exports.FakeDashboardProjection = exports.FakeRecoveryProjection = exports.FakeDecisionEngine = exports.FakeOutboxPublisher = exports.FakeClock = exports.FakeScheduler = exports.FakeMessageTransport = void 0;
 var fake_message_1 = require("./fake-message");
 Object.defineProperty(exports, "FakeMessageTransport", { enumerable: true, get: function () { return fake_message_1.FakeMessageTransport; } });
 var fake_scheduler_1 = require("./fake-scheduler");
@@ -9,4 +9,18 @@ var fake_clock_1 = require("./fake-clock");
 Object.defineProperty(exports, "FakeClock", { enumerable: true, get: function () { return fake_clock_1.FakeClock; } });
 var fake_outbox_1 = require("./fake-outbox");
 Object.defineProperty(exports, "FakeOutboxPublisher", { enumerable: true, get: function () { return fake_outbox_1.FakeOutboxPublisher; } });
+var fake_decision_engine_1 = require("./fake-decision-engine");
+Object.defineProperty(exports, "FakeDecisionEngine", { enumerable: true, get: function () { return fake_decision_engine_1.FakeDecisionEngine; } });
+var fake_recovery_projection_1 = require("./fake-recovery-projection");
+Object.defineProperty(exports, "FakeRecoveryProjection", { enumerable: true, get: function () { return fake_recovery_projection_1.FakeRecoveryProjection; } });
+var fake_dashboard_projection_1 = require("./fake-dashboard-projection");
+Object.defineProperty(exports, "FakeDashboardProjection", { enumerable: true, get: function () { return fake_dashboard_projection_1.FakeDashboardProjection; } });
+var fake_timeline_1 = require("./fake-timeline");
+Object.defineProperty(exports, "FakeTimeline", { enumerable: true, get: function () { return fake_timeline_1.FakeTimeline; } });
+var fake_worker_1 = require("./fake-worker");
+Object.defineProperty(exports, "FakeWorker", { enumerable: true, get: function () { return fake_worker_1.FakeWorker; } });
+var test_harness_1 = require("./test-harness");
+Object.defineProperty(exports, "SystemTestHarness", { enumerable: true, get: function () { return test_harness_1.SystemTestHarness; } });
+Object.defineProperty(exports, "PipelineExpectation", { enumerable: true, get: function () { return test_harness_1.PipelineExpectation; } });
+Object.defineProperty(exports, "createTestHarness", { enumerable: true, get: function () { return test_harness_1.createTestHarness; } });
 //# sourceMappingURL=index.js.map

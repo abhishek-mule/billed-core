@@ -258,8 +258,11 @@ export function getVerifiedTenantIdFromRequest(request: NextRequest): string | n
   const payload = getAuthPayloadFromRequest(request)
   if (!payload) return null
 
-  if (payload.tenantId) return payload.tenantId
-  return null
+  // Cross-check: ensure JWT tenantId matches the non-httpOnly cookie if both are set
+  const cookieTenantId = request.cookies.get('bz_tenant')?.value
+  if (payload.tenantId && cookieTenantId && payload.tenantId !== cookieTenantId) return null
+
+  return payload.tenantId || cookieTenantId || null
 }
 
 export function getVerifiedUserIdFromRequest(request: NextRequest): string | null {

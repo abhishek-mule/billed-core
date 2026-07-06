@@ -28,17 +28,27 @@ function CashSection({ section }: { section: AnyDashboardSection }) {
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
-      {metrics.map((metric: CashMetric, i: number) => (
-        <div key={i} className="rounded-xl border p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{metric.label}</p>
-            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-lg border ${getToneColor(metric.tone)}`}>
-              {React.createElement(getToneIcon(metric.tone), { size: 14 })}
-            </span>
+      {metrics.map((metric: CashMetric, i: number) => {
+        const showEmptyLabel = metric.emptyLabel && metric.value === '₹0'
+        return (
+          <div key={i} className="rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+              <span className={`inline-flex h-6 w-6 items-center justify-center rounded-lg border ${getToneColor(metric.tone)}`}>
+                {React.createElement(getToneIcon(metric.tone), { size: 14 })}
+              </span>
+            </div>
+            {showEmptyLabel ? (
+              <p className="mt-2 text-sm font-medium text-muted-foreground">{metric.emptyLabel}</p>
+            ) : (
+              <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{metric.value}</p>
+            )}
+            {metric.subtitle && (
+              <p className="mt-0.5 text-xs text-muted-foreground whitespace-pre-line">{metric.subtitle}</p>
+            )}
           </div>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{metric.value}</p>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

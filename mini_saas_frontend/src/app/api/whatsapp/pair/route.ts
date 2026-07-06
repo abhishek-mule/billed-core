@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           deliverySuccessRate: parsed.deliverySuccessRate || null,
           error: parsed.error || null,
         }
-      } catch {}
+      } catch { console.error('[WhatsAppPair] Failed to parse health data') }
     }
 
     if (exists && connectionState === 'disconnected') {

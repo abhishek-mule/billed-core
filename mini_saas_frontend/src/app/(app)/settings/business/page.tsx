@@ -85,6 +85,11 @@ export default function BusinessProfilePage() {
         body: JSON.stringify(profile),
       })
 
+      if (!syncRes.ok) {
+        const errData = await syncRes.json().catch(() => ({}))
+        throw new Error(errData.error || "Server rejected update")
+      }
+
       // Update cookie + localStorage so AppShell reflects the new name immediately
       if (profile.name) {
         setCookie("bz_tenant_name", profile.name)

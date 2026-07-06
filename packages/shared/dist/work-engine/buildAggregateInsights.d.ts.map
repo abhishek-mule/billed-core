@@ -1,0 +1,1 @@
+{"version":3,"file":"buildAggregateInsights.d.ts","sourceRoot":"","sources":["../../src/work-engine/buildAggregateInsights.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,yBAAyB,EAAE,uBAAuB,EAAE,MAAM,UAAU,CAAA;AAClF,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,SAAS,CAAA;AAI9C,wBAAgB,sBAAsB,CACpC,WAAW,EAAE,yBAAyB,EAAE,EACxC,WAAW,EAAE,uBAAuB,EAAE,GACrC,eAAe,EAAE,CAiEnB"}

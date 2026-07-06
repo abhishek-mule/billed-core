@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { MerchantLanguage } from '@billzo/shared'
 import { Clock, Hand, Bell, PauseCircle, CheckCircle2, AlertCircle, ChevronRight, HelpCircle } from 'lucide-react'
 
 export type RecoveryPlanMode = 'scheduled_reminder' | 'promise' | 'auto_recovery' | 'paused' | 'none'
@@ -37,10 +38,10 @@ const MODE_CONFIG: Record<RecoveryPlanMode, { icon: any; color: string; bg: stri
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  active: 'Active',
-  waiting: 'Waiting',
-  paused: 'Paused',
-  completed: 'Completed',
+  active: MerchantLanguage.state.active,
+  waiting: MerchantLanguage.state.waiting,
+  paused: MerchantLanguage.state.paused,
+  completed: MerchantLanguage.state.completed,
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -72,7 +73,7 @@ export function RecoveryPlanCard({
       <div className={cn('p-4 flex items-center gap-3', cfg.bg)}>
         <Icon size={20} className={cfg.color} />
         <div className="flex-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recovery Plan</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Today</p>
           <p className="font-semibold text-sm mt-0.5">{plan.modeLabel}</p>
         </div>
         <span className={cn('text-xs font-semibold', STATUS_COLORS[plan.status])}>
@@ -85,7 +86,7 @@ export function RecoveryPlanCard({
         {/* Execution */}
         {plan.executionAt && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Execution</span>
+            <span className="text-muted-foreground">Scheduled</span>
             <span className="font-medium">
               {new Date(plan.executionAt).toLocaleDateString('en-IN', {
                 day: 'numeric', month: 'short',
@@ -128,7 +129,7 @@ export function RecoveryPlanCard({
                     hour: '2-digit', minute: '2-digit',
                   })}
                   {' '}
-                  &middot; {plan.nextAction.isAutomatic ? 'Automatic' : 'Manual'}
+                  &middot; {plan.nextAction.isAutomatic ? MerchantLanguage.common.automatic : MerchantLanguage.common.manual}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">{plan.nextAction.reason}</p>
@@ -140,7 +141,7 @@ export function RecoveryPlanCard({
         {/* Reason */}
         {plan.nextAction.reason && (
           <div className="rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Why? </span>
+            <span className="font-medium text-foreground">Reason </span>
             {plan.nextAction.reason}
           </div>
         )}
@@ -187,17 +188,17 @@ export function RecoveryPlanCard({
         <div className="border-t border-border px-4 py-3 flex gap-2">
           {onEdit && (
             <button onClick={onEdit} className="text-xs font-medium text-primary hover:underline">
-              Change
+              {MerchantLanguage.action.change}
             </button>
           )}
           {onPause && (
             <button onClick={onPause} className="text-xs font-medium text-orange-600 hover:underline">
-              Pause
+              {MerchantLanguage.common.pause}
             </button>
           )}
           {onCancel && (
             <button onClick={onCancel} className="text-xs font-medium text-destructive hover:underline">
-              Cancel
+              {MerchantLanguage.action.cancel}
             </button>
           )}
         </div>

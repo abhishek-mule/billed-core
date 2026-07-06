@@ -52,7 +52,7 @@ function applyRoutingRules(response: NextResponse, pathname: string, hasAuth: bo
   const isAuthRoute = pathname.startsWith('/auth')
   const isAuthResolverRoute = pathname.startsWith('/auth/resolve')
   const isOnboardingRoute = pathname.startsWith('/onboarding')
-  const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/invoices') || pathname.startsWith('/parties') || pathname.startsWith('/settings') || pathname.startsWith('/reports') || pathname.startsWith('/pos') || pathname.startsWith('/pricing') || pathname.startsWith('/more') || pathname.startsWith('/pulse') || pathname.startsWith('/cashflow') || pathname.startsWith('/products') || pathname.startsWith('/purchases') || pathname.startsWith('/recovery')
+  const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/sales') || pathname.startsWith('/udhar') || pathname.startsWith('/invoices') || pathname.startsWith('/parties') || pathname.startsWith('/settings') || pathname.startsWith('/reports') || pathname.startsWith('/pos') || pathname.startsWith('/pricing') || pathname.startsWith('/more') || pathname.startsWith('/pulse') || pathname.startsWith('/cashflow') || pathname.startsWith('/products') || pathname.startsWith('/purchases') || pathname.startsWith('/recovery')
 
   if (DEBUG) {
     console.log(`[Middleware] Routing: path=${pathname}, hasAuth=${hasAuth}, hasTenant=${hasTenant}, isAuth=${isAuthRoute}, isAuthResolver=${isAuthResolverRoute}, isOnboarding=${isOnboardingRoute}, isApp=${isAppRoute}`)

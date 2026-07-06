@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { db } from '@/lib/billzo/db'
+import { getTenantId, getUserId } from '@/lib/billzo/tenant'
 import {
   computeRecoveryMetrics,
   computeAgingReport,
@@ -113,8 +114,8 @@ export function useReportsData(): UseReportsDataReturn {
 
   const loadData = useCallback(async () => {
     try {
-      const tenantId = getCookie('bz_tenant')
-      const userId = getCookie('bz_user_id')
+      const tenantId = getTenantId()
+      const userId = getUserId()
       if (!tenantId || !userId) {
         router.push('/auth')
         return

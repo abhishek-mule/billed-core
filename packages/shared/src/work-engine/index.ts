@@ -7,6 +7,7 @@ export type {
   WorkContext,
   CashPosition,
   DashboardView,
+  AutomationPlanItem,
   CustomerView,
   InvoiceSummary,
   PaymentSummary,
@@ -15,10 +16,14 @@ export type {
   TodaySectionPayload,
   CashSectionPayload,
   ActivitySectionPayload,
+  MemoriesSectionPayload,
   DashboardSection,
   AnyDashboardSection,
   CashMetric,
   ActivityEvent,
+  MemoryCategory,
+  MerchantMemory,
+  BusinessInsight,
 } from './types'
 
 export { SeverityWeight } from './types'
@@ -45,3 +50,10 @@ export { buildDashboardSections } from './buildDashboardSections'
 
 export { buildCustomerPage } from './buildCustomerPage'
 export type { CustomerPageView } from './buildCustomerPage'
+
+export { buildMerchantMemory } from './buildMerchantMemory'
+export type { MemoryInput } from './buildMerchantMemory'
+
+export { buildAggregateInsights } from './buildAggregateInsights'
+
+export { buildAutomationPlan, formatPlanTime } from './buildAutomationPlan'

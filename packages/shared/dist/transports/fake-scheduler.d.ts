@@ -2,7 +2,7 @@ import type { Scheduler, ScheduledJob } from './scheduler';
 export declare class FakeScheduler implements Scheduler {
     readonly name = "fake";
     private jobs;
-    private autoFire;
+    autoFire: boolean;
     setAutoFire(fire: boolean): void;
     schedule(job: Omit<ScheduledJob, 'fired' | 'firedAt'>): Promise<void>;
     cancel(jobId: string): Promise<void>;

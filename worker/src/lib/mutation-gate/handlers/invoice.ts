@@ -33,7 +33,7 @@ export const invoiceMarkPaid: Handler = {
 export const reminderAdvanceStage: Handler = {
   domain: 'recovery_state',
   execute: async (payload) => {
-    const { invoiceId, lastWhatsappStatus, lastWhatsappAt, recoveryStage, nextRecoveryAt } = payload as any
+    const { invoiceId, lastWhatsappStatus, lastWhatsappAt, recoveryStage, nextRecoveryAt, recoveryState } = payload as any
     if (!invoiceId) {
       return { outcome: 'failure', error: 'invoiceId is required', touchedRows: [], transitionTraces: [] }
     }
@@ -42,6 +42,7 @@ export const reminderAdvanceStage: Handler = {
     if (lastWhatsappAt !== undefined) updates.last_whatsapp_at = lastWhatsappAt
     if (recoveryStage !== undefined) updates.recovery_stage = recoveryStage
     if (nextRecoveryAt !== undefined) updates.next_recovery_at = nextRecoveryAt
+    if (recoveryState !== undefined) updates.recovery_state = recoveryState
     // authority:governed reminder.advance_stage
     const { error } = await supabaseAdmin.from('invoices').update(updates).eq('id', invoiceId)
     if (error) {

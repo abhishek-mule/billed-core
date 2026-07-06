@@ -4,6 +4,8 @@ import { writeOutboxEvent } from './outbox'
 import { sendWhatsAppMessage } from '../../../lib/whatsapp-router'
 import { generateStatementPdf, type StatementInvoice } from '../../../lib/statement-pdf'
 import { EventType } from '@billzo/shared'
+import { Queue } from 'bullmq'
+import { createRedisConnection } from '../../../lib/redis'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -23,9 +25,36 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
   const tenantId = event.tenantId
   const invoiceId = event.entityId
   const payload = event.payload || {}
-  const { customerId, templateKey, vars, personalNote } = payload
+  const { customerId, templateKey, vars, personalNote, messageType } = payload
 
   if (!tenantId || !customerId) return
+
+  // Route reminder messages through BullMQ reminders queue (decision engine gate)
+  if (messageType === 'reminder') {
+    const connection = createRedisConnection()
+    const remindersQueue = new Queue('reminders', { connection })
+    await remindersQueue.add(
+      'send-reminder',
+      {
+        tenantId,
+        invoiceId,
+        customerId,
+        caseId: payload.caseId || null,
+        trigger: payload.trigger || 'manual',
+        override: payload.override || false,
+        reminderId: payload.reminderId || null,
+        stage: payload.stage || 't0_soft',
+        dueDate: payload.dueDate || null,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+      },
+    )
+    await remindersQueue.close()
+    await connection.quit()
+    return
+  }
 
   const { data: customer } = await supabaseAdmin
     .from('customers')
@@ -73,7 +102,7 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
   let finalMessage = ''
   let documentUrl: string | undefined
   let documentName: string | undefined
-  let messageType: string = templateKey || 'text'
+  let resolvedMessageType: string = templateKey || 'text'
 
   if (isConsolidated) {
     const appUrl = process.env.APP_URL || 'http://localhost:3000'
@@ -122,7 +151,7 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
 
     documentUrl = pdfPath
     documentName = `Statement_${customerName.replace(/\s+/g, '_')}.pdf`
-    messageType = 'statement'
+    resolvedMessageType = 'statement'
   } else if (templateKey && config.templateNames) {
     const templateName = (config.templateNames as Record<string, string | undefined>)[templateKey]
     if (templateName) {
@@ -174,7 +203,7 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
     customer_id: customerId,
     phone: `+${toNumber}`,
     status: eventStatus,
-    message_type: messageType,
+    message_type: resolvedMessageType,
     direction: 'outbound',
     event_layer: 'transport',
     provider_message_id: sendResult.messageId || messageId,

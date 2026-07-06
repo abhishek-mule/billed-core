@@ -78,6 +78,8 @@ pipeline. There is no migration runner — each file is applied once.
 | 050_tenant_memberships.sql | Applied | |
 | 051_recovery_queue_events.sql | **Superseded** | Replaced by `recovery_case_events` in 028. Do not apply. |
 | 052_tenants_complete_schema.sql | Applied | |
+| 053_identity_schema.sql | Pending | Not yet applied |
+| 054_fix_priority_cases_rpc_filter.sql | Pending | Relaxes next_action_type filter to include review_payment and merchant_review |
 | verify_schema.sql | — | Helper script, not a migration |
 
 ## Duplicate migration numbers

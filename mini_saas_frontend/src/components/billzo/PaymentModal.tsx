@@ -95,7 +95,6 @@ export function PaymentModal({
 
       if (paymentAmount >= amount) {
         setStep('done')
-        setTimeout(() => { onSuccess(); onClose() }, 1500)
       } else {
         setStep('followup_choice')
       }
@@ -108,6 +107,7 @@ export function PaymentModal({
 
   async function handleNoCommit() {
     setFollowUpSaving(true)
+    setError(null)
     try {
       const res = await fetch("/api/recovery/queue/actions", {
         method: "POST",
@@ -120,11 +120,12 @@ export function PaymentModal({
           payload: { delayDays: 3 },
         }),
       })
-      if (res.ok) {
-        setStep('followup_done')
-        setTimeout(() => { onSuccess(); onClose() }, 1200)
-      }
-    } catch { } finally {
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to schedule follow-up")
+      setStep('followup_done')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
       setFollowUpSaving(false)
     }
   }
@@ -132,8 +133,9 @@ export function PaymentModal({
   async function handleSaveCommit() {
     if (!promiseDate) return
     setFollowUpSaving(true)
+    setError(null)
     try {
-      await fetch("/api/recovery/queue/actions", {
+      const res = await fetch("/api/recovery/queue/actions", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -148,10 +150,13 @@ export function PaymentModal({
           },
         }),
       })
-    } catch { } finally {
-      setFollowUpSaving(false)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to save promise")
       setStep('followup_done')
-      setTimeout(() => { onSuccess(); onClose() }, 1200)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setFollowUpSaving(false)
     }
   }
 
@@ -275,6 +280,12 @@ export function PaymentModal({
         {/* ── FOLLOW-UP: Did customer commit? ── */}
         {step === 'followup_choice' && (
           <>
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
+                <AlertCircle size={14} />
+                {error}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
                 <Bell className="h-5 w-5" />
@@ -318,6 +329,12 @@ export function PaymentModal({
         {/* ── FOLLOW-UP: Customer committed ── */}
         {step === 'followup_commit' && (
           <>
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
+                <AlertCircle size={14} />
+                {error}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-700">
                 <CalendarDays className="h-5 w-5" />
@@ -386,6 +403,12 @@ export function PaymentModal({
             <p className="text-sm text-slate-500 text-center">
               {formatINR(recordedAmount)} received · {formatINR(remainingAmount)} remaining
             </p>
+            <button
+              onClick={() => { onSuccess(); onClose() }}
+              className="mt-4 px-6 h-10 rounded-lg bg-foreground text-background text-sm font-bold"
+            >
+              Close
+            </button>
           </div>
         )}
 
@@ -399,6 +422,12 @@ export function PaymentModal({
             <p className="text-sm text-slate-500">
               {formatINR(recordedAmount)} via {methodLabel}
             </p>
+            <button
+              onClick={() => { onSuccess(); onClose() }}
+              className="mt-4 px-6 h-10 rounded-lg bg-foreground text-background text-sm font-bold"
+            >
+              Close
+            </button>
           </div>
         )}
       </div>

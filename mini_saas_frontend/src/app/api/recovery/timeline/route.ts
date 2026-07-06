@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
         .limit(limit),
       supabaseAdmin
         .from('payments')
-        .select('id, invoice_id, customer_id, amount, status, provider, created_at, customers!inner(customer_name, phone)')
+        .select('id, invoice_id, customer_id, amount, status, source, created_at, customers!inner(customer_name, phone)')
         .eq('tenant_id', tenantId)
         .eq('status', 'success')
         .order('created_at', { ascending: false })
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
           customerName: cust.customer_name || 'Unknown',
           customerPhone: cust.phone || '',
           amount: Number(pmt.amount) || 0,
-          label: pmt.provider === 'cash' ? 'Cash' : 'Payment',
+          label: pmt.source === 'cash' ? 'Cash' : 'Payment',
           detail: `Payment of ₹${Number(pmt.amount).toLocaleString('en-IN')} received`,
           occurredAt: pmt.created_at,
           status: 'success',

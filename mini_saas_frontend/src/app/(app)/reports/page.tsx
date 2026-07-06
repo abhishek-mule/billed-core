@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
-import { getCookie } from "@/lib/cookies"
+import { getTenantId, getUserId } from "@/lib/billzo/tenant"
 import { useReportsData } from "@/components/reports/useReportsData"
 import { DateRangePicker } from "@/components/reports/DateRangePicker"
 import type {
@@ -197,7 +197,7 @@ function SendReminderButton({ phone, customerName, amount }: {
   const [sent, setSent] = useState(false)
   const handleClick = async () => {
     try {
-      const tenantId = getCookie('bz_tenant')
+      const tenantId = getTenantId()
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -209,7 +209,7 @@ function SendReminderButton({ phone, customerName, amount }: {
         }),
       })
       if (res.ok) { setSent(true); setTimeout(() => setSent(false), 2000) }
-    } catch {}
+    } catch (err) { console.error('[Reports] Failed to send reminder:', err) }
   }
 
   return (
@@ -360,7 +360,7 @@ export default function ReportsPage() {
   const [productLoading, setProductLoading] = useState(true)
 
   useEffect(() => {
-    const tenantId = getCookie('bz_tenant')
+    const tenantId = getTenantId()
     if (!tenantId) { router.push('/auth'); return }
     ;(async () => {
       const data = await db().products.where('tenantId').equals(tenantId).toArray()

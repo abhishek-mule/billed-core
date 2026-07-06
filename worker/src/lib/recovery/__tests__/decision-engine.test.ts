@@ -48,6 +48,8 @@ describe('canSendReminder', () => {
     expect(result.allowed).toBe(true)
     expect(result.decision).toBe('send')
     expect(result.reason).toBe('All checks passed')
+    expect(result.reasons).toEqual([])
+    expect(result.overridden).toBe(false)
     expect(result.rules).toHaveLength(15)
     expect(result.rules.every(r => r.passed)).toBe(true)
   })
@@ -230,24 +232,24 @@ describe('canSendReminder', () => {
     expect(threeFail.confidence).toBeLessThan(0.8)
   })
 
-  // ── Rule 0: Merchant Override ──
+  // ── Merchant Override ──
 
-  it('respects active override and bypasses all checks', () => {
+  it('evaluates all rules but allows send when override is active', () => {
     const result = canSendReminder(makeInput({
       invoice: {
         overrideSend: true,
-        overrideAt: '2026-06-10T10:00:00.000Z',  // 2h before our test time
+        overrideAt: '2026-06-10T10:00:00.000Z',
         overrideReason: 'Customer is a family friend',
       },
     }))
     expect(result.allowed).toBe(true)
     expect(result.decision).toBe('send')
-    expect(result.reason).toContain('Merchant override')
-    expect(result.rules).toHaveLength(1)  // only override rule checked
-    expect(result.rules[0].override).toBe(true)
+    expect(result.overridden).toBe(true)
+    expect(result.rules).toHaveLength(15)
+    expect(result.reasons).toEqual([])
   })
 
-  it('bypasses even blocked conditions when override is active', () => {
+  it('overrides sets allowed even with blocking conditions and reports reasons', () => {
     const result = canSendReminder(makeInput({
       invoice: {
         outstanding: 0,
@@ -259,33 +261,31 @@ describe('canSendReminder', () => {
       },
     }))
     expect(result.allowed).toBe(true)
-    expect(result.rulesSnapshot.merchant_override).toBe(true)
+    expect(result.overridden).toBe(true)
+    expect(result.reasons.length).toBeGreaterThan(0)
+  })
+
+  it('explicit override param bypasses all DB checks', () => {
+    const result = canSendReminder(makeInput(), { override: true })
+    expect(result.allowed).toBe(true)
+    expect(result.overridden).toBe(true)
   })
 
   it('does not apply expired override (>24h old) — falls through to normal rules', () => {
     const result = canSendReminder(makeInput({
       invoice: {
         overrideSend: true,
-        overrideAt: '2026-06-05T10:00:00.000Z',  // 5 days ago
+        overrideAt: '2026-06-05T10:00:00.000Z',
         overrideReason: 'Old override',
       },
     }))
-    // Override rule not in rules array (only active overrides appear)
-    expect(result.rules.every(r => r.rule !== 'merchant_override')).toBe(true)
     expect(result.rules.length).toBe(15)
     expect(result.rules[0].rule).toBe('outstanding_positive')
-    // Snapshot reflects inactive override
-    expect(result.rulesSnapshot.merchant_override).toBe(false)
+    expect(result.overridden).toBe(false)
   })
 
-  it('merchant_override rule appears first in rules_snapshot', () => {
-    const result = canSendReminder(makeInput({
-      invoice: {
-        overrideSend: true,
-        overrideAt: '2026-06-10T10:00:00.000Z',
-        overrideReason: 'Override test',
-      },
-    }))
-    expect(result.rulesSnapshot.merchant_override).toBe(true)
+  it('passes reminderId through to output', () => {
+    const result = canSendReminder(makeInput({}), { reminderId: 'R-001' })
+    expect(result.reminderId).toBe('R-001')
   })
 })

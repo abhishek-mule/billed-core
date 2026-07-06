@@ -6,7 +6,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INTERPRETER_VERSION = exports.DECAY_HALF_LIVES = exports.DEFAULT_OPERATING_HOURS = exports.RECOVERY_ENGAGEMENT_STATES = exports.RECOVERY_STATES = exports.MESSAGE_ORIGINS = exports.STAGE_LABELS = exports.REMINDER_STAGES = void 0;
+exports.INTERPRETER_VERSION = exports.DECAY_HALF_LIVES = exports.DEFAULT_OPERATING_HOURS = exports.RECOVERY_ENGAGEMENT_STATES = exports.RECOVERY_STATES = exports.INVOICE_RECOVERY_STATES = exports.MESSAGE_ORIGINS = exports.STAGE_LABELS = exports.REMINDER_STAGES = void 0;
 exports.normalizeStage = normalizeStage;
 exports.getNextStage = getNextStage;
 exports.generateBillzoMessageId = generateBillzoMessageId;
@@ -86,6 +86,30 @@ function computeTransportHash(params) {
     ].join('|');
     return crypto_1.default.createHash('md5').update(raw).digest('hex');
 }
+// ============================================================
+// INVOICE RECOVERY STATE — Reminder lifecycle FSM
+// ============================================================
+// This state machine governs the automated reminder lifecycle at the
+// invoice level. It replaces the overloaded meaning of next_recovery_at = NULL.
+//
+// States:
+//   pending        — New invoice, never processed by reminder worker
+//   scheduled      — Active automation, worker processes based on next_recovery_at
+//   paused         — Merchant snoozed/halted automated reminders
+//   manual_review  — All automatic stages exhausted, needs merchant action
+//   completed      — Settled (paid/waived)
+//   disputed       — Contested, halt all automation
+//
+// Worker processes only: pending, scheduled
+// Worker ignores:        paused, manual_review, completed, disputed
+exports.INVOICE_RECOVERY_STATES = [
+    'pending',
+    'scheduled',
+    'paused',
+    'manual_review',
+    'completed',
+    'disputed',
+];
 function isOverdue(status, dueDate, now = new Date()) {
     if (status === 'paid')
         return false;

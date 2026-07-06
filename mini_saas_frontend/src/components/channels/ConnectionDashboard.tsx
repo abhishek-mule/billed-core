@@ -131,7 +131,7 @@ export default function ConnectionDashboard() {
     try {
       await fetch(`/api/channels/${channelId}/disconnect`, { method: 'POST', credentials: 'include' })
       fetchChannels(true)
-    } catch {}
+    } catch (err) { console.error('[ConnectionDashboard] Disconnect failed:', err) }
   }
 
   if (loading) {

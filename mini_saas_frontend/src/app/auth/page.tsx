@@ -162,72 +162,54 @@ function LoginSkeleton() {
   )
 }
 
-function GeometricPattern() {
-  const pattern = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-      <rect width="80" height="80" fill="none"/>
-      <path d="M40 0 L80 40 L40 80 L0 40 Z" fill="none" stroke="rgba(30,60,140,0.08)" stroke-width="1.5"/>
-      <path d="M40 10 L70 40 L40 70 L10 40 Z" fill="none" stroke="rgba(30,60,140,0.05)" stroke-width="1"/>
-      <circle cx="40" cy="40" r="4" fill="rgba(30,60,140,0.06)"/>
-      <circle cx="40" cy="0" r="2.5" fill="rgba(30,60,140,0.04)"/>
-      <circle cx="80" cy="40" r="2.5" fill="rgba(30,60,140,0.04)"/>
-      <circle cx="40" cy="80" r="2.5" fill="rgba(30,60,140,0.04)"/>
-      <circle cx="0" cy="40" r="2.5" fill="rgba(30,60,140,0.04)"/>
-      <line x1="0" y1="0" x2="40" y2="40" stroke="rgba(30,60,140,0.04)" stroke-width="0.75"/>
-      <line x1="80" y1="0" x2="40" y2="40" stroke="rgba(30,60,140,0.04)" stroke-width="0.75"/>
-      <line x1="0" y1="80" x2="40" y2="40" stroke="rgba(30,60,140,0.04)" stroke-width="0.75"/>
-      <line x1="80" y1="80" x2="40" y2="40" stroke="rgba(30,60,140,0.04)" stroke-width="0.75"/>
-    </svg>
-  `.trim()
-
-  const encoded = `data:image/svg+xml,${encodeURIComponent(pattern)}`
-
-  return (
-    <div
-      className="absolute inset-0"
-      style={{ backgroundImage: `url("${encoded}")`, backgroundRepeat: 'repeat' }}
-      aria-hidden="true"
-    />
-  )
-}
-
 function LeftPanel() {
   return (
-    <div className="hidden lg:flex lg:w-[50%] relative overflow-hidden flex-col bg-[#f0f2f8]">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f2f8] via-[#e8ecf8] to-[#f0f2f8]" />
-      <GeometricPattern />
+    <div className="hidden lg:flex lg:w-[50%] relative overflow-hidden flex-col">
+      <div className="absolute inset-0">
+        <Image
+          src="/left.jpeg"
+          alt="BillZo Dashboard"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/30" />
+      </div>
 
-      <div className="relative flex-1 flex items-center justify-center p-12">
-        <div className="max-w-xl text-center">
+      {/* Full-coverage Glassmorphism Layer over entire left panel */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-xl">
+        {/* Subtle shine overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none" />
+        
+        {/* Content centered within the glass layer */}
+        <div className="relative h-full flex flex-col items-center justify-center px-8 text-white">
           <div className="flex justify-center mb-8">
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-md flex items-center justify-center p-2">
+            <div className="w-16 h-16 bg-white/15 backdrop-blur-md rounded-2xl border border-white/30 flex items-center justify-center p-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
               <Image src="/logo_new.png" alt="BillZo" width={48} height={48} className="object-contain" />
             </div>
           </div>
-          <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4 tracking-tight">
+          <h2 className="text-3xl lg:text-4xl font-bold mb-4 tracking-tight text-white drop-shadow-lg">
             Recovery OS for Indian Merchants
           </h2>
-          <p className="text-lg text-slate-500 mb-8 leading-relaxed">
+          <p className="text-base lg:text-lg text-white/80 mb-8 leading-relaxed max-w-xl drop-shadow">
             Turn overdue invoices into collected cash. Automated reminders, payment links, and smart recovery workflows — all in one dashboard.
           </p>
-          <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-500">
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-blue-600" />
+          <div className="flex flex-wrap justify-center gap-3 text-sm">
+            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-white/20 text-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
+              <Shield className="w-4 h-4" />
               <span>Automated follow-ups</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-blue-600" />
+            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-white/20 text-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
+              <Zap className="w-4 h-4" />
               <span>Instant payment links</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-blue-600" />
+            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-white/20 text-white/90 shadow-[0_2px_8px_rgba(0,0,0,0.2)]">
+              <Users className="w-4 h-4" />
               <span>Customer promises tracker</span>
             </div>
           </div>
         </div>
       </div>
-
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#f0f2f8] to-transparent" />
     </div>
   )
 }

@@ -246,15 +246,15 @@ export async function getTenantRecoveryMetrics(tenantId: string): Promise<{
   // Calculate average time to recovery
   const { data: paidInvoices } = await supabaseAdmin
     .from('invoices')
-    .select('due_at, updated_at')
+    .select('due_date, updated_at')
     .eq('tenant_id', tenantId)
     .eq('status', 'paid')
-    .not('due_at', 'is', null)
+    .not('due_date', 'is', null)
 
   let averageTimeToRecovery = 0
   if (paidInvoices && paidInvoices.length > 0) {
     const totalDays = paidInvoices.reduce((sum, inv) => {
-      const dueDate = new Date(inv.due_at)
+      const dueDate = new Date(inv.due_date)
       const paidDate = new Date(inv.updated_at)
       return sum + (paidDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
     }, 0)

@@ -8,6 +8,7 @@ import {
   Calendar, ChevronDown, ChevronUp, Save, CheckCircle2, AlertCircle,
 } from "lucide-react"
 import { getCookie } from "@/lib/cookies"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
 interface RecoverySettings {
   autoReminders: boolean
@@ -111,13 +112,10 @@ export default function RecoverySettingsPage() {
           },
         },
       }
-      const res = await fetch('/api/tenant/whatsapp-config', {
+      await fetchWithAuth('/api/tenant/whatsapp-config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('Failed to save')
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {

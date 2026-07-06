@@ -5,8 +5,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Search, Plus, ChevronRight,
-  TrendingUp, AlertCircle, ArrowRight, Download, FileSpreadsheet,
-  FileText, Receipt,
+  TrendingUp, AlertCircle, Download, FileSpreadsheet,
+  FileText, Receipt, IndianRupee,
 } from "lucide-react"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
@@ -307,15 +307,17 @@ export default function InvoicesPage() {
                   {attentionInvs.length} overdue invoice{attentionInvs.length !== 1 ? "s" : ""}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {formatINR(attentionInvs.reduce((s, i) => s + getOutstanding(i), 0))} collectable
+                  {formatINR(attentionInvs.reduce((s, i) => s + getOutstanding(i), 0))} to collect
                 </p>
               </div>
-              <Link
-                href="/cashflow"
-                className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
-              >
-                Open Recovery <ArrowRight className="h-3 w-3" />
-              </Link>
+              {attentionInvs.length > 0 && (
+                <Link
+                  href={`/invoices/${attentionInvs[0].id}`}
+                  className="flex items-center gap-1 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <IndianRupee className="h-3 w-3" /> Collect Now
+                </Link>
+              )}
             </div>
           </div>
         </div>

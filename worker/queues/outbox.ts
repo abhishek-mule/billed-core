@@ -416,6 +416,15 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
     if (consumed) return // already processed
   }
 
+  // 3b. Mark payment as processed when worker begins handling it
+  if (event.type === 'payment.completed' && event.payload?.paymentId) {
+    await supabaseAdmin
+      .from('payments')
+      .update({ lifecycle_status: 'processed', updated_at: new Date().toISOString() })
+      .eq('id', event.payload.paymentId)
+      .then(() => {}, () => {})
+  }
+
   // 4. Build signal event for the state machine
   const invoiceId = event.entityId || null
   const signal: SignalEvent = {
@@ -498,6 +507,15 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
     return
   } else {
     console.log('[StateMachine] Upsert successful for case:', caseId);
+  }
+
+  // 6b. Mark payment as projected when recovery case is updated
+  if (event.type === 'payment.completed' && event.payload?.paymentId) {
+    await supabaseAdmin
+      .from('payments')
+      .update({ lifecycle_status: 'projected', updated_at: new Date().toISOString() })
+      .eq('id', event.payload.paymentId)
+      .then(() => {}, () => {})
   }
 
   // 7. Insert recovery_case_event (append-only decision log)

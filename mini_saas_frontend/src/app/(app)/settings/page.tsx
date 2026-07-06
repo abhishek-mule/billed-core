@@ -6,12 +6,13 @@ import Link from "next/link"
 import {
   Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut,
   Search, Clock, Download, Trash2, Zap, CheckCircle2, AlertCircle, XCircle,
-  Wifi, Sun, Moon,
+  Wifi, Sun, Moon, Bug,
 } from "lucide-react"
 import { useTheme } from "@/lib/billzo/theme"
 import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
-import { getCookie, clearAuthCookies } from "@/lib/cookies"
+import { clearAuthCookies } from "@/lib/cookies"
+import { getTenantId } from "@/lib/billzo/tenant"
 
 type CategoryStatus = 'connected' | 'not_connected' | 'pending'
 
@@ -43,9 +44,8 @@ export default function SettingsPage() {
       try {
         setLoading(true)
         setError(null)
-        const tenantId = getCookie('bz_tenant')
-        const userId = getCookie('bz_user_id')
-        if (!tenantId || !userId) { router.push('/auth'); return }
+        const tenantId = getTenantId()
+        if (!tenantId) { setError('No session found'); return }
         const data = await db().tenants.get(tenantId)
         setTenant(data)
       } catch {
@@ -127,6 +127,13 @@ export default function SettingsPage() {
       title: 'Data & Privacy',
       description: 'Export data, manage storage',
       danger: true,
+    },
+    {
+      id: 'developer',
+      href: '/settings/developer',
+      icon: <Bug className={ICON_CLASS} />,
+      title: 'Developer',
+      description: 'Payment pipeline, event inspector, debug tools',
     },
   ], [tenant])
 

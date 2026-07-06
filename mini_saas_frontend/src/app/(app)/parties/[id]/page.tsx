@@ -12,6 +12,7 @@ import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
 
 import { formatINR } from "@/lib/utils"
+import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
 import type { AutomationMode } from "@/lib/billzo/types"
 import { scheduleBackgroundSync } from "@/lib/billzo/sync"
@@ -87,7 +88,7 @@ export default function PartyDetailPage() {
         .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setPayments(customerPayments)
     } catch (err) {
-      setError("Failed to load party details")
+      setError(MerchantLanguage.error.loadFailed)
     } finally {
       setLoading(false)
     }
@@ -150,7 +151,7 @@ export default function PartyDetailPage() {
             <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
             <p className="text-sm text-rose-600 mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => { setLoading(true); setError(null); loadParty() }}>
-              <RefreshCw className="w-4 h-4 mr-1.5" /> Retry
+              <RefreshCw className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.retry}
             </Button>
           </div>
         </div>
@@ -165,11 +166,11 @@ export default function PartyDetailPage() {
     const lastReminderInv = [...invoices].sort((a: any, b: any) => new Date(b.lastReminderAt || 0).getTime() - new Date(a.lastReminderAt || 0).getTime())[0]
 
     let mode: RecoveryPlanMode = 'none'
-    let modeLabel = 'No Recovery Plan'
+    let modeLabel = 'Everything looks good'
     let executionAt: string | null = null
     let afterExecution = ''
     let status: RecoveryPlanData['status'] = 'completed'
-    const nextAction: RecoveryPlanAction = { type: 'No action needed', at: null, isAutomatic: true, reason: 'Invoice paid' }
+      const nextAction: RecoveryPlanAction = { type: 'Nothing to do', at: null, isAutomatic: true, reason: 'No pending invoices' }
     const history: RecoveryPlanData['history'] = []
 
     if (pending > 0) {
@@ -187,7 +188,7 @@ export default function PartyDetailPage() {
         mode = 'scheduled_reminder'
         modeLabel = 'Scheduled Reminder'
         executionAt = nextReminderInv.nextRecoveryAt
-        afterExecution = 'Auto recovery resumes'
+        afterExecution = 'Auto follow-up resumes'
         nextAction.type = 'Send reminder'
         nextAction.at = nextReminderInv.nextRecoveryAt
         nextAction.reason = `${unpaidInvoices.length} invoice${unpaidInvoices.length > 1 ? 's' : ''} unpaid`
@@ -196,14 +197,14 @@ export default function PartyDetailPage() {
         mode = 'paused'
         modeLabel = 'Paused'
         afterExecution = 'Manual only'
-        nextAction.type = 'Waiting for merchant'
-        nextAction.reason = 'Recovery paused by merchant'
+        nextAction.type = 'Waiting'
+        nextAction.reason = 'Paused by you'
         nextAction.isAutomatic = false
       } else {
         mode = 'auto_recovery'
-        modeLabel = 'Auto Recovery'
-        afterExecution = 'Decision engine manages'
-        nextAction.type = 'Pending decision'
+        modeLabel = 'Auto follow-up'
+        afterExecution = 'Managed automatically'
+        nextAction.type = 'Waiting'
         nextAction.reason = `${formatINR(pending)} outstanding`
         nextAction.isAutomatic = true
       }
@@ -253,7 +254,7 @@ export default function PartyDetailPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 text-center text-sm text-muted-foreground">
-          Party not found. <Link href="/parties" className="text-foreground font-medium hover:underline">Back to parties</Link>
+          {MerchantLanguage.customer.notFound} <Link href="/parties" className="text-foreground font-medium hover:underline">{MerchantLanguage.customer.backToCustomers}</Link>
         </div>
       </div>
     )
@@ -288,7 +289,7 @@ export default function PartyDetailPage() {
 
         {/* Back link */}
         <Link href="/parties" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> All parties
+          <ArrowLeft className="w-4 h-4" /> {MerchantLanguage.customer.allCustomers}
         </Link>
 
         {/* Party header */}
@@ -325,7 +326,7 @@ export default function PartyDetailPage() {
                     }); setEditing(true) }}
                     className="text-xs text-muted-foreground font-medium shrink-0 hover:text-foreground"
                   >
-                    Edit
+                    {MerchantLanguage.action.edit}
                   </button>
                 )}
               </div>
@@ -350,14 +351,14 @@ export default function PartyDetailPage() {
                     </div>
                   ))}
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(false)}>{MerchantLanguage.action.cancel}</Button>
                     <Button size="sm" onClick={async () => {
                       const now = new Date().toISOString()
                       await db().customers.update(customer.id, { ...editForm, updatedAt: now })
                       setCustomer({ ...customer, ...editForm, updatedAt: now })
                       scheduleBackgroundSync()
                       setEditing(false)
-                    }}>Save</Button>
+                    }}>{MerchantLanguage.action.save}</Button>
                   </div>
                 </div>
               ) : (
@@ -391,15 +392,15 @@ export default function PartyDetailPage() {
         {/* Financial summary */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-card border border-border rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Invoiced</p>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.lifetimePurchases}</p>
             <p className="text-base font-semibold text-foreground tabular-nums">{formatINR(totalInvoiced)}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Paid</p>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.paymentsReceived}</p>
             <p className="text-base font-semibold text-emerald-600 tabular-nums">{formatINR(totalPaid)}</p>
           </div>
           <div className={`bg-card border rounded-lg p-3 ${pending > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-border'}`}>
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Pending</p>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.outstanding}</p>
             <p className={`text-base font-semibold tabular-nums ${pending > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>
               {formatINR(pending)}
             </p>
@@ -410,15 +411,15 @@ export default function PartyDetailPage() {
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <IndianRupee size={14} />
-            Udhar Summary
+            {MerchantLanguage.customer.outstanding}
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <p className="text-[10px] text-muted-foreground">Invoices</p>
+              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.invoices}</p>
               <p className="text-lg font-bold">{unpaidInvoices.length}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Oldest Due</p>
+              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.oldestDue}</p>
               <p className="text-lg font-bold">
                 {(() => {
                   const oldest = unpaidInvoices.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
@@ -429,7 +430,7 @@ export default function PartyDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Lifetime</p>
+              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.lifetime}</p>
               <p className="text-lg font-bold">{formatINR(totalInvoiced)}</p>
             </div>
           </div>
@@ -455,7 +456,7 @@ export default function PartyDetailPage() {
           <div className="grid grid-cols-5 gap-1.5">
             <QuickAction
               icon={MessageSquare}
-              label="Send"
+              label={MerchantLanguage.common.send}
               onClick={() => {
                 setSelectedInvoiceId(null)
                 setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
@@ -465,24 +466,24 @@ export default function PartyDetailPage() {
             />
             <QuickAction
               icon={CalendarClock}
-              label="Schedule"
+              label={MerchantLanguage.common.schedule}
               onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_reminder`)}
               disabled={unpaidInvoices.length === 0}
             />
             <QuickAction
               icon={Hand}
-              label="Promise"
+              label={MerchantLanguage.payment.promise}
               onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_promise`)}
               disabled={unpaidInvoices.length === 0}
             />
             <QuickAction
               icon={Wallet}
-              label="Payment"
+              label={MerchantLanguage.payment.recordPayment}
               onClick={() => router.push(`/pulse?payInvoice=${id}`)}
             />
             <QuickAction
               icon={Phone}
-              label="Call"
+              label={MerchantLanguage.customer.call}
               onClick={() => {
                 if (customer.phone) window.location.href = `tel:${customer.phone}`
               }}
@@ -497,7 +498,7 @@ export default function PartyDetailPage() {
         {/* Success banner */}
         {waSuccess && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-            <span className="text-xs text-emerald-700 font-medium">Reminder sent via WhatsApp!</span>
+            <span className="text-xs text-emerald-700 font-medium">{MerchantLanguage.payment.reminderSent}</span>
           </div>
         )}
 
@@ -517,7 +518,7 @@ export default function PartyDetailPage() {
               activeTab === 'invoices' ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Invoices ({invoices.length})
+            {MerchantLanguage.customer.invoices} ({invoices.length})
           </button>
           <button
             onClick={() => setActiveTab('payments')}
@@ -525,7 +526,7 @@ export default function PartyDetailPage() {
               activeTab === 'payments' ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Payments ({payments.length})
+            {MerchantLanguage.customer.payments} ({payments.length})
           </button>
         </div>
 
@@ -533,7 +534,7 @@ export default function PartyDetailPage() {
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           {filteredTransactions.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
-              {activeTab === 'invoices' ? 'No invoices yet' : 'No payments yet'}
+              {activeTab === 'invoices' ? MerchantLanguage.customer.noInvoicesYet : MerchantLanguage.customer.noPaymentsYet}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -580,7 +581,7 @@ export default function PartyDetailPage() {
             <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <h2 className="text-sm font-semibold text-foreground">
-                  {customer.phone ? 'Send WhatsApp Reminder' : 'Add phone number'}
+                  {customer.phone ? MerchantLanguage.payment.sendReminder : 'Add phone number'}
                 </h2>
                 <button onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }} className="p-1 rounded hover:bg-muted">
                   <span className="text-muted-foreground text-lg leading-none">×</span>
@@ -686,7 +687,7 @@ export default function PartyDetailPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
             <div className="w-full max-w-sm bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground">Reminder Settings</h2>
+                <h2 className="text-sm font-semibold text-foreground">Reminder settings</h2>
                 <button onClick={() => setShowAutomationModal(false)} className="p-1 rounded hover:bg-muted">
                   <span className="text-muted-foreground text-lg leading-none">×</span>
                 </button>

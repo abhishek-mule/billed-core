@@ -58,7 +58,12 @@ export async function GET(request: NextRequest) {
       paymentBehavior = `Usually pays within ${daysSinceLastPayment} days`
     }
 
-    const nextAction = recoveryCase.next_action_type || 'send_reminder'
+    const hasOverdue = parseFloat(recoveryCase.total_overdue) > 0
+    const hasValidPromise = recoveryCase.promise_to_pay_date && new Date(recoveryCase.promise_to_pay_date) > new Date()
+    let nextAction = recoveryCase.next_action_type || 'send_reminder'
+    if (nextAction === 'wait' && hasOverdue && !hasValidPromise) {
+      nextAction = 'send_reminder'
+    }
     const nextActionLabel = getNextActionLabel(nextAction)
     const nextActionReason = buildReason({
       caseId: recoveryCase.id,

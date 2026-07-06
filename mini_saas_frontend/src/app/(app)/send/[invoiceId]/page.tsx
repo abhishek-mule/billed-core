@@ -15,7 +15,9 @@ import { formatINR } from "@/lib/utils"
 import { toast } from "sonner"
 import { db } from "@/lib/billzo/db"
 import { getCookie } from "@/lib/cookies"
-import { getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
+import { getTenantId } from "@/lib/billzo/tenant"
+import { downloadInvoicePDF, generateInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
+import type { Tenant } from "@/lib/billzo/types"
 
 interface InvoiceDataFull {
   id: string
@@ -75,6 +77,7 @@ export default function InvoiceSendPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<InvoiceDataFull | null>(null)
+  const [tenantData, setTenantData] = useState<Tenant | null>(null)
   const [customerPhone, setCustomerPhone_] = useState("")
   const [customerOutstanding, setCustomerOutstanding] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "upi" | "udhar">("udhar")
@@ -85,6 +88,7 @@ export default function InvoiceSendPage() {
   const [copied, setCopied] = useState(false)
   const [paymentLinkUrl, setPaymentLinkUrl] = useState<string | null>(null)
   const [paymentLinkLoading, setPaymentLinkLoading] = useState(false)
+  const [paymentLinkError, setPaymentLinkError] = useState(false)
 
   // Promise fields
   const [promiseAmount, setPromiseAmount] = useState(0)
@@ -109,7 +113,6 @@ export default function InvoiceSendPage() {
   const [showNoPhoneSheet, setShowNoPhoneSheet] = useState(false)
 
   // Send flow fields
-  const [includePaymentLink, setIncludePaymentLink] = useState(true)
   const [customMessage, setCustomMessage] = useState("")
   const [showMessagePreview, setShowMessagePreview] = useState(false)
 
@@ -147,7 +150,6 @@ export default function InvoiceSendPage() {
       setCustomerPhone_(inv.customerPhone || "")
       setCustomerOutstanding(prevOutstanding)
       setPaymentMethod(inv.paidAmount > 0 ? "cash" : "udhar")
-      setIncludePaymentLink(inv.paidAmount === 0)
       setPromiseAmount(inv.total - inv.paidAmount)
       setPromiseDate(getNextSunday())
       setLoading(false)
@@ -159,6 +161,22 @@ export default function InvoiceSendPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  useEffect(() => {
+    const tid = getTenantId()
+    if (tid) {
+      db().tenants.get(tid).then(t => setTenantData(t ?? null))
+    }
+  }, [])
+
+  // Auto-generate payment link on mount if invoice is unpaid
+  useEffect(() => {
+    if (!invoice || paymentLinkUrl || paymentLinkLoading) return
+    if (invoice.status !== "paid" && invoice.paidAmount === 0) {
+      generatePaymentLink()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice])
+
   const updatePhone = async (phone: string) => {
     setCustomerPhone_(phone)
     if (invoice && phone) {
@@ -169,6 +187,7 @@ export default function InvoiceSendPage() {
   const generatePaymentLink = async () => {
     if (!invoice || paymentLinkUrl) return
     setPaymentLinkLoading(true)
+    setPaymentLinkError(false)
     try {
       const res = await fetch("/api/payment/payment-link", {
         method: "POST",
@@ -184,28 +203,59 @@ export default function InvoiceSendPage() {
       const data = await res.json()
       if (data.short_url || data.url) {
         setPaymentLinkUrl(data.short_url || data.url)
+      } else {
+        setPaymentLinkError(true)
       }
     } catch (err) {
       console.error("Payment link error:", err)
+      setPaymentLinkError(true)
     } finally {
       setPaymentLinkLoading(false)
     }
   }
 
-  const buildMessage = (withLink?: string): string => {
+  const buildMessage = (): string => {
     const shopName = getCookie("bz_tenant_name") || "My Shop"
     const inv = invoice
     if (!inv) return ""
     if (customMessage) return customMessage
 
-    const link = withLink || (includePaymentLink && paymentLinkUrl ? paymentLinkUrl : null)
-    const paymentNote = isUdhar
-      ? link
-        ? `\n\nPay here: ${link}`
-        : ""
-      : "\n\nPayment received. Thank you!"
+    const paymentNote = isUdhar && paymentLinkUrl
+      ? `\n\nPay here: ${paymentLinkUrl}`
+      : isUdhar
+        ? ""
+        : "\n\nPayment received. Thank you!"
 
-    return `Namaste ${inv.customerName},\n\nYour invoice ${inv.invoiceNumber || inv.id.slice(0, 8)} of ${formatINR(inv.total)} is ready.${paymentNote}\n\nThank you,\n${shopName}`
+    return `Namaste ${inv.customerName},\n\nInvoice #${inv.invoiceNumber || inv.id.slice(0, 8)}\nAmount: ${formatINR(inv.total)}${paymentNote}\n\nThank you,\n${shopName}`
+  }
+
+  const buildPdfData = (): InvoiceData => {
+    const inv = invoice!
+    const itemsForPdf = inv.items.map(i => {
+      const lineTotal = i.price * i.qty
+      const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal
+      return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gstRate, taxable }
+    })
+    const subtotal = itemsForPdf.reduce((s, i) => s + i.taxable, 0)
+    return {
+      invoiceNumber: inv.invoiceNumber || inv.id,
+      date: new Date(inv.createdAt).toLocaleDateString('en-IN'),
+      customerName: inv.customerName,
+      customerPhone: inv.customerPhone || undefined,
+      items: itemsForPdf,
+      subtotal,
+      tax: inv.total - subtotal,
+      total: inv.total,
+      businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
+      businessPhone: tenantData?.phone,
+      businessGstin: tenantData?.gstin,
+      businessPan: tenantData?.pan,
+      businessAddress: tenantData?.address,
+      bankDetails: tenantData?.bankDetails,
+      upiId: tenantData?.upiId,
+      whiteLabel: tenantData?.whiteLabel,
+      placeOfSupply: tenantData?.gstin ? tenantData.gstin.slice(0, 2) : undefined,
+    }
   }
 
   const getDefaultMessage = buildMessage()
@@ -216,12 +266,7 @@ export default function InvoiceSendPage() {
     setError(null)
 
     try {
-      if (includePaymentLink && isUdhar && !paymentLinkUrl) {
-        await generatePaymentLink()
-      }
-
-      const finalLink = includePaymentLink && isUdhar ? paymentLinkUrl : null
-      const message = buildMessage(finalLink || undefined)
+      // Build WhatsApp link synchronously and open immediately (avoids popup blocker)
       const businessName = getCookie("bz_tenant_name") || "My Shop"
       const subtotal = invoice.items.reduce((s, i) => s + (i.price * i.qty * 100 / (100 + (i.gstRate || 0))), 0)
       const waData: InvoiceData = {
@@ -245,6 +290,13 @@ export default function InvoiceSendPage() {
       }
       const waLink = getWhatsAppShareLink(waData)
       window.open(waLink, "_blank")
+
+      // Now async operations
+      if (isUdhar && !paymentLinkUrl) {
+        await generatePaymentLink()
+      }
+
+      const message = buildMessage()
 
       await fetch("/api/intents/send-message", {
         method: "POST",
@@ -549,25 +601,34 @@ export default function InvoiceSendPage() {
           <div className="grid grid-cols-2 gap-2">
             <SecondaryAction
               icon={CheckCircle2}
-              label="Record Payment"
+              label="Receive Payment"
               onClick={handleMarkPaid}
             />
             <SecondaryAction
-              icon={paymentLinkLoading ? Loader2 : (paymentLinkUrl ? Check : ExternalLink)}
-              label={paymentLinkUrl ? "Copy Payment Link" : "Create Payment Link"}
-              description={paymentLinkUrl ? "Tap to copy" : "UPI, card, bank transfer"}
-              onClick={async () => {
-                if (paymentLinkUrl) {
-                  copyPaymentLink()
-                } else {
-                  await generatePaymentLink()
-                }
-              }}
+              icon={paymentLinkLoading ? Loader2 : (paymentLinkUrl ? Copy : ExternalLink)}
+              label={paymentLinkLoading ? "Generating..." : (paymentLinkUrl ? "Copy Payment Link" : "Payment Link")}
+              description={paymentLinkLoading ? "Please wait..." : (paymentLinkUrl ? "Tap to copy" : "Generating...")}
+              onClick={() => { if (paymentLinkUrl) copyPaymentLink() }}
               loading={paymentLinkLoading}
             />
           </div>
           {paymentLinkUrl && copied && (
             <p className="text-xs text-emerald-600 font-medium text-center">Copied!</p>
+          )}
+          {paymentLinkError && (
+            <p className="text-xs text-amber-600 font-medium flex items-center gap-1 justify-center">
+              <AlertTriangle size={12} />
+              Payment link couldn't be generated
+              <button onClick={generatePaymentLink} className="underline font-semibold">Retry</button>
+            </p>
+          )}
+          {paymentLinkUrl && (
+            <SecondaryAction
+              icon={ExternalLink}
+              label="QR Code"
+              description="Scan to pay"
+              onClick={() => window.open(paymentLinkUrl, '_blank')}
+            />
           )}
         </div>
 
@@ -578,16 +639,20 @@ export default function InvoiceSendPage() {
             <SecondaryAction
               icon={FileText}
               label="Share PDF"
-              onClick={() => window.open(`/api/invoices/${i.id}/pdf`, '_blank')}
+              onClick={async () => {
+                const pdfData = buildPdfData()
+                const doc = await generateInvoicePDF(pdfData)
+                const blob = (doc as any).output('blob')
+                const url = URL.createObjectURL(blob)
+                window.open(url, '_blank')
+              }}
             />
             <SecondaryAction
               icon={Download}
               label="Download PDF"
-              onClick={() => {
-                const a = document.createElement('a')
-                a.href = `/api/invoices/${i.id}/pdf`
-                a.download = `invoice-${i.invoiceNumber || i.id}.pdf`
-                a.click()
+              onClick={async () => {
+                const pdfData = buildPdfData()
+                await downloadInvoicePDF(pdfData)
               }}
             />
           </div>
@@ -695,7 +760,7 @@ export default function InvoiceSendPage() {
                 <p className="text-xs text-green-700 dark:text-green-300 whitespace-pre-wrap">
                   {customMessage || getDefaultMessage}
                 </p>
-                {isUdhar && includePaymentLink && (
+                {isUdhar && (
                   <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
                     <ExternalLink size={10} />
                     {paymentLinkUrl ? '✓ Payment link included' : 'Payment link will be attached'}
@@ -715,24 +780,29 @@ export default function InvoiceSendPage() {
           )}
         </section>
 
-        {/* Payment link — bundled into send, not separate */}
+        {/* Payment link — always included for unpaid invoices */}
         {isUdhar && (
           <section className="bg-card border border-border rounded-xl p-4 space-y-2">
-            <label className="flex items-center justify-between cursor-pointer">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
-                  }`}
-                  onClick={() => setIncludePaymentLink(!includePaymentLink)}
-                >
-                  {includePaymentLink && <CheckCircle2 size={14} className="text-white" />}
-                </div>
-                <span className="text-sm font-medium">Include Payment Link</span>
-              </div>
-              {paymentLinkLoading && <Loader2 size={14} className="animate-spin" />}
-            </label>
-            {includePaymentLink && paymentLinkUrl && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Payment Link</span>
+              {paymentLinkLoading ? (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" />
+                  Generating...
+                </span>
+              ) : paymentLinkUrl ? (
+                <span className="text-xs text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 size={12} />
+                  Ready
+                </span>
+              ) : paymentLinkError ? (
+                <span className="text-xs text-amber-600 flex items-center gap-1">
+                  <AlertTriangle size={12} />
+                  Failed
+                </span>
+              ) : null}
+            </div>
+            {paymentLinkUrl && (
               <button
                 onClick={copyPaymentLink}
                 className="flex items-center gap-2 text-xs text-primary font-medium"
@@ -741,17 +811,28 @@ export default function InvoiceSendPage() {
                 {copied ? 'Copied!' : 'Copy payment link'}
               </button>
             )}
-            <p className="text-[10px] text-muted-foreground">Customer can pay via UPI, Card, or Bank Transfer.</p>
+            {paymentLinkError && (
+              <button onClick={generatePaymentLink} className="text-xs text-amber-600 underline font-medium">
+                Retry
+              </button>
+            )}
+            <p className="text-[10px] text-muted-foreground">Automatically included in message. Customer can pay via UPI, Card, or Bank Transfer.</p>
           </section>
+        )}
+
+        {error && (
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive">
+            {error}
+          </div>
         )}
 
         <button
           onClick={handleSendNow}
-          disabled={sending}
+          disabled={sending || (isUdhar && paymentLinkLoading)}
           className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
         >
-          {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-          {sending ? 'Sending...' : 'Send Now'}
+          {sent ? <CheckCircle2 size={18} /> : sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+          {sent ? 'Sent!' : sending ? 'Sending...' : 'Send Now'}
         </button>
       </>
     )
@@ -974,19 +1055,6 @@ export default function InvoiceSendPage() {
               rows={3}
             />
           </div>
-          <label className="flex items-center justify-between cursor-pointer">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                  includePaymentLink ? "bg-primary border-primary" : "border-muted-foreground/30"
-                }`}
-                onClick={() => setIncludePaymentLink(!includePaymentLink)}
-              >
-                {includePaymentLink && <CheckCircle2 size={14} className="text-white" />}
-              </div>
-              <span className="text-sm font-medium">Include Payment Link</span>
-            </div>
-          </label>
         </section>
 
         <button
@@ -1104,9 +1172,13 @@ export default function InvoiceSendPage() {
               </button>
 
               <button
-                onClick={() => {
+                onClick={async () => {
                   setShowNoPhoneSheet(false)
-                  window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')
+                  const pdfData = buildPdfData()
+                  const doc = await generateInvoicePDF(pdfData)
+                  const blob = (doc as any).output('blob')
+                  const url = URL.createObjectURL(blob)
+                  window.open(url, '_blank')
                 }}
                 className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
               >

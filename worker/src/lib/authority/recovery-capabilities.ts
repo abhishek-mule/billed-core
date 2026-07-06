@@ -82,6 +82,7 @@ export const recoveryUpsertCase: CapabilityProvider = {
           customer_id: customerId,
           status: 'open',
           total_outstanding: totalOutstanding ?? 0,
+          total_overdue: totalOutstanding ?? 0,
           invoice_count: 1,
           last_activity_at: now,
         })

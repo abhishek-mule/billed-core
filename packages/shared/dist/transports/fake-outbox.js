@@ -29,6 +29,12 @@ class FakeOutboxPublisher {
     async getStatus(eventId) {
         return this.events.get(eventId) ?? null;
     }
+    setStatus(eventId, status) {
+        const event = this.events.get(eventId);
+        if (event) {
+            this.events.set(eventId, { ...event, status });
+        }
+    }
     markProcessed(eventId, status) {
         const event = this.events.get(eventId);
         if (event) {

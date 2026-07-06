@@ -38,6 +38,8 @@ export declare function computeTransportHash(params: {
     attemptNumber?: number;
 }): string;
 export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue';
+export declare const INVOICE_RECOVERY_STATES: readonly ["pending", "scheduled", "paused", "manual_review", "completed", "disputed"];
+export type InvoiceRecoveryState = (typeof INVOICE_RECOVERY_STATES)[number];
 export declare function isOverdue(status: InvoiceStatus, dueDate: string | Date | null | undefined, now?: Date): boolean;
 export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'conflict' | 'dead_letter';
 export declare const RECOVERY_STATES: readonly ["created", "due_soon", "overdue_soft", "overdue_engaged", "overdue_ignored", "high_risk", "escalated", "recovered", "failed"];

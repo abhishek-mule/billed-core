@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Record payment in unified ledger — trigger auto-maintains outstanding_amount
+        // recordPayment() already fires payment.completed outbox event internally
         await recordPayment({
           tenantId,
           invoiceId,
@@ -103,21 +104,6 @@ export async function POST(request: NextRequest) {
           evidence: {
             razorpayPaymentId: razorpay_payment_id,
             razorpayOrderId: razorpay_order_id,
-          },
-        })
-
-        const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
-        await writeOutboxEvent({
-          type: 'payment.completed',
-          entityId: invoiceId,
-          tenantId: tenantId || '',
-          correlationId: razorpay_order_id,
-          payload: {
-            customerId: resolvedCustomerId || '',
-            amount: pmtAmount,
-            provider: 'razorpay',
-            providerPaymentId: razorpay_payment_id,
-            razorpay_order_id,
           },
         })
       } catch (dbError) {

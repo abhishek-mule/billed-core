@@ -9,6 +9,7 @@ import {
   Bell, ChevronRight,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
+import { MerchantLanguage } from "@billzo/shared"
 import { PromiseModal } from "@/components/billzo/PromiseModal"
 import { PauseModal } from "@/components/billzo/PauseModal"
 
@@ -156,14 +157,14 @@ export default function RecoveryQueuePage() {
       <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-foreground">Recovery Queue</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Upcoming automations and actions</p>
+            <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.manage}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">{MerchantLanguage.recovery.manageSubtitle}</p>
           </div>
           <button
             onClick={load}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> {MerchantLanguage.common.refresh}
           </button>
         </div>
 
@@ -171,19 +172,19 @@ export default function RecoveryQueuePage() {
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-card rounded-xl border border-border p-4">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Customers</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{MerchantLanguage.recovery.totalCustomers}</p>
               <p className="text-xl font-bold text-foreground mt-1 tabular-nums">{filtered.length}</p>
             </div>
             <div className="bg-card rounded-xl border border-border p-4">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">At Risk</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{MerchantLanguage.recovery.atRisk}</p>
               <p className="text-xl font-bold text-foreground mt-1 tabular-nums">₹{totalAtRisk.toLocaleString('en-IN')}</p>
             </div>
             <div className="bg-card rounded-xl border border-rose-200 p-4">
-              <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider">Overdue Today</p>
+              <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider">{MerchantLanguage.recovery.overdueToday}</p>
               <p className="text-xl font-bold text-rose-700 mt-1 tabular-nums">{overdueCount}</p>
             </div>
             <div className="bg-card rounded-xl border border-purple-200 p-4">
-              <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">Promises</p>
+              <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">{MerchantLanguage.recovery.promises}</p>
               <p className="text-xl font-bold text-purple-700 mt-1 tabular-nums">{promiseCount} · ₹{promiseAmount.toLocaleString('en-IN')}</p>
             </div>
           </div>
@@ -194,7 +195,7 @@ export default function RecoveryQueuePage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or phone..."
+            placeholder={MerchantLanguage.recovery.searchByNameOrPhone}
             className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
@@ -216,8 +217,8 @@ export default function RecoveryQueuePage() {
         {!loading && !error && filtered.length === 0 && (
           <div className="bg-card border border-dashed border-border rounded-lg p-12 text-center">
             <Bell className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-            <p className="font-semibold text-foreground">No upcoming automations</p>
-            <p className="text-xs text-muted-foreground mt-1">All caught up! New reminders will appear here when scheduled.</p>
+            <p className="font-semibold text-foreground">No upcoming actions</p>
+            <p className="text-xs text-muted-foreground mt-1">{MerchantLanguage.state.allCaughtUp} New reminders will appear here when scheduled.</p>
           </div>
         )}
 
