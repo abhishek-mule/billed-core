@@ -1,0 +1,6 @@
+export { computeEMA, computeEMASeries, computeDecayedCount } from './ema';
+export { createBetaPrior, updateBelief, posteriorMean, posteriorVariance, combineHierarchicalPriors, sampleSizeToWeight } from './bayesian';
+export { detectHistogramDrift } from './drift';
+export type { DriftConfig, DriftReport } from './drift';
+export { DEFAULT_DRIFT_CONFIG } from './drift';
+//# sourceMappingURL=index.d.ts.map

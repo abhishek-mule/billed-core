@@ -1,19 +1,41 @@
 // authority:exempt notification_routing — device token management
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import WebSocket from 'ws'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  ''
+let _supabaseAdmin: SupabaseClient | null = null
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
-  realtime: { transport: WebSocket as never },
+function getSupabaseAdmin(): SupabaseClient {
+  if (_supabaseAdmin) return _supabaseAdmin
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[supabase-admin] SUPABASE_URL or SERVICE_ROLE_KEY not set — supabase client unavailable')
+    throw new Error('Supabase client not configured')
+  }
+
+  _supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+    realtime: { transport: WebSocket as never },
+  })
+  return _supabaseAdmin
+}
+
+// Lazy Proxy — all existing import { supabaseAdmin } sites work without changes.
+// The client is not created until the first property access (e.g. .from()).
+export const supabaseAdmin: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    const client = getSupabaseAdmin()
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof value === 'function' ? value.bind(client) : value
+  },
 })
 
 export async function saveDeviceToken(tenantId: string, fcmToken: string, deviceType: string) {
-  const { data, error } = await supabaseAdmin
+  const client = getSupabaseAdmin()
+  const { data, error } = await client
     .from('device_tokens')
     .upsert({ 
       tenant_id: tenantId, 
@@ -30,7 +52,8 @@ export async function saveDeviceToken(tenantId: string, fcmToken: string, device
 }
 
 export async function getDeviceTokens(tenantId: string) {
-  const { data, error } = await supabaseAdmin
+  const client = getSupabaseAdmin()
+  const { data, error } = await client
     .from('device_tokens')
     .select('fcm_token')
     .eq('tenant_id', tenantId)
@@ -45,7 +68,8 @@ export async function getDeviceTokens(tenantId: string) {
 export async function deleteDeviceTokens(tokens: string[]) {
   if (tokens.length === 0) return
 
-  const { error } = await supabaseAdmin
+  const client = getSupabaseAdmin()
+  const { error } = await client
     .from('device_tokens')
     .delete()
     .in('fcm_token', tokens)

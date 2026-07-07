@@ -6,6 +6,18 @@ export declare const ACTION_SOURCES: readonly ["system", "worker", "merchant", "
 export type ActionSource = (typeof ACTION_SOURCES)[number];
 export declare const RECOVERY_GOALS: readonly ["full_payment", "partial_payment", "engagement", "relationship_preservation"];
 export type RecoveryGoal = (typeof RECOVERY_GOALS)[number];
+export interface RecoveryPlanDecisionReason {
+    modelVersion: string;
+    keyFeatures: string[];
+    confidence: number;
+    customerRiskScore: number;
+    liquidityWindow: {
+        dayOfWeek: number;
+        startHour: number;
+        endHour: number;
+    } | null;
+    driftDetected: boolean;
+}
 export interface RecoveryPlan {
     actionType: ActionType;
     goal: RecoveryGoal;
@@ -14,6 +26,7 @@ export interface RecoveryPlan {
     priority: number;
     timing: RecoveryTiming;
     reason: string;
+    decisionReason: RecoveryPlanDecisionReason;
 }
 export interface RecoveryTiming {
     immediate: boolean;

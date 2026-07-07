@@ -60,6 +60,15 @@ export type RecoveryGoal = (typeof RECOVERY_GOALS)[number]
 // RECOVERY PLAN — What the orchestrator decides should happen next
 // ============================================================
 
+export interface RecoveryPlanDecisionReason {
+  modelVersion: string
+  keyFeatures: string[]
+  confidence: number
+  customerRiskScore: number
+  liquidityWindow: { dayOfWeek: number; startHour: number; endHour: number } | null
+  driftDetected: boolean
+}
+
 export interface RecoveryPlan {
   actionType: ActionType
   goal: RecoveryGoal
@@ -68,6 +77,7 @@ export interface RecoveryPlan {
   priority: number
   timing: RecoveryTiming
   reason: string
+  decisionReason: RecoveryPlanDecisionReason
 }
 
 export interface RecoveryTiming {

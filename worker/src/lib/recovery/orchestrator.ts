@@ -17,6 +17,7 @@ import {
   type CanSendReminderInput,
   type CanSendReminderOutput,
   RecoveryPolicies,
+  CURRENT_MODEL_VERSION,
 } from '@billzo/shared'
 import type { RecoveryPlan } from '@billzo/shared'
 
@@ -37,9 +38,8 @@ export function createRecoveryPlan(input: OrchestrateInput): RecoveryPlan {
   const { decisionOutput, recoveryStage, outstanding } = input
 
   if (!decisionOutput.allowed) {
-    const isBlock = decisionOutput.decision === 'block'
     return {
-      actionType: isBlock ? 'wait' : 'wait',
+      actionType: 'wait',
       goal: 'engagement',
       confidence: decisionOutput.confidence,
       priority: 10,
@@ -48,6 +48,14 @@ export function createRecoveryPlan(input: OrchestrateInput): RecoveryPlan {
         scheduledAt: decisionOutput.nextReviewAt ?? undefined,
       },
       reason: decisionOutput.reason,
+      decisionReason: {
+        modelVersion: CURRENT_MODEL_VERSION,
+        keyFeatures: [],
+        confidence: decisionOutput.confidence,
+        customerRiskScore: 0,
+        liquidityWindow: null,
+        driftDetected: false,
+      },
     }
   }
 
@@ -62,6 +70,14 @@ export function createRecoveryPlan(input: OrchestrateInput): RecoveryPlan {
       priority: 1,
       timing: { immediate: true },
       reason: `All reminder stages exhausted (${recoveryStage}). Escalating to merchant.`,
+      decisionReason: {
+        modelVersion: CURRENT_MODEL_VERSION,
+        keyFeatures: [],
+        confidence: decisionOutput.confidence * 0.8,
+        customerRiskScore: 0,
+        liquidityWindow: null,
+        driftDetected: false,
+      },
     }
   }
 
@@ -73,5 +89,13 @@ export function createRecoveryPlan(input: OrchestrateInput): RecoveryPlan {
     priority: RecoveryPolicies.DEFAULT_PRIORITY,
     timing: { immediate: true },
     reason: `Invoice overdue. Stage: ${recoveryStage}. Standard recovery cycle.`,
+    decisionReason: {
+      modelVersion: CURRENT_MODEL_VERSION,
+      keyFeatures: ['standard_cycle'],
+      confidence: decisionOutput.confidence,
+      customerRiskScore: 0,
+      liquidityWindow: null,
+      driftDetected: false,
+    },
   }
 }
