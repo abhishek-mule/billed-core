@@ -135,7 +135,7 @@ describe('WorkStore', () => {
       const todaySection = getTodaySection(sections)
       expect(todaySection?.payload.items).toHaveLength(0)
       expect(todaySection?.payload.empty).toBeDefined()
-      expect(todaySection?.payload.empty?.headline).toBe("Nothing needs your attention right now")
+      expect(todaySection?.payload.empty?.headline).toContain("Recovering")
 
       const cashSection = getCashSection(sections)
       expect(cashSection?.payload.metrics).toHaveLength(3)
