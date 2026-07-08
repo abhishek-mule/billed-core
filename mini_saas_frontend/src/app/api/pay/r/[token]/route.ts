@@ -92,6 +92,6 @@ export async function GET(
     metadata: { billzoMessageId, whatsappEventId: eventId },
   }).maybeSingle()
 
-  const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&am=${amount}&pn=${encodeURIComponent('BillZo')}`
+  const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('BillZo')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + invoiceId)}`
   return NextResponse.redirect(upiUrl, 302)
 }

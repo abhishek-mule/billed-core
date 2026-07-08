@@ -346,7 +346,7 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<jsPDF> {
   // Right column: QR Code
   if (data.upiId) {
     try {
-      const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${data.total}&tn=INV%20${encodeURIComponent(data.invoiceNumber)}`
+      const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${data.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('INV ' + data.invoiceNumber)}`
       const qrDataUrl = await QRCode.toDataURL(upiQrStr, {
         width: 90,
         margin: 1,

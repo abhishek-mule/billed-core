@@ -34,7 +34,7 @@ export class UPIProvider implements CollectionProvider<UpiPaymentRequest, UpiPay
 
     return {
       tokenUrl: `${appUrl}/pay/r/${token}`,
-      upiDeepLink: `upi://pay?pa=${encodeURIComponent(input.upiId)}&am=${input.amount}&pn=${encodeURIComponent(input.businessName || 'BillZo')}`,
+      upiDeepLink: `upi://pay?pa=${encodeURIComponent(input.upiId)}&pn=${encodeURIComponent(input.businessName || 'BillZo')}&am=${input.amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Payment to ' + (input.businessName || 'BillZo'))}`,
     }
   }
 }
