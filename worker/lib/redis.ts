@@ -1,21 +1,7 @@
 import Redis, { type RedisOptions } from 'ioredis'
 
 function getRedisUrl(): string {
-  // Priority 1: Railway Redis (from reference variables)
-  const railwayHost = process.env.REDIS_HOST
-  const railwayPort = process.env.REDIS_PORT
-  const railwayPassword = process.env.REDIS_PASSWORD
-  
-  if (railwayHost && railwayPort && railwayPassword) {
-    return `redis://:${railwayPassword}@${railwayHost}:${railwayPort}`
-  }
-
-  // Priority 2: Railway Redis URL (if available)
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL
-  }
-
-  // Priority 3: Upstash Redis (fallback)
+  // Priority 1: Upstash Redis (shared with Vercel)
   const upstashUrl = process.env.UPSTASH_REDIS_URL
   if (upstashUrl) return upstashUrl
   
@@ -25,6 +11,21 @@ function getRedisUrl(): string {
     const host = restUrl.replace(/^https?:\/\//, '')
     return `rediss://default:${token}@${host}:6379`
   }
+
+  // Priority 2: Railway Redis (from reference variables)
+  const railwayHost = process.env.REDIS_HOST
+  const railwayPort = process.env.REDIS_PORT
+  const railwayPassword = process.env.REDIS_PASSWORD
+  
+  if (railwayHost && railwayPort && railwayPassword) {
+    return `redis://:${railwayPassword}@${railwayHost}:${railwayPort}`
+  }
+
+  // Priority 3: Railway Redis URL (if available)
+  if (process.env.REDIS_URL) {
+    return process.env.REDIS_URL
+  }
+
   return ''
 }
 
