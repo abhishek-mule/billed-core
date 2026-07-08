@@ -102,13 +102,6 @@ function TodaySection({ section }: { section: AnyDashboardSection & { type: 'tod
                 )}
               </div>
             )}
-            {empty.statusFallback && !empty.nextAction && (
-              <div className="mt-3 pt-2 border-t border-dashed border-border">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Automation status</p>
-                <p className="mt-1 text-xs font-medium text-foreground">{empty.statusFallback.headline}</p>
-                <p className="text-xs text-muted-foreground">{empty.statusFallback.subtitle}</p>
-              </div>
-            )}
             {empty.nextAction && (
               <div className="mt-3 pt-2 border-t border-dashed border-border">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Next automatic action</p>

@@ -1,4 +1,4 @@
-import type { DashboardView, AnyDashboardSection, WorkContext, AutomationPlanItem } from './types'
+import type { DashboardView, AnyDashboardSection, WorkContext, AutomationPlanItem, Action } from './types'
 import { buildCashMetrics } from './buildCashMetrics'
 import { buildActivity } from './buildActivity'
 import { formatPlanTime } from './buildAutomationPlan'
@@ -21,19 +21,77 @@ function planToNextAction(item: AutomationPlanItem): { when: string; label: stri
   }
 }
 
+interface EmptyStateContent {
+  headline: string
+  subtitle?: string
+  autoActions?: string[]
+  nextAction?: { when: string; label: string; customerName?: string; type: 'reminder' | 'call' | 'review' | 'wait'; status: string; reason?: string }
+  action: Action
+}
+
+function computeEmptyState(cash: DashboardView['cash'], plan: AutomationPlanItem[], nextActionItem: ReturnType<typeof planToNextAction> | undefined): EmptyStateContent {
+  const isAllClear = cash.customerCount === 0
+  const amount = cash.outstanding
+  const count = cash.customerCount
+
+  if (isAllClear) {
+    return {
+      headline: "All invoices collected",
+      autoActions: ["No outstanding payments."],
+      action: { type: 'review', label: 'View Outstanding', target: { entity: 'customer', id: '' } },
+    }
+  }
+
+  const totalStr = `\u20B9${amount.toLocaleString('en-IN')}`
+  const customerStr = `${count} customer${count === 1 ? '' : 's'}`
+
+  const hasScheduledReminder = plan.some(p => p.status === 'scheduled')
+  const hasManualRequired = plan.some(p => p.status === 'manual_required')
+  const hasWaitingPromise = plan.some(p => p.status === 'waiting')
+
+  if (nextActionItem && nextActionItem.status === 'scheduled') {
+    return {
+      headline: `Recovering ${totalStr} from ${customerStr}`,
+      subtitle: "No action needed — automation is handling this.",
+      nextAction: nextActionItem,
+      action: { type: 'review', label: 'View Outstanding', target: { entity: 'customer', id: '' } },
+    }
+  }
+
+  if (hasManualRequired) {
+    return {
+      headline: `Manual action needed for ${customerStr}`,
+      subtitle: `${totalStr} outstanding — some customers need your attention.`,
+      action: { type: 'review', label: 'View Outstanding', target: { entity: 'customer', id: '' } },
+    }
+  }
+
+  if (hasWaitingPromise || hasScheduledReminder || nextActionItem) {
+    return {
+      headline: `Recovering ${totalStr} from ${customerStr}`,
+      subtitle: "Automation will follow up at the right time. No action needed now.",
+      nextAction: nextActionItem,
+      action: { type: 'review', label: 'View Outstanding', target: { entity: 'customer', id: '' } },
+    }
+  }
+
+  return {
+    headline: `Recovering ${totalStr} from ${customerStr}`,
+    subtitle: "Monitoring in progress. No action needed right now.",
+    action: { type: 'review', label: 'View Outstanding', target: { entity: 'customer', id: '' } },
+  }
+}
+
 export function buildDashboardSections(view: DashboardView, context: WorkContext): AnyDashboardSection[] {
   const sections: AnyDashboardSection[] = []
   const hasWork = view.work.length > 0
 
-  // Determine next action and fallback
   const plan = view.automationPlan
   const nextActionItem = plan.length > 0 ? planToNextAction(plan[0]) : undefined
-  const planFallback = plan.length === 0 ? {
-    headline: "All outstanding invoices are within their grace period",
-    subtitle: "No follow-ups are scheduled right now. We'll notify you when action is needed.",
-  } : undefined
+  const emptyState = !hasWork && view.cash.customerCount > 0
+    ? computeEmptyState(view.cash, plan, nextActionItem)
+    : undefined
 
-  // Today's Work
   sections.push({
     type: 'today',
     priority: 1,
@@ -41,17 +99,16 @@ export function buildDashboardSections(view: DashboardView, context: WorkContext
     payload: {
       items: view.work,
       empty: !hasWork ? {
-        headline: "Nothing needs your attention right now",
-        subtitle: "Auto follow-ups are already handling your pending payments.",
-        autoActions: view.cash.customerCount > 0 ? [
-          `Recovering \u20B9${view.cash.outstanding.toLocaleString('en-IN')} from ${view.cash.customerCount} customer${view.cash.customerCount === 1 ? '' : 's'}`,
-          "Reminders scheduled",
-          "Monitoring incoming payments",
-          "We'll notify you if manual action is required",
-        ] : undefined,
-        nextAction: nextActionItem,
-        statusFallback: planFallback,
-        scheduleLink: "/recovery",
+        headline: view.cash.customerCount === 0
+          ? "All invoices collected"
+          : emptyState?.headline ?? "No work items for today",
+        subtitle: view.cash.customerCount === 0
+          ? undefined
+          : emptyState?.subtitle,
+        autoActions: view.cash.customerCount === 0
+          ? ["No outstanding payments."]
+          : emptyState?.autoActions,
+        nextAction: emptyState?.nextAction,
         action: {
           type: 'review',
           label: 'View Outstanding',

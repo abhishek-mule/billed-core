@@ -76,7 +76,6 @@ export interface TodaySectionPayload {
     checklist?: string[]
     autoActions?: string[]
     nextAction?: { when: string; label: string; customerName?: string; type: 'reminder' | 'call' | 'review' | 'wait'; status: string; reason?: string }
-    statusFallback?: { headline: string; subtitle: string }
     scheduleLink?: string
     action?: Action
   }
