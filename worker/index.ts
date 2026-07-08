@@ -149,8 +149,7 @@ async function main() {
   logWorkerEvent({ message: 'Starting BillZo worker service...', level: 'info', timestamp: new Date().toISOString() })
 
   if (!process.env.UPSTASH_REDIS_URL) {
-    logWorkerError(new Error('Missing UPSTASH_REDIS_URL'), { hint: 'Format: rediss://default:TOKEN@HOST:PORT' })
-    process.exit(1)
+    console.warn('[worker] UPSTASH_REDIS_URL not set — worker will use Railway Redis (shared Redis with Vercel will not work)')
   }
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -163,7 +162,7 @@ async function main() {
     level: 'info',
     timestamp: new Date().toISOString(),
     metadata: {
-      redis: process.env.UPSTASH_REDIS_URL?.slice(0, 20) + '...',
+      redis: process.env.UPSTASH_REDIS_URL ? process.env.UPSTASH_REDIS_URL.slice(0, 20) + '...' : 'Railway Redis',
       supabase: process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set',
     },
   })
