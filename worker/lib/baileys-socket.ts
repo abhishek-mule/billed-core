@@ -9,6 +9,7 @@ import { Boom } from '@hapi/boom'
 import { getBaileysCreds, saveBaileysCreds, hasBaileysAuth, deleteBaileysAuthState } from '../stores/baileys-auth'
 import { RedisBaileysKeyStore } from '../stores/baileys-keys'
 import { storeQrCode, clearQrCode } from '../stores/baileys-qr'
+import { storePairingCode, clearPairingCode } from '../stores/baileys-pairing-code'
 import { setBaileysState, clearBaileysState } from '../stores/baileys-state'
 import { emitWhatsAppStatusUpdated } from '../src/lib/billzo/events'
 import { acquireSocketLock, releaseSocketLock, startLockRenewal } from './socket-lock'
@@ -48,7 +49,12 @@ function resetReconnectBackoff(tenantId: string): void {
   reconnectAttempts.delete(tenantId)
 }
 
-export async function startBaileysSocket(tenantId: string): Promise<void> {
+export interface BaileysSocketOptions {
+  method?: 'qr' | 'pairing'
+  phoneNumber?: string
+}
+
+export async function startBaileysSocket(tenantId: string, options?: BaileysSocketOptions): Promise<void> {
   console.log(`[Baileys] startBaileysSocket called for tenant: ${tenantId}`)
   if (sockets.has(tenantId)) {
     console.log(`[Baileys] Socket already exists for tenant ${tenantId}`)
@@ -145,7 +151,7 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
     const { connection, lastDisconnect, qr } = update
     console.log(`[Baileys] Connection update for ${tenantId}:`, { connection, hasQr: !!qr, lastDisconnect })
 
-    if (qr) {
+    if (qr && (!options || options.method !== 'pairing')) {
       console.log(`[Baileys] QR generated for tenant ${tenantId}. Storing in Redis...`)
       await storeQrCode(tenantId, qr)
       await setBaileysState(tenantId, { connectionState: 'connecting', qrGeneratedAt: new Date().toISOString() })
@@ -162,6 +168,7 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       console.log(`[Baileys] Connected for tenant ${tenantId}`)
       resetReconnectBackoff(tenantId)
       await clearQrCode(tenantId)
+      await clearPairingCode(tenantId)
       await setBaileysState(tenantId, { connectionState: 'connected', lastConnectedAt: now, lastHeartbeatAt: now, error: null })
 
       // Auto-create messaging_channel if it doesn't exist
@@ -196,8 +203,9 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       const isIntentional = intentionallyDisconnecting.has(tenantId)
       intentionallyDisconnecting.delete(tenantId)
 
-      // Always clear stale QR — a dead socket's QR is worthless
+      // Always clear stale QR and pairing code — a dead socket's credentials are worthless
       await clearQrCode(tenantId)
+      await clearPairingCode(tenantId)
 
       if (isIntentional) {
         await releaseSocketLock(tenantId)
@@ -234,6 +242,24 @@ export async function startBaileysSocket(tenantId: string): Promise<void> {
       }
     }
   })
+
+  // Request pairing code if method is 'pairing'
+  if (options?.method === 'pairing' && options?.phoneNumber) {
+    const raw = options.phoneNumber.replace(/[^0-9]/g, '')
+    if (raw) {
+      ;(async () => {
+        try {
+          const code = await sock.requestPairingCode(raw)
+          const displayCode = `${code.slice(0, 4)}-${code.slice(4)}`.toUpperCase()
+          console.log(`[Baileys] Pairing code generated for ${tenantId}: ${displayCode}`)
+          await storePairingCode(tenantId, displayCode)
+          await setBaileysState(tenantId, { connectionState: 'connecting', pairingCodeGeneratedAt: new Date().toISOString() })
+        } catch (err) {
+          console.error(`[Baileys] Failed to request pairing code for ${tenantId}:`, err)
+        }
+      })()
+    }
+  }
 
   sock.ev.on('messages.upsert', (m) => {
     for (const msg of m.messages) {
@@ -326,6 +352,7 @@ export async function disconnectBaileys(tenantId: string): Promise<void> {
   await deleteBaileysAuthState(tenantId)
   await releaseSocketLock(tenantId)
   await clearBaileysState(tenantId)
+  await clearPairingCode(tenantId)
 }
 
 export async function sendViaBaileys(

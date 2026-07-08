@@ -6,7 +6,7 @@ import Link from "next/link"
 import {
   ArrowLeft, MessageCircle, Smartphone, Wifi, WifiOff, QrCode,
   CheckCircle2, AlertCircle, Eye, EyeOff, Loader2, ChevronRight,
-  LayoutTemplate,
+  LayoutTemplate, KeyRound,
 } from "lucide-react"
 import type { TenantWhatsAppConfig, WhatsAppProvider } from "@/lib/billzo/types"
 import QRCode from "qrcode"
@@ -35,11 +35,14 @@ export default function WhatsAppSettingsPage() {
   const [channelHealth, setChannelHealth] = useState<Record<string, any> | null>(null)
 
   // Pairing state
-  const [pairStatus, setPairStatus] = useState<"idle" | "requested" | "awaiting_scan" | "connected" | "failed">("idle")
+  const [pairStatus, setPairStatus] = useState<"idle" | "selecting" | "requested" | "awaiting_scan" | "awaiting_code" | "connected" | "failed">("idle")
+  const [pairMethod, setPairMethod] = useState<"qr" | "pairing" | null>(null)
   const [pairQr, setPairQr] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null)
   const [qrTimeLeft, setQrTimeLeft] = useState(0)
+  const [pairingCode, setPairingCode] = useState<string | null>(null)
+  const [pairingPhone, setPairingPhone] = useState("")
   const [pairPollInterval, setPairPollInterval] = useState<ReturnType<typeof setInterval> | null>(null)
   const [pairingInProgress, setPairingInProgress] = useState(false)
 
@@ -98,21 +101,31 @@ export default function WhatsAppSettingsPage() {
   }
 
   // Baileys pairing
-  const startPairing = useCallback(async () => {
+  const startPairing = useCallback(async (method?: "qr" | "pairing", phone?: string) => {
     const tenantId = getCookie("bz_tenant")
     if (!tenantId || pairingInProgress) return
 
+    const actualMethod = method || pairMethod || "qr"
+
     setPairingInProgress(true)
     setPairStatus("requested")
+    setPairMethod(actualMethod)
     setPairQr(null)
     setQrExpiresAt(null)
     setQrTimeLeft(0)
+    setPairingCode(null)
     setError("")
 
     let pollInterval: ReturnType<typeof setInterval> | null = null
 
     try {
-      await fetchWithAuth("/api/whatsapp/pair", { method: "POST" })
+      await fetchWithAuth("/api/whatsapp/pair", {
+        method: "POST",
+        body: JSON.stringify({
+          method: actualMethod,
+          phoneNumber: phone || pairingPhone || null,
+        }),
+      })
 
       pollInterval = setInterval(async () => {
         try {
@@ -125,15 +138,20 @@ export default function WhatsAppSettingsPage() {
           if (data.status === "connected") {
             setPairStatus("connected")
             setPairQr(null)
+            setPairingCode(null)
             if (pollInterval) clearInterval(pollInterval)
             setPairingInProgress(false)
           } else if (data.status === "awaiting_scan" && data.qr) {
             setPairStatus("awaiting_scan")
             setPairQr(data.qr)
             set("whatsappProvider", "baileys")
+          } else if (data.status === "awaiting_code" && data.pairingCode) {
+            setPairStatus("awaiting_code")
+            setPairingCode(data.pairingCode)
+            set("whatsappProvider", "baileys")
           } else if (data.connectionState === "disconnected" && data.health?.error === "qr_refs_exhausted") {
             setPairStatus("failed")
-            setError("QR pairing timed out. Please try again.")
+            setError("Pairing timed out. Please try again.")
             if (pollInterval) clearInterval(pollInterval)
             setPairingInProgress(false)
           }
@@ -147,7 +165,7 @@ export default function WhatsAppSettingsPage() {
       if (pollInterval) clearInterval(pollInterval)
       setPairingInProgress(false)
     }
-  }, [pairingInProgress, set])
+  }, [pairingInProgress, pairMethod, pairingPhone, set])
 
   const disconnectBaileys = async () => {
     try {
@@ -160,7 +178,10 @@ export default function WhatsAppSettingsPage() {
       setError(err.message || "Failed to disconnect")
     }
     setPairStatus("idle")
+    setPairMethod(null)
     setPairQr(null)
+    setPairingCode(null)
+    setPairingPhone("")
     if (pairPollInterval) {
       clearInterval(pairPollInterval)
       setPairPollInterval(null)
@@ -191,6 +212,8 @@ export default function WhatsAppSettingsPage() {
       if (left <= 0) {
         clearInterval(tick)
         setPairStatus("failed")
+        setPairingCode(null)
+        setPairMethod(null)
         setError("QR code expired. A new QR will be generated automatically...")
         setTimeout(() => { setError(""); startPairing() }, 1500)
       }
@@ -208,6 +231,14 @@ export default function WhatsAppSettingsPage() {
         setConnectionState(data.connectionState || "disconnected")
         setChannelHealth(data.health || null)
         if (data.status === "connected") setPairStatus("connected")
+        else if (data.status === "awaiting_code" && data.pairingCode) {
+          setPairStatus("awaiting_code")
+          setPairMethod("pairing")
+          setPairingCode(data.pairingCode)
+        } else if (data.status === "awaiting_scan" && data.qr) {
+          setPairStatus("awaiting_scan")
+          setPairQr(data.qr)
+        }
       })
       .catch(() => {})
   }, [])
@@ -343,6 +374,7 @@ export default function WhatsAppSettingsPage() {
                       Disconnect
                     </button>
                   </div>
+
                 ) : pairStatus === "awaiting_scan" && pairQr ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="relative rounded-lg border border-border bg-card p-2">
@@ -363,26 +395,114 @@ export default function WhatsAppSettingsPage() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground text-center max-w-xs">
-                      Open WhatsApp on your phone → Menu → Linked Devices → Link a Device → Scan this QR
+                      Open WhatsApp → Menu → Linked Devices → Link a Device → Scan this QR
                     </p>
+                    <button
+                      onClick={() => { setPairStatus("selecting"); setPairMethod(null); setPairQr(null); }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Choose a different method
+                    </button>
                   </div>
+
+                ) : pairStatus === "awaiting_code" && pairingCode ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="rounded-lg border border-border bg-card p-4 w-full max-w-xs">
+                      <p className="text-xs text-muted-foreground text-center mb-2">Enter this code in WhatsApp</p>
+                      <p className="text-3xl font-mono font-extrabold tracking-[0.25em] text-center text-foreground select-all">
+                        {pairingCode}
+                      </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>1. Open WhatsApp on your phone</p>
+                      <p>2. Settings → Linked Devices → Link a Device</p>
+                      <p>3. Tap "Link with phone number instead"</p>
+                      <p>4. Enter the code above</p>
+                    </div>
+                    <button
+                      onClick={() => { setPairStatus("selecting"); setPairingCode(null); }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Choose a different method
+                    </button>
+                  </div>
+
+                ) : pairStatus === "selecting" || pairStatus === "idle" ? (
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-foreground">How would you like to connect?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          setPairMethod("qr")
+                          setPairStatus("selecting")
+                          startPairing("qr")
+                        }}
+                        disabled={pairingInProgress}
+                        className="rounded-lg border-2 border-border p-3 text-left hover:border-emerald-300 transition-colors disabled:opacity-50"
+                      >
+                        <QrCode className="w-5 h-5 text-foreground mb-1" />
+                        <p className="text-sm font-semibold text-foreground">Scan QR</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Use a second device to scan</p>
+                      </button>
+                      <button
+                        onClick={() => setPairStatus("selecting")}
+                        disabled={pairingInProgress}
+                        className={`rounded-lg border-2 p-3 text-left transition-colors disabled:opacity-50 ${
+                          pairMethod === "pairing"
+                            ? "border-emerald-400 bg-emerald-50"
+                            : "border-border hover:border-emerald-300"
+                        }`}
+                      >
+                        <KeyRound className="w-5 h-5 text-foreground mb-1" />
+                        <p className="text-sm font-semibold text-foreground">Pair with Code</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Recommended for mobile</p>
+                      </button>
+                    </div>
+
+                    {pairMethod === "pairing" && (
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-xs font-medium text-foreground">
+                          WhatsApp Number
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="tel"
+                            value={pairingPhone}
+                            onChange={e => setPairingPhone(e.target.value)}
+                            placeholder="+919876543210"
+                            className="flex-1 h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
+                          />
+                          <button
+                            onClick={() => startPairing("pairing", pairingPhone)}
+                            disabled={pairingInProgress || !pairingPhone.replace(/\D/g, "")}
+                            className="h-10 px-4 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                          >
+                            {pairingInProgress ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <KeyRound className="w-3 h-3" />
+                            )}
+                            Generate Code
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          The WhatsApp number you want to link (including country code)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <WifiOff className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Not connected</span>
+                      <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+                      <span className="text-sm text-muted-foreground">Connecting...</span>
                     </div>
                     <button
-                      onClick={startPairing}
-                      disabled={pairingInProgress}
-                      className="h-8 px-3 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                      onClick={() => { setPairStatus("idle"); setPairMethod(null); if (pairPollInterval) clearInterval(pairPollInterval); setPairingInProgress(false); }}
+                      className="text-xs text-rose-500 hover:underline"
                     >
-                      {pairingInProgress ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <QrCode className="w-3 h-3" />
-                      )}
-                      {pairingInProgress ? "Connecting..." : "Link WhatsApp"}
+                      Cancel
                     </button>
                   </div>
                 )}

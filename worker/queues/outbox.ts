@@ -730,8 +730,11 @@ async function handleWhatsAppPairRequested(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
-  logger.info({ tenantId }, 'Starting Baileys pairing')
-  await startBaileysSocket(tenantId)
+  const method = event.payload?.method || 'qr'
+  const phoneNumber = event.payload?.phone || event.payload?.phoneNumber
+
+  logger.info({ tenantId, method, hasPhone: !!phoneNumber }, 'Starting Baileys pairing')
+  await startBaileysSocket(tenantId, { method, phoneNumber })
 }
 
 async function handleWhatsAppUnpaired(event: any): Promise<void> {

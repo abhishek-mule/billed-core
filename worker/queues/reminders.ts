@@ -116,7 +116,8 @@ function buildPaymentUrls(upiId?: string, tenantId?: string, invoiceId?: string,
     const result = upiProvider.create({ invoiceId, tenantId, amount, upiId, businessName })
     return [`Pay here: ${result.tokenUrl}`]
   }
-  return [`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(businessName || '')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Payment to ' + (businessName || 'BillZo'))}`]
+  const fallbackAmount = amount ?? 0
+  return [`Pay via UPI: upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(businessName || '')}&am=${fallbackAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Payment to ' + (businessName || 'BillZo'))}`]
 }
 
 // Track which variation was last used per (tenantId, invoiceId) so we cycle forward

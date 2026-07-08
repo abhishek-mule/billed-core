@@ -8,6 +8,7 @@ export interface BaileysConnectionState {
   lastHeartbeatAt: string | null
   lastConnectedAt: string | null
   qrGeneratedAt: string | null
+  pairingCodeGeneratedAt: string | null
   error: string | null
   deliverySuccessRate: number | null
 }
@@ -23,6 +24,7 @@ export async function setBaileysState(tenantId: string, state: Partial<BaileysCo
         lastHeartbeatAt: null,
         lastConnectedAt: null,
         qrGeneratedAt: null,
+        pairingCodeGeneratedAt: null,
         error: null,
         deliverySuccessRate: null,
         ...state,

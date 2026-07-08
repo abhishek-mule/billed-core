@@ -11,20 +11,24 @@ export async function POST(request: NextRequest) {
     if (auth.response) return auth.response
     const { tenantId } = auth
 
+    const body = await request.json().catch(() => ({}))
+    const method: 'qr' | 'pairing' = body.method === 'pairing' ? 'pairing' : 'qr'
+    const phoneNumber = body.phoneNumber || null
+
     const correlationId = `pair:${tenantId}:${Date.now()}`
     const eventId = await writeOutboxEvent({
       idempotencyKey: `whatsapp:pair:${tenantId}:${Date.now()}`,
       type: 'whatsapp.pair.requested',
       tenantId: tenantId!,
       entityId: null,
-      payload: {},
+      payload: { method, phone: phoneNumber },
       causationId: null,
       correlationId,
       version: 1,
     })
 
-    console.log('[WhatsApp/Pair] Outbox event written:', eventId)
-    return NextResponse.json({ success: true, eventId, correlationId })
+    console.log('[WhatsApp/Pair] Outbox event written:', eventId, method, phoneNumber ? '(with phone)' : '(no phone)')
+    return NextResponse.json({ success: true, eventId, correlationId, method })
   } catch (error: any) {
     console.error('[WhatsApp/Pair] POST Error:', error.message, error.stack)
     return NextResponse.json({
@@ -44,8 +48,9 @@ export async function GET(request: NextRequest) {
   const redis = createRedisClient()
 
   try {
-    const [qr, exists, stateRaw] = await Promise.all([
+    const [qr, pairingCode, exists, stateRaw] = await Promise.all([
       redis.get(`baileys:qr:${tenantId}`).catch(() => null),
+      redis.get(`baileys:code:${tenantId}`).catch(() => null),
       redis.exists(`baileys:creds:${tenantId}`).catch(() => null),
       redis.get(`baileys:state:${tenantId}`).catch(() => null),
     ])
@@ -73,6 +78,11 @@ export async function GET(request: NextRequest) {
     if (qr) {
       return NextResponse.json({ status: 'awaiting_scan', qr, connectionState, health } as const)
     }
+
+    if (pairingCode) {
+      return NextResponse.json({ status: 'awaiting_code', pairingCode, connectionState, health } as const)
+    }
+
     const connStatus: 'connected' | 'waiting' = connectionState === 'connected' ? 'connected' : 'waiting'
     return NextResponse.json({ status: connStatus, connectionState, health })
   } catch (error: any) {
