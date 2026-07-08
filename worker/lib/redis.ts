@@ -25,7 +25,6 @@ function getRedisUrl(): string {
     const host = restUrl.replace(/^https?:\/\//, '')
     return `rediss://default:${token}@${host}:6379`
   }
-  
   return ''
 }
 
