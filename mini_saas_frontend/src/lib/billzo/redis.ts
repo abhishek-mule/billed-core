@@ -15,10 +15,11 @@ function getRedisUrl(): string {
   const host = process.env.REDIS_HOST
   const port = process.env.REDIS_PORT || '6379'
   const password = process.env.REDIS_PASSWORD
+  if (host && password) {
+    return `redis://:${password}@${host}:${port}`
+  }
   if (host) {
-    return password
-      ? `rediss://default:${encodeURIComponent(password)}@${host}:${port}`
-      : `redis://${host}:${port}`
+    return `redis://${host}:${port}`
   }
   throw new Error('UPSTASH_REDIS_URL or REDIS_HOST not configured')
 }
