@@ -445,7 +445,7 @@ export default function WhatsAppSettingsPage() {
                         <p className="text-xs text-muted-foreground mt-0.5">Use a second device to scan</p>
                       </button>
                       <button
-                        onClick={() => setPairStatus("selecting")}
+                        onClick={() => { setPairMethod("pairing"); setPairStatus("selecting"); }}
                         disabled={pairingInProgress}
                         className={`rounded-lg border-2 p-3 text-left transition-colors disabled:opacity-50 ${
                           pairMethod === "pairing"
