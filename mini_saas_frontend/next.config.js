@@ -1,4 +1,14 @@
 /** @type {import('next').NextConfig} */
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  swSrc: 'worker/index.js',
+  register: true,
+  skipWaiting: true,
+  clientsClaim: true,
+  disable: process.env.NODE_ENV === 'development',
+  reloadOnOnline: true,
+})
+
 const nextConfig = {
   transpilePackages: ['@billzo/shared'],
   images: {
@@ -51,4 +61,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withPWA(nextConfig)
