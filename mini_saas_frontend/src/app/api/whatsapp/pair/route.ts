@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
-import { createRedisClient } from '@/lib/billzo/redis'
 import { verifyRequest, errorResponse } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
@@ -45,46 +44,22 @@ export async function GET(request: NextRequest) {
     return errorResponse('tenantId required', 400)
   }
 
-  const redis = createRedisClient()
+  const workerUrl = process.env.WORKER_API_URL
+  if (!workerUrl) {
+    console.error('[WhatsApp/Pair] WORKER_API_URL not set')
+    return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null, error: 'Worker not configured' })
+  }
 
   try {
-    const [qr, pairingCode, exists, stateRaw] = await Promise.all([
-      redis.get(`baileys:qr:${tenantId}`).catch(() => null),
-      redis.get(`baileys:code:${tenantId}`).catch(() => null),
-      redis.exists(`baileys:creds:${tenantId}`).catch(() => null),
-      redis.get(`baileys:state:${tenantId}`).catch(() => null),
-    ])
-
-    let connectionState = 'disconnected'
-    let health: Record<string, any> | null = null
-
-    if (stateRaw) {
-      try {
-        const parsed = JSON.parse(stateRaw)
-        connectionState = parsed.connectionState || connectionState
-        health = {
-          lastHeartbeatAt: parsed.lastHeartbeatAt || null,
-          lastConnectedAt: parsed.lastConnectedAt || null,
-          deliverySuccessRate: parsed.deliverySuccessRate || null,
-          error: parsed.error || null,
-        }
-      } catch { console.error('[WhatsAppPair] Failed to parse health data') }
+    const res = await fetch(`${workerUrl}/api/whatsapp/pair/${tenantId}`, {
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!res.ok) {
+      console.error('[WhatsApp/Pair] Worker returned', res.status)
+      return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null })
     }
-
-    if (exists && connectionState === 'disconnected') {
-      connectionState = 'connected'
-    }
-
-    if (qr) {
-      return NextResponse.json({ status: 'awaiting_scan', qr, connectionState, health } as const)
-    }
-
-    if (pairingCode) {
-      return NextResponse.json({ status: 'awaiting_code', pairingCode, connectionState, health } as const)
-    }
-
-    const connStatus: 'connected' | 'waiting' = connectionState === 'connected' ? 'connected' : 'waiting'
-    return NextResponse.json({ status: connStatus, connectionState, health })
+    const data = await res.json()
+    return NextResponse.json(data)
   } catch (error: any) {
     console.error('[WhatsApp/Pair] GET Error:', error)
     return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null, error: error.message })

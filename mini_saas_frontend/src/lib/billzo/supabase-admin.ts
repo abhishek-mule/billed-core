@@ -1,4 +1,6 @@
 // authority:exempt notification_routing — device token management
+import dns from 'node:dns'
+dns.setDefaultResultOrder('ipv4first')
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let _supabaseAdmin: SupabaseClient | null = null

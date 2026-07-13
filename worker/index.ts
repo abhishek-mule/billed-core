@@ -1,6 +1,7 @@
 import http from 'node:http'
 import dns from 'node:dns'
 import { Queue } from 'bullmq'
+import { URL } from 'node:url'
 
 // Prefer IPv4 connections — Supabase direct URL resolves to IPv6-only,
 // which fails on Railway (ENETUNREACH). IPv6 remains available but IPv4 is tried first.
@@ -28,6 +29,10 @@ import { OutboxListener } from './src/lib/spine/outbox-listener'
 import { TransportRegistry, BaileysAdapter, GupshupAdapter, SimulationAdapter } from './src/lib/transport'
 import { setTransportRegistry } from './lib/whatsapp-router'
 import { applyOverride } from './src/lib/recovery/override-handler'
+import { getQrCode } from './stores/baileys-qr'
+import { getPairingCode } from './stores/baileys-pairing-code'
+import { getBaileysCreds } from './stores/baileys-auth'
+import { getBaileysState } from './stores/baileys-state'
 
 async function getQueueHealth() {
   const connection = createRedisConnection()
@@ -72,6 +77,52 @@ function startHealthServer(runtime: AuthorityRuntime) {
         uptimeSeconds: diag.uptimeSeconds,
         startedAt: diag.startedAt,
       }))
+    } else if (req.url?.startsWith('/api/whatsapp/pair/') && req.method === 'GET') {
+      const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
+      const tenantId = req.url.slice('/api/whatsapp/pair/'.length)
+      if (!tenantId) {
+        res.writeHead(400, cors)
+        res.end(JSON.stringify({ error: 'Missing tenantId' }))
+        return
+      }
+      const [qr, pairingCode, creds, state] = await Promise.all([
+        getQrCode(tenantId),
+        getPairingCode(tenantId),
+        getBaileysCreds(tenantId),
+        getBaileysState(tenantId),
+      ])
+      const hasCreds = creds !== null
+      if (qr) {
+        res.writeHead(200, cors)
+        res.end(JSON.stringify({
+          status: 'awaiting_scan',
+          qr,
+          connectionState: state?.connectionState ?? 'disconnected',
+          health: state,
+        }))
+      } else if (pairingCode) {
+        res.writeHead(200, cors)
+        res.end(JSON.stringify({
+          status: 'awaiting_code',
+          pairingCode,
+          connectionState: state?.connectionState ?? 'disconnected',
+          health: state,
+        }))
+      } else if (hasCreds && state?.connectionState === 'connected') {
+        res.writeHead(200, cors)
+        res.end(JSON.stringify({
+          status: 'connected',
+          connectionState: 'connected',
+          health: state,
+        }))
+      } else {
+        res.writeHead(200, cors)
+        res.end(JSON.stringify({
+          status: 'waiting',
+          connectionState: state?.connectionState ?? 'disconnected',
+          health: state,
+        }))
+      }
     } else if (req.method === 'POST' && req.url === '/api/v1/recovery/override') {
       let body = ''
       req.on('data', (chunk) => { body += chunk })
