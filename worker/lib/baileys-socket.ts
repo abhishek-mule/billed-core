@@ -147,6 +147,8 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
     await saveBaileysCreds(tenantId, creds)
   })
 
+  let pairingCodeRequested = false
+
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
     console.log(`[Baileys] Connection update for ${tenantId}:`, { connection, hasQr: !!qr, lastDisconnect })
@@ -156,6 +158,23 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
       await storeQrCode(tenantId, qr)
       await setBaileysState(tenantId, { connectionState: 'connecting', qrGeneratedAt: new Date().toISOString() })
       console.log(`[Baileys] QR stored for ${tenantId}`)
+    }
+
+    // Request pairing code once when socket first signals readiness (has QR)
+    if (qr && options?.method === 'pairing' && options?.phoneNumber && !pairingCodeRequested) {
+      pairingCodeRequested = true
+      const raw = options.phoneNumber.replace(/[^0-9]/g, '')
+      if (raw) {
+        try {
+          const code = await sock.requestPairingCode(raw)
+          const displayCode = `${code.slice(0, 4)}-${code.slice(4)}`.toUpperCase()
+          console.log(`[Baileys] Pairing code generated for ${tenantId}: ${displayCode}`)
+          await storePairingCode(tenantId, displayCode)
+          await setBaileysState(tenantId, { connectionState: 'connecting', pairingCodeGeneratedAt: new Date().toISOString() })
+        } catch (err) {
+          console.error(`[Baileys] Failed to request pairing code for ${tenantId}:`, err)
+        }
+      }
     }
 
     if (qr === undefined && connection !== 'open') {
@@ -203,11 +222,12 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
       const isIntentional = intentionallyDisconnecting.has(tenantId)
       intentionallyDisconnecting.delete(tenantId)
 
-      // Always clear stale QR and pairing code — a dead socket's credentials are worthless
       await clearQrCode(tenantId)
-      await clearPairingCode(tenantId)
+      // Don't clear pairing code on close — it remains valid for its TTL.
+      // Only clear on open (paired) or intentional disconnect.
 
       if (isIntentional) {
+        await clearPairingCode(tenantId)
         await releaseSocketLock(tenantId)
         sockets.delete(tenantId)
         console.log(`[Baileys] Intentional disconnect for tenant ${tenantId}, not reconnecting`)
@@ -222,6 +242,7 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
       console.log(`[Baileys] Disconnected for tenant ${tenantId}: loggedOut=${isLoggedOut} qrExhausted=${isQrRefsExhausted} statusCode=${statusCode}`)
 
       if (isLoggedOut) {
+        await clearPairingCode(tenantId)
         await setBaileysState(tenantId, { connectionState: 'auth_expired', error: 'logged_out' })
         await deleteBaileysAuthState(tenantId)
         await clearBaileysState(tenantId)
@@ -242,24 +263,6 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
       }
     }
   })
-
-  // Request pairing code if method is 'pairing'
-  if (options?.method === 'pairing' && options?.phoneNumber) {
-    const raw = options.phoneNumber.replace(/[^0-9]/g, '')
-    if (raw) {
-      ;(async () => {
-        try {
-          const code = await sock.requestPairingCode(raw)
-          const displayCode = `${code.slice(0, 4)}-${code.slice(4)}`.toUpperCase()
-          console.log(`[Baileys] Pairing code generated for ${tenantId}: ${displayCode}`)
-          await storePairingCode(tenantId, displayCode)
-          await setBaileysState(tenantId, { connectionState: 'connecting', pairingCodeGeneratedAt: new Date().toISOString() })
-        } catch (err) {
-          console.error(`[Baileys] Failed to request pairing code for ${tenantId}:`, err)
-        }
-      })()
-    }
-  }
 
   sock.ev.on('messages.upsert', (m) => {
     for (const msg of m.messages) {
