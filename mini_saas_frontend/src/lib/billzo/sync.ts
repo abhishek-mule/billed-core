@@ -237,7 +237,7 @@ export async function syncPendingQueue() {
  * This closes the gap where server-side webhooks (Razorpay, WhatsApp status)
  * modify data while the client is offline.
  */
-async function reconcileFromServer() {
+export async function reconcileFromServer() {
   const tenantId = getTenantId()
   if (!tenantId) return
   if ((navigator as any).onLine === false) return
