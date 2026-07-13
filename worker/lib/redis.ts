@@ -13,7 +13,24 @@ function getRedisUrl(): string {
   }
   console.log('[redis] getRedisUrl env:', JSON.stringify(debugVars))
 
-  // Priority 1: Upstash Redis (shared with Vercel)
+  // Priority 1: Railway Redis (unlimited, worker runs alongside it)
+  const railwayHost = process.env.REDIS_HOST
+  const railwayPort = process.env.REDIS_PORT
+  const railwayPassword = process.env.REDIS_PASSWORD
+  
+  if (railwayHost && railwayPort && railwayPassword) {
+    const url = `redis://:${railwayPassword}@${railwayHost}:${railwayPort}`
+    console.log('[redis] using Railway Redis')
+    return url
+  }
+
+  // Priority 2: Railway Redis URL (if available)
+  if (process.env.REDIS_URL) {
+    console.log('[redis] using REDIS_URL')
+    return process.env.REDIS_URL
+  }
+
+  // Priority 3: Upstash Redis (fallback for local dev / Vercel)
   const upstashUrl = process.env.UPSTASH_REDIS_URL
   if (upstashUrl) {
     console.log('[redis] using UPSTASH_REDIS_URL')
@@ -27,23 +44,6 @@ function getRedisUrl(): string {
     const url = `rediss://default:${token}@${host}:6379`
     console.log('[redis] using Upstash REST fallback')
     return url
-  }
-
-  // Priority 2: Railway Redis (from reference variables)
-  const railwayHost = process.env.REDIS_HOST
-  const railwayPort = process.env.REDIS_PORT
-  const railwayPassword = process.env.REDIS_PASSWORD
-  
-  if (railwayHost && railwayPort && railwayPassword) {
-    const url = `redis://:${railwayPassword}@${railwayHost}:${railwayPort}`
-    console.log('[redis] using Railway Redis vars')
-    return url
-  }
-
-  // Priority 3: Railway Redis URL (if available)
-  if (process.env.REDIS_URL) {
-    console.log('[redis] using REDIS_URL')
-    return process.env.REDIS_URL
   }
 
   console.warn('[redis] NO REDIS URL FOUND — returning empty')
