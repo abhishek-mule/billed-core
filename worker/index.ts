@@ -1,5 +1,10 @@
 import http from 'node:http'
+import dns from 'node:dns'
 import { Queue } from 'bullmq'
+
+// Prefer IPv4 connections — Supabase direct URL resolves to IPv6-only,
+// which fails on Railway (ENETUNREACH). IPv6 remains available but IPv4 is tried first.
+dns.setDefaultResultOrder('ipv4first')
 import { createOutboxWorker, processOutboxEvent } from './queues/outbox'
 import { createRemindersWorker, enqueueOverdueReminders } from './queues/reminders'
 import { startPromiseExpiryScanner, stopPromiseExpiryScanner } from './src/lib/recovery/promise-expiry'

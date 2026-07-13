@@ -730,6 +730,15 @@ async function handleWhatsAppPairRequested(event: any): Promise<void> {
   const tenantId = event.tenantId
   if (!tenantId) return
 
+  // Prevent duplicate socket creation — check if a socket lock already exists
+  const redis = getRedis()
+  const lockKey = `baileys:lock:${tenantId}`
+  const hasLock = await redis.exists(lockKey)
+  if (hasLock) {
+    logger.info({ tenantId }, 'Socket lock already held, skipping duplicate pair request')
+    return
+  }
+
   const method = event.payload?.method || 'qr'
   const phoneNumber = event.payload?.phone || event.payload?.phoneNumber
 
