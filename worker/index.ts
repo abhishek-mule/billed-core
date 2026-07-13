@@ -92,15 +92,15 @@ function startHealthServer(runtime: AuthorityRuntime) {
         getBaileysState(tenantId),
       ])
       const hasCreds = creds !== null
-      if (qr) {
+      if (pairingCode) {
         res.writeHead(200, cors)
         res.end(JSON.stringify({
-          status: 'awaiting_scan',
-          qr,
+          status: 'awaiting_code',
+          pairingCode,
           connectionState: state?.connectionState ?? 'disconnected',
           health: state,
         }))
-      } else if (pairingCode) {
+      } else if (qr) {
         res.writeHead(200, cors)
         res.end(JSON.stringify({
           status: 'awaiting_code',

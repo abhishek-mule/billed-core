@@ -170,6 +170,8 @@ export async function startBaileysSocket(tenantId: string, options?: BaileysSock
           const displayCode = `${code.slice(0, 4)}-${code.slice(4)}`.toUpperCase()
           console.log(`[Baileys] Pairing code generated for ${tenantId}: ${displayCode}`)
           await storePairingCode(tenantId, displayCode)
+          // Clear any stale QR so the API returns the pairing code
+          await clearQrCode(tenantId)
           await setBaileysState(tenantId, { connectionState: 'connecting', pairingCodeGeneratedAt: new Date().toISOString() })
         } catch (err) {
           console.error(`[Baileys] Failed to request pairing code for ${tenantId}:`, err)
