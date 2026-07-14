@@ -27,8 +27,8 @@ if (config) {
 
     self.registration.showNotification(title || 'BillZo', {
       body: body || '',
-      icon: '/logo_new.png',
-      badge: '/logo-icon.svg',
+      icon: '/logo.svg',
+      badge: '/logo.svg',
       tag: data.type || 'billzo-alert',
       requireInteraction: true,
       data: { url, ...data },

@@ -156,8 +156,8 @@ export function showLocalNotification(title: string, body: string, icon?: string
   if (Notification.permission === "granted") {
     new Notification(title, {
       body,
-      icon: icon || "/logo.png",
-      badge: "/logo.png",
+      icon: icon || "/logo.svg",
+      badge: "/logo.svg",
     });
   }
 }

@@ -64,8 +64,8 @@ export async function POST(request: NextRequest) {
         notification: {
           title,
           body: message,
-          icon: icon || '/logo_new.png',
-          badge: '/logo-icon.svg',
+          icon: icon || '/logo.svg',
+          badge: '/logo.svg',
           tag: type || 'billzo-alert',
           requireInteraction: type === 'daily_brief' || type === 'payment_due',
           data: {
