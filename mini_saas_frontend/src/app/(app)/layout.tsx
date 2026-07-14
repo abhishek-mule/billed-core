@@ -13,6 +13,11 @@ export default function BillzoLayout({ children }: { children: React.ReactNode }
   const [showApp, setShowApp] = useState(false)
 
   useEffect(() => {
+    const seen = sessionStorage.getItem('billzo_splash_shown')
+    if (seen) {
+      setShowApp(true)
+      return
+    }
     const handleOnline = () => scheduleBackgroundSync()
     window.addEventListener('online', handleOnline)
     window.addEventListener('billzo:sync', () => {
@@ -26,7 +31,7 @@ export default function BillzoLayout({ children }: { children: React.ReactNode }
   }, [])
 
   if (!showApp) {
-    return <SplashScreen onComplete={() => setShowApp(true)} />
+    return <SplashScreen onComplete={() => { sessionStorage.setItem('billzo_splash_shown', '1'); setShowApp(true) }} />
   }
 
   return (
