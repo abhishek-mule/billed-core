@@ -562,14 +562,14 @@ export default function AuthPage() {
         <LeftPanel />
         <MobileLogoBar />
 
-        <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white relative">
+        <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white relative overflow-hidden">
 
           <Suspense fallback={<LoginSkeleton />}>
-            <div className="w-full max-w-[360px] relative animate-in fade-in slide-in-from-bottom-3 duration-600">
+            <div className="w-full max-w-[360px] relative z-10 animate-in fade-in slide-in-from-bottom-3 duration-600">
               <div className="text-center mb-5 animate-in fade-in slide-in-from-top-2 duration-500 delay-100">
                 <div className="flex justify-center mb-3">
-                  <div className="w-10 h-10 rounded-full bg-card border border-border shadow-sm flex items-center justify-center">
-                    <Image src="/logo.svg" alt="BillZo" width={22} height={22} className="object-contain" />
+                  <div className="w-12 h-12 rounded-full bg-card border border-border shadow-sm flex items-center justify-center">
+                    <Image src="/logo.svg" alt="BillZo" width={28} height={28} className="object-contain" />
                   </div>
                 </div>
                 <h1 className="font-display font-semibold text-lg text-card-foreground">Welcome back</h1>
@@ -593,13 +593,11 @@ export default function AuthPage() {
           </Suspense>
 
           {/* India map watermark at leftmost side */}
-          <div className="absolute left-0 bottom-8 animate-in fade-in duration-500 delay-300">
+          <div className="absolute left-0 bottom-0 w-44 lg:w-56 opacity-70 pointer-events-none animate-in fade-in duration-500 delay-300">
             <img
               src="/indi_dog.svg"
               alt="India"
-              width={350}
-              height={190}
-              className="rounded-r-md pr-1 shadow-sm border border-border/30 border-l-0"
+              className="w-full h-auto rounded-r-md border border-border/20 border-l-0"
             />
           </div>
         </div>
