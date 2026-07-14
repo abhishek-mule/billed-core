@@ -176,7 +176,7 @@ export default function OnboardingPage() {
           ) : (
             <div className="rounded-2xl border border-border bg-card shadow-lg p-7">
               <div className="flex items-center gap-3 mb-5">
-                <Image src="/logo_new.png" alt="BillZo" width={32} height={32} className="object-contain" />
+                <Image src="/logo.svg" alt="BillZo" width={32} height={32} className="object-contain" />
                 <div>
                   <h1 className="text-xl font-bold text-card-foreground">Set up your business</h1>
                   <p className="text-xs text-muted-foreground">Create your BillZo merchant account</p>

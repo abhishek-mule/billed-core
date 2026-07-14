@@ -104,7 +104,7 @@ export function useRazorpay() {
       currency: options.currency || 'INR',
       name: options.name || 'BillZo',
       description: options.description || 'Invoice Payment',
-      image: options.image || '/logo_new.png',
+      image: options.image || '/logo.svg',
       order_id: options.order_id,
       prefill: {
         name: options.prefill?.name || '',

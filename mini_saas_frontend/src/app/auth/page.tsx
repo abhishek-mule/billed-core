@@ -3,7 +3,22 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, ShieldCheck, Lock } from "lucide-react"
+import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, ShieldCheck, Lock, ArrowRight } from "lucide-react"
+
+// ── Fonts ──
+// Fraunces: a warm, editorial display serif — carries the "ledger / paper" personality.
+// Inter: quiet, legible body face for the actual work of reading and typing.
+// JetBrains Mono: reserved strictly for data, timestamps, and small-caps labels.
+function FontFaces() {
+  return (
+    <style jsx global>{`
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+      .font-display { font-family: 'Fraunces', ui-serif, Georgia, serif; font-feature-settings: 'ss01' 1; }
+      .font-body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+      .font-ledger { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    `}</style>
+  )
+}
 
 function MagicLinkForm() {
   const [email, setEmail] = useState("")
@@ -94,8 +109,14 @@ function MagicLinkForm() {
     const msg = errorMessage || error
     return (
       <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-        <div role="alert" className="px-3 py-2.5 bg-destructive/10 border border-destructive/20 rounded text-destructive text-xs">{msg}</div>
-        <button onClick={() => window.location.reload()} className="w-full py-2.5 border border-border text-muted-foreground rounded text-sm font-medium hover:bg-muted transition-colors">
+        <div role="alert" className="flex items-start gap-2.5 px-4 py-3 bg-destructive/[0.07] border border-destructive/25 rounded-sm text-destructive text-xs font-body leading-relaxed">
+          <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
+          {msg}
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="w-full py-2.5 border border-border text-muted-foreground rounded-sm text-sm font-body font-medium hover:bg-muted hover:text-foreground transition-colors"
+        >
           Try again
         </button>
       </div>
@@ -103,39 +124,62 @@ function MagicLinkForm() {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+    <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
       {sent ? (
         <div className="space-y-3">
-          <div className="py-6 bg-blue-50 rounded text-center border border-blue-100">
-            <Mail className="w-7 h-7 text-blue-600 mx-auto mb-2" />
-            <p className="text-xs text-blue-700 font-medium">Check your inbox — click the link to sign in.</p>
+          <div className="relative py-7 px-5 bg-blue-600/[0.06] rounded-sm text-center border border-blue-600/15 overflow-hidden">
+            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full bg-blue-600/[0.06]" />
+            <div className="relative">
+              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center">
+                <Mail className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-xs text-blue-700 font-body font-medium leading-relaxed">
+                Check your inbox — click the link to sign in.
+              </p>
+              <p className="text-[11px] text-blue-700/60 font-body mt-1">Sent to {email}</p>
+            </div>
           </div>
-          <button onClick={() => { setSent(false); setEmail("") }} className="w-full py-2.5 border border-border text-muted-foreground rounded text-sm font-medium hover:bg-muted transition-colors">
+          <button
+            onClick={() => { setSent(false); setEmail("") }}
+            className="w-full py-2.5 border border-border text-muted-foreground rounded-sm text-sm font-body font-medium hover:bg-muted hover:text-foreground transition-colors"
+          >
             Use a different email
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label htmlFor="email-input" className="block text-xs text-muted-foreground mb-1.5 font-medium tracking-wide">Business Email</label>
-            <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <label htmlFor="email-input" className="block text-[10px] font-ledger uppercase text-muted-foreground mb-1.5 tracking-[0.12em]">
+              Business Email
+            </label>
+            <div className="relative group">
+              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-blue-600 transition-colors" aria-hidden="true" />
               <input
                 id="email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className="w-full pl-9 pr-4 py-2.5 rounded border border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 focus:bg-card outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-sm border border-border bg-muted text-sm font-body text-foreground placeholder:text-muted-foreground focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 focus:bg-card outline-none transition-all"
                 aria-label="Email address"
               />
             </div>
           </div>
-          <button type="submit" disabled={loading} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm" aria-busy={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+          <button
+            type="submit"
+            disabled={loading}
+            className="group w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm font-body font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_14px_rgba(37,99,235,0.28)]"
+            aria-busy={loading}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
             {loading ? "Sending link..." : "Send Magic Link"}
+            {!loading && <ArrowRight className="h-3.5 w-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />}
           </button>
-          <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-center gap-4 text-[10px] font-body text-muted-foreground pt-1">
             <span className="flex items-center gap-1"><Lock className="w-3 h-3" />Passwordless</span>
             <span className="flex items-center gap-1"><Zap className="w-3 h-3" />Offline First</span>
             <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" />Secure</span>
@@ -148,18 +192,67 @@ function MagicLinkForm() {
 
 function LoginSkeleton() {
   return (
-    <div className="w-full max-w-[340px] space-y-4 animate-pulse">
+    <div className="w-full max-w-[360px] space-y-4 animate-pulse">
       <div className="flex justify-center">
-        <div className="w-10 h-10 rounded bg-muted" />
+        <div className="w-11 h-11 rounded-full bg-muted" />
       </div>
       <div className="h-5 w-48 mx-auto bg-muted rounded" />
       <div className="h-4 w-64 mx-auto bg-muted rounded" />
       <div className="bg-card shadow-xl p-8 space-y-4">
         <div className="space-y-3">
-          <div className="h-10 bg-muted rounded" />
-          <div className="h-10 bg-muted rounded" />
+          <div className="h-11 bg-muted rounded" />
+          <div className="h-11 bg-muted rounded" />
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Perforation: a torn ticket-stub edge, the page's one signature motif ──
+// Grounded directly in the subject — this is an invoice-recovery product,
+// so the login card reads like a tear-off receipt stub.
+
+function Perforation({ tone = "light" }: { tone?: "light" | "dark" }) {
+  const dot = tone === "dark" ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)"
+  const holes = Array.from({ length: 26 })
+  return (
+    <div className="relative flex items-center" aria-hidden="true">
+      <div className="flex-1 flex items-center gap-[7px] overflow-hidden">
+        {holes.map((_, i) => (
+          <span key={i} className="w-[3px] h-[3px] rounded-full shrink-0" style={{ background: dot }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Radial progress ring for the "likely to pay" stat ──
+
+function RadialProgress({ value, size = 34 }: { value: number; size?: number }) {
+  const stroke = 3
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const offset = c - (value / 100) * c
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="#4ade80"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          style={{ filter: "drop-shadow(0 0 3px rgba(74,222,128,0.5))" }}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-ledger text-green-400">
+        {value}%
+      </span>
     </div>
   )
 }
@@ -181,7 +274,6 @@ function IndiaPattern() {
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#india-grid)" />
-      {/* Stylized abstract India outline */}
       <g transform="translate(400,300) scale(1.1)" opacity="0.6" fill="none" stroke="white" strokeWidth="1">
         <path d="
           M-20,-80 L-30,-70 L-45,-65 L-55,-50
@@ -212,14 +304,12 @@ function AnimatedBackground() {
       <defs>
         <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
       </defs>
-      {/* Dotted network lines */}
       <line x1="120" y1="80" x2="250" y2="200" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
       <line x1="250" y1="200" x2="400" y2="150" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
       <line x1="400" y1="150" x2="550" y2="280" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
       <line x1="550" y1="280" x2="680" y2="220" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
       <line x1="120" y1="80" x2="300" y2="420" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
       <line x1="680" y1="220" x2="500" y2="450" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
-      {/* Nodes */}
       <circle cx="120" cy="80" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
       <circle cx="250" cy="200" r="2.5" fill="white" opacity="0.3" />
       <circle cx="400" cy="150" r="3" fill="white" opacity="0.35" filter="url(#glow)" />
@@ -227,7 +317,6 @@ function AnimatedBackground() {
       <circle cx="680" cy="220" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
       <circle cx="300" cy="420" r="2.5" fill="white" opacity="0.3" />
       <circle cx="500" cy="450" r="2" fill="white" opacity="0.25" />
-      {/* Floating micro particles (very small) */}
       <circle cx="180" cy="140" r="1" fill="white" opacity="0.2" />
       <circle cx="450" cy="90" r="1" fill="white" opacity="0.15" />
       <circle cx="620" cy="350" r="1" fill="white" opacity="0.2" />
@@ -252,15 +341,16 @@ const RECOVERY_STEPS = [
 
 function RecoveryJourneyPreview() {
   return (
-    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-5">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
-        <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Live Recovery Journey</span>
+    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
+          <span className="text-[9px] font-ledger text-white/40 uppercase tracking-[0.15em]">Live Recovery</span>
+        </div>
+        <span className="text-[8px] font-ledger text-white/25">#INV-4471</span>
       </div>
-
-      {/* Steps */}
-      <div className="space-y-0">
+      <Perforation tone="dark" />
+      <div className="space-y-0 mt-2">
         {RECOVERY_STEPS.map((step, i) => (
           <div key={step.label} className="flex items-start gap-3">
             <div className="flex flex-col items-center">
@@ -277,27 +367,22 @@ function RecoveryJourneyPreview() {
               </div>
               {i < RECOVERY_STEPS.length - 1 && (
                 <div
-                  className={`w-px min-h-[18px] flex-1 ${
-                    i < 3 ? "bg-white/[0.08]" : "bg-white/[0.04]"
-                  }`}
+                  className={`w-px min-h-[18px] flex-1 ${i < 3 ? "bg-white/[0.08]" : "bg-white/[0.04]"}`}
                   style={{ height: step.detail ? "28px" : "18px" }}
                 />
               )}
             </div>
             <div className="pt-px">
-              <div
-                className={`text-xs leading-tight ${
-                  step.status === "done"
-                    ? "text-white/60"
-                    : step.status === "active"
-                      ? "text-white/90 font-medium"
-                      : "text-white/25"
-                }`}
-              >
+              <div className={`text-xs font-body leading-tight ${
+                step.status === "done" ? "text-white/60" : step.status === "active" ? "text-white/90 font-medium" : "text-white/25"
+              }`}>
                 {step.label}
               </div>
               {step.detail && (
-                <div className="text-[10px] text-white/40 mt-0.5">{step.detail}</div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {step.status === "active" && <RadialProgress value={82} size={16} />}
+                  <span className="text-[10px] font-body text-white/40">{step.status === "active" ? "chance of payment today" : step.detail}</span>
+                </div>
               )}
             </div>
           </div>
@@ -328,57 +413,52 @@ function RecoveryEngineStatus() {
   }, [])
 
   return (
-    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-5 flex flex-col justify-between">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-[10px] text-white/40 font-mono uppercase tracking-[0.15em]">Recovery Engine</span>
+    <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-4 flex flex-col justify-between">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Zap className="w-3 h-3 text-blue-400" />
+          <span className="text-[9px] font-ledger text-white/40 uppercase tracking-[0.15em]">Engine</span>
         </div>
-        <span className="text-[10px] text-white/30 font-mono">● Monitoring</span>
+        <span className="text-[9px] font-ledger text-white/30">● Monitoring</span>
       </div>
 
-      {/* Hero metric */}
-      <div className="mb-4">
-        <div className="text-[10px] text-white/40 mb-0.5">Recovering</div>
-        <div className="text-xl font-bold text-white tracking-tight">₹17,460</div>
+      <div className="mb-2">
+        <div className="text-[9px] font-body text-white/40 mb-0.5">Recovering</div>
+        <div className="text-xl font-display font-semibold text-white tracking-tight">₹17,460</div>
       </div>
 
-      {/* Secondary metrics */}
-      <div className="space-y-2 mb-4">
-        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-          <span className="text-[10px] text-white/40">Active Customers</span>
+      <div className="space-y-1 mb-2">
+        <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.06]">
+          <span className="text-[9px] font-body text-white/40">Active Customers</span>
           <div className="flex items-center gap-1">
-            <Users className="w-3 h-3 text-white/40" />
-            <span className="text-xs font-medium text-white/70">12</span>
+            <Users className="w-2.5 h-2.5 text-white/40" />
+            <span className="text-[10px] font-ledger text-white/70">12</span>
           </div>
         </div>
-        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-          <span className="text-[10px] text-white/40">Likely to Pay Today</span>
-          <div className="flex items-center gap-1">
-            <TrendingUp className="w-3 h-3 text-green-400" />
-            <span className="text-xs font-medium text-green-400">82%</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Next action */}
-      <div className="pt-3 border-t border-white/[0.06] mb-3">
-        <div className="text-[10px] text-white/40 mb-1">Next Automatic Action</div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.06]">
+          <span className="text-[9px] font-body text-white/40">Likely to Pay Today</span>
           <div className="flex items-center gap-1.5">
-            <Clock className="w-3 h-3 text-blue-400" />
-            <span className="text-xs text-white/70 font-medium">WhatsApp Reminder</span>
+            <TrendingUp className="w-2.5 h-2.5 text-green-400" />
+            <span className="text-[10px] font-ledger text-green-400">82%</span>
           </div>
-          <span className="text-[10px] text-white/50">Today · 7:30 PM</span>
         </div>
       </div>
 
-      {/* Rotating status */}
-      <div className="pt-2 border-t border-white/[0.06]">
-        <div className="flex items-center gap-1.5 transition-all duration-500">
-          <span className="w-1 h-1 rounded-full bg-blue-400 animate-pulse shrink-0" />
-          <span className="text-[10px] text-white/35 font-mono truncate transition-all duration-500" key={statusIndex}>
+      <div className="pt-2 border-t border-white/[0.06] mb-2">
+        <div className="text-[9px] font-body text-white/40 mb-0.5">Next Action</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5 text-blue-400" />
+            <span className="text-[10px] font-body text-white/70 font-medium">WhatsApp</span>
+          </div>
+          <span className="text-[9px] font-ledger text-white/50">7:30 PM</span>
+        </div>
+      </div>
+
+      <div className="pt-1.5 border-t border-white/[0.06]">
+        <div className="flex items-center gap-1 transition-all duration-500">
+          <span className="w-0.5 h-0.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+          <span className="text-[9px] font-ledger text-white/35 truncate transition-all duration-500" key={statusIndex}>
             {STATUS_MESSAGES[statusIndex]}
           </span>
         </div>
@@ -390,70 +470,66 @@ function RecoveryEngineStatus() {
 function LeftPanel() {
   return (
     <div className="hidden lg:flex lg:w-[50%] relative overflow-hidden flex-col">
-      {/* Deep-navy gradient background */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#0f1f3d] to-[#162d50]" />
-
-      {/* Geometric India pattern overlay */}
       <IndiaPattern />
-
-      {/* Animated nodes network */}
       <AnimatedBackground />
 
-      {/* Subtle tricolor accent stripe at the top */}
       <div className="absolute top-0 left-0 right-0 h-1 flex">
         <div className="flex-1 bg-[#FF9933]" />
         <div className="flex-1 bg-white" />
         <div className="flex-1 bg-[#138808]" />
       </div>
 
-      {/* Glassmorphism overlay */}
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm">
         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none" />
 
-        <div className="relative h-full flex flex-col items-center justify-center px-10 text-white">
-          {/* Logo + branding */}
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center p-2 shadow-lg mb-2.5">
-              <Image src="/logo_new.png" alt="BillZo" width={38} height={38} className="object-contain" />
+        <div className="relative h-full flex flex-col items-center text-white">
+          {/* Top section: logo, heading, description */}
+          <div className="flex flex-col items-center shrink-0 px-8 pt-6 pb-2">
+            <div className="flex flex-col items-center mb-3 animate-in fade-in slide-in-from-top-3 duration-700">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-lg mb-1.5">
+                <Image src="/logo.svg" alt="BillZo" width={26} height={26} className="object-contain" />
+              </div>
+              <div className="font-display font-semibold text-xs text-white/85 tracking-wide">BillZo</div>
+              <div className="text-[8px] font-ledger text-white/40 tracking-[0.25em] uppercase mt-0.5">Recovery OS</div>
             </div>
-            <div className="text-sm font-bold text-white/80 tracking-wide">BillZo</div>
-            <div className="text-[11px] text-white/40 tracking-[0.2em] uppercase">Recovery OS</div>
+
+            <h2 className="font-display font-semibold text-2xl lg:text-[2rem] leading-[1.08] tracking-tight text-white drop-shadow-lg text-center max-w-lg">
+              Every unpaid invoice
+              <br />
+              <span className="text-white/60">has a next move.</span>
+            </h2>
+
+            <p className="text-[11px] lg:text-xs font-body text-white/55 mt-2 leading-relaxed max-w-md text-center">
+              From invoice to payment — BillZo manages the entire recovery journey, automatically.
+            </p>
+
+            <div className="flex items-center gap-1.5 mt-2">
+              <div className="flex -space-x-1.5">
+                {["A", "K", "R", "M"].map((letter) => (
+                  <div key={letter} className="w-4 h-4 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[7px] font-ledger text-white/50">
+                    {letter}
+                  </div>
+                ))}
+              </div>
+              <span className="text-[9px] font-body text-white/40">Trusted by growing Indian businesses</span>
+            </div>
           </div>
 
-          {/* Headline — extra-bold */}
-          <h2 className="text-3xl lg:text-4xl font-extrabold mb-3 tracking-tight text-white drop-shadow-lg">
-            Recovery OS for Indian Merchants
-          </h2>
-
-          {/* Tagline */}
-          <p className="text-sm lg:text-base text-white/60 mb-5 leading-relaxed max-w-lg drop-shadow">
-            From invoice to payment — BillZo manages the entire recovery journey.
-          </p>
-
-          {/* Trust bar */}
-          <div className="flex items-center gap-1.5 mb-8">
-            <div className="flex -space-x-1.5">
-              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">A</div>
-              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">K</div>
-              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">R</div>
-              <div className="w-5 h-5 rounded-full bg-white/[0.12] border border-white/[0.06] flex items-center justify-center text-[8px] text-white/50">M</div>
+          {/* Cards section: takes remaining space */}
+          <div className="flex-1 min-h-0 w-full max-w-2xl px-8 pb-20 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full animate-in fade-in slide-in-from-bottom-3 duration-700 delay-150">
+              <RecoveryJourneyPreview />
+              <RecoveryEngineStatus />
             </div>
-            <span className="text-[10px] text-white/40">Trusted by growing Indian businesses</span>
-          </div>
-
-          {/* Recovery Journey + Engine side by side */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
-            <RecoveryJourneyPreview />
-            <RecoveryEngineStatus />
           </div>
         </div>
       </div>
 
-      {/* Built for Indian MSMEs badge */}
       <div className="absolute bottom-5 left-0 right-0 flex justify-center">
         <div className="inline-flex items-center gap-1.5 bg-white/[0.06] backdrop-blur-sm px-3 py-1.5 border border-white/[0.10]">
           <IndianRupee className="w-3 h-3 text-white/60" />
-          <span className="text-[11px] text-white/50 font-medium tracking-wide">Proudly Built for Indian MSMEs</span>
+          <span className="text-[11px] font-body text-white/50 font-medium tracking-wide">Proudly Built for Indian MSMEs</span>
         </div>
       </div>
     </div>
@@ -462,51 +538,73 @@ function LeftPanel() {
 
 function MobileLogoBar() {
   return (
-    <div className="lg:hidden flex flex-col items-center gap-1 p-5 border-b border-border bg-gradient-to-r from-[#0a1628] to-[#162d50]">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-white/95 rounded-lg flex items-center justify-center p-1.5 shadow">
-          <Image src="/logo_new.png" alt="BillZo" width={22} height={22} className="object-contain" />
-        </div>
-        <span className="font-bold text-white text-sm">BillZo</span>
+    <div className="lg:hidden flex flex-col items-center gap-1 p-5 border-b border-border bg-gradient-to-r from-[#0a1628] to-[#162d50] relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-[3px] flex">
+        <div className="flex-1 bg-[#FF9933]" />
+        <div className="flex-1 bg-white" />
+        <div className="flex-1 bg-[#138808]" />
       </div>
-      <p className="text-[11px] text-white/60">Recovery OS for Indian Merchants</p>
+      <div className="flex items-center gap-2 mt-1">
+        <div className="w-8 h-8 bg-white/95 rounded-lg flex items-center justify-center p-1.5 shadow">
+          <Image src="/logo.svg" alt="BillZo" width={22} height={22} className="object-contain" />
+        </div>
+        <span className="font-display font-semibold text-white text-sm">BillZo</span>
+      </div>
+      <p className="text-[11px] font-body text-white/60">Recovery OS for Indian Merchants</p>
     </div>
   )
 }
 
 export default function AuthPage() {
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-background">
-      <LeftPanel />
-      <MobileLogoBar />
+    <>
+      <FontFaces />
+      <div className="min-h-screen flex flex-col lg:flex-row bg-background">
+        <LeftPanel />
+        <MobileLogoBar />
 
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-background">
-        <Suspense fallback={<LoginSkeleton />}>
-          <div className="w-full max-w-[360px]">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <div className="flex justify-center mb-4">
-                <Image src="/logo_new.png" alt="BillZo" width={44} height={44} className="object-contain" />
+        <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white relative">
+
+          <Suspense fallback={<LoginSkeleton />}>
+            <div className="w-full max-w-[360px] relative animate-in fade-in slide-in-from-bottom-3 duration-600">
+              <div className="text-center mb-5 animate-in fade-in slide-in-from-top-2 duration-500 delay-100">
+                <div className="flex justify-center mb-3">
+                  <div className="w-10 h-10 rounded-full bg-card border border-border shadow-sm flex items-center justify-center">
+                    <Image src="/logo.svg" alt="BillZo" width={22} height={22} className="object-contain" />
+                  </div>
+                </div>
+                <h1 className="font-display font-semibold text-lg text-card-foreground">Welcome back</h1>
+                <p className="text-[11px] font-body text-muted-foreground mt-1">Continue managing your business.</p>
               </div>
-              <h1 className="text-lg font-bold text-card-foreground">Welcome back</h1>
-              <p className="text-xs text-muted-foreground mt-1">Continue managing your business.</p>
-            </div>
 
-            {/* Card — no border-radius, deeper shadow, more padding */}
-            <div className="bg-card shadow-xl p-8">
-              <MagicLinkForm />
-            </div>
+              {/* Login card */}
+              <div className="bg-card shadow-lg animate-in fade-in slide-in-from-bottom-3 duration-600 delay-200">
+                <div className="p-6">
+                  <MagicLinkForm />
+                </div>
+              </div>
 
-            {/* Footer */}
-            <p className="text-center text-[11px] text-muted-foreground mt-6">
-              By signing in, you agree to the{' '}
-              <a href="#" className="text-blue-600 hover:text-blue-700 underline">Terms of Service</a>
-              {' '}and{' '}
-              <a href="#" className="text-blue-600 hover:text-blue-700 underline">Privacy Policy</a>
-            </p>
+              <p className="text-center text-[10px] font-body text-muted-foreground mt-3 leading-relaxed">
+                By signing in, you agree to the{" "}
+                <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</a>
+                {" "}and{" "}
+                <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</a>
+              </p>
+            </div>
+          </Suspense>
+
+          {/* India map watermark at leftmost side */}
+          <div className="absolute left-0 bottom-8 animate-in fade-in duration-500 delay-300">
+            <img
+              src="/indi_up.svg"
+              alt="India"
+              width={350}
+              height={190}
+              className="bg-white rounded-r-md pr-1 shadow-sm opacity-60 hover:opacity-100 transition-all duration-300 hover:scale-105 border border-border/30 border-l-0"
+            />
           </div>
-        </Suspense>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
