@@ -487,7 +487,7 @@ function LeftPanel() {
           <div className="flex flex-col items-center shrink-0 px-8 pt-6 pb-2">
             <div className="flex flex-col items-center mb-3 animate-in fade-in slide-in-from-top-3 duration-700">
               <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-lg mb-1.5">
-                <Image src="/logo.svg" alt="BillZo" width={26} height={26} className="object-contain" />
+                <Image src="/logo.svg" alt="BillZo" width={50} height={50} className="object-contain" />
               </div>
               <div className="font-display font-semibold text-xs text-white/85 tracking-wide">BillZo</div>
               <div className="text-[8px] font-ledger text-white/40 tracking-[0.25em] uppercase mt-0.5">Recovery OS</div>
@@ -562,42 +562,44 @@ export default function AuthPage() {
         <LeftPanel />
         <MobileLogoBar />
 
-        <div className="flex-1 flex items-center justify-center p-8 lg:p-12 bg-white relative overflow-hidden">
+        <div className="flex-1 flex flex-col bg-white relative overflow-hidden">
 
-          <Suspense fallback={<LoginSkeleton />}>
-            <div className="w-full max-w-[360px] relative z-10 animate-in fade-in slide-in-from-bottom-3 duration-600">
-              <div className="text-center mb-5 animate-in fade-in slide-in-from-top-2 duration-500 delay-100">
-                <div className="flex justify-center mb-3">
-                  <div className="w-12 h-12 rounded-full bg-card border border-border shadow-sm flex items-center justify-center">
-                    <Image src="/logo.svg" alt="BillZo" width={28} height={28} className="object-contain" />
+          <div className="flex-1 flex items-center justify-center p-8 lg:p-12">
+            <Suspense fallback={<LoginSkeleton />}>
+              <div className="w-full max-w-[360px] animate-in fade-in slide-in-from-bottom-3 duration-600">
+                <div className="text-center mb-5 animate-in fade-in slide-in-from-top-2 duration-500 delay-100">
+                  <div className="flex justify-center mb-3">
+                    <div className="w-12 h-12 rounded-full bg-card border border-border shadow-sm flex items-center justify-center">
+                      <Image src="/logo.svg" alt="BillZo" width={40} height={40} className="object-contain" />
+                    </div>
+                  </div>
+                  <h1 className="font-display font-semibold text-lg text-card-foreground">Welcome back</h1>
+                  <p className="text-[11px] font-body text-muted-foreground mt-1">Continue managing your business.</p>
+                </div>
+
+                {/* Login card */}
+                <div className="bg-card shadow-lg animate-in fade-in slide-in-from-bottom-3 duration-600 delay-200">
+                  <div className="p-6">
+                    <MagicLinkForm />
                   </div>
                 </div>
-                <h1 className="font-display font-semibold text-lg text-card-foreground">Welcome back</h1>
-                <p className="text-[11px] font-body text-muted-foreground mt-1">Continue managing your business.</p>
+
+                <p className="text-center text-[10px] font-body text-muted-foreground mt-3 leading-relaxed">
+                  By signing in, you agree to the{" "}
+                  <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</a>
+                  {" "}and{" "}
+                  <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</a>
+                </p>
               </div>
+            </Suspense>
+          </div>
 
-              {/* Login card */}
-              <div className="bg-card shadow-lg animate-in fade-in slide-in-from-bottom-3 duration-600 delay-200">
-                <div className="p-6">
-                  <MagicLinkForm />
-                </div>
-              </div>
-
-              <p className="text-center text-[10px] font-body text-muted-foreground mt-3 leading-relaxed">
-                By signing in, you agree to the{" "}
-                <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</a>
-                {" "}and{" "}
-                <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</a>
-              </p>
-            </div>
-          </Suspense>
-
-          {/* India map watermark at leftmost side */}
-          <div className="absolute left-0 bottom-0 w-44 lg:w-56 opacity-70 pointer-events-none animate-in fade-in duration-500 delay-300">
+          {/* India map watermark — in flow at bottom, never overlaps */}
+          <div className="shrink-0 self-start w-36 sm:w-40 lg:w-48 opacity-60 pointer-events-none animate-in fade-in duration-500 delay-300">
             <img
               src="/indi_dog.svg"
               alt="India"
-              className="w-full h-auto rounded-r-md border border-border/20 border-l-0"
+              className="w-full h-auto rounded-r-md border border-border/10 border-l-0"
             />
           </div>
         </div>

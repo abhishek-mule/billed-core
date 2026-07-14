@@ -1,10 +1,43 @@
-// authority:deferred-authoritative offline_sync_debt — Dexie→Supabase client sync
+// authority:deferred-authoritative offline_sync_debt — Dexie→Supabase sync via API proxy
 // Mutates authoritative tables (invoices, payments, tenants) without authority governance.
 // Constitutional debt acknowledged — requires Dexie→authority ingress architecture.
-import { createClient } from '@supabase/supabase-js'
 import { db, notifyChanged } from './db'
 import { getTenantId } from './tenant'
 import type { QueueItem, Invoice, Payment, WhatsAppEvent, RecoveryCase, RecoveryAttribution } from './types'
+
+const SYNC_PROXY = '/api/sync/proxy'
+
+async function proxyUpsert(table: string, records: Record<string, unknown>[]): Promise<{ id: string; ok: boolean; status?: number; error?: string }[]> {
+  try {
+    const res = await fetch(SYNC_PROXY, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', table, records }),
+    })
+    const body = await res.json()
+    if (!res.ok && !body.results) throw new Error(body.error || `HTTP ${res.status}`)
+    return body.results || []
+  } catch (err: any) {
+    return records.map((r) => ({ id: (r.id as string) || 'unknown', ok: false, error: err.message }))
+  }
+}
+
+async function proxyReconcile(table: string, tenantId: string, since: string): Promise<{ data?: any[]; error?: string }> {
+  try {
+    const res = await fetch(SYNC_PROXY, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reconcile', table, tenantId, since }),
+    })
+    const body = await res.json()
+    if (!res.ok) return { error: body.error || `HTTP ${res.status}` }
+    return { data: body.data || [] }
+  } catch (err: any) {
+    return { error: err.message }
+  }
+}
 
 const MAX_DELAY_MS = 10 * 60 * 1000
 const RECONCILE_TABLES = ['invoices', 'payments', 'customers', 'whatsapp_events', 'recovery_cases', 'recovery_attributions'] as const
@@ -162,8 +195,6 @@ export async function syncPendingQueue() {
     const tenantId = getTenantId()
     if (!tenantId) return
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     const due = new Date().toISOString()
     const pending = await db()
       .queue.where('[tenantId+status]')
@@ -172,12 +203,6 @@ export async function syncPendingQueue() {
       .sortBy('createdAt')
 
     if (pending.length === 0) return
-    if (!url || !key) {
-      await markDeferred(pending, 'Supabase env missing')
-      return
-    }
-
-    const supabase = createClient(url, key)
 
     for (const item of pending) {
       const current = await db().queue.get(item.id)
@@ -189,40 +214,31 @@ export async function syncPendingQueue() {
 
       await db().queue.update(item.id, { status: 'syncing', attempts: current.attempts + 1, updatedAt: new Date().toISOString() })
 
-      if (item.action === 'send_whatsapp') {
-        const { error: waError } = await supabase.from('recovery_attempts').upsert(serializeQueuePayload(item) as Record<string, unknown>, { onConflict: 'id' })
-        if (!waError) {
-          await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
-        } else {
-          const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
-          await db().queue.update(item.id, { status: 'failed', lastError: waError.message, nextAttemptAt, updatedAt: new Date().toISOString() })
-        }
-        continue
-      }
-
+      const table = item.action === 'send_whatsapp' ? 'recovery_attempts' : tableFor(item)
       const payload = serializeQueuePayload(item)
-      const { error, status } = await supabase.from(tableFor(item)).upsert(payload as Record<string, unknown>, { onConflict: 'id' })
-      if (!error) {
+      const results = await proxyUpsert(table, [payload as Record<string, unknown>])
+      const result = results[0]
+
+      if (result && result.ok) {
         await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
-        
+
         // Payment entities: emit payment.completed so the worker processes it
         // Skip negative amounts (reversals) — worker handles those separately
         if (item.entity === 'payment' && (item.payload as any)?.amount > 0) {
           const p = item.payload as any
           syncPaymentEvent(p).catch(() => {})
         }
-        
-        continue
+      } else {
+        const conflict = result?.status === 409
+        const errMsg = result?.error || 'Sync failed'
+        const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
+        await db().queue.update(item.id, {
+          status: conflict ? 'conflict' : 'failed',
+          lastError: errMsg,
+          nextAttemptAt,
+          updatedAt: new Date().toISOString(),
+        })
       }
-
-      const conflict = status === 409 || error.code === '23505'
-      const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
-      await db().queue.update(item.id, {
-        status: conflict ? 'conflict' : 'failed',
-        lastError: error.message,
-        nextAttemptAt,
-        updatedAt: new Date().toISOString(),
-      })
     }
     notifyChanged()
   } finally {
@@ -242,11 +258,6 @@ export async function reconcileFromServer() {
   if (!tenantId) return
   if ((navigator as any).onLine === false) return
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) return
-
-  const supabase = createClient(url, key)
   const since = getLastReconciledAt()
   let newestTs = since
 
@@ -261,12 +272,7 @@ export async function reconcileFromServer() {
   }
 
   for (const table of RECONCILE_TABLES) {
-    const { data: rows, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .gt('updated_at', since)
-      .order('updated_at', { ascending: true })
+    const { data: rows, error } = await proxyReconcile(table, tenantId, since)
 
     if (error || !rows || rows.length === 0) continue
 
@@ -436,20 +442,6 @@ async function syncPaymentEvent(p: any): Promise<boolean> {
     console.warn('[SyncPaymentEvent] Network error:', err)
     return false
   }
-}
-
-async function markDeferred(items: QueueItem[], reason: string) {
-  const nextAttemptAt = new Date(Date.now() + 30_000).toISOString()
-  await Promise.all(
-    items.map((item) =>
-      db().queue.update(item.id, {
-        status: 'failed',
-        lastError: reason,
-        nextAttemptAt,
-        updatedAt: new Date().toISOString(),
-      })
-    )
-  )
 }
 
 function normalizePayload(payload: unknown): unknown {
