@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, ShieldCheck, Lock, ArrowRight } from "lucide-react"
+import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, Lock, ArrowRight } from "lucide-react"
 
 // ── Fonts ──
 // Fraunces: a warm, editorial display serif — carries the "ledger / paper" personality.
@@ -181,8 +181,7 @@ function MagicLinkForm() {
           </button>
           <div className="flex items-center justify-center gap-4 text-[10px] font-body text-muted-foreground pt-1">
             <span className="flex items-center gap-1"><Lock className="w-3 h-3" />Passwordless</span>
-            <span className="flex items-center gap-1"><Zap className="w-3 h-3" />Offline First</span>
-            <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" />Secure</span>
+
           </div>
         </form>
       )}
@@ -600,7 +599,7 @@ export default function AuthPage() {
               alt="India"
               width={350}
               height={190}
-              className="rounded-r-md pr-1 shadow-sm hover:scale-105 transition-all duration-300 border border-border/30 border-l-0"
+              className="rounded-r-md pr-1 shadow-sm border border-border/30 border-l-0"
             />
           </div>
         </div>
