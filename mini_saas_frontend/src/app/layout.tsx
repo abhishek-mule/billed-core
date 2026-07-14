@@ -14,7 +14,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Billzo | Money Recovery Console',
   description: 'Automate your daily cash recovery.',
-  manifest: '/manifest.json',
+  manifest: '/manifest.json?v=2',
 };
 
 export const viewport: Viewport = {
