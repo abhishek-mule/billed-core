@@ -595,7 +595,7 @@ export default function AuthPage() {
           {/* India map watermark at leftmost side */}
           <div className="absolute left-0 bottom-8 animate-in fade-in duration-500 delay-300">
             <img
-              src="/indi_up.png"
+              src="/indi_dog.svg"
               alt="India"
               width={350}
               height={190}
