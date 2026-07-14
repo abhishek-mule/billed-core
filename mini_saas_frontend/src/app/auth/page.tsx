@@ -596,11 +596,11 @@ export default function AuthPage() {
           {/* India map watermark at leftmost side */}
           <div className="absolute left-0 bottom-8 animate-in fade-in duration-500 delay-300">
             <img
-              src="/indi_up.svg"
+              src="/indi_up.png"
               alt="India"
               width={350}
               height={190}
-              className="bg-white rounded-r-md pr-1 shadow-sm opacity-60 hover:opacity-100 transition-all duration-300 hover:scale-105 border border-border/30 border-l-0"
+              className="rounded-r-md pr-1 shadow-sm hover:scale-105 transition-all duration-300 border border-border/30 border-l-0"
             />
           </div>
         </div>
