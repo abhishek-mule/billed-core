@@ -1,22 +1,18 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import Lottie, { type LottieRefCurrentProps } from 'lottie-react'
-import animationData from '@/lib/billzo/splash-animation.json'
+import { useEffect, useState } from 'react'
 
 interface SplashScreenProps {
   onComplete: () => void
 }
 
 export function SplashScreen({ onComplete }: SplashScreenProps) {
-  const lottieRef = useRef<LottieRefCurrentProps>(null)
   const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter')
 
   useEffect(() => {
-    lottieRef.current?.setSpeed(3)
     const t1 = setTimeout(() => setPhase('visible'), 80)
-    const t2 = setTimeout(() => setPhase('exit'), 1000)
-    const t3 = setTimeout(() => onComplete(), 1200)
+    const t2 = setTimeout(() => setPhase('exit'), 1600)
+    const t3 = setTimeout(() => onComplete(), 2000)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
   }, [onComplete])
 
@@ -25,17 +21,17 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background transition-opacity duration-300"
       style={{ opacity: phase === 'exit' ? 0 : 1 }}
     >
-      <div className="w-48 h-48 md:w-56 md:h-56"
+      <div
+        className="w-48 h-48 md:w-56 md:h-56"
         style={{
           opacity: phase === 'enter' ? 0 : 1,
           transform: `scale(${phase === 'enter' ? 0.9 : 1})`,
           transition: 'opacity 0.35s ease-out, transform 0.35s ease-out',
         }}
       >
-        <Lottie
-          lottieRef={lottieRef}
-          animationData={animationData}
-          loop={false}
+        <img
+          src="/animated_splash.svg"
+          alt="BillZo"
           className="w-full h-full"
         />
       </div>
