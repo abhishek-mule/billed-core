@@ -6,13 +6,18 @@ vi.mock('@/lib/billzo/tenant', () => ({
 }))
 
 let mockServerData: Record<string, any[]> = {}
-const mockSupabaseFrom = vi.fn()
 
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    from: mockSupabaseFrom,
-  })),
-}))
+const originalFetch = globalThis.fetch
+let fetchMock: ReturnType<typeof vi.fn>
+
+beforeEach(() => {
+  fetchMock = vi.fn()
+  globalThis.fetch = fetchMock
+})
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+})
 
 let dexieInvoices: Map<string, any> = new Map()
 let dexiePayments: Map<string, any> = new Map()
@@ -71,20 +76,24 @@ function setupServerResponse(rows: any[]) {
     if (!mockServerData[table]) mockServerData[table] = []
     mockServerData[table].push(row)
   }
-  mockSupabaseFrom.mockImplementation((table: string) => ({
-    select: () => ({
-      eq: () => ({
-        gt: () => ({
-          order: () => ({
-            then: (resolve: any) => resolve({
-              data: mockServerData[table] || null,
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    }),
-  }))
+  fetchMock.mockImplementation(async (url: string, opts?: any) => {
+    if (url === '/api/sync/proxy') {
+      const body = JSON.parse(opts?.body || '{}')
+      if (body.action === 'reconcile') {
+        return {
+          ok: true,
+          json: async () => ({ data: mockServerData[body.table] || [] }),
+        }
+      }
+      if (body.action === 'upsert') {
+        return {
+          ok: true,
+          json: async () => ({ results: body.records.map((r: any) => ({ id: r.id, ok: true })) }),
+        }
+      }
+    }
+    return { ok: false, json: async () => ({ error: 'not mocked' }) }
+  })
 }
 
 const TENANT_ID = 'tenant_test_rec'
@@ -202,13 +211,12 @@ describe('reconcileFromServer', () => {
     Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
     const { syncAndReconcile } = await import('@/lib/billzo/sync')
     await syncAndReconcile()
-    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('skips when Supabase env not set', async () => {
+  it('handles gracefully when Supabase env not set', async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     const { syncAndReconcile } = await import('@/lib/billzo/sync')
-    await syncAndReconcile()
-    expect(mockSupabaseFrom).not.toHaveBeenCalled()
+    await expect(syncAndReconcile()).resolves.toBeUndefined()
   })
 })
