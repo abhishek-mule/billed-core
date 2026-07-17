@@ -26,7 +26,7 @@ import { recoveryCapabilities } from './src/lib/authority/recovery-capabilities'
 import { gstrCapabilities } from './src/lib/authority/gstr-capabilities'
 import { MutationGate } from './src/lib/mutation-gate'
 import { OutboxListener } from './src/lib/spine/outbox-listener'
-import { TransportRegistry, BaileysAdapter, GupshupAdapter, SimulationAdapter } from './src/lib/transport'
+import { TransportRegistry, BaileysAdapter, GupshupAdapter, MetaAdapter, SimulationAdapter } from './src/lib/transport'
 import { setTransportRegistry } from './lib/whatsapp-router'
 import { applyOverride } from './src/lib/recovery/override-handler'
 import { getQrCode } from './stores/baileys-qr'
@@ -103,8 +103,8 @@ function startHealthServer(runtime: AuthorityRuntime) {
       } else if (qr) {
         res.writeHead(200, cors)
         res.end(JSON.stringify({
-          status: 'awaiting_code',
-          pairingCode,
+          status: 'awaiting_scan',
+          qr,
           connectionState: state?.connectionState ?? 'disconnected',
           health: state,
         }))
@@ -256,6 +256,7 @@ async function main() {
   transportRegistry.register(new BaileysAdapter())
   transportRegistry.register(new GupshupAdapter())
   transportRegistry.register(new SimulationAdapter())
+  transportRegistry.register(new MetaAdapter())
   setTransportRegistry(transportRegistry)
 
   function wrapWithGate(client: { submit: Function }): { submit: Function } {
