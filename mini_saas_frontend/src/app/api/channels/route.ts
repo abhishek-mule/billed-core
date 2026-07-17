@@ -6,8 +6,8 @@ import { validateJsonBody } from '@/lib/billzo/api-middleware'
 export const dynamic = 'force-dynamic'
 
 const ALLOWED_CHANNEL_TYPES = ['whatsapp', 'sms', 'email']
-const ALLOWED_PROVIDERS = ['gupshup', 'twilio', 'msg91']
-const ALLOWED_CONFIG_KEYS = ['api_key', 'app_name', 'source_number', 'webhook_url', 'template_id', 'sender_id']
+const ALLOWED_PROVIDERS = ['gupshup', 'twilio', 'msg91', 'meta']
+const ALLOWED_CONFIG_KEYS = ['api_key', 'app_name', 'source_number', 'webhook_url', 'template_id', 'sender_id', 'accessToken', 'phoneNumberId', 'wabaId']
 
 export async function GET(request: NextRequest) {
   try {

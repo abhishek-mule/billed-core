@@ -1,5 +1,6 @@
 export { TransportRegistry } from './registry'
 export { BaileysAdapter } from './adapters/baileys-adapter'
 export { GupshupAdapter } from './adapters/gupshup-adapter'
+export { MetaAdapter } from './adapters/meta-adapter'
 export { SimulationAdapter } from './adapters/simulation-adapter'
 export type { TransportAdapter, OutboundMessage, SendResult, ChannelHealth, ConnectionState } from './types'
