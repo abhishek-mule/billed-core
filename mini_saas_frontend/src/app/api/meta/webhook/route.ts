@@ -44,10 +44,11 @@ raw_challenge=${rawChallenge}`,
   )
 }
 
-// POST — Meta may send verification via POST as well
+// POST — Incoming messages, status updates, and form-encoded verification
 export async function POST(request: NextRequest) {
-  // Check if this is a verification request (form-encoded body)
   const contentType = request.headers.get('content-type') || ''
+
+  // Form-encoded verification (some Meta flows use this)
   if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
     const formData = await request.formData()
     const mode = formData.get('hub.mode')
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     const challenge = formData.get('hub.challenge')
 
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('[MetaWebhook] Verified via POST', { mode, token })
+      console.log('[MetaWebhook] Verified via POST form', { mode, token })
       return new Response(challenge as string, {
         status: 200,
         headers: { 'Content-Type': 'text/plain' },
@@ -63,18 +64,16 @@ export async function POST(request: NextRequest) {
     }
 
     return new Response(
-      `Verification failed (POST form).
-mode=${mode}
-token=${token}
-challenge=${challenge}
-expected_token=${VERIFY_TOKEN}`,
+      `Verification failed (POST form).\nmode=${mode}\ntoken=${token}\nchallenge=${challenge}\nexpected_token=${VERIFY_TOKEN}`,
       { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
     )
   }
 
-  // Also try raw JSON body for verification
+  // JSON body — either webhook event or JSON verification request
   try {
     const body = await request.json()
+
+    // Check for JSON-based verification (legacy/alternate flow)
     if (body?.hub?.mode === 'subscribe' && body?.hub?.verify_token === VERIFY_TOKEN) {
       const challenge = body?.hub?.challenge
       if (challenge) {
@@ -82,16 +81,9 @@ expected_token=${VERIFY_TOKEN}`,
         return new Response(String(challenge), { status: 200, headers: { 'Content-Type': 'text/plain' } })
       }
     }
-  } catch {
-    // Not JSON or not a verification request — proceed as normal message
-  }
 
-  // Normal message/status POST handling
-  try {
-  try {
-    const body = await request.json()
+    // Normal webhook event
     const entries = body?.entry
-
     if (!entries || !Array.isArray(entries)) {
       return NextResponse.json({ status: 'ok' })
     }
@@ -105,13 +97,11 @@ expected_token=${VERIFY_TOKEN}`,
         const phoneNumberId = value.metadata?.phone_number_id
         if (!phoneNumberId) continue
 
-        // Process status updates
         const statuses = value.statuses || []
         for (const status of statuses) {
           await handleStatusUpdate(phoneNumberId, status)
         }
 
-        // Process inbound messages
         const messages = value.messages || []
         for (const msg of messages) {
           await handleInboundMessage(phoneNumberId, msg)
@@ -122,7 +112,7 @@ expected_token=${VERIFY_TOKEN}`,
     return NextResponse.json({ status: 'ok' })
   } catch (err: any) {
     console.error('[MetaWebhook] Error:', err.message)
-    return NextResponse.json({ status: 'ok' }) // Always return 200 to Meta
+    return NextResponse.json({ status: 'ok' })
   }
 }
 
