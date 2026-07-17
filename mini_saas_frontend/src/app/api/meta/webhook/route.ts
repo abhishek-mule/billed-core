@@ -28,8 +28,9 @@ async function insertEvent(payload: Record<string, any>) {
 
 async function upsertEvent(payload: Record<string, any>, conflictColumn: string) {
   if (!SERVICE_ROLE_KEY) {
-    console.error('[MetaWebhook] SUPABASE_SERVICE_ROLE_KEY not set')
-    return
+    const msg = 'SUPABASE_SERVICE_ROLE_KEY not set'
+    console.error('[MetaWebhook] ' + msg)
+    throw new Error(msg)
   }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events?on_conflict=${conflictColumn}`, {
     method: 'POST',
@@ -43,7 +44,7 @@ async function upsertEvent(payload: Record<string, any>, conflictColumn: string)
   })
   if (!res.ok) {
     const body = await res.text()
-    console.error('[MetaWebhook] DB upsert failed:', res.status, body)
+    throw new Error(`DB upsert failed (${res.status}): ${body}`)
   }
 }
 
@@ -72,6 +73,8 @@ export async function GET(request: NextRequest) {
   }
 
   console.warn('[MetaWebhook] Verification failed', { mode, token, url, rawQuery })
+  const hasKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+  const keyPreview = hasKey ? process.env.SUPABASE_SERVICE_ROLE_KEY!.substring(0, 20) + '...' : 'MISSING'
   return new Response(
     `Verification failed.
 mode=${mode}
@@ -83,7 +86,9 @@ url=${url}
 method=GET
 raw_mode=${rawMode}
 raw_token=${rawToken}
-raw_challenge=${rawChallenge}`,
+raw_challenge=${rawChallenge}
+has_svc_key=${hasKey}
+key_preview=${keyPreview}`,
     { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
   )
 }
