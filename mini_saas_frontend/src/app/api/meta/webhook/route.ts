@@ -123,9 +123,9 @@ async function handleStatusUpdate(phoneNumberId: string, status: any) {
       id: status.id,
       provider_message_id: status.id,
       status: mapMetaStatus(status.status),
-      recipient_id: status.recipient_id,
+      phone: status.recipient_id,
       occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
-      errors: status.errors ? JSON.stringify(status.errors) : null,
+      error: status.errors ? JSON.stringify(status.errors) : null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'provider_message_id' })
 
@@ -138,14 +138,14 @@ async function handleInboundMessage(phoneNumberId: string, msg: any) {
   const { error } = await supabaseAdmin
     .from('whatsapp_events')
     .insert({
+      id: msg.id,
       provider_message_id: msg.id,
-      from_number: msg.from,
+      phone: msg.from,
       message_type: msg.type || 'unknown',
-      message_body: msg.text?.body || null,
+      message_preview: msg.text?.body || null,
       direction: 'inbound',
       status: 'received',
       occurred_at: new Date(Number(msg.timestamp) * 1000).toISOString(),
-      created_at: new Date().toISOString(),
     })
 
   if (error) {
