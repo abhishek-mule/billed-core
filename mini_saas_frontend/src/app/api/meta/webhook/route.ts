@@ -8,9 +8,16 @@ const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'billzo_meta_verif
 // GET — Webhook verification (Meta sends this during setup)
 export async function GET(request: NextRequest) {
   const url = request.url
+  const rawQuery = request.nextUrl.search
   const mode = request.nextUrl.searchParams.get('hub.mode')
   const token = request.nextUrl.searchParams.get('hub.verify_token')
   const challenge = request.nextUrl.searchParams.get('hub.challenge')
+
+  // Also try reading from the raw query string
+  const rawParams = new URLSearchParams(rawQuery)
+  const rawMode = rawParams.get('hub.mode')
+  const rawToken = rawParams.get('hub.verify_token')
+  const rawChallenge = rawParams.get('hub.challenge')
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
     console.log('[MetaWebhook] Verified successfully', { url })
@@ -20,15 +27,67 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  console.warn('[MetaWebhook] Verification failed', { mode, token, url })
+  console.warn('[MetaWebhook] Verification failed', { mode, token, url, rawQuery })
   return new Response(
-    `Verification failed.\nmode=${mode}\ntoken=${token}\nchallenge=${challenge}\nexpected_token=${VERIFY_TOKEN}\nurl=${url}`,
-    { status: 403, headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' } },
+    `Verification failed.
+mode=${mode}
+token=${token}
+challenge=${challenge}
+expected_token=${VERIFY_TOKEN}
+raw_query=${rawQuery}
+url=${url}
+method=GET
+raw_mode=${rawMode}
+raw_token=${rawToken}
+raw_challenge=${rawChallenge}`,
+    { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
   )
 }
 
-// POST — Incoming messages and status updates
+// POST — Meta may send verification via POST as well
 export async function POST(request: NextRequest) {
+  // Check if this is a verification request (form-encoded body)
+  const contentType = request.headers.get('content-type') || ''
+  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+    const formData = await request.formData()
+    const mode = formData.get('hub.mode')
+    const token = formData.get('hub.verify_token')
+    const challenge = formData.get('hub.challenge')
+
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log('[MetaWebhook] Verified via POST', { mode, token })
+      return new Response(challenge as string, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      })
+    }
+
+    return new Response(
+      `Verification failed (POST form).
+mode=${mode}
+token=${token}
+challenge=${challenge}
+expected_token=${VERIFY_TOKEN}`,
+      { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
+    )
+  }
+
+  // Also try raw JSON body for verification
+  try {
+    const body = await request.json()
+    if (body?.hub?.mode === 'subscribe' && body?.hub?.verify_token === VERIFY_TOKEN) {
+      const challenge = body?.hub?.challenge
+      if (challenge) {
+        console.log('[MetaWebhook] Verified via JSON POST', body)
+        return new Response(String(challenge), { status: 200, headers: { 'Content-Type': 'text/plain' } })
+      }
+    }
+  } catch {
+    // Not JSON or not a verification request — proceed as normal message
+  }
+
+  // Normal message/status POST handling
+  try {
   try {
     const body = await request.json()
     const entries = body?.entry
