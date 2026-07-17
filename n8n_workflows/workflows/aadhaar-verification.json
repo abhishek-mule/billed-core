@@ -7,7 +7,9 @@
         "path": "verify-aadhaar",
         "responseMode": "responseNode",
         "options": {}
-      },
+      }
+      
+      ,
       "id": "webhook-initiate",
       "name": "Webhook - Initiate",
       "type": "n8n-nodes-base.webhook",

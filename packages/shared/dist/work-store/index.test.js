@@ -90,12 +90,12 @@ function getActivitySection(sections) {
             const { sections } = await store.getDashboard();
             const cashSection = getCashSection(sections);
             (0, vitest_1.expect)(cashSection?.payload.metrics).toHaveLength(3);
-            const outstanding = cashSection?.payload.metrics.find(m => m.label === 'Outstanding');
-            const collectedToday = cashSection?.payload.metrics.find(m => m.label === 'Collected Today');
+            const outstanding = cashSection?.payload.metrics.find(m => m.label === 'Money to Collect');
+            const collectedToday = cashSection?.payload.metrics.find(m => m.label === 'Received Today');
             const expectedToday = cashSection?.payload.metrics.find(m => m.label === 'Expected Today');
-            (0, vitest_1.expect)(outstanding?.value).toContain('15,000');
-            (0, vitest_1.expect)(collectedToday?.value).toContain('5,000');
-            (0, vitest_1.expect)(expectedToday?.value).toContain('15,000');
+            (0, vitest_1.expect)(outstanding?.value).toBe('₹15,000');
+            (0, vitest_1.expect)(collectedToday?.value).toBe('₹5,000');
+            (0, vitest_1.expect)(expectedToday?.value).toBe('₹15,000');
         });
         (0, vitest_1.it)('builds activity in activity section from recent events', async () => {
             const store = (0, index_1.createWorkStore)(mockDeps());
@@ -113,7 +113,7 @@ function getActivitySection(sections) {
             const todaySection = getTodaySection(sections);
             (0, vitest_1.expect)(todaySection?.payload.items).toHaveLength(0);
             (0, vitest_1.expect)(todaySection?.payload.empty).toBeDefined();
-            (0, vitest_1.expect)(todaySection?.payload.empty?.headline).toBe("Today's work is complete");
+            (0, vitest_1.expect)(todaySection?.payload.empty?.headline).toContain("Recovering");
             const cashSection = getCashSection(sections);
             (0, vitest_1.expect)(cashSection?.payload.metrics).toHaveLength(3);
             const activitySection = getActivitySection(sections);
