@@ -26,13 +26,13 @@ async function insertEvent(payload: Record<string, any>) {
   }
 }
 
-async function upsertEvent(payload: Record<string, any>, conflictColumn: string) {
+async function upsertEvent(payload: Record<string, any>) {
   if (!SERVICE_ROLE_KEY) {
     const msg = 'SUPABASE_SERVICE_ROLE_KEY not set'
     console.error('[MetaWebhook] ' + msg)
     throw new Error(msg)
   }
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events?on_conflict=${conflictColumn}`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -42,6 +42,24 @@ async function upsertEvent(payload: Record<string, any>, conflictColumn: string)
     },
     body: JSON.stringify(payload),
   })
+  if (res.status === 409) {
+    // Conflict — update existing row
+    const id = payload.id
+    const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!updateRes.ok) {
+      const body = await updateRes.text()
+      throw new Error(`DB update failed (${updateRes.status}): ${body}`)
+    }
+    return
+  }
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`DB upsert failed (${res.status}): ${body}`)
@@ -174,7 +192,7 @@ async function handleStatusUpdate(phoneNumberId: string, status: any) {
     occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
     error: status.errors ? JSON.stringify(status.errors) : null,
     updated_at: new Date().toISOString(),
-  }, 'provider_message_id')
+  })
 }
 
 async function handleInboundMessage(phoneNumberId: string, msg: any) {
