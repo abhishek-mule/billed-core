@@ -45,6 +45,7 @@ export const EventType = {
   WHATSAPP_INBOUND: 'whatsapp.inbound',
   SEND_MESSAGE_INTENDED: 'send_message.intended',
   SEND_MESSAGE_EXECUTED: 'send_message.executed',
+  MESSAGE_EVENT: 'message.event',
 
   // Sync
   SYNC_COMPLETED: 'sync.completed',

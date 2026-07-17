@@ -141,6 +141,7 @@ const HANDLER_LANES: LaneHandler[] = [
   // TRANSPORT LANE — Physical delivery truth
   { lane: 'transport', priority: 0, name: 'tryHandleSendMessageIntent', handle: tryHandleSendMessageIntent },
   { lane: 'transport', priority: 1, name: 'tryHandleTransportProjection', handle: tryHandleTransportProjection },
+  { lane: 'transport', priority: 2, name: 'applyMessageProjection', handle: applyMessageProjection },
 
   // BEHAVIOR LANE — Observation interpretation → behavioral memory
   { lane: 'behavior', priority: 1, name: 'tryHandleObservationInterpreter', handle: tryHandleObservationInterpreter },
@@ -288,6 +289,75 @@ async function tryHandleTransportProjection(event: any): Promise<void> {
   }
   if (event.type === 'whatsapp.upi_clicked') {
     await handleUpiClicked(event)
+  }
+}
+
+// ============================================================
+// MESSAGE EVENT PROJECTION — message.event → collection_actions + customers
+// ============================================================
+async function applyMessageProjection(event: any): Promise<void> {
+  if (event.type !== 'message.event') return
+
+  const payload = event.payload || {}
+  const billzoMessageId = payload.billzo_message_id as string | undefined
+  if (!billzoMessageId) return
+
+  const status = payload.status as string
+  const occurredAt = payload.occurred_at as string
+
+  // Resolve collection_action by billzo_message_id
+  const { data: actions } = await supabaseAdmin
+    .from('collection_actions')
+    .select('id, tenant_id, customer_id, last_event_at')
+    .eq('billzo_message_id', billzoMessageId)
+    .limit(1)
+
+  if (actions && actions.length > 0) {
+    const action = actions[0]
+
+    // Only update if the new event is newer than what we've seen
+    const lastEventAt = action.last_event_at
+    if (lastEventAt && occurredAt <= lastEventAt) {
+      logger.debug({ billzoMessageId, status, occurredAt, lastEventAt }, 'Skipping projection: event older than last seen')
+      return
+    }
+
+    const updates: Record<string, any> = {
+      last_delivery_status: status,
+      last_event_at: occurredAt,
+      delivery_provider: payload.provider || 'meta',
+      updated_at: new Date().toISOString(),
+    }
+
+    if (status === 'delivered') updates.delivered_at = occurredAt
+    if (status === 'read') updates.read_at = occurredAt
+    if (status === 'failed') updates.failed_at = occurredAt
+
+    await supabaseAdmin
+      .from('collection_actions')
+      .update(updates)
+      .eq('id', action.id)
+      .then(() => {}, () => {})
+
+    // Update customers projection
+    const customerId = action.customer_id
+    if (customerId && action.tenant_id) {
+      const customerUpdates: Record<string, any> = {
+        last_whatsapp_activity: occurredAt,
+        last_whatsapp_status: status,
+        updated_at: new Date().toISOString(),
+      }
+      if (status === 'delivered' || status === 'read' || status === 'sent') {
+        customerUpdates.last_contacted_at = occurredAt
+      }
+      await supabaseAdmin
+        .from('customers')
+        .update(customerUpdates)
+        .eq('id', customerId)
+        .then(() => {}, () => {})
+    }
+  } else {
+    logger.debug({ billzoMessageId, status }, 'No collection_action found for message.event — may be test message')
   }
 }
 
