@@ -33,7 +33,7 @@ export function createMetaClient(config: MetaConfig) {
 
     getTemplates(): Promise<{ data: any[] }> {
       const url = `https://graph.facebook.com/${config.apiVersion || DEFAULT_API_VERSION}/${config.wabaId}/message_templates`
-      return fetch(url, { headers }).then((r) => r.json())
+      return fetch(url, { headers }).then((r) => r.json() as Promise<{ data: any[] }>)
     },
 
     createTemplate(name: string, category: string, components: any[], language: string): Promise<any> {
