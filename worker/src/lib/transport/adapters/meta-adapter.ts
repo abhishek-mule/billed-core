@@ -1,7 +1,7 @@
 import type { TransportAdapter, OutboundMessage, SendResult, ChannelHealth } from '../types'
 import { supabaseAdmin } from '../../billzo/supabase-admin'
 
-const DEFAULT_API_VERSION = 'v22.0'
+const DEFAULT_API_VERSION = 'v25.0'
 const MESSAGING_PRODUCT = 'whatsapp'
 
 export class MetaAdapter implements TransportAdapter {
