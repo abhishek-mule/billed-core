@@ -2,67 +2,43 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState, useEffect, useRef } from 'react'
-import { syncSessionFromCookies } from '@/lib/billzo/tenant'
+import { useState, useEffect } from 'react'
 import {
-  Search, Home, ShoppingCart,
-  Users, Package, Settings, FileText,
-  Menu, LogOut, PanelLeftClose, PanelLeft,
-  User, HelpCircle, IndianRupee, Plus, X,
-  UserPlus, CreditCard,
+  Bell, Search, Home, ShoppingCart, Receipt, TrendingUp, Activity,
+  Users, Package, BarChart3, Settings, MoreHorizontal, Menu,
+  LogOut, ChevronDown, WifiOff,
 } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
+import '@/styles/app-shell.css'
 
-// ─── Navigation structure ────────────────────────────────────────────────────
-// Product doctrine: flat IA around merchant intent, not internal modules.
+// ─── Nav config ──────────────────────────────────────────────────────────────
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home, activeOn: ['/dashboard'] },
-  { href: '/sales', label: 'Sales', icon: ShoppingCart, activeOn: ['/sales', '/pos', '/invoices', '/send'] },
-  { href: '/udhar', label: 'Udhar', icon: IndianRupee, activeOn: ['/udhar', '/recovery', '/pulse'] },
-  { href: '/parties', label: 'Customers', icon: Users, activeOn: ['/parties'] },
-  { href: '/products', label: 'Products', icon: Package, activeOn: ['/products'] },
-  { href: '/reports', label: 'Reports', icon: FileText, activeOn: ['/reports', '/cashflow'] },
-  { href: '/settings', label: 'Settings', icon: Settings, activeOn: ['/settings'] },
+const NAV_WORKSPACE = [
+  { href: '/dashboard', label: 'Home',     icon: Home         },
+  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp   },
+  { href: '/pulse',     label: 'Payments', icon: Activity     },
+  { href: '/invoices',  label: 'Invoices', icon: Receipt      },
+  { href: '/pos',       label: 'POS',      icon: ShoppingCart },
 ]
 
-const MODULE_NAMES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/sales': 'Sales',
-  '/pos': 'Sales',
-  '/invoices': 'Sales',
-  '/send': 'Sales',
-  '/udhar': 'Udhar',
-  '/recovery': 'Udhar',
-  '/pulse': 'Udhar',
-  '/parties': 'Customers',
-  '/products': 'Products',
-  '/reports': 'Reports',
-  '/cashflow': 'Reports',
-  '/settings': 'Settings',
-}
+const NAV_MANAGE = [
+  { href: '/parties',  label: 'Parties',  icon: Users    },
+  { href: '/products', label: 'Products', icon: Package  },
+  { href: '/reports',  label: 'Reports',  icon: BarChart3 },
+]
+
+const NAV_SYSTEM = [
+  { href: '/settings', label: 'Settings', icon: Settings },
+]
 
 const MOBILE_NAV = [
-  { href: '/dashboard', label: 'Home', icon: Home, primary: false, activeOn: ['/dashboard'] },
-  { href: '/sales', label: 'Sales', icon: ShoppingCart, primary: false, activeOn: ['/sales', '/pos', '/invoices', '/send'] },
-  { href: '/pos', label: 'New', icon: Plus, primary: true, activeOn: ['/pos'] },
-  { href: '/udhar', label: 'Udhar', icon: IndianRupee, primary: false, activeOn: ['/udhar', '/recovery', '/pulse'] },
-  { href: '/parties', label: 'Customers', icon: Users, primary: false, activeOn: ['/parties'] },
+  { href: '/dashboard', label: 'Home',     icon: Home,           primary: false },
+  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp,     primary: false },
+  { href: '/pos',       label: 'POS',      icon: ShoppingCart,   primary: true  },
+  { href: '/invoices',  label: 'Invoices', icon: Receipt,        primary: false },
+  { href: '/more',      label: 'More',     icon: MoreHorizontal, primary: false },
 ]
-
-const FAB_ACTIONS = [
-  { href: '/pos', label: 'New Invoice', icon: ShoppingCart },
-  { href: '/pulse', label: 'Receive Payment', icon: IndianRupee },
-  { href: '/parties/add', label: 'Add Customer', icon: UserPlus },
-  { href: '/products/add', label: 'Add Product', icon: Package },
-  { href: '/invoices', label: 'Payment Link', icon: CreditCard },
-  { href: '/dashboard', label: 'Search', icon: Search },
-]
-
-function isNavActive(pathname: string, href: string, activeOn?: string[]) {
-  return (activeOn || [href]).some(path => pathname === path || pathname.startsWith(`${path}/`))
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,317 +49,233 @@ function getCookie(name: string) {
 }
 
 function doLogout() {
-  ;['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id'].forEach(c =>
-    document.cookie = c + '=; Max-Age=0; path=/'
+  ;['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id'].forEach(
+    k => (document.cookie = `${k}=; Max-Age=0; path=/`)
   )
-  localStorage.removeItem('accessToken')
-  localStorage.removeItem('refreshToken')
-  localStorage.removeItem('tokenExpiry')
+  ;['accessToken', 'refreshToken', 'tokenExpiry'].forEach(k => localStorage.removeItem(k))
   window.location.href = '/auth'
+}
+
+function initials(name?: string) {
+  if (!name) return 'BZ'
+  const parts = name.trim().split(/\s+/)
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase()
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
+function NavSection({
+  label, items, pathname, collapsed,
+}: {
+  label: string
+  items: { href: string; label: string; icon: React.ElementType }[]
+  pathname: string
+  collapsed: boolean
+}) {
+  return (
+    <div className="bz-nav-section">
+      {!collapsed && <span className="bz-nav-section-label">{label}</span>}
+      {items.map(({ href, label, icon: Icon }) => {
+        const active = pathname.startsWith(href)
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn('bz-nav-item', active && 'bz-nav-item--active')}
+            aria-current={active ? 'page' : undefined}
+            title={collapsed ? label : undefined}
+          >
+            <Icon size={16} strokeWidth={1.75} className="bz-nav-icon" />
+            {!collapsed && <span className="bz-nav-label">{label}</span>}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
 function Sidebar({
-  pathname, collapsed, onToggle, onLogout, userName, userEmail,
+  pathname, collapsed, onToggle, onLogout, userName,
 }: {
   pathname: string
   collapsed: boolean
   onToggle: () => void
   onLogout: () => void
   userName?: string
-  userEmail?: string
 }) {
+  const ini = initials(userName)
+
   return (
-    <aside
-      className={cn(
-        'w-sidebar flex-shrink-0 hidden lg:flex flex-col bg-card border-r border-border transition-[width] duration-200 overflow-hidden',
-        collapsed && 'w-sidebar-collapsed',
-      )}
-    >
-      {/* Header */}
-      <div className="h-topbar flex items-center gap-3.5 px-3.5 border-b border-border flex-shrink-0">
-        <Link href="/dashboard" className="flex items-center gap-2 min-w-0 no-underline text-inherit" aria-label="BillZo">
-          <img src="/logo_new.png" alt="BillZo" className="w-[26px] h-[26px] object-contain shrink-0" />
-          {!collapsed && <span className="text-sm font-semibold tracking-tight whitespace-nowrap">BillZo</span>}
+    <aside className={cn('bz-sidebar', collapsed && 'bz-sidebar--collapsed')}>
+      <div className="bz-sidebar-header">
+        <Link href="/dashboard" className="bz-logo" aria-label="BillZo home">
+          <div className="bz-logo-mark">B</div>
+          {!collapsed && <span className="bz-logo-text">BillZo</span>}
         </Link>
-        <button
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={cn(
-            'flex items-center gap-2 h-8 rounded text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer whitespace-nowrap',
-            collapsed ? 'w-full justify-center' : 'ml-auto',
-          )}
-        >
-          {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
-        </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 scrollbar-none">
-        <div className="flex flex-col gap-0.5">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, activeOn }) => {
-            const active = isNavActive(pathname, href, activeOn)
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  'flex items-center gap-2 h-[34px] px-2 rounded text-xs font-medium text-muted-foreground no-underline whitespace-nowrap transition-colors hover:bg-secondary hover:text-foreground',
-                  active && 'bg-primary/10 text-primary font-semibold',
-                  collapsed && 'justify-center px-0',
-                )}
-                aria-current={active ? 'page' : undefined}
-              >
-                <Icon size={18} strokeWidth={collapsed ? 2 : 1.8} className="shrink-0" />
-                {!collapsed && <span className="overflow-hidden text-ellipsis">{label}</span>}
-              </Link>
-            )
-          })}
-        </div>
+      <nav className="bz-sidebar-nav">
+        <NavSection label="Workspace" items={NAV_WORKSPACE} pathname={pathname} collapsed={collapsed} />
+        <NavSection label="Manage"    items={NAV_MANAGE}    pathname={pathname} collapsed={collapsed} />
+        <NavSection label="System"    items={NAV_SYSTEM}    pathname={pathname} collapsed={collapsed} />
       </nav>
 
-      {/* Footer */}
-      <div className="flex-shrink-0 border-t border-border p-2 flex flex-col gap-0.5">
+      <div className="bz-sidebar-footer">
         <button
-          onClick={onLogout}
-          className={cn(
-            'flex items-center gap-2 w-full p-1.5 px-2 rounded text-left hover:bg-secondary transition-colors whitespace-nowrap cursor-pointer',
-            collapsed && 'justify-center',
-          )}
-          title="Sign out"
+          className="bz-collapse-btn"
+          onClick={onToggle}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand' : 'Collapse'}
         >
-          <div className="w-[26px] h-[26px] rounded shrink-0 overflow-hidden bg-primary/10 flex items-center justify-center text-xs font-bold text-primary border border-border">
-            <img
-              src={`https://api.dicebear.com/10.x/glyphs/svg?seed=${encodeURIComponent(userName || 'default')}`}
-              alt="avatar"
-              className="w-full h-full"
-            />
-          </div>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
+            className={cn('bz-collapse-icon', collapsed && 'bz-collapse-icon--flipped')}
+          >
+            <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {!collapsed && <span>Collapse</span>}
+        </button>
+
+        <button className="bz-user-row" onClick={onLogout} title="Sign out">
+          <div className="bz-user-avatar" aria-hidden="true">{ini}</div>
           {!collapsed && (
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <span className="text-xs font-semibold truncate block">{userName || 'My Shop'}</span>
-              <span className="text-[11px] text-muted-foreground truncate block">{userEmail || 'Sign out'}</span>
+            <div className="bz-user-info">
+              <span className="bz-user-name">{userName || 'My Shop'}</span>
             </div>
           )}
-          {!collapsed && <LogOut size={14} className="shrink-0 text-muted-foreground" />}
+          {!collapsed && <LogOut size={13} className="bz-logout-icon" />}
         </button>
       </div>
     </aside>
   )
 }
 
-// ─── TopBar ──────────────────────────────────────────────────────────────────
+// ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function TopBar({
-  onMobileMenu, userName, onLogout,
+  title, onMobileMenu, userName,
 }: {
+  title?: string
   onMobileMenu: () => void
   userName?: string
-  onLogout: () => void
 }) {
-  const pathname = usePathname()
-  const title = Object.entries(MODULE_NAMES).find(([path]) => pathname.startsWith(path))?.[1] || ''
-  const [showDropdown, setShowDropdown] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!showDropdown) return
-    const clickHandler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false)
-      }
-    }
-    const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowDropdown(false)
-    }
-    document.addEventListener('mousedown', clickHandler)
-    document.addEventListener('keydown', keyHandler)
-    return () => {
-      document.removeEventListener('mousedown', clickHandler)
-      document.removeEventListener('keydown', keyHandler)
-    }
-  }, [showDropdown])
-
+  const ini = initials(userName)
   return (
-    <header className="h-topbar flex-shrink-0 flex items-center gap-2 px-4 bg-card border-b border-border">
-      <div className="flex items-center gap-2.5 min-w-0 lg:hidden">
-        <button
-          onClick={onMobileMenu}
-          aria-label="Open menu"
-          className="flex items-center justify-center w-8 h-8 rounded text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-        >
-          <Menu size={16} />
+    <header className="bz-topbar">
+      <div className="bz-topbar-left">
+        <button className="bz-mobile-menu-btn" onClick={onMobileMenu} aria-label="Open menu">
+          <Menu size={18} />
         </button>
+        {title && <h1 className="bz-page-title">{title}</h1>}
       </div>
-      <h1 className="text-sm font-semibold truncate m-0">{title}</h1>
 
-      <div className="ml-auto flex items-center gap-1.5">
-        <div className="flex items-center gap-[7px] h-8 px-2.5 bg-secondary border border-border rounded-md cursor-text transition-colors focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15 min-w-0">
-          <Search size={14} className="shrink-0 text-muted-foreground" />
-          <input
-            className="flex-1 min-w-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-            placeholder="Search..."
-            aria-label="Search customers, invoices, products"
-          />
-          <kbd className="hidden sm:block text-[10.5px] font-mono text-muted-foreground bg-card border border-border px-1 rounded">⌘K</kbd>
-        </div>
+      <div className="bz-topbar-right">
+        <label className="bz-search" aria-label="Search">
+          <Search size={13} className="bz-search-icon" aria-hidden="true" />
+          <input className="bz-search-input" placeholder="Search…" aria-label="Search invoices, parties, products" />
+          <kbd className="bz-search-kbd" aria-hidden="true">⌘K</kbd>
+        </label>
 
-        <div className="relative">
-          <button
-            onClick={() => setShowDropdown(v => !v)}
-            aria-label="Profile menu"
-            aria-expanded={showDropdown}
-            className="w-[22px] h-[22px] rounded overflow-hidden shrink-0 ring-offset-2 ring-offset-card focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <img
-              src={`https://api.dicebear.com/10.x/glyphs/svg?seed=${encodeURIComponent(userName || 'default')}`}
-              alt="avatar"
-              className="w-full h-full"
-            />
-          </button>
+        <Link href="/pulse" className="bz-icon-btn" aria-label="Notifications">
+          <Bell size={16} />
+        </Link>
 
-          {showDropdown && (
-            <>
-              <div className="fixed inset-0 z-[90] bg-transparent" onClick={() => setShowDropdown(false)} />
-              <div
-                className="absolute top-[44px] right-0 z-[95] min-w-[180px] bg-card border border-border rounded-xl p-1 shadow-drawer dark:shadow-drawer-dark animate-fade-scale-in"
-                ref={dropdownRef}
-                role="menu"
-              >
-                <Link
-                  href="/settings"
-                  className="flex items-center gap-2 w-full px-2.5 py-[7px] rounded text-xs font-medium no-underline text-foreground hover:bg-secondary transition-colors"
-                  role="menuitem"
-                  onClick={() => setShowDropdown(false)}
-                >
-                  <User size={14} className="text-muted-foreground shrink-0" />
-                  Settings
-                </Link>
-                <Link
-                  href="/settings"
-                  className="flex items-center gap-2 w-full px-2.5 py-[7px] rounded text-xs font-medium no-underline text-foreground hover:bg-secondary transition-colors"
-                  role="menuitem"
-                  onClick={() => setShowDropdown(false)}
-                >
-                  <HelpCircle size={14} className="text-muted-foreground shrink-0" />
-                  Help & Support
-                </Link>
-                <div className="h-px bg-border my-[3px] mx-1.5" />
-                <button
-                  className="flex items-center gap-2 w-full px-2.5 py-[7px] rounded text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
-                  role="menuitem"
-                  onClick={() => { setShowDropdown(false); onLogout() }}
-                >
-                  <LogOut size={14} className="shrink-0" />
-                  Sign Out
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <button className="bz-org-btn" aria-label="Switch organisation">
+          <div className="bz-topbar-avatar" aria-hidden="true">{ini}</div>
+          <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
+          <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
+        </button>
       </div>
     </header>
   )
 }
 
-// ─── Mobile Drawer ───────────────────────────────────────────────────────────
+// ─── Mobile drawer ────────────────────────────────────────────────────────────
 
-function MobileDrawer({ open, onClose, pathname }: { open: boolean; onClose: () => void; pathname: string }) {
+function MobileDrawer({
+  open, onClose, pathname, userName,
+}: {
+  open: boolean
+  onClose: () => void
+  pathname: string
+  userName?: string
+}) {
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
   }, [open])
 
+  const allNav = [...NAV_WORKSPACE, ...NAV_MANAGE, ...NAV_SYSTEM]
+  const ini = initials(userName)
+
   return (
-    <div
-      className={cn(
-        'fixed inset-0 bg-black/35 opacity-0 pointer-events-none transition-opacity z-40',
-        open && 'opacity-100 pointer-events-auto',
-      )}
-      onClick={onClose}
-    >
-      <div
-        className={cn(
-          'fixed top-0 left-0 bottom-0 w-[260px] bg-card border-r border-border flex flex-col -translate-x-full transition-transform duration-300 z-50 will-change-transform',
-          open && 'translate-x-0',
-        )}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="h-topbar flex items-center justify-between px-3.5 border-b border-border flex-shrink-0">
-          <Link href="/dashboard" className="flex items-center gap-2 min-w-0 no-underline text-inherit" onClick={onClose}>
-            <img src="/logo_new.png" alt="BillZo" className="w-[26px] h-[26px] object-contain shrink-0" />
-            <span className="text-sm font-semibold tracking-tight">BillZo</span>
+    <>
+      <div className={cn('bz-drawer-backdrop', open && 'bz-drawer-backdrop--open')} onClick={onClose} aria-hidden="true" />
+      <div className={cn('bz-drawer', open && 'bz-drawer--open')} role="dialog" aria-modal="true" aria-label="Navigation menu">
+        <div className="bz-drawer-header">
+          <Link href="/dashboard" className="bz-logo" onClick={onClose}>
+            <div className="bz-logo-mark">B</div>
+            <span className="bz-logo-text">BillZo</span>
           </Link>
-          <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="flex items-center justify-center w-8 h-8 text-muted-foreground hover:bg-secondary hover:text-foreground rounded-md transition-colors no-scale"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          <button className="bz-icon-btn" onClick={onClose} aria-label="Close menu" style={{ border: 'none' }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-2.5 flex flex-col gap-0.5 scrollbar-none">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, activeOn }) => {
-            const active = isNavActive(pathname, href, activeOn)
+        <nav className="bz-drawer-nav">
+          {allNav.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href)
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={onClose}
-                className={cn(
-                  'flex items-center gap-2.5 h-[38px] px-2.5 rounded text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-secondary hover:text-foreground',
-                  active && 'bg-primary/10 text-primary font-semibold',
-                )}
+                className={cn('bz-nav-item', active && 'bz-nav-item--active')}
                 aria-current={active ? 'page' : undefined}
               >
-                <Icon size={16} strokeWidth={1.8} />
-                {label}
+                <Icon size={16} strokeWidth={1.75} className="bz-nav-icon" />
+                <span className="bz-nav-label">{label}</span>
               </Link>
             )
           })}
         </nav>
 
-        <div className="flex-shrink-0 border-t border-border p-3 px-2.5">
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-success" />
-            All synced · just now
-          </span>
+        <div className="bz-drawer-footer">
+          <div className="bz-user-row" style={{ cursor: 'default' }}>
+            <div className="bz-user-avatar">{ini}</div>
+            <div className="bz-user-info">
+              <span className="bz-user-name">{userName || 'My Shop'}</span>
+              <span className="bz-user-email" style={{ fontSize: 10.5 }}>All synced</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
-// ─── Bottom Nav (Mobile) ─────────────────────────────────────────────────────
+// ─── Bottom nav (mobile) ──────────────────────────────────────────────────────
 
 function BottomNav({ pathname }: { pathname: string }) {
   return (
-    <nav className="flex items-stretch h-bottom-nav bg-card border-t border-border pb-safe flex-shrink-0 lg:hidden">
-      {MOBILE_NAV.map(({ href, label, icon: Icon, primary, activeOn }) => {
-        const active = isNavActive(pathname, href, activeOn)
+    <nav className="bz-bottom-nav" aria-label="Main navigation">
+      {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
+        const active = pathname.startsWith(href)
         return (
           <Link
             key={href}
             href={href}
-            className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-[3px] text-[11px] font-medium text-muted-foreground no-underline py-1 relative transition-colors',
-              active && 'text-primary',
-              primary && 'text-primary',
-            )}
+            className={cn('bz-bottom-item', active && 'bz-bottom-item--active', primary && 'bz-bottom-item--primary')}
             aria-current={active ? 'page' : undefined}
           >
-            {primary
-              ? (
-                <span className="w-11 h-11 rounded-xl bg-primary text-white shadow-lg shadow-primary/25 flex items-center justify-center">
-                  <Icon size={20} strokeWidth={2} />
-                </span>
-              )
-              : <Icon size={18} strokeWidth={1.8} />
-            }
+            {primary ? (
+              <span className="bz-bottom-fab" aria-hidden="true"><Icon size={20} strokeWidth={2} /></span>
+            ) : (
+              <Icon size={19} strokeWidth={1.75} aria-hidden="true" />
+            )}
             <span>{label}</span>
           </Link>
         )
@@ -392,197 +284,103 @@ function BottomNav({ pathname }: { pathname: string }) {
   )
 }
 
-function FloatingActionMenu() {
-  const [open, setOpen] = useState(false)
+// ─── Logout modal ─────────────────────────────────────────────────────────────
 
+function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   return (
-    <div className="fixed right-5 bottom-[calc(var(--bottom-nav-h)+1.25rem)] lg:bottom-6 z-30">
-      {open && (
-        <>
-          <button
-            aria-label="Close quick actions"
-            className="fixed inset-0 bg-transparent cursor-default"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute bottom-14 right-0 w-[220px] bg-card border border-border rounded-xl p-1.5 shadow-drawer dark:shadow-drawer-dark animate-fade-scale-in">
-            {FAB_ACTIONS.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={label}
-                href={href}
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-semibold text-foreground no-underline hover:bg-secondary transition-colors"
-              >
-                <Icon size={15} className="text-muted-foreground shrink-0" />
-                {label}
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-      <button
-        type="button"
-        aria-label={open ? 'Close quick actions' : 'Open quick actions'}
-        aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
-        className="w-12 h-12 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 flex items-center justify-center transition-transform active:scale-95 hover:bg-primary/95"
-      >
-        {open ? <X size={20} /> : <Plus size={22} />}
-      </button>
+    <div className="bz-modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="logout-title">
+      <div className="bz-modal" onClick={e => e.stopPropagation()}>
+        <h2 id="logout-title" className="bz-modal-title">Sign out?</h2>
+        <p className="bz-modal-body">Your local data stays on this device. You can sign back in anytime.</p>
+        <div className="bz-modal-actions">
+          <Button variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
+          <Button variant="danger"  onClick={onConfirm} className="flex-1">Sign out</Button>
+        </div>
+      </div>
     </div>
   )
 }
 
-// ─── AppShell ────────────────────────────────────────────────────────────────
+// ─── AppShell ─────────────────────────────────────────────────────────────────
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [userData, setUserData] = useState<{ userName?: string; userEmail?: string }>({})
+  const [collapsed, setCollapsed]     = useState(false)
+  const [mobileOpen, setMobileOpen]   = useState(false)
+  const [isOnline, setIsOnline]       = useState(true)
+  const [showLogout, setShowLogout]   = useState(false)
+  const [userName, setUserName]       = useState<string>()
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   useEffect(() => {
-    syncSessionFromCookies()
     setIsOnline(navigator.onLine)
-    const goOnline = () => {
-      setIsOnline(true)
-      import('@/lib/billzo/sync').then(m => m.scheduleBackgroundSync())
-    }
+
+    const goOnline = () => { setIsOnline(true); import('@/lib/billzo/sync').then(m => m.scheduleBackgroundSync()) }
     const goOffline = () => setIsOnline(false)
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
 
-    function readUserData() {
-      const name = getCookie('bz_tenant_name')
-      let email: string | undefined
-      try {
-        const token = getCookie('bz_access')
-        if (token) {
-          const payload = JSON.parse(atob(token.split('.')[1]))
-          email = payload.email
-        }
-      } catch { console.error('[AppShell] Failed to parse token') }
-      setUserData({
-        userName: name ? decodeURIComponent(name) : undefined,
-        userEmail: email,
-      })
-    }
-
-    readUserData()
-    window.addEventListener('focus', readUserData)
+    const name = getCookie('bz_tenant_name')
+    setUserName(name ? decodeURIComponent(name) : undefined)
 
     return () => {
       window.removeEventListener('online', goOnline)
       window.removeEventListener('offline', goOffline)
-      window.removeEventListener('focus', readUserData)
     }
   }, [])
 
+  // Silent token refresh
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout> | null = null
-
+    let timer: ReturnType<typeof setTimeout> | null = null
     function scheduleRefresh() {
       try {
         const token = document.cookie.match(/(?:^|;\s*)bz_access=([^;]+)/)?.[1]
         if (!token) return
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        const exp = payload.exp
-        const now = Math.floor(Date.now() / 1000)
-        const ttl = exp - now
-        const refreshAt = ttl > 0 ? (ttl - 300) * 1000 : 0
-        if (timeout) clearTimeout(timeout)
-        if (refreshAt > 0) {
-          timeout = setTimeout(async () => {
-            try {
-              const refreshTok = document.cookie.match(/(?:^|;\s*)bz_refresh=([^;]+)/)?.[1]
-              if (!refreshTok) return
-              const res = await fetch('/api/auth/refresh', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refreshToken: refreshTok }),
-              })
-              if (res.ok) {
-                const setCookie = res.headers.get('set-cookie') || ''
-                document.cookie = setCookie
-              }
-            } catch { /* silent */ }
-          }, refreshAt)
-        }
+        const { exp } = JSON.parse(atob(token.split('.')[1]))
+        const refreshIn = (exp - Math.floor(Date.now() / 1000) - 300) * 1000
+        if (refreshIn <= 0) return
+        timer = setTimeout(async () => {
+          try {
+            const refreshTok = document.cookie.match(/(?:^|;\s*)bz_refresh=([^;]+)/)?.[1]
+            if (!refreshTok) return
+            await fetch('/api/auth/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: refreshTok }),
+            })
+          } catch { /* silent */ }
+        }, refreshIn)
       } catch { /* silent */ }
     }
-
     scheduleRefresh()
-    return () => { if (timeout) clearTimeout(timeout) }
+    return () => { if (timer) clearTimeout(timer) }
   }, [])
-
-  const { userName, userEmail } = userData
 
   return (
     <>
-      <div className="flex h-dvh bg-background overflow-hidden">
-        <Sidebar
-          pathname={pathname}
-          collapsed={collapsed}
-          onToggle={() => setCollapsed(c => !c)}
-          onLogout={() => setShowLogoutConfirm(true)}
-          userName={userName}
-          userEmail={userEmail}
-        />
+      <div className={cn('bz-shell', collapsed && 'bz-shell--collapsed')}>
+        <Sidebar pathname={pathname} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onLogout={() => setShowLogout(true)} userName={userName} />
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} pathname={pathname} userName={userName} />
 
-        <MobileDrawer
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          pathname={pathname}
-        />
-
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <TopBar
-            onMobileMenu={() => setMobileOpen(true)}
-            userName={userName}
-            onLogout={() => setShowLogoutConfirm(true)}
-          />
+        <div className="bz-body">
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} userName={userName} />
 
           {!isOnline && (
-            <div className="flex items-center justify-center gap-[7px] py-[7px] px-4 bg-destructive/10 text-destructive text-xs font-medium border-b border-destructive/20">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-              You are offline — changes will sync when reconnected
+            <div className="bz-offline-bar" role="status">
+              <WifiOff size={13} aria-hidden="true" />
+              Offline — changes will sync when reconnected
             </div>
           )}
 
-          <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
-            <div className="p-6 max-w-[1280px] mx-auto">{children}</div>
-          </main>
-
+          <main className="bz-main">{children}</main>
           <BottomNav pathname={pathname} />
         </div>
       </div>
 
-      <FloatingActionMenu />
-
-      {showLogoutConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setShowLogoutConfirm(false)}
-        >
-          <div className="w-full max-w-[360px] bg-card border border-border rounded-xl p-5 pt-5 pb-4 animate-fade-scale-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold m-0 mb-1.5">Sign out of BillZo?</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed m-0 mb-[18px]">
-              Your local data will remain on this device. You can sign back in anytime.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowLogoutConfirm(false)} className="flex-1">
-                Cancel
-              </Button>
-              <Button variant="danger" onClick={() => { setShowLogoutConfirm(false); doLogout() }} className="flex-1">
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showLogout && <LogoutModal onCancel={() => setShowLogout(false)} onConfirm={() => { setShowLogout(false); doLogout() }} />}
     </>
   )
 }
+
+export default AppShell

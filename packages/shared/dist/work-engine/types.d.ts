@@ -62,10 +62,6 @@ export interface TodaySectionPayload {
             status: string;
             reason?: string;
         };
-        statusFallback?: {
-            headline: string;
-            subtitle: string;
-        };
         scheduleLink?: string;
         action?: Action;
     };
