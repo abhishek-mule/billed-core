@@ -186,9 +186,11 @@ export async function POST(request: NextRequest) {
 async function handleStatusUpdate(phoneNumberId: string, status: any) {
   await upsertEvent({
     id: status.id,
+    tenant_id: 'meta_webhook',
     provider_message_id: status.id,
     status: mapMetaStatus(status.status),
     phone: status.recipient_id,
+    direction: 'outbound',
     occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
     error: status.errors ? JSON.stringify(status.errors) : null,
     updated_at: new Date().toISOString(),
@@ -198,6 +200,7 @@ async function handleStatusUpdate(phoneNumberId: string, status: any) {
 async function handleInboundMessage(phoneNumberId: string, msg: any) {
   await insertEvent({
     id: msg.id,
+    tenant_id: 'meta_webhook',
     provider_message_id: msg.id,
     phone: msg.from,
     message_type: msg.type || 'unknown',
