@@ -20,6 +20,8 @@ import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import { ShadowProjection, initializeShadowProjection } from '../src/lib/recovery/shadow-projection'
+import { planRecoveryActions, computeTriggerType } from '../src/lib/recovery/recovery-planner'
+import type { PolicyStep } from '../src/lib/recovery/recovery-planner'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
@@ -126,7 +128,7 @@ export function createOutboxWorker(authority?: InternalAuthorityClient) {
   return worker
 }
 
-type HandlerLane = 'transport' | 'behavior' | 'recovery' | 'cognition' | 'attribution' | 'notification'
+type HandlerLane = 'transport' | 'behavior' | 'recovery' | 'cognition' | 'attribution' | 'notification' | 'orchestration'
 
 interface LaneHandler {
   lane: HandlerLane
@@ -163,6 +165,11 @@ const HANDLER_LANES: LaneHandler[] = [
   { lane: 'notification', priority: 1, name: 'tryHandleNotifications', handle: tryHandleNotifications },
   { lane: 'notification', priority: 2, name: 'tryHandleBaileysLifecycle', handle: tryHandleBaileysLifecycle },
   { lane: 'notification', priority: 3, name: 'tryHandleRedisPublish', handle: tryHandleRedisPublish },
+
+  // ORCHESTRATION LANE — Recovery automation (plan, cancel, follow-up)
+  { lane: 'orchestration', priority: 1, name: 'tryHandleRecoveryPlanner', handle: tryHandleRecoveryPlanner },
+  { lane: 'orchestration', priority: 2, name: 'tryHandlePromiseFollowUp', handle: tryHandlePromiseFollowUp },
+  { lane: 'orchestration', priority: 3, name: 'tryHandleActionCancellation', handle: tryHandleActionCancellation },
 ]
 
 export async function processOutboxEvent(event: any): Promise<void> {
@@ -192,7 +199,7 @@ export async function processOutboxEvent(event: any): Promise<void> {
 
   // Execute handlers in lane order (transport → behavior → attribution → notification)
   // Each handler catches its own errors — a failure in one concern does not block others.
-  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'attribution', 'notification']
+  const laneOrder: HandlerLane[] = ['transport', 'behavior', 'recovery', 'attribution', 'notification', 'orchestration']
 
   for (const lane of laneOrder) {
     const laneHandlers = HANDLER_LANES
@@ -1206,4 +1213,270 @@ async function handleOverdueEvent(event: any): Promise<void> {
   } finally {
     await queue.close()
   }
+}
+
+// ============================================================
+// ORCHESTRATION HANDLERS — Recovery automation
+// ============================================================
+
+async function tryHandleRecoveryPlanner(event: any): Promise<void> {
+  if (event.type !== 'invoice.created') return
+
+  const invoiceId = event.entityId
+  const tenantId = event.tenantId
+  if (!invoiceId || !tenantId) return
+
+  // Load invoice with customer
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('id, customer_id, total, due_at')
+    .eq('id', invoiceId)
+    .single()
+
+  if (!invoice || !invoice.customer_id) return
+
+  // Resolve tenant's policy (use default if none)
+  const { data: policies } = await supabaseAdmin
+    .from('recovery_policies')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .limit(1)
+
+  let policyId: string
+  if (policies && policies.length > 0) {
+    policyId = policies[0].id
+  } else {
+    // Fall back to system default
+    const { data: sysPolicy } = await supabaseAdmin
+      .from('recovery_policies')
+      .select('id')
+      .eq('is_default', true)
+      .limit(1)
+      .single()
+
+    if (!sysPolicy) return
+    policyId = sysPolicy.id
+  }
+
+  // Load policy steps
+  const { data: steps } = await supabaseAdmin
+    .from('recovery_policy_steps')
+    .select('*')
+    .eq('policy_id', policyId)
+    .eq('is_enabled', true)
+    .order('sequence', { ascending: true })
+
+  if (!steps || steps.length === 0) return
+
+  const policySteps: PolicyStep[] = steps.map((s: any) => ({
+    id: s.id,
+    sequence: s.sequence,
+    triggerType: s.trigger_type,
+    offsetDays: s.offset_days,
+    actionType: s.action_type,
+    templateName: s.template_name,
+    channel: s.channel,
+    isEnabled: s.is_enabled,
+  }))
+
+  const triggerType = computeTriggerType(event.type)
+
+  const plannedActions = planRecoveryActions({
+    tenantId,
+    customerId: invoice.customer_id,
+    invoiceIds: [invoice.id],
+    dueDate: invoice.due_at,
+    policyId,
+    steps: policySteps,
+  })
+
+  for (const action of plannedActions) {
+    const actionId = `ca_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
+    const { error } = await supabaseAdmin
+      .from('collection_actions')
+      .insert({
+        id: actionId,
+        tenant_id: action.tenantId,
+        customer_id: action.customerId,
+        invoice_ids: action.invoiceIds,
+        action_type: action.actionType,
+        template_name: action.templateName,
+        policy_id: action.policyId,
+        trigger_type: action.triggerType,
+        status: action.status,
+        source: action.source,
+        scheduled_at: action.scheduledAt,
+        reason: action.reason,
+        priority: action.priority,
+      })
+
+    if (error) {
+      logger.error({ tenantId, policyId, error: error.message }, 'Failed to create scheduled action')
+      continue
+    }
+
+    // Write audit event
+    await supabaseAdmin
+      .from('collection_action_events')
+      .insert({
+        action_id: actionId,
+        event_type: 'scheduled',
+        payload: { scheduled_at: action.scheduledAt, template: action.templateName, step: action.policyStepId },
+      })
+      .then(() => {}, () => {})
+  }
+
+  logger.info({ tenantId, invoiceId, actionsCreated: plannedActions.length }, 'Recovery planner created scheduled actions')
+}
+
+async function tryHandlePromiseFollowUp(event: any): Promise<void> {
+  if (event.type !== 'promise.made') return
+
+  const tenantId = event.tenantId
+  const invoiceId = event.entityId
+  const payload = event.payload || {}
+  const customerId = payload.customerId as string | undefined
+  const promiseDate = payload.promiseDate as string | undefined
+
+  if (!tenantId || !invoiceId || !customerId || !promiseDate) return
+
+  // Load the policy to find PROMISE_DATE steps
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('due_at')
+    .eq('id', invoiceId)
+    .single()
+
+  if (!invoice) return
+
+  // Resolve policy
+  const { data: policies } = await supabaseAdmin
+    .from('recovery_policies')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .limit(1)
+
+  let policyId: string
+  if (policies && policies.length > 0) {
+    policyId = policies[0].id
+  } else {
+    const { data: sysPolicy } = await supabaseAdmin
+      .from('recovery_policies')
+      .select('id')
+      .eq('is_default', true)
+      .limit(1)
+      .single()
+    if (!sysPolicy) return
+    policyId = sysPolicy.id
+  }
+
+  const { data: steps } = await supabaseAdmin
+    .from('recovery_policy_steps')
+    .select('*')
+    .eq('policy_id', policyId)
+    .eq('is_enabled', true)
+    .eq('trigger_type', 'PROMISE_DATE')
+    .order('sequence', { ascending: true })
+
+  if (!steps || steps.length === 0) return
+
+  const policySteps: PolicyStep[] = steps.map((s: any) => ({
+    id: s.id,
+    sequence: s.sequence,
+    triggerType: s.trigger_type,
+    offsetDays: s.offset_days,
+    actionType: s.action_type,
+    templateName: s.template_name,
+    channel: s.channel,
+    isEnabled: s.is_enabled,
+  }))
+
+  const plannedActions = planRecoveryActions({
+    tenantId,
+    customerId,
+    invoiceIds: [invoiceId],
+    dueDate: invoice.due_at,
+    policyId,
+    steps: policySteps,
+    promiseDate,
+  })
+
+  for (const action of plannedActions) {
+    const actionId = `ca_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
+    await supabaseAdmin
+      .from('collection_actions')
+      .insert({
+        id: actionId,
+        tenant_id: action.tenantId,
+        customer_id: action.customerId,
+        invoice_ids: action.invoiceIds,
+        action_type: action.actionType,
+        template_name: action.templateName,
+        policy_id: action.policyId,
+        trigger_type: action.triggerType,
+        status: action.status,
+        source: action.source,
+        scheduled_at: action.scheduledAt,
+        reason: action.reason,
+        priority: action.priority,
+      })
+      .then(() => {}, () => {})
+
+    await supabaseAdmin
+      .from('collection_action_events')
+      .insert({
+        action_id: actionId,
+        event_type: 'scheduled',
+        payload: { scheduled_at: action.scheduledAt, template: action.templateName, trigger: 'promise', promise_date: promiseDate },
+      })
+      .then(() => {}, () => {})
+  }
+
+  logger.info({ tenantId, invoiceId, promiseDate }, 'Promise follow-up scheduled')
+}
+
+async function tryHandleActionCancellation(event: any): Promise<void> {
+  if (event.type !== 'payment.completed') return
+
+  const invoiceId = event.entityId
+  const tenantId = event.tenantId
+  if (!invoiceId || !tenantId) return
+
+  const now = new Date().toISOString()
+
+  // Cancel all pending scheduled actions for this invoice
+  const { data: pending } = await supabaseAdmin
+    .from('collection_actions')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .contains('invoice_ids', [invoiceId])
+    .eq('status', 'scheduled')
+
+  if (!pending || pending.length === 0) return
+
+  const ids = pending.map((a: any) => a.id)
+
+  await supabaseAdmin
+    .from('collection_actions')
+    .update({
+      status: 'cancelled',
+      cancelled_at: now,
+      cancel_reason: 'payment_received',
+      updated_at: now,
+    })
+    .in('id', ids)
+
+  // Write audit events
+  const auditRows = ids.map((id: string) => ({
+    action_id: id,
+    event_type: 'cancelled',
+    payload: { reason: 'payment_received', invoice_id: invoiceId, cancelled_at: now },
+  }))
+
+  await supabaseAdmin
+    .from('collection_action_events')
+    .insert(auditRows)
+    .then(() => {}, () => {})
+
+  logger.info({ tenantId, invoiceId, cancelledCount: ids.length }, 'Pending actions cancelled after payment')
 }

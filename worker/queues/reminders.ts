@@ -8,6 +8,7 @@ import { createQueueLogger } from '../lib/queue-logger'
 import { EventType, DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
+import { executeAction } from '../src/lib/recovery/action-executor'
 import { generateCorrelationId } from '../src/lib/billzo/idempotency'
 import { sendWhatsAppMessage, getEffectiveProvider } from '../lib/whatsapp-router'
 import { startBaileysSocket, isBaileysConnected } from '../lib/baileys-socket'
@@ -203,6 +204,9 @@ interface ReminderJobData {
   override?: boolean
   reminderId?: string
   dueDate?: string | null
+  // Sprint 2: action-based execution
+  actionId?: string
+  templateName?: string | null
 }
 
 export function createRemindersWorker(authority?: InternalAuthorityClient) {
@@ -212,6 +216,14 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
     'reminders',
     async (job: Job<ReminderJobData>) => {
       const startTime = Date.now()
+
+      // Sprint 2: action-based jobs from collection_actions scheduler
+      if (job.data.actionId) {
+        const result = await executeAction(job.data.actionId)
+        logger.info({ actionId: job.data.actionId, result }, 'Action executed from scheduler')
+        return result
+      }
+
       const { invoiceId, tenantId, stage, customerId, caseId, trigger, override, reminderId, dueDate } = job.data
 
       // Jitter ±15 min on next reminder time to avoid burst collisions
@@ -908,33 +920,30 @@ function createEnqueueLock(): { redis: ReturnType<typeof getRedis>; ttl: number 
 export async function enqueueOverdueReminders(): Promise<number> {
   const now = new Date().toISOString()
   let enqueued = 0
-  let skippedMuted = 0
-  let skippedManual = 0
   let skippedLocked = 0
 
-  const { data: rawInvoices, error } = await supabaseAdmin
-    .from('invoices')
-    .select(`
-      id,
-      tenant_id,
-      recovery_stage,
-      next_recovery_at,
-      customer_id,
-      recovery_state
-    `)
-    .in('status', ['unpaid', 'overdue'])
-    .in('recovery_state', ['pending', 'scheduled'])
-    .or(`next_recovery_at.lte.${now},next_recovery_at.is.null`)
-    .limit(200)
+  // Scan collection_actions for due scheduled actions instead of scanning invoices.
+  // This is the scheduler's single responsibility: find what's due and enqueue it.
+  const { data: actions, error } = await supabaseAdmin
+    .from('collection_actions')
+    .select('id, tenant_id, customer_id, invoice_ids, action_type, template_name, scheduled_at, attempt_count, max_attempts')
+    .eq('status', 'scheduled')
+    .in('action_type', ['reminder', 'promise_followup'])
+    .lte('scheduled_at', now)
+    .order('scheduled_at', { ascending: true })
+    .limit(100)
 
-  if (error || !rawInvoices) {
-    logger.error({ err: error?.message }, 'Failed to fetch overdue invoices')
+  if (error || !actions) {
+    logger.error({ err: error?.message }, 'Failed to fetch scheduled actions')
     return 0
   }
 
-  // Don't enqueue outside business hours (9 AM – 8 PM IST) for
-  // auto-reminders. Scheduled reminders (next_recovery_at explicitly set)
-  // are user-intended and bypass this check.
+  // Filter: attempt_count < max_attempts (Supabase doesn't support column comparison in lte easily)
+  const dueActions = actions.filter((a: any) => (a.attempt_count || 0) < (a.max_attempts || 3))
+
+  if (dueActions.length === 0) return 0
+
+  // Business hours check (9 AM – 8 PM IST)
   const tz = 'Asia/Kolkata'
   const hour = parseInt(
     new Intl.DateTimeFormat('en-US', {
@@ -946,16 +955,12 @@ export async function enqueueOverdueReminders(): Promise<number> {
   )
   const outsideBusinessHours = hour < 9 || hour >= 20
   if (outsideBusinessHours) {
-    const scheduled = rawInvoices.filter(inv => inv.next_recovery_at !== null).length
-    logger.info({ hour, tz, totalCandidates: rawInvoices.length, scheduledOnly: scheduled }, 'Outside business hours — enqueuing only scheduled reminders')
+    logger.info({ hour, tz, pendingActions: dueActions.length }, 'Outside business hours — deferring scheduled actions')
+    return 0
   }
-  const invoices = rawInvoices.filter(inv => {
-    if (outsideBusinessHours && inv.next_recovery_at === null) return false
-    return true
-  })
 
-  // Collect unique customer IDs and fetch their automation modes
-  const customerIds = [...new Set(invoices.map(i => i.customer_id).filter(Boolean))]
+  // Collect unique customer IDs for automation mode check
+  const customerIds = [...new Set(dueActions.map((a: any) => a.customer_id).filter(Boolean))]
   const customerModeMap = new Map<string, string>()
   if (customerIds.length > 0) {
     const { data: customers } = await supabaseAdmin
@@ -971,80 +976,40 @@ export async function enqueueOverdueReminders(): Promise<number> {
 
   const queue = createReminderQueue()
   const lock = createEnqueueLock()
-  for (const inv of invoices) {
-    const stage = normalizeStage(inv.recovery_stage)
-    if (!REMINDER_STAGES.includes(stage)) continue
+  for (const action of dueActions) {
+    const mode = customerModeMap.get(action.customer_id) || 'full_auto'
+    if (mode === 'muted' || mode === 'manual') continue
 
-    const mode = customerModeMap.get(inv.customer_id) || 'full_auto'
-    if (mode === 'muted') {
-      skippedMuted++
-      continue
-    }
-    if (mode === 'manual') {
-      skippedManual++
-      continue
-    }
-
-    logger.info('recovery_scan_candidate', {
-      invoiceId: inv.id,
-      customerId: inv.customer_id,
-      stage,
-      nextRecoveryAt: inv.next_recovery_at,
-    })
-
-    // Distributed lock: prevent duplicate enqueue if this invoice+stage
-    // was already enqueued within the TTL window (e.g. after crash/restart)
-    const lockKey = `enqueue_lock:reminder:${inv.id}:${stage}`
+    // Distributed lock: prevent duplicate enqueue
+    const lockKey = `enqueue_lock:action:${action.id}`
     const acquired = await lock.redis.set(lockKey, '1', 'EX', lock.ttl, 'NX')
     if (!acquired) {
       skippedLocked++
       continue
     }
 
-    const actionId = `CA_${crypto.randomUUID()}`
-    await queue.add(`reminder:${inv.id}:${stage}`, {
-      invoiceId: inv.id,
-      tenantId: inv.tenant_id,
-      stage,
-      customerId: inv.customer_id,
-      trigger: 'auto',
-      reminderId: crypto.randomUUID(),
-    }, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 60000 },
-      delay: Math.floor(Math.random() * 120000) + 30000,
+    // Mark as processing to prevent re-pickup by another worker
+    await supabaseAdmin
+      .from('collection_actions')
+      .update({ status: 'processing', updated_at: now })
+      .eq('id', action.id)
+      .eq('status', 'scheduled')
+
+    await queue.add(`action:${action.id}`, {
+      actionId: action.id,
+      tenantId: action.tenant_id,
+      invoiceId: action.invoice_ids?.[0] || '',
+      stage: action.template_name || 'scheduled',
+      customerId: action.customer_id,
+      templateName: action.template_name,
+    } as ReminderJobData, {
+      attempts: 1,
+      delay: Math.floor(Math.random() * 30000) + 5000,
     })
     enqueued++
-
-    // Log scheduled action to collection_actions
-    // authority:exempt append_only_observability — collection_actions is append-only audit log, not business state
-    supabaseAdmin.from('collection_actions').insert({
-      id: actionId,
-      tenant_id: inv.tenant_id,
-      customer_id: inv.customer_id || null,
-      invoice_ids: [inv.id],
-      action_type: 'reminder',
-      status: 'scheduled',
-      source: 'worker',
-      provider: 'whatsapp',
-      scheduled_at: new Date(Date.now() + Math.floor(Math.random() * 120000) + 30000).toISOString(),
-      reason: `Reminder enqueued — stage: ${stage}`,
-      priority: 5,
-      metadata: { recoveryStage: stage },
-    }).then(null, (err: any) => { logger.error({ invoiceId: inv.id, err }, 'Failed to log scheduled collection_action') })
-
-    // Transition: pending → scheduled (first time being managed by automation)
-    if (inv.recovery_state === 'pending') {
-      // authority:fallback enqueue_pending_transition
-      supabaseAdmin
-        .from('invoices')
-        .update({ recovery_state: 'scheduled' })
-        .eq('id', inv.id)
-        .then(null, (err: any) => { logger.error({ invoiceId: inv.id, err }, 'Failed to transition recovery_state pending→scheduled') })
-    }
   }
 
   await queue.close()
-  logger.info({ enqueued, skippedMuted, skippedManual, skippedLocked }, 'Enqueued overdue reminder jobs')
+  logger.info({ enqueued, skippedLocked, totalDue: dueActions.length }, 'Enqueued scheduled action jobs')
   return enqueued
 }
