@@ -38,13 +38,13 @@ async function upsertEvent(payload: Record<string, any>) {
       'Content-Type': 'application/json',
       apikey: SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      Prefer: 'resolution=merge-duplicates,return=minimal',
+      Prefer: 'return=minimal',
     },
     body: JSON.stringify(payload),
   })
   if (res.status === 409) {
     // Conflict — update existing row
-    const id = payload.id
+    const id = encodeURIComponent(payload.id)
     const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events?id=eq.${id}`, {
       method: 'PATCH',
       headers: {
