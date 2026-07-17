@@ -1,7 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export const dynamic = 'force-dynamic'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qdnmuoyqpqdewepzuezp.supabase.co'
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+async function insertEvent(payload: Record<string, any>) {
+  if (!SERVICE_ROLE_KEY) {
+    console.error('[MetaWebhook] SUPABASE_SERVICE_ROLE_KEY not set')
+    return
+  }
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    console.error('[MetaWebhook] DB insert failed:', res.status, body)
+  }
+}
+
+async function upsertEvent(payload: Record<string, any>, conflictColumn: string) {
+  if (!SERVICE_ROLE_KEY) {
+    console.error('[MetaWebhook] SUPABASE_SERVICE_ROLE_KEY not set')
+    return
+  }
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_events?on_conflict=${conflictColumn}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    console.error('[MetaWebhook] DB upsert failed:', res.status, body)
+  }
+}
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'billzo_meta_verify_2024'
 
@@ -109,48 +153,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ status: 'ok' })
+    return NextResponse.json({ status: 'ok', result: 'processed' })
   } catch (err: any) {
     console.error('[MetaWebhook] Error:', err.message)
-    return NextResponse.json({ status: 'ok' })
+    return NextResponse.json({ status: 'ok', error: err.message })
   }
 }
 
 async function handleStatusUpdate(phoneNumberId: string, status: any) {
-  const { error } = await supabaseAdmin
-    .from('whatsapp_events')
-    .upsert({
-      id: status.id,
-      provider_message_id: status.id,
-      status: mapMetaStatus(status.status),
-      phone: status.recipient_id,
-      occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
-      error: status.errors ? JSON.stringify(status.errors) : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'provider_message_id' })
-
-  if (error) {
-    console.error('[MetaWebhook] Failed to record status:', error.message)
-  }
+  await upsertEvent({
+    id: status.id,
+    provider_message_id: status.id,
+    status: mapMetaStatus(status.status),
+    phone: status.recipient_id,
+    occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
+    error: status.errors ? JSON.stringify(status.errors) : null,
+    updated_at: new Date().toISOString(),
+  }, 'provider_message_id')
 }
 
 async function handleInboundMessage(phoneNumberId: string, msg: any) {
-  const { error } = await supabaseAdmin
-    .from('whatsapp_events')
-    .insert({
-      id: msg.id,
-      provider_message_id: msg.id,
-      phone: msg.from,
-      message_type: msg.type || 'unknown',
-      message_preview: msg.text?.body || null,
-      direction: 'inbound',
-      status: 'received',
-      occurred_at: new Date(Number(msg.timestamp) * 1000).toISOString(),
-    })
-
-  if (error) {
-    console.error('[MetaWebhook] Failed to record inbound:', error.message)
-  }
+  await insertEvent({
+    id: msg.id,
+    provider_message_id: msg.id,
+    phone: msg.from,
+    message_type: msg.type || 'unknown',
+    message_preview: msg.text?.body || null,
+    direction: 'inbound',
+    status: 'received',
+    occurred_at: new Date(Number(msg.timestamp) * 1000).toISOString(),
+  })
 }
 
 function mapMetaStatus(status: string): string {
