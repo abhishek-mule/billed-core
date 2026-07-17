@@ -1,6 +1,6 @@
 import type { MetaConfig, SendMessageRequest, SendMessageResponse } from './types'
 
-const DEFAULT_API_VERSION = 'v22.0'
+const DEFAULT_API_VERSION = 'v25.0'
 
 function baseUrl(config: MetaConfig): string {
   return `https://graph.facebook.com/${config.apiVersion || DEFAULT_API_VERSION}/${config.phoneNumberId}`
