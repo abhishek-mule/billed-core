@@ -7,17 +7,24 @@ const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'billzo_meta_verif
 
 // GET — Webhook verification (Meta sends this during setup)
 export async function GET(request: NextRequest) {
+  const url = request.url
   const mode = request.nextUrl.searchParams.get('hub.mode')
   const token = request.nextUrl.searchParams.get('hub.verify_token')
   const challenge = request.nextUrl.searchParams.get('hub.challenge')
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('[MetaWebhook] Verified successfully')
-    return new NextResponse(challenge, { status: 200 })
+    console.log('[MetaWebhook] Verified successfully', { url })
+    return new Response(challenge, {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain' },
+    })
   }
 
-  console.warn('[MetaWebhook] Verification failed', { mode, token })
-  return new NextResponse('Verification failed', { status: 403 })
+  console.warn('[MetaWebhook] Verification failed', { mode, token, url })
+  return new Response(
+    `Verification failed.\nmode=${mode}\ntoken=${token}\nchallenge=${challenge}\nexpected_token=${VERIFY_TOKEN}\nurl=${url}`,
+    { status: 403, headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' } },
+  )
 }
 
 // POST — Incoming messages and status updates
