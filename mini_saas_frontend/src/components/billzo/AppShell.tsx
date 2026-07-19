@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  Bell, Search, Home, ShoppingCart, Receipt, TrendingUp, Activity,
-  Users, Package, BarChart3, Settings, MoreHorizontal, Menu,
-  LogOut, ChevronDown, WifiOff,
+  Bell, Search, Home, Plus, Receipt, TrendingUp, Activity,
+  Users, Package, BarChart3, Settings, Menu,
+  LogOut, ChevronDown, WifiOff, Zap, CreditCard, Target,
 } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
@@ -15,15 +15,15 @@ import '@/styles/app-shell.css'
 // ─── Nav config ──────────────────────────────────────────────────────────────
 
 const NAV_WORKSPACE = [
-  { href: '/dashboard', label: 'Home',     icon: Home         },
-  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp   },
-  { href: '/pulse',     label: 'Payments', icon: Activity     },
-  { href: '/invoices',  label: 'Invoices', icon: Receipt      },
-  { href: '/pos',       label: 'POS',      icon: ShoppingCart },
+  { href: '/recovery', label: 'Recovery',  icon: Zap         },
+  { href: '/dashboard',      label: 'Dashboard', icon: Home        },
+  { href: '/invoices',       label: 'Invoices',  icon: Receipt     },
+  { href: '/parties',        label: 'Customers', icon: Users       },
+  { href: '/pulse',          label: 'Payments',  icon: Activity    },
+  { href: '/cashflow',       label: 'Cashflow',  icon: TrendingUp  },
 ]
 
 const NAV_MANAGE = [
-  { href: '/parties',  label: 'Parties',  icon: Users    },
   { href: '/products', label: 'Products', icon: Package  },
   { href: '/reports',  label: 'Reports',  icon: BarChart3 },
 ]
@@ -33,11 +33,11 @@ const NAV_SYSTEM = [
 ]
 
 const MOBILE_NAV = [
-  { href: '/dashboard', label: 'Home',     icon: Home,           primary: false },
-  { href: '/cashflow',  label: 'Cashflow', icon: TrendingUp,     primary: false },
-  { href: '/pos',       label: 'POS',      icon: ShoppingCart,   primary: true  },
-  { href: '/invoices',  label: 'Invoices', icon: Receipt,        primary: false },
-  { href: '/more',      label: 'More',     icon: MoreHorizontal, primary: false },
+  { href: '/recovery',  label: 'Recovery',  icon: Zap,          primary: false },
+  { href: '/dashboard', label: 'Home',      icon: Home,         primary: false },
+  { href: '/pos',       label: 'Bill',      icon: Plus,         primary: true  },
+  { href: '/parties',   label: 'Customers', icon: Users,        primary: false },
+  { href: '/recovery/timeline', label: 'Activity', icon: Activity, primary: false },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -67,28 +67,28 @@ function initials(name?: string) {
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 function NavSection({
-  label, items, pathname, collapsed,
+  label, items, pathname,
 }: {
   label: string
   items: { href: string; label: string; icon: React.ElementType }[]
   pathname: string
-  collapsed: boolean
 }) {
   return (
     <div className="bz-nav-section">
-      {!collapsed && <span className="bz-nav-section-label">{label}</span>}
-      {items.map(({ href, label, icon: Icon }) => {
+      <span className="bz-nav-section-label">{label}</span>
+      {items.map(({ href, label, icon: Icon }, idx) => {
         const active = pathname.startsWith(href)
+        const isRecovery = label === 'Recovery'
         return (
           <Link
             key={href}
             href={href}
-            className={cn('bz-nav-item', active && 'bz-nav-item--active')}
+            className={cn('bz-nav-item', active && 'bz-nav-item--active', isRecovery && 'bz-nav-item--accent')}
             aria-current={active ? 'page' : undefined}
-            title={collapsed ? label : undefined}
+            style={{ '--i': idx } as React.CSSProperties}
           >
             <Icon size={16} strokeWidth={1.75} className="bz-nav-icon" />
-            {!collapsed && <span className="bz-nav-label">{label}</span>}
+            <span className="bz-nav-label">{label}</span>
           </Link>
         )
       })}
@@ -97,54 +97,36 @@ function NavSection({
 }
 
 function Sidebar({
-  pathname, collapsed, onToggle, onLogout, userName,
+  pathname, onLogout, userName,
 }: {
   pathname: string
-  collapsed: boolean
-  onToggle: () => void
   onLogout: () => void
   userName?: string
 }) {
   const ini = initials(userName)
 
   return (
-    <aside className={cn('bz-sidebar', collapsed && 'bz-sidebar--collapsed')}>
+    <aside className="bz-sidebar">
       <div className="bz-sidebar-header">
         <Link href="/dashboard" className="bz-logo" aria-label="BillZo home">
-          <div className="bz-logo-mark">B</div>
-          {!collapsed && <span className="bz-logo-text">BillZo</span>}
+          <img src="/logo.svg" alt="BillZo" className="bz-logo-img" />
+          <span className="bz-logo-text">BillZo</span>
         </Link>
       </div>
 
       <nav className="bz-sidebar-nav">
-        <NavSection label="Workspace" items={NAV_WORKSPACE} pathname={pathname} collapsed={collapsed} />
-        <NavSection label="Manage"    items={NAV_MANAGE}    pathname={pathname} collapsed={collapsed} />
-        <NavSection label="System"    items={NAV_SYSTEM}    pathname={pathname} collapsed={collapsed} />
+        <NavSection label="Workspace" items={NAV_WORKSPACE} pathname={pathname} />
+        <NavSection label="Manage"    items={NAV_MANAGE}    pathname={pathname} />
+        <NavSection label="System"    items={NAV_SYSTEM}    pathname={pathname} />
       </nav>
 
       <div className="bz-sidebar-footer">
-        <button
-          className="bz-collapse-btn"
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
-            className={cn('bz-collapse-icon', collapsed && 'bz-collapse-icon--flipped')}
-          >
-            <path d="M10 3L5 8L10 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {!collapsed && <span>Collapse</span>}
-        </button>
-
         <button className="bz-user-row" onClick={onLogout} title="Sign out">
           <div className="bz-user-avatar" aria-hidden="true">{ini}</div>
-          {!collapsed && (
-            <div className="bz-user-info">
-              <span className="bz-user-name">{userName || 'My Shop'}</span>
-            </div>
-          )}
-          {!collapsed && <LogOut size={13} className="bz-logout-icon" />}
+          <div className="bz-user-info">
+            <span className="bz-user-name">{userName || 'My Shop'}</span>
+          </div>
+          <LogOut size={13} className="bz-logout-icon" />
         </button>
       </div>
     </aside>
@@ -164,7 +146,7 @@ function TopBar({
   return (
     <header className="bz-topbar">
       <div className="bz-topbar-left">
-        <button className="bz-mobile-menu-btn" onClick={onMobileMenu} aria-label="Open menu">
+        <button className="bz-mobile-menu-btn lg:hidden" onClick={onMobileMenu} aria-label="Open menu">
           <Menu size={18} />
         </button>
         {title && <h1 className="bz-page-title">{title}</h1>}
@@ -215,7 +197,7 @@ function MobileDrawer({
       <div className={cn('bz-drawer', open && 'bz-drawer--open')} role="dialog" aria-modal="true" aria-label="Navigation menu">
         <div className="bz-drawer-header">
           <Link href="/dashboard" className="bz-logo" onClick={onClose}>
-            <div className="bz-logo-mark">B</div>
+            <img src="/icon.svg" alt="BillZo" className="bz-logo-img" />
             <span className="bz-logo-text">BillZo</span>
           </Link>
           <button className="bz-icon-btn" onClick={onClose} aria-label="Close menu" style={{ border: 'none' }}>
@@ -264,18 +246,27 @@ function BottomNav({ pathname }: { pathname: string }) {
     <nav className="bz-bottom-nav" aria-label="Main navigation">
       {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
         const active = pathname.startsWith(href)
+        if (primary) {
+          return (
+            <Link
+              key={href}
+              href={href}
+              className="bz-bottom-item bz-bottom-item--primary"
+              aria-current={active ? 'page' : undefined}
+            >
+              <span className="bz-bottom-fab" aria-hidden="true"><Icon size={26} strokeWidth={2.25} /></span>
+              <span>{label}</span>
+            </Link>
+          )
+        }
         return (
           <Link
             key={href}
             href={href}
-            className={cn('bz-bottom-item', active && 'bz-bottom-item--active', primary && 'bz-bottom-item--primary')}
+            className={cn('bz-bottom-item', active && 'bz-bottom-item--active')}
             aria-current={active ? 'page' : undefined}
           >
-            {primary ? (
-              <span className="bz-bottom-fab" aria-hidden="true"><Icon size={20} strokeWidth={2} /></span>
-            ) : (
-              <Icon size={19} strokeWidth={1.75} aria-hidden="true" />
-            )}
+            <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
             <span>{label}</span>
           </Link>
         )
@@ -305,7 +296,6 @@ function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm:
 
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed]     = useState(false)
   const [mobileOpen, setMobileOpen]   = useState(false)
   const [isOnline, setIsOnline]       = useState(true)
   const [showLogout, setShowLogout]   = useState(false)
@@ -359,8 +349,8 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
 
   return (
     <>
-      <div className={cn('bz-shell', collapsed && 'bz-shell--collapsed')}>
-        <Sidebar pathname={pathname} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} onLogout={() => setShowLogout(true)} userName={userName} />
+      <div className="bz-shell">
+        <Sidebar pathname={pathname} onLogout={() => setShowLogout(true)} userName={userName} />
         <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} pathname={pathname} userName={userName} />
 
         <div className="bz-body">
