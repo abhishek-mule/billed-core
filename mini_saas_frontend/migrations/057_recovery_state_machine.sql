@@ -27,11 +27,9 @@ COMMENT ON COLUMN invoices.recovery_state IS 'Reminder lifecycle state machine. 
 
 CREATE INDEX IF NOT EXISTS idx_invoices_recovery_state ON invoices(recovery_state);
 
--- Backfill existing terminal-stage invoices so the worker never picks them up again.
--- These are invoices that have exhausted all reminder stages and have no next
--- recovery scheduled — they should live in manual_review, not pending.
-UPDATE invoices
-SET recovery_state = 'manual_review'
-WHERE recovery_stage IN ('t5_warning', 't4_final')
-  AND next_recovery_at IS NULL
-  AND status IN ('unpaid', 'overdue');
+-- NOTE: The original backfill referenced invoices.recovery_stage / next_recovery_at,
+-- which were never created on the invoices table. That made this migration fail to
+-- apply on a fresh database. The recovery_stage (TEXT) and next_recovery_at
+-- (TIMESTAMPTZ) columns are added by migration 076, which also seeds sane defaults.
+-- The terminal-stage backfill is now handled there, so it is intentionally omitted here
+-- to keep 057 idempotent and applyable.

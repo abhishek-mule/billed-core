@@ -9,14 +9,18 @@ function getSupabaseAdmin(): SupabaseClient {
   if (_supabaseAdmin) return _supabaseAdmin
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!supabaseUrl || !supabaseKey) {
-    console.warn('[supabase-admin] SUPABASE_URL or SERVICE_ROLE_KEY not set — supabase client unavailable')
-    throw new Error('Supabase client not configured')
+  // The admin client must use the service-role key. Falling back to the
+  // publishable/anon key would perform privileged server-side writes with
+  // unprivileged credentials (and silently bypass RLS expectations). Refuse
+  // to construct the client unless the service-role key is present.
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.warn('[supabase-admin] SUPABASE_SERVICE_ROLE_KEY not set — refusing to create admin client (will not fall back to publishable key)')
+    throw new Error('Supabase admin client not configured: SUPABASE_SERVICE_ROLE_KEY is required')
   }
+
+  const supabaseKey = serviceRoleKey
 
   _supabaseAdmin = createClient(supabaseUrl, supabaseKey)
   return _supabaseAdmin
