@@ -147,8 +147,8 @@ export default function SettingsPage() {
   }, [categories, q])
 
   const STATUS_STYLES: Record<CategoryStatus, string> = {
-    connected: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    not_connected: 'bg-amber-50 text-amber-700 border-amber-200',
+    connected: 'bg-success-soft text-success border-success',
+    not_connected: 'bg-warning-soft text-warning border-warning',
     pending: 'bg-muted/50 text-muted-foreground border-border',
   }
 
@@ -171,9 +171,9 @@ export default function SettingsPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600 mb-4">{error}</p>
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Again</Button>
           </div>
         </div>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
             <p className="text-sm font-semibold text-foreground truncate">{tenant?.name || 'My Shop'}</p>
             <p className="text-xs text-muted-foreground">{tenant?.phone || ''}{tenant?.plan ? ` · ${tenant.plan}` : ''}</p>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+          <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-success-soft text-success border border-success shrink-0">
             Active
           </span>
         </div>
@@ -224,14 +224,14 @@ export default function SettingsPage() {
                 key={cat.id}
                 href={cat.href}
                 className={`bg-card border rounded-lg p-4 transition-colors hover:border-border ${
-                  cat.danger ? 'border-rose-200 hover:border-rose-300' : 'border-border'
+                  cat.danger ? 'border-danger hover:border-danger' : 'border-border'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <div className={`${ICON_WRAPPER} ${
-                    cat.danger ? 'bg-rose-50 text-rose-500' :
-                    cat.id === 'whatsapp' ? 'bg-emerald-50 text-emerald-600' :
-                    cat.id === 'recovery' ? 'bg-amber-50 text-amber-600' :
+                    cat.danger ? 'bg-danger-soft text-danger' :
+                    cat.id === 'whatsapp' ? 'bg-success-soft text-success' :
+                    cat.id === 'recovery' ? 'bg-warning-soft text-warning' :
                     'bg-muted/50 text-muted-foreground'
                   }`}>
                     {cat.icon}
@@ -247,7 +247,7 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{cat.description}</p>
                   </div>
-                  <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-rose-300' : 'text-muted-foreground'}`} />
+                  <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-danger' : 'text-muted-foreground'}`} />
                 </div>
               </Link>
             ))}
@@ -283,20 +283,20 @@ export default function SettingsPage() {
         </div>
 
         {/* Danger zone */}
-        <div className="border-t border-rose-200 pt-4 mt-4">
+        <div className="border-t border-danger pt-4 mt-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="w-4 h-4 text-rose-400" />
-            <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">Danger Zone</p>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <p className="text-xs font-medium text-danger uppercase tracking-wider">Danger Zone</p>
           </div>
-          <div className="bg-card border border-rose-200 rounded-lg divide-y divide-rose-100 overflow-hidden">
+          <div className="bg-card border border-danger rounded-lg divide-y divide-danger-soft overflow-hidden">
             <button
               onClick={handleSignOut}
-              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-rose-50 transition-colors"
+              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-danger-soft transition-colors"
             >
-              <LogOut className="w-5 h-5 text-rose-500" />
+              <LogOut className="w-5 h-5 text-danger" />
               <div>
-                <p className="text-sm font-medium text-rose-700">Sign out</p>
-                <p className="text-xs text-rose-500">End your current session</p>
+                <p className="text-sm font-medium text-danger">Sign out</p>
+                <p className="text-xs text-danger">End your current session</p>
               </div>
             </button>
           </div>

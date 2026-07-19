@@ -49,14 +49,14 @@ export default function DevUnlockPage() {
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="max-w-sm text-center space-y-4 p-8">
         <div className="text-4xl">{status.includes("✅") ? "🎉" : "⏳"}</div>
-        <div className="text-sm text-slate-600 font-medium">{status}</div>
+        <div className="text-sm text-foreground font-medium">{status}</div>
         {status.includes("✅") && (
-          <a href="/parties" className="inline-block mt-4 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700">
+          <a href="/parties" className="inline-block mt-4 px-6 py-3 rounded-xl bg-info text-white text-sm font-bold hover:bg-info">
             Go to Parties
           </a>
         )}
         {status.includes("❌") && (
-          <a href="/auth/resolve" className="inline-block mt-4 px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700">
+          <a href="/auth/resolve" className="inline-block mt-4 px-6 py-3 rounded-xl bg-info text-white text-sm font-bold hover:bg-info">
             Fix Auth
           </a>
         )}

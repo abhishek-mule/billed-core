@@ -14,9 +14,9 @@ import { getCookie } from "@/lib/cookies";
 import { scheduleBackgroundSync } from "@/lib/billzo/sync";
 
 const statusStyle: Record<string, string> = {
-  synced: "bg-green-100 text-green-700",
-  pending: "bg-yellow-100 text-yellow-700",
-  failed: "bg-red-100 text-red-700",
+  synced: "bg-success-soft text-success",
+  pending: "bg-warning-soft text-warning",
+  failed: "bg-danger-soft text-danger",
 };
 
 export default function InvoiceDetailPage() {
@@ -312,11 +312,11 @@ export default function InvoiceDetailPage() {
                 {invoice.syncStatus || "pending"}
               </span>
               {partial ? (
-                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-orange-100 text-orange-700">
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-warning-soft text-warning">
                   PARTIAL
                 </span>
               ) : (
-                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${paid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${paid ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
                   {paid ? "PAID" : "UNPAID"}
                 </span>
               )}
@@ -358,7 +358,7 @@ export default function InvoiceDetailPage() {
         <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => setShowWAModal(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-green-600 py-4 text-sm font-bold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-success py-4 text-sm font-bold text-white hover:bg-success transition-colors disabled:opacity-50"
           >
             {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
             WhatsApp
@@ -376,7 +376,7 @@ export default function InvoiceDetailPage() {
           )}
 
           {paid ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl bg-green-100 py-4 text-sm font-bold text-green-700">
+            <div className="flex items-center justify-center gap-2 rounded-2xl bg-success-soft py-4 text-sm font-bold text-success">
               <CheckCircle2 className="h-4 w-4" />
               Paid
             </div>
@@ -410,13 +410,13 @@ export default function InvoiceDetailPage() {
         </div>
 
         {(paymentLink || invoice?.paymentLinkUrl) && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
+            <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
             <a
               href={paymentLink || invoice?.paymentLinkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-green-700 font-medium underline break-all"
+              className="text-xs text-success font-medium underline break-all"
             >
               {paymentLink || invoice?.paymentLinkUrl}
             </a>
@@ -424,9 +424,9 @@ export default function InvoiceDetailPage() {
         )}
 
         {(waSuccess) && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-            <span className="text-xs text-green-700 font-medium">Message sent!</span>
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
+            <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+            <span className="text-xs text-success font-medium">Message sent!</span>
           </div>
         )}
       </div>
@@ -462,7 +462,7 @@ export default function InvoiceDetailPage() {
                     />
                   </div>
                   {waError && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-danger-soft border border-danger text-danger text-xs">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {waError}
                     </div>
@@ -473,7 +473,7 @@ export default function InvoiceDetailPage() {
                   <button
                     onClick={() => sendWhatsApp()}
                     disabled={sendingWA}
-                    className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 h-11 rounded-xl bg-success font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
                     {sendingWA ? 'Sending...' : 'Send Message'}
@@ -497,7 +497,7 @@ export default function InvoiceDetailPage() {
                     A phone number is required to send WhatsApp reminders.
                   </p>
                   {waError && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-danger-soft border border-danger text-danger text-xs">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {waError}
                     </div>
@@ -508,7 +508,7 @@ export default function InvoiceDetailPage() {
                   <button
                     onClick={savePhoneAndSend}
                     disabled={sendingWA || !missingPhone.trim()}
-                    className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 h-11 rounded-xl bg-success font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {sendingWA && <Loader className="h-4 w-4 animate-spin" />}
                     {sendingWA ? 'Saving & Sending...' : 'Save Phone & Send'}
@@ -564,24 +564,24 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="p-5 space-y-4">
               {overrideSuccess ? (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-xs text-green-700 font-medium">Override applied! Worker will send the reminder on next cycle.</span>
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
+                  <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                  <span className="text-xs text-success font-medium">Override applied! Worker will send the reminder on next cycle.</span>
                 </div>
               ) : (
                 <>
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground mb-1">Blocked Reason</div>
-                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                    <div className="rounded-xl bg-warning-soft border border-warning p-3 text-sm text-warning">
                       {overrideBlockedReason}
                     </div>
                   </div>
 
                   {overrideWarning && (
-                    <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                    <div className="rounded-xl bg-danger-soft border border-danger p-3 text-sm text-danger">
                       <div className="font-semibold mb-1">Risk Warning</div>
                       <p>{overrideWarning}</p>
-                      <p className="mt-2 text-xs text-red-600">
+                      <p className="mt-2 text-xs text-danger">
                         This may damage the customer relationship. Only proceed if you are certain.
                       </p>
                     </div>
@@ -599,7 +599,7 @@ export default function InvoiceDetailPage() {
                   </div>
 
                   {overrideError && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-danger-soft border border-danger text-danger text-xs">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {overrideError}
                     </div>
@@ -617,8 +617,8 @@ export default function InvoiceDetailPage() {
                       disabled={overriding || (overrideRequiresAck && !overrideWarning)}
                       className={`flex-1 h-11 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-colors ${
                         overrideRequiresAck
-                          ? 'bg-red-600 hover:bg-red-700'
-                          : 'bg-amber-600 hover:bg-amber-700'
+                          ? 'bg-danger hover:bg-danger'
+                          : 'bg-warning hover:bg-warning'
                       } disabled:opacity-50`}
                     >
                       {overriding && <Loader className="h-4 w-4 animate-spin" />}
@@ -649,8 +649,8 @@ export default function InvoiceDetailPage() {
             <div className="p-5 space-y-4">
               {recordPaymentSuccess ? (
                 <div className="flex flex-col items-center gap-3 py-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
-                    <CheckCircle2 size={32} className="text-emerald-600" />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success-soft">
+                    <CheckCircle2 size={32} className="text-success" />
                   </div>
                   <p className="font-bold text-foreground text-lg">Payment Recorded</p>
                   <p className="text-sm text-muted-foreground text-center">
@@ -665,8 +665,8 @@ export default function InvoiceDetailPage() {
                 </div>
               ) : (
                 <>
-                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 mb-4">
-                    <p className="text-xs text-slate-500 font-medium">Outstanding</p>
+                  <div className="rounded-xl bg-muted border border-border px-4 py-3 mb-4">
+                    <p className="text-xs text-muted-foreground font-medium">Outstanding</p>
                     <p className="text-xl font-bold text-foreground tabular-nums">
                       {formatINR(Math.max(0, (parseFloat(invoice?.total) || 0) - (parseFloat(invoice?.paidAmount) || 0)))}
                     </p>
@@ -707,7 +707,7 @@ export default function InvoiceDetailPage() {
                     />
                   </div>
                   {recordPaymentError && (
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-danger-soft border border-danger text-danger text-xs">
                       <AlertCircle className="h-4 w-4 shrink-0" />
                       {recordPaymentError}
                     </div>
@@ -722,7 +722,7 @@ export default function InvoiceDetailPage() {
                     <button
                       onClick={handleRecordPayment}
                       disabled={recordingPayment || !recordAmount || parseFloat(recordAmount) <= 0}
-                      className="flex-1 h-11 rounded-xl bg-green-600 font-bold text-white flex items-center justify-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50"
+                      className="flex-1 h-11 rounded-xl bg-success font-bold text-white flex items-center justify-center gap-2 hover:bg-success transition-colors disabled:opacity-50"
                     >
                       {recordingPayment && <Loader className="h-4 w-4 animate-spin" />}
                       {recordingPayment ? 'Recording...' : 'Record Payment'}

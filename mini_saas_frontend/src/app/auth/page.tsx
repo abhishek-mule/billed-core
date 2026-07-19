@@ -127,16 +127,16 @@ function MagicLinkForm() {
     <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
       {sent ? (
         <div className="space-y-3">
-          <div className="relative py-7 px-5 bg-blue-600/[0.06] rounded-sm text-center border border-blue-600/15 overflow-hidden">
-            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full bg-blue-600/[0.06]" />
+          <div className="relative py-7 px-5 bg-info/[0.06] rounded-sm text-center border border-info/15 overflow-hidden">
+            <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full bg-info/[0.06]" />
             <div className="relative">
-              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-blue-600/10 border border-blue-600/20 flex items-center justify-center">
-                <Mail className="w-4 h-4 text-blue-600" />
+              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-info/10 border border-info/20 flex items-center justify-center">
+                <Mail className="w-4 h-4 text-info" />
               </div>
-              <p className="text-xs text-blue-700 font-body font-medium leading-relaxed">
+              <p className="text-xs text-info font-body font-medium leading-relaxed">
                 Check your inbox — click the link to sign in.
               </p>
-              <p className="text-[11px] text-blue-700/60 font-body mt-1">Sent to {email}</p>
+              <p className="text-[11px] text-info/60 font-body mt-1">Sent to {email}</p>
             </div>
           </div>
           <button
@@ -153,14 +153,14 @@ function MagicLinkForm() {
               Business Email
             </label>
             <div className="relative group">
-              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-blue-600 transition-colors" aria-hidden="true" />
+              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-info transition-colors" aria-hidden="true" />
               <input
                 id="email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className="w-full pl-10 pr-4 py-2.5 rounded-sm border border-border bg-muted text-sm font-body text-foreground placeholder:text-muted-foreground focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 focus:bg-card outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-sm border border-border bg-muted text-sm font-body text-foreground placeholder:text-muted-foreground focus:border-info focus:ring-2 focus:ring-info/15 focus:bg-card outline-none transition-all"
                 aria-label="Email address"
               />
             </div>
@@ -168,7 +168,7 @@ function MagicLinkForm() {
           <button
             type="submit"
             disabled={loading}
-            className="group w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm font-body font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_14px_rgba(37,99,235,0.28)]"
+            className="group w-full py-3 bg-info hover:bg-info text-white rounded-sm text-sm font-body font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_14px_rgba(37,99,235,0.28)]"
             aria-busy={loading}
           >
             {loading ? (
@@ -249,7 +249,7 @@ function RadialProgress({ value, size = 34 }: { value: number; size?: number }) 
           style={{ filter: "drop-shadow(0 0 3px rgba(74,222,128,0.5))" }}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-ledger text-green-400">
+      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-ledger text-success">
         {value}%
       </span>
     </div>
@@ -343,7 +343,7 @@ function RecoveryJourneyPreview() {
     <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-4">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
+          <span className="w-1 h-1 rounded-full bg-success animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
           <span className="text-[9px] font-ledger text-white/40 uppercase tracking-[0.15em]">Live Recovery</span>
         </div>
         <span className="text-[8px] font-ledger text-white/25">#INV-4471</span>
@@ -356,9 +356,9 @@ function RecoveryJourneyPreview() {
               <div
                 className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center text-[9px] font-bold transition-all ${
                   step.status === "done"
-                    ? "bg-green-500/20 border-green-400/60 text-green-400"
+                    ? "bg-success/20 border-success/60 text-success"
                     : step.status === "active"
-                      ? "bg-blue-500/20 border-blue-400 text-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]"
+                      ? "bg-info/20 border-info text-info shadow-[0_0_10px_rgba(96,165,250,0.5)]"
                       : "border-white/[0.15] text-white/20"
                 }`}
               >
@@ -415,7 +415,7 @@ function RecoveryEngineStatus() {
     <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-4 flex flex-col justify-between">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <Zap className="w-3 h-3 text-blue-400" />
+          <Zap className="w-3 h-3 text-info" />
           <span className="text-[9px] font-ledger text-white/40 uppercase tracking-[0.15em]">Engine</span>
         </div>
         <span className="text-[9px] font-ledger text-white/30">● Monitoring</span>
@@ -437,8 +437,8 @@ function RecoveryEngineStatus() {
         <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.06]">
           <span className="text-[9px] font-body text-white/40">Likely to Pay Today</span>
           <div className="flex items-center gap-1.5">
-            <TrendingUp className="w-2.5 h-2.5 text-green-400" />
-            <span className="text-[10px] font-ledger text-green-400">82%</span>
+            <TrendingUp className="w-2.5 h-2.5 text-success" />
+            <span className="text-[10px] font-ledger text-success">82%</span>
           </div>
         </div>
       </div>
@@ -447,7 +447,7 @@ function RecoveryEngineStatus() {
         <div className="text-[9px] font-body text-white/40 mb-0.5">Next Action</div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <Clock className="w-2.5 h-2.5 text-blue-400" />
+            <Clock className="w-2.5 h-2.5 text-info" />
             <span className="text-[10px] font-body text-white/70 font-medium">WhatsApp</span>
           </div>
           <span className="text-[9px] font-ledger text-white/50">7:30 PM</span>
@@ -456,7 +456,7 @@ function RecoveryEngineStatus() {
 
       <div className="pt-1.5 border-t border-white/[0.06]">
         <div className="flex items-center gap-1 transition-all duration-500">
-          <span className="w-0.5 h-0.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+          <span className="w-0.5 h-0.5 rounded-full bg-info animate-pulse shrink-0" />
           <span className="text-[9px] font-ledger text-white/35 truncate transition-all duration-500" key={statusIndex}>
             {STATUS_MESSAGES[statusIndex]}
           </span>
@@ -586,9 +586,9 @@ export default function AuthPage() {
 
                 <p className="text-center text-[10px] font-body text-muted-foreground mt-3 leading-relaxed">
                   By signing in, you agree to the{" "}
-                  <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Terms of Service</a>
+                  <a href="#" className="text-info hover:text-info underline underline-offset-2">Terms of Service</a>
                   {" "}and{" "}
-                  <a href="#" className="text-blue-600 hover:text-blue-700 underline underline-offset-2">Privacy Policy</a>
+                  <a href="#" className="text-info hover:text-info underline underline-offset-2">Privacy Policy</a>
                 </p>
               </div>
             </Suspense>

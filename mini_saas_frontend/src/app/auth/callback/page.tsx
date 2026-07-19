@@ -106,8 +106,8 @@ function CallbackContent() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center p-8">
-          <p className="text-red-600 font-medium mb-4">{error}</p>
-          <a href="/auth" className="text-indigo-600 hover:underline font-medium">
+          <p className="text-danger font-medium mb-4">{error}</p>
+          <a href="/auth" className="text-info hover:underline font-medium">
             Back to login
           </a>
         </div>
@@ -117,7 +117,7 @@ function CallbackContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="flex items-center gap-3 text-slate-600">
+      <div className="flex items-center gap-3 text-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span>Finishing sign in...</span>
       </div>
@@ -129,7 +129,7 @@ export default function AuthCallbackPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="flex items-center gap-3 text-slate-600">
+        <div className="flex items-center gap-3 text-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>Loading...</span>
         </div>

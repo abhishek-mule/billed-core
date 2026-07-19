@@ -55,9 +55,9 @@ export default async function DeveloperPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <Bug className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600">No tenant session found. Please log in.</p>
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <Bug className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger">No tenant session found. Please log in.</p>
           </div>
         </div>
       </div>
@@ -107,7 +107,7 @@ export default async function DeveloperPage() {
 
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-600">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-info-soft text-info">
               <Bug className="w-5 h-5" />
             </div>
             <div>
@@ -119,16 +119,33 @@ export default async function DeveloperPage() {
           </div>
         </div>
 
+        <Link
+          href="/settings/developer/recovery-diagnostics"
+          className="block bg-card border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-recovery-soft text-recovery">
+              <Bug className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Recovery Diagnostics</h2>
+              <p className="text-xs text-muted-foreground">
+                Inspect the workflow engine&apos;s actions, lifecycle events, and next scheduled step for any invoice.
+              </p>
+            </div>
+          </div>
+        </Link>
+
         {/* Stage legend */}
         <div className="bg-card border border-border rounded-lg p-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
           {STAGE_ORDER.map(s => (
             <div key={s} className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${
-                s === 'created' ? 'bg-slate-400' :
-                s === 'synced' ? 'bg-blue-400' :
-                s === 'processed' ? 'bg-amber-400' :
-                s === 'projected' ? 'bg-emerald-400' :
-                'bg-violet-400'
+                s === 'created' ? 'bg-muted' :
+                s === 'synced' ? 'bg-info' :
+                s === 'processed' ? 'bg-warning' :
+                s === 'projected' ? 'bg-success' :
+                'bg-recovery'
               }`} />
               <span className="font-medium text-foreground">{STAGE_LABELS[s]}</span>
               <span className="text-muted-foreground">— {STAGE_DESCRIPTIONS[s]}</span>
@@ -149,9 +166,9 @@ export default async function DeveloperPage() {
 
               return (
                 <div key={p.id} className={`bg-card border-2 rounded-lg p-4 ${
-                  isCompleted ? 'border-emerald-200' :
-                  currentIdx <= 0 ? 'border-slate-200' :
-                  'border-amber-200'
+                  isCompleted ? 'border-success' :
+                  currentIdx <= 0 ? 'border-border' :
+                  'border-warning'
                 }`}>
                   {/* Header row */}
                   <div className="flex items-center justify-between mb-3">
@@ -166,15 +183,15 @@ export default async function DeveloperPage() {
                         {p.source}
                       </span>
                       {p.source_id && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-sky-50 text-sky-600 border border-sky-200">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-info-soft text-info border border-info">
                           #{p.source_id}
                         </span>
                       )}
                     </div>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${
-                      isCompleted ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                      currentIdx <= 0 ? 'bg-slate-50 text-slate-500 border-slate-200' :
-                      'bg-amber-50 text-amber-700 border-amber-200'
+                      isCompleted ? 'bg-success-soft text-success border-success' :
+                      currentIdx <= 0 ? 'bg-muted text-muted-foreground border-border' :
+                      'bg-warning-soft text-warning border-warning'
                     }`}>
                       {p.lifecycle_status}
                     </span>
@@ -197,14 +214,14 @@ export default async function DeveloperPage() {
                           {/* Stage dot + label */}
                           <div className="flex flex-col items-center min-w-0">
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                              isCurrent ? 'ring-2 ring-offset-1 ring-indigo-400' : ''
+                              isCurrent ? 'ring-2 ring-offset-1 ring-info' : ''
                             } ${
                               isActive
-                                ? stage === 'created' ? 'bg-slate-500 text-white'
-                                  : stage === 'synced' ? 'bg-blue-500 text-white'
-                                  : stage === 'processed' ? 'bg-amber-500 text-white'
-                                  : stage === 'projected' ? 'bg-emerald-500 text-white'
-                                  : 'bg-violet-500 text-white'
+                                ? stage === 'created' ? 'bg-muted text-white'
+                                  : stage === 'synced' ? 'bg-info text-white'
+                                  : stage === 'processed' ? 'bg-warning text-white'
+                                  : stage === 'projected' ? 'bg-success text-white'
+                                  : 'bg-recovery text-white'
                                 : 'bg-muted text-muted-foreground'
                             }`}>
                               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -241,8 +258,8 @@ export default async function DeveloperPage() {
                     <div className="mt-2 pt-2 border-t border-border flex items-center gap-2 text-[10px] text-muted-foreground">
                       <span className="font-medium">Outbox:</span>
                       <span className={`px-1 py-0.5 rounded font-medium ${
-                        outbox.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
-                        outbox.status === 'processing' ? 'bg-amber-50 text-amber-600' :
+                        outbox.status === 'completed' ? 'bg-success-soft text-success' :
+                        outbox.status === 'processing' ? 'bg-warning-soft text-warning' :
                         'bg-muted text-muted-foreground'
                       }`}>
                         {outbox.status}

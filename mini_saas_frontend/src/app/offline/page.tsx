@@ -29,7 +29,7 @@ export default function OfflinePage() {
   if (online) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-        <div className="grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-emerald-700">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-success-soft text-success">
           <Wifi className="h-8 w-8" />
         </div>
         <h1 className="mt-5 text-xl font-black">You're back online</h1>
@@ -39,7 +39,7 @@ export default function OfflinePage() {
         <button
           onClick={handleRetry}
           disabled={retrying}
-          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-success px-6 py-2.5 text-sm font-semibold text-white hover:bg-success disabled:opacity-50 transition-colors"
         >
           {retrying ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -54,7 +54,7 @@ export default function OfflinePage() {
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-      <div className="grid h-16 w-16 place-items-center rounded-full bg-amber-100 text-amber-700">
+      <div className="grid h-16 w-16 place-items-center rounded-full bg-warning-soft text-warning">
         <WifiOff className="h-8 w-8" />
       </div>
       <h1 className="mt-5 text-xl font-black">You're offline</h1>
@@ -64,7 +64,7 @@ export default function OfflinePage() {
       <button
         onClick={handleRetry}
         disabled={retrying}
-        className="mt-6 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+        className="mt-6 inline-flex items-center gap-2 rounded-lg bg-warning px-6 py-2.5 text-sm font-semibold text-white hover:bg-warning disabled:opacity-50 transition-colors"
       >
         <RefreshCw className={`h-4 w-4 ${retrying ? 'animate-spin' : ''}`} />
         Try again

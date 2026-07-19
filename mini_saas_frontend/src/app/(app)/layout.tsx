@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AppShell } from '@/components/billzo/AppShell'
 import { ErrorBoundary } from '@/components/billzo/ErrorBoundary'
-import { SplashScreen } from '@/components/billzo/SplashScreen'
 import { SessionProvider } from '@/lib/billzo/session'
 import { NetworkStatus } from '@/components/billzo/NetworkStatus'
 import { scheduleBackgroundSync } from '@/lib/billzo/network-status'
 import { syncPendingQueue, reconcileFromServer } from '@/lib/billzo/sync'
 
 export default function BillzoLayout({ children }: { children: React.ReactNode }) {
-  const [showApp, setShowApp] = useState(false)
-
   useEffect(() => {
-    const seen = sessionStorage.getItem('billzo_splash_shown')
-    if (seen) {
-      setShowApp(true)
-      return
-    }
     const handleOnline = () => scheduleBackgroundSync()
     window.addEventListener('online', handleOnline)
     window.addEventListener('billzo:sync', () => {
@@ -29,10 +21,6 @@ export default function BillzoLayout({ children }: { children: React.ReactNode }
       window.removeEventListener('billzo:sync', handleOnline)
     }
   }, [])
-
-  if (!showApp) {
-    return <SplashScreen onComplete={() => { sessionStorage.setItem('billzo_splash_shown', '1'); setShowApp(true) }} />
-  }
 
   return (
     <ErrorBoundary>

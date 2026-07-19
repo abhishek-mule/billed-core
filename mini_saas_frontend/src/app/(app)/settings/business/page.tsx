@@ -139,13 +139,13 @@ export default function BusinessProfilePage() {
 
         {/* Status */}
         {saved && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+          <div className="flex items-center gap-2 px-4 py-3 bg-success-soft border border-success rounded-lg text-sm text-success">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             Business profile saved
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600">
+          <div className="flex items-center gap-2 px-4 py-3 bg-danger-soft border border-danger rounded-lg text-sm text-danger">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>

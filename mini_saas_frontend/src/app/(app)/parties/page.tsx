@@ -84,9 +84,9 @@ function getOutstandingStatus(inv: Invoice): 'overdue' | 'due_soon' | 'clear' {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  overdue: 'bg-rose-50 text-rose-700 border-rose-200',
-  due_soon: 'bg-amber-50 text-amber-700 border-amber-200',
-  clear: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  overdue: 'bg-danger-soft text-danger border-border',
+  due_soon: 'bg-warning-soft text-warning border-border',
+  clear: 'bg-success-soft text-success border-border',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -165,7 +165,7 @@ function PartyCard({ party, isSelected, onSelect }: {
           )}
           <div className="flex items-center justify-between mt-1.5">
             <p className={`text-sm font-semibold tabular-nums ${
-              party.outstanding > 0 ? 'text-rose-600' : 'text-emerald-600'
+              party.outstanding > 0 ? 'text-danger' : 'text-success'
             }`}>
               {formatINR(party.outstanding)}
             </p>
@@ -259,7 +259,7 @@ function PartyDetail({ party, onBack }: {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-3">
           <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Outstanding</p>
-          <p className="text-base font-semibold text-rose-600 tabular-nums">{formatINR(party.outstanding)}</p>
+          <p className="text-base font-semibold text-danger tabular-nums">{formatINR(party.outstanding)}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-3">
           <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Sales</p>
@@ -285,7 +285,7 @@ function PartyDetail({ party, onBack }: {
             <p className="text-sm text-muted-foreground">No pending invoices</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-border">
             {pendingInvoices.map(inv => {
               const status = getOutstandingStatus(inv)
               return (
@@ -312,7 +312,7 @@ function PartyDetail({ party, onBack }: {
                     </button>
                     <button
                       onClick={() => router.push(`/pulse?payInvoice=${inv.id}`)}
-                      className="text-xs px-2.5 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-medium"
+                      className="text-xs px-2.5 py-1.5 rounded bg-success-soft border border-border text-success hover:bg-success-soft/70 font-medium"
                     >
                       Pay
                     </button>
@@ -490,9 +490,9 @@ export default function PartiesPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600 mb-4">{error}</p>
+          <div className="bg-card border border-danger-soft rounded-lg p-6 text-center">
+            <AlertTriangle className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               {MerchantLanguage.common.retry}
             </Button>
@@ -530,7 +530,7 @@ export default function PartiesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 pb-8">
+    <div className="min-h-screen bg-muted/50 pb-24">
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Financial Hero */}
@@ -580,7 +580,7 @@ export default function PartiesPage() {
               </div>
               <button
                 onClick={() => router.push('/parties/add')}
-                className="w-9 h-9 rounded-lg bg-foreground text-background flex items-center justify-center flex-shrink-0"
+                className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -596,9 +596,10 @@ export default function PartiesPage() {
 
             {/* Party list */}
             {filtered.length === 0 ? (
-              <div className="bg-card border border-border rounded-lg p-6 text-center">
-                <p className="text-sm text-muted-foreground">No customers match your search</p>
-              </div>
+              <EmptyState
+                icon={<Search className="h-6 w-6" />}
+                title="No customers match your search"
+              />
             ) : (
               <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
                 {filtered.map(party => (
@@ -639,7 +640,7 @@ export default function PartiesPage() {
       <div className="lg:hidden fixed bottom-20 right-4 z-10">
         <button
           onClick={() => router.push('/parties/add')}
-          className="w-12 h-12 rounded-full bg-foreground text-background flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+          className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
         >
           <Plus className="w-5 h-5" />
         </button>

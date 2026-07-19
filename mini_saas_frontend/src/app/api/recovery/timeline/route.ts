@@ -1,167 +1,101 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { getInvoiceRecoveryTimeline } from '@/lib/billzo/attribution'
 
-export const dynamic = 'force-dynamic'
-
+/**
+ * Customer Timeline — unified, append-only event history for one customer.
+ * Sources: collection_actions (lifecycle), collection_action_events (state
+ * changes), whatsapp_events (delivery/read). The single audit + debug trail a
+ * merchant or support agent scrolls to answer "why didn't they pay?".
+ */
 export async function GET(request: NextRequest) {
   const auth = await verifyRequest(request)
   if (auth.response) return auth.response
   const tenantId = auth.tenantId!
+  if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const customerId = request.nextUrl.searchParams.get('customerId')
+  if (!customerId) return NextResponse.json({ error: 'customerId required' }, { status: 400 })
 
   try {
-    const { searchParams } = new URL(request.url)
-    const invoiceId = searchParams.get('invoiceId')
+    const { data: actions } = await supabaseAdmin
+      .from('collection_actions')
+      .select('id, action_type, channel, template_name, status, trigger_type, created_at, scheduled_at, completed_at, invoice_ids')
+      .eq('tenant_id', tenantId)
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: true })
+      .limit(200)
 
-    // Per-invoice timeline (existing behavior)
-    if (invoiceId) {
-      let invoiceExists = true
-      try {
-        const { data: invoice } = await supabaseAdmin
-          .from('invoices')
-          .select('id, tenant_id')
-          .eq('id', invoiceId)
+    const actionIds = (actions || []).map((a: any) => a.id)
+
+    const { data: events } = actionIds.length
+      ? await supabaseAdmin
+          .from('collection_action_events')
+          .select('action_id, event_type, to_status, created_at, payload')
           .eq('tenant_id', tenantId)
-          .single()
-        if (!invoice) invoiceExists = false
-      } catch {
-        invoiceExists = false
-      }
+          .in('action_id', actionIds)
+          .order('created_at', { ascending: true })
+          .limit(400)
+      : { data: [] as any[] }
 
-      if (!invoiceExists) {
-        return NextResponse.json({ events: [], attribution: null })
-      }
+    const { data: wa } = actionIds.length
+      ? await supabaseAdmin
+          .from('whatsapp_events')
+          .select('recovery_attempt_id, template, delivered_at, read_at, clicked_at, failed_reason, occurred_at, status')
+          .eq('tenant_id', tenantId)
+          .in('recovery_attempt_id', actionIds)
+          .order('occurred_at', { ascending: true })
+          .limit(400)
+      : { data: [] as any[] }
 
-      const timeline = await getInvoiceRecoveryTimeline(invoiceId)
+    const unified: any[] = []
 
-      let attribution = null
-      try {
-        const { data: attr } = await supabaseAdmin
-          .from('recovery_attributions')
-          .select('*')
-          .eq('invoice_id', invoiceId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-        attribution = attr
-      } catch {
-        attribution = null
-      }
+    // 1. collection_actions itself: created/scheduled/completed milestones
+    for (const a of actions || []) {
+      const label = a.action_type === 'call' ? 'Phone Call' : a.action_type === 'reminder' ? 'Reminder' : a.action_type === 'promise_followup' ? 'Promise Follow-up' : a.action_type
+      if (a.created_at) unified.push({ at: a.created_at, source: 'action', type: 'created', label: `${label} Scheduled`, detail: a.channel || a.template_name || '' })
+      if (a.completed_at) unified.push({ at: a.completed_at, source: 'action', type: 'completed', label: `${label} Completed`, detail: '' })
+    }
 
-      return NextResponse.json({
-        events: timeline.events || [],
-        attribution: attribution || null,
+    // 2. collection_action_events: state transitions
+    const evtLabel: Record<string, string> = {
+      scheduled: 'Scheduled', started: 'Started', sent: 'Reminder Sent', delivered: 'Delivered',
+      failed: 'Failed', completed: 'Completed', cancelled: 'Cancelled', expired: 'Expired',
+      promise_made: 'Promise Made', payment_received: 'Payment Received', state_changed: 'Case State Changed',
+    }
+    for (const e of events || []) {
+      unified.push({
+        at: e.created_at, source: 'event', type: e.event_type,
+        label: evtLabel[e.event_type] || e.event_type.replace(/_/g, ' '),
+        detail: e.payload?.reason || e.payload?.channel || (e.to_status ? `→ ${e.to_status}` : '') || '',
       })
     }
 
-    // Tenant-wide timeline (for Recovery History page)
-    const limit = Math.min(Number(searchParams.get('limit')) || 100, 200)
-    const customerId = searchParams.get('customerId')
-
-    const [whatsappRes, casesRes, paymentsRes] = await Promise.all([
-      supabaseAdmin
-        .from('whatsapp_events')
-        .select('id, customer_id, invoice_id, amount, status, direction, message_preview, occurred_at, delivered_at, read_at, failed_at, customers!inner(customer_name, phone)')
-        .eq('tenant_id', tenantId)
-        .eq('direction', 'outbound')
-        .order('occurred_at', { ascending: false })
-        .limit(limit),
-      supabaseAdmin
-        .from('recovery_cases')
-        .select('id, customer_id, promise_to_pay_date, recovery_state_v2, next_action_type, last_activity_at, attention_score, customers!inner(customer_name, phone)')
-        .eq('tenant_id', tenantId)
-        .not('promise_to_pay_date', 'is', null)
-        .order('last_activity_at', { ascending: false })
-        .limit(limit),
-      supabaseAdmin
-        .from('payments')
-        .select('id, invoice_id, customer_id, amount, status, source, created_at, customers!inner(customer_name, phone)')
-        .eq('tenant_id', tenantId)
-        .eq('status', 'success')
-        .order('created_at', { ascending: false })
-        .limit(limit),
-    ])
-
-    const timeline: Array<{
-      id: string
-      type: 'reminder' | 'promise' | 'payment' | 'call' | 'system'
-      customerId: string
-      customerName: string
-      customerPhone: string
-      amount: number
-      label: string
-      detail: string
-      occurredAt: string
-      status: string
-    }> = []
-
-    // Add whatsapp events as reminders
-    if (whatsappRes.data) {
-      for (const ev of whatsappRes.data) {
-        const cust = (ev as any).customers || {}
-        timeline.push({
-          id: `reminder-${ev.id}`,
-          type: 'reminder',
-          customerId: ev.customer_id || '',
-          customerName: cust.customer_name || 'Unknown',
-          customerPhone: cust.phone || '',
-          amount: Number(ev.amount) || 0,
-          label: 'Reminder',
-          detail: ev.message_preview || 'WhatsApp reminder sent',
-          occurredAt: ev.occurred_at,
-          status: ev.status,
-        })
-      }
+    // 3. whatsapp_events: delivery signal
+    for (const w of wa || []) {
+      if (w.delivered_at) unified.push({ at: w.delivered_at, source: 'whatsapp', type: 'delivered', label: 'Delivered', detail: w.template || '' })
+      if (w.read_at) unified.push({ at: w.read_at, source: 'whatsapp', type: 'read', label: 'Read', detail: w.template || '' })
+      if (w.clicked_at) unified.push({ at: w.clicked_at, source: 'whatsapp', type: 'clicked', label: 'Clicked UPI', detail: '' })
+      if (w.status === 'failed' && !w.delivered_at) unified.push({ at: w.occurred_at, source: 'whatsapp', type: 'failed', label: 'Delivery Failed', detail: w.failed_reason || '' })
     }
 
-    // Add promises from recovery_cases with promise_to_pay_date
-    if (casesRes.data) {
-      for (const rc of casesRes.data) {
-        const cust = (rc as any).customers || {}
-        timeline.push({
-          id: `promise-${rc.id}`,
-          type: 'promise',
-          customerId: rc.customer_id,
-          customerName: cust.customer_name || 'Unknown',
-          customerPhone: cust.phone || '',
-          amount: 0,
-          label: 'Promise',
-          detail: `Promised payment by ${new Date(rc.promise_to_pay_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-          occurredAt: rc.last_activity_at || rc.promise_to_pay_date,
-          status: new Date(rc.promise_to_pay_date) < new Date() ? 'broken' : 'active',
-        })
-      }
+    unified.sort((x, y) => +new Date(x.at) - +new Date(y.at))
+
+    // Group by day
+    const byDay = new Map<string, any[]>()
+    for (const u of unified) {
+      const d = new Date(u.at).toISOString().slice(0, 10)
+      const arr = byDay.get(d) || []
+      arr.push(u)
+      byDay.set(d, arr)
     }
+    const days = [...byDay.entries()].map(([date, items]) => ({ date, items })).reverse()
 
-    // Add payments
-    if (paymentsRes.data) {
-      for (const pmt of paymentsRes.data) {
-        const cust = (pmt as any).customers || {}
-        timeline.push({
-          id: `payment-${pmt.id}`,
-          type: 'payment',
-          customerId: pmt.customer_id || '',
-          customerName: cust.customer_name || 'Unknown',
-          customerPhone: cust.phone || '',
-          amount: Number(pmt.amount) || 0,
-          label: pmt.source === 'cash' ? 'Cash' : 'Payment',
-          detail: `Payment of ₹${Number(pmt.amount).toLocaleString('en-IN')} received`,
-          occurredAt: pmt.created_at,
-          status: 'success',
-        })
-      }
-    }
-
-    // Sort all by occurredAt descending
-    timeline.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-
-    // Filter by customerId if provided
-    const filtered = customerId ? timeline.filter(e => e.customerId === customerId) : timeline
-
-    return NextResponse.json({ events: filtered.slice(0, limit), total: filtered.length })
+    return NextResponse.json({ customerId, days, total: unified.length })
   } catch (err: any) {
-    console.error('[RecoveryTimeline] Error:', err)
-    return NextResponse.json({ events: [], total: 0, error: err.message })
+    console.error('[Timeline] failed', err)
+    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
   }
 }

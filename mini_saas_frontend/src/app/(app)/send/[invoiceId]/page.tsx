@@ -519,7 +519,7 @@ export default function InvoiceSendPage() {
             <div className="flex-1">
               <p className="font-semibold">{i.customerName}</p>
               {customerOutstanding > 0 && (
-                <p className="text-xs text-amber-600">{formatINR(customerOutstanding)} previous outstanding</p>
+                <p className="text-xs text-warning">{formatINR(customerOutstanding)} previous outstanding</p>
               )}
             </div>
           </div>
@@ -534,8 +534,8 @@ export default function InvoiceSendPage() {
             />
           </div>
           {/* Communication status */}
-          <div className={`flex items-center gap-2 text-xs ${customerPhone ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-            <span className={`w-2 h-2 rounded-full ${customerPhone ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+          <div className={`flex items-center gap-2 text-xs ${customerPhone ? 'text-success' : 'text-muted-foreground'}`}>
+            <span className={`w-2 h-2 rounded-full ${customerPhone ? 'bg-success' : 'bg-muted-foreground/40'}`} />
             {customerPhone
               ? `WhatsApp · ${customerPhone.replace(/\d(?=\d{4})/g, 'x')}`
               : 'No WhatsApp number — share manually'}
@@ -549,7 +549,7 @@ export default function InvoiceSendPage() {
             <div className="text-right"><span className="text-muted-foreground text-xs">Total</span><p className="font-bold text-lg">{formatINR(i.total)}</p></div>
           </div>
           <div className={`mt-2 text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 ${
-            isUdhar ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+            isUdhar ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
           }`}>
             {isUdhar ? "UDHARI" : "PAID"}
           </div>
@@ -613,10 +613,10 @@ export default function InvoiceSendPage() {
             />
           </div>
           {paymentLinkUrl && copied && (
-            <p className="text-xs text-emerald-600 font-medium text-center">Copied!</p>
+            <p className="text-xs text-success font-medium text-center">Copied!</p>
           )}
           {paymentLinkError && (
-            <p className="text-xs text-amber-600 font-medium flex items-center gap-1 justify-center">
+            <p className="text-xs text-warning font-medium flex items-center gap-1 justify-center">
               <AlertTriangle size={12} />
               Payment link couldn't be generated
               <button onClick={generatePaymentLink} className="underline font-semibold">Retry</button>
@@ -664,25 +664,25 @@ export default function InvoiceSendPage() {
           <div className="space-y-1.5 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">WhatsApp Send</span>
-              <span className={`text-xs font-medium ${phoneVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
+              <span className={`text-xs font-medium ${phoneVerified ? 'text-success' : 'text-warning'}`}>
                 {phoneVerified ? 'Ready' : 'Add phone'}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Reminder Scheduled</span>
-              <span className={`text-xs font-medium ${reminderScheduled ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+              <span className={`text-xs font-medium ${reminderScheduled ? 'text-success' : 'text-muted-foreground'}`}>
                 {reminderScheduled ? 'Yes' : 'No'}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Promise Recorded</span>
-              <span className={`text-xs font-medium ${promiseRecorded ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+              <span className={`text-xs font-medium ${promiseRecorded ? 'text-success' : 'text-muted-foreground'}`}>
                 {promiseRecorded ? 'Yes' : 'No'}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Payment Link</span>
-              <span className={`text-xs font-medium ${paymentLinkUrl ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+              <span className={`text-xs font-medium ${paymentLinkUrl ? 'text-success' : 'text-muted-foreground'}`}>
                 {paymentLinkUrl ? 'Ready' : 'Not created'}
               </span>
             </div>
@@ -707,7 +707,7 @@ export default function InvoiceSendPage() {
 
         {/* Credit exposure warning */}
         {totalExposure > 50000 && isUdhar && (
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning flex items-start gap-2">
             <AlertTriangle size={14} className="shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold">Credit Exposure: {formatINR(totalExposure)}</p>
@@ -736,7 +736,7 @@ export default function InvoiceSendPage() {
         </div>
 
         {!customerPhone && (
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-200">
+          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
             No customer WhatsApp number. We'll open your WhatsApp so you can forward the invoice manually.
           </div>
         )}
@@ -752,16 +752,16 @@ export default function InvoiceSendPage() {
               {customMessage ? 'Reset' : 'Edit'}
             </button>
           </div>
-          <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+          <div className="bg-success-soft dark:bg-green-950/20 border border-success dark:border-success rounded-lg p-3">
             <div className="flex items-start gap-2">
-              <MessageSquare size={14} className="text-green-600 shrink-0 mt-0.5" />
+              <MessageSquare size={14} className="text-success shrink-0 mt-0.5" />
               <div>
-                <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">To: {i.customerName}</p>
-                <p className="text-xs text-green-700 dark:text-green-300 whitespace-pre-wrap">
+                <p className="text-xs text-success dark:text-success font-medium mb-1">To: {i.customerName}</p>
+                <p className="text-xs text-success dark:text-success whitespace-pre-wrap">
                   {customMessage || getDefaultMessage}
                 </p>
                 {isUdhar && (
-                  <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                  <p className="text-xs text-success mt-2 flex items-center gap-1">
                     <ExternalLink size={10} />
                     {paymentLinkUrl ? '✓ Payment link included' : 'Payment link will be attached'}
                   </p>
@@ -791,12 +791,12 @@ export default function InvoiceSendPage() {
                   Generating...
                 </span>
               ) : paymentLinkUrl ? (
-                <span className="text-xs text-emerald-600 flex items-center gap-1">
+                <span className="text-xs text-success flex items-center gap-1">
                   <CheckCircle2 size={12} />
                   Ready
                 </span>
               ) : paymentLinkError ? (
-                <span className="text-xs text-amber-600 flex items-center gap-1">
+                <span className="text-xs text-warning flex items-center gap-1">
                   <AlertTriangle size={12} />
                   Failed
                 </span>
@@ -812,7 +812,7 @@ export default function InvoiceSendPage() {
               </button>
             )}
             {paymentLinkError && (
-              <button onClick={generatePaymentLink} className="text-xs text-amber-600 underline font-medium">
+              <button onClick={generatePaymentLink} className="text-xs text-warning underline font-medium">
                 Retry
               </button>
             )}
@@ -861,8 +861,8 @@ export default function InvoiceSendPage() {
           <ArrowLeft size={16} /> Back
         </button>
 
-        <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4">
-          <h2 className="font-bold flex items-center gap-2"><Hand size={18} className="text-amber-600" /> Promise to Pay</h2>
+        <div className="rounded-xl bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-4">
+          <h2 className="font-bold flex items-center gap-2"><Hand size={18} className="text-warning" /> Promise to Pay</h2>
           <p className="text-xs text-muted-foreground mt-1">Customer committed to pay. BillZo will remind them.</p>
         </div>
 
@@ -900,8 +900,8 @@ export default function InvoiceSendPage() {
                     onClick={() => setPromiseTime(t)}
                     className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
                       promiseTime === t
-                        ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 text-amber-700'
-                        : 'border-border text-muted-foreground hover:border-amber-200'
+                        ? 'border-warning bg-warning-soft dark:bg-amber-950/30 text-warning'
+                        : 'border-border text-muted-foreground hover:border-warning'
                     }`}
                   >
                     <Icon size={14} />
@@ -929,7 +929,7 @@ export default function InvoiceSendPage() {
               <div className="flex items-center gap-2">
                 <div
                   className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    promiseAutoFollowup ? "bg-amber-600 border-amber-600" : "border-muted-foreground/30"
+                    promiseAutoFollowup ? "bg-warning border-warning" : "border-muted-foreground/30"
                   }`}
                   onClick={() => setPromiseAutoFollowup(!promiseAutoFollowup)}
                 >
@@ -957,7 +957,7 @@ export default function InvoiceSendPage() {
         <button
           onClick={handleSavePromise}
           disabled={promiseSaving || !promiseDate}
-          className="w-full py-4 bg-amber-600 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-amber-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
+          className="w-full py-4 bg-warning text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-warning disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {promiseSaving ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
           {promiseSaving ? 'Saving...' : 'Save Promise'}
@@ -995,8 +995,8 @@ export default function InvoiceSendPage() {
           <ArrowLeft size={16} /> Back
         </button>
 
-        <div className="rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 p-4">
-          <h2 className="font-bold flex items-center gap-2"><CalendarClock size={18} className="text-violet-600" /> Schedule Reminder</h2>
+        <div className="rounded-xl bg-recovery-soft dark:bg-violet-950/30 border border-recovery dark:border-recovery p-4">
+          <h2 className="font-bold flex items-center gap-2"><CalendarClock size={18} className="text-recovery" /> Schedule Reminder</h2>
           <p className="text-xs text-muted-foreground mt-1">BillZo sends at the scheduled time. Rate limits handled automatically.</p>
         </div>
 
@@ -1034,8 +1034,8 @@ export default function InvoiceSendPage() {
                   onClick={() => setScheduleRepeat(r.value)}
                   className={`rounded-lg border py-2 text-xs font-medium transition-all ${
                     scheduleRepeat === r.value
-                      ? 'border-violet-400 bg-violet-50 dark:bg-violet-950/30 text-violet-700'
-                      : 'border-border text-muted-foreground hover:border-violet-200'
+                      ? 'border-recovery bg-recovery-soft dark:bg-violet-950/30 text-recovery'
+                      : 'border-border text-muted-foreground hover:border-recovery'
                   }`}
                 >
                   {r.label}
@@ -1060,7 +1060,7 @@ export default function InvoiceSendPage() {
         <button
           onClick={handleScheduleReminder}
           disabled={scheduleSaving || !scheduleDate}
-          className="w-full py-4 bg-violet-600 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-violet-700 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
+          className="w-full py-4 bg-recovery text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-recovery disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {scheduleSaving ? <Loader2 size={18} className="animate-spin" /> : <CalendarClock size={18} />}
           {scheduleSaving ? 'Scheduling...' : 'Schedule Reminder'}

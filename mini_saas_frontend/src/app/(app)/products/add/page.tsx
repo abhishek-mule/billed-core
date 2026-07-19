@@ -104,7 +104,7 @@ export default function AddProductPage() {
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">{error}</div>
+          <div className="p-3 rounded-lg bg-danger-soft border border-danger text-danger text-sm">{error}</div>
         )}
 
         {/* Basic / Advanced toggle */}
@@ -115,7 +115,7 @@ export default function AddProductPage() {
             className="flex items-center justify-between w-full text-sm"
           >
             <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500" />
+              <Zap className="w-4 h-4 text-warning" />
               <span className="font-medium text-foreground">
                 {basicMode ? 'Basic Mode' : 'Advanced Mode'}
               </span>
@@ -134,7 +134,7 @@ export default function AddProductPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                  Product Name <span className="text-rose-500">*</span>
+                  Product Name <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"

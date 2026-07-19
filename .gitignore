@@ -98,3 +98,6 @@ frappe_docker/sites/
 
 # Claude Code
 .claude/
+
+# TypeScript build info
+tsconfig.tsbuildinfo

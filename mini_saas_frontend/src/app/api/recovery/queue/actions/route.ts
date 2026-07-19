@@ -7,6 +7,8 @@ import { verifyRequest, validateJsonBody, validateRequired, errorResponse, logAp
 import { signUpiToken } from '@/lib/billzo/crypto'
 import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
 import { requireFeature } from '@/lib/auth/feature-gate'
+import { getEntitlement, emitUsageEvent } from '@/lib/billzo/feature-flags'
+import { planPromiseFollowup } from '@/lib/recovery/planner'
 import { EventType, PAYMENT_SOURCES } from '@billzo/shared'
 import type { PaymentSource } from '@billzo/shared'
 
@@ -234,6 +236,30 @@ export async function POST(request: NextRequest) {
 
     // ── send_reminder: executable transport intent with consolidated customer message ──
     if (action === 'send_reminder') {
+      // Quota gate with SOFT LIMITS: warn at 90%/95% (orange/red), hard-disable
+      // only past 110%. Usage is incremented via the billing worker (outbox).
+      const { PLAN_LIMITS } = await import('@/lib/billzo/plan-limits')
+      const { checkQuota, emitUsageEvent } = await import('@/lib/billzo/feature-flags')
+      const ent = await getEntitlement(tid)
+      const limit = ent ? PLAN_LIMITS[ent.planCode].reminders : 3
+      const quota = await checkQuota(tid, 'reminders_sent', limit)
+      let quotaWarning: 'none' | 'warn' | 'critical' | 'exceeded' = 'none'
+      if (limit > 0) {
+        const pct = (quota.used / limit) * 100
+        if (pct >= 110) quotaWarning = 'exceeded'
+        else if (pct >= 95) quotaWarning = 'critical'
+        else if (pct >= 90) quotaWarning = 'warn'
+      }
+      if (quotaWarning === 'exceeded') {
+        return NextResponse.json({
+          error: 'QUOTA_EXCEEDED',
+          feature: 'reminders',
+          limit,
+          used: quota.used,
+          upgradeTo: 'pro',
+        }, { status: 402 })
+      }
+
       // Get all unpaid invoices for this customer
       const { data: unpaidInvoices } = await supabase
         .from('invoices')
@@ -339,6 +365,9 @@ export async function POST(request: NextRequest) {
 
         await markCaseActivity(supabase, caseId)
 
+        // Usage increment is event-driven (billing worker applies it).
+        await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+
         return NextResponse.json({
           success: true,
           action,
@@ -349,12 +378,14 @@ export async function POST(request: NextRequest) {
           invoiceCount: unpaidInvoices.length,
           message: 'Reminder queued for delivery via WhatsApp',
           refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
+          quotaWarning,
         })
       }
 
       if (directResult.sentVia === 'gupshup') {
         await markCaseActivity(supabase, caseId)
         if (directResult.success) {
+          await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
           return NextResponse.json({
             success: true,
             action,
@@ -363,6 +394,7 @@ export async function POST(request: NextRequest) {
             totalOverdue,
             invoiceCount: unpaidInvoices.length,
             refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
+            quotaWarning,
           })
         }
         return NextResponse.json({
@@ -480,6 +512,16 @@ export async function POST(request: NextRequest) {
 
       if (action === 'mark_promise') {
         outboxPayload.due_date = payload?.dueDate || null
+        // Promise made → schedule a promise follow-up action automatically.
+        if (payload?.dueDate && recoveryCase?.customer_id) {
+          await planPromiseFollowup({
+            tenantId: tid,
+            customerId: recoveryCase.customer_id,
+            invoiceIds: body.invoiceId ? [body.invoiceId] : [],
+            promiseDate: new Date(payload.dueDate),
+            reason: 'promise_made',
+          }).catch((e) => console.error('[QueueAction] promise follow-up failed', e))
+        }
       }
 
       if (action === 'snooze') {

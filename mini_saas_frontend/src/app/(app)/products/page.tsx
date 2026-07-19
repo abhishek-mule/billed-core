@@ -40,21 +40,21 @@ function getStockStatus(product: Product): StockStatus {
 const STOCK_INDICATORS: Record<StockStatus, { label: string; dot: string; bg: string; text: string }> = {
   in_stock: {
     label: 'In Stock',
-    dot: 'bg-emerald-500',
-    bg: 'bg-emerald-50 text-emerald-700',
-    text: 'text-emerald-700',
+    dot: 'bg-success',
+    bg: 'bg-success-soft text-success',
+    text: 'text-success',
   },
   low_stock: {
     label: 'Low Stock',
-    dot: 'bg-amber-500',
-    bg: 'bg-amber-50 text-amber-700',
-    text: 'text-amber-700',
+    dot: 'bg-warning',
+    bg: 'bg-warning-soft text-warning',
+    text: 'text-warning',
   },
   out_of_stock: {
     label: 'Out of Stock',
-    dot: 'bg-rose-500',
-    bg: 'bg-rose-50 text-rose-700',
-    text: 'text-rose-700',
+    dot: 'bg-danger',
+    bg: 'bg-danger-soft text-danger',
+    text: 'text-danger',
   },
 }
 
@@ -112,11 +112,11 @@ function InventoryHero({
           active={activeFilter === 'out_of_stock'}
           onClick={() => onFilterChange(activeFilter === 'out_of_stock' ? null : 'out_of_stock')}
         />
-        <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-3">
-          <p className="text-[10px] text-amber-700 font-medium uppercase tracking-wider mb-1">
+        <div className="bg-warning-soft/50 border border-warning rounded-lg p-3">
+          <p className="text-[10px] text-warning font-medium uppercase tracking-wider mb-1">
             <AlertTriangle className="w-3 h-3 inline mr-1" />Needs Attention
           </p>
-          <p className="text-lg font-semibold text-amber-700 tabular-nums">{lowStockCount + outOfStockCount}</p>
+          <p className="text-lg font-semibold text-warning tabular-nums">{lowStockCount + outOfStockCount}</p>
         </div>
       </div>
     </div>
@@ -132,24 +132,24 @@ function InventoryAttentionSection({ products }: { products: Product[] }) {
   if (critical.length === 0) return null
 
   return (
-    <div className="bg-amber-50/30 border border-amber-200 rounded-lg p-4">
+    <div className="bg-warning-soft/30 border border-warning rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
-        <AlertTriangle className="w-4 h-4 text-amber-600" />
-        <p className="text-sm font-medium text-amber-800">Inventory Attention</p>
-        <p className="text-xs text-amber-600 ml-auto">{critical.length} product{critical.length > 1 ? 's' : ''} running low</p>
+        <AlertTriangle className="w-4 h-4 text-warning" />
+        <p className="text-sm font-medium text-warning">Inventory Attention</p>
+        <p className="text-xs text-warning ml-auto">{critical.length} product{critical.length > 1 ? 's' : ''} running low</p>
       </div>
       <div className="grid gap-2">
         {critical.map(p => {
           const estimatedDays = p.stock > 0 ? Math.max(1, Math.round(p.stock / 2)) : 0
           return (
-            <div key={p.id} className="flex items-center justify-between bg-card rounded border border-amber-200/60 px-3 py-2">
+            <div key={p.id} className="flex items-center justify-between bg-card rounded border border-warning/60 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
                 <p className="text-xs text-muted-foreground">{p.stock} remaining — ~{estimatedDays} day{estimatedDays > 1 ? 's' : ''}</p>
               </div>
-              <div className="w-full max-w-[120px] h-1.5 bg-amber-100 rounded-full ml-3">
+              <div className="w-full max-w-[120px] h-1.5 bg-warning-soft rounded-full ml-3">
                 <div
-                  className="h-full bg-amber-500 rounded-full"
+                  className="h-full bg-warning rounded-full"
                   style={{ width: `${Math.min(100, (p.stock / Math.max(p.lowStockAt, 1)) * 100)}%` }}
                 />
               </div>
@@ -359,9 +359,9 @@ export default function ProductsPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600 mb-4">{error}</p>
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <AlertTriangle className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               Try Again
             </Button>

@@ -1,8 +1,9 @@
 'use client'
 
-import { db, notifyChanged, uuid, loadSampleData } from './db'
+import { db, notifyChanged, uuid } from './db'
 import { createRecoveryAttempt, nextRecoveryAt, nextRecoveryStage } from './recovery'
 import { scheduleBackgroundSync, syncPendingQueue } from './sync'
+import { planInvoiceOnCreated } from '@/lib/recovery/client'
 import { getActiveSession, getTenantId } from './tenant'
 
 import { trackEvent, events } from './analytics'
@@ -78,13 +79,10 @@ export async function ensureBillzoReady() {
 
   const tenantId = getTenantIdLocal()
   const userId = localStorage.getItem('userId')
-  const tenantName = localStorage.getItem('tenantName')
   if (!tenantId || !userId) return
 
   const tenant = await db().tenants.get(tenantId)
   if (!tenant) return
-
-  await loadSampleData(tenantId, tenantName || 'My Shop', userId)
 }
 
 export async function getBillzoState() {
@@ -232,6 +230,14 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
 
     notifyChanged()
     scheduleBackgroundSync()
+
+    // Event-driven recovery planning: invoice.created → planner → collection_actions.
+    void planInvoiceOnCreated({
+      invoiceId: invoice.id,
+      customerId: customer.id,
+      dueAt: invoice.dueAt,
+    })
+
     return { success: true, data: { ...invoice, items: [item] } }
   } catch (error) {
     console.error('Failed to create invoice:', error)

@@ -163,14 +163,14 @@ export default function AddCustomerPage() {
       </div>
 
       {success && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-success-soft border border-success text-success text-sm">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Customer created! Redirecting...
         </div>
       )}
 
       {apiError && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-danger-soft border border-danger text-danger text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {apiError}
         </div>
@@ -184,9 +184,9 @@ export default function AddCustomerPage() {
               value={form.name}
               onChange={set('name')}
               placeholder="Customer name"
-              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.name ? 'border-red-400' : ''}`}
+              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.name ? 'border-danger' : ''}`}
             />
-            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-danger mt-1">{errors.name}</p>}
           </div>
 
           <div>
@@ -202,9 +202,9 @@ export default function AddCustomerPage() {
               onChange={set('phone')}
               placeholder="+91 98765 43210"
               type="tel"
-              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.phone ? 'border-red-400' : ''}`}
+              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.phone ? 'border-danger' : ''}`}
             />
-            {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+            {errors.phone && <p className="text-xs text-danger mt-1">{errors.phone}</p>}
           </div>
 
           <div>
@@ -214,9 +214,9 @@ export default function AddCustomerPage() {
               onChange={set('whatsapp_number')}
               placeholder="+91 98765 43210 (if different from phone)"
               type="tel"
-              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.whatsapp ? 'border-red-400' : ''}`}
+              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.whatsapp ? 'border-danger' : ''}`}
             />
-            {errors.whatsapp && <p className="text-xs text-red-500 mt-1">{errors.whatsapp}</p>}
+            {errors.whatsapp && <p className="text-xs text-danger mt-1">{errors.whatsapp}</p>}
           </div>
 
           <div>
@@ -225,9 +225,9 @@ export default function AddCustomerPage() {
               value={form.gstin}
               onChange={set('gstin')}
               placeholder="29AAACP1234C1Z5"
-              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-ring ${errors.gstin ? 'border-red-400' : ''}`}
+              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-ring ${errors.gstin ? 'border-danger' : ''}`}
             />
-            {errors.gstin && <p className="text-xs text-red-500 mt-1">{errors.gstin}</p>}
+            {errors.gstin && <p className="text-xs text-danger mt-1">{errors.gstin}</p>}
           </div>
 
           <div>
@@ -237,9 +237,9 @@ export default function AddCustomerPage() {
               onChange={set('email')}
               placeholder="customer@example.com"
               type="email"
-              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.email ? 'border-red-400' : ''}`}
+              className={`w-full h-11 rounded-xl border bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-ring ${errors.email ? 'border-danger' : ''}`}
             />
-            {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+            {errors.email && <p className="text-xs text-danger mt-1">{errors.email}</p>}
           </div>
 
           <div>
@@ -265,8 +265,8 @@ export default function AddCustomerPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border p-4 bg-amber-50 border-amber-200">
-          <p className="text-xs text-amber-700">
+        <div className="rounded-xl border p-4 bg-warning-soft border-warning">
+          <p className="text-xs text-warning">
             By adding this customer, you confirm you have their consent to send WhatsApp messages. Opt-in status can be updated later.
           </p>
         </div>

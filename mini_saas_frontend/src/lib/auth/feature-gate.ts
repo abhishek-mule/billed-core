@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { hasFeature, getPlan, type Feature, type PlanType } from '@/lib/billzo/plan-limits'
+import { type Feature, type PlanType } from '@/lib/billzo/plan-limits'
+import { getEntitlement } from '@/lib/billzo/feature-flags'
 
 export interface FeatureGateResult {
   allowed: boolean
@@ -30,34 +31,29 @@ export async function requireFeature(
   feature: string,
   method: HttpMethod = 'GET',
 ): Promise<FeatureGateResult> {
-  const { data: tenant, error: tenantErr } = await supabaseAdmin
-    .from('tenants')
-    .select('plan, created_at')
-    .eq('id', tenantId)
-    .single()
-
-  if (tenantErr || !tenant) {
+  const ent = await getEntitlement(tenantId)
+  if (!ent) {
     return { allowed: false, error: 'TENANT_NOT_FOUND' }
   }
 
-  const plan = getPlan(tenant.plan)
+  const plan = ent.planCode
 
-  // 1. Permanent feature entitlement
+  // 1. Permanent feature entitlement (plan + overrides resolved by FeatureService)
   if (TRIAL_FEATURES.includes(feature)) {
     // trial features are promotions — handled below
-  } else if (hasFeature(plan, feature as Feature)) {
+  } else if (ent.features.includes(feature as Feature)) {
     return { allowed: true }
   } else {
     return {
       allowed: false,
       error: 'FEATURE_LOCKED',
-      upgradeTo: plan === 'starter' ? 'pro' : 'growth',
+      upgradeTo: plan === 'starter' ? 'pro' : 'business',
     }
   }
 
   // 2. Promotions — only checked on mutating requests
   if (!TRIAL_FEATURES.includes(feature)) {
-    return { allowed: false, error: 'FEATURE_LOCKED', upgradeTo: plan === 'starter' ? 'pro' : 'growth' }
+    return { allowed: false, error: 'FEATURE_LOCKED', upgradeTo: plan === 'starter' ? 'pro' : 'business' }
   }
 
   if (method === 'GET') {
@@ -67,12 +63,11 @@ export async function requireFeature(
   }
 
   // 3. free_recovery_trial promotion
-  return checkTrialEligibility(tenantId, tenant.created_at, plan)
+  return checkTrialEligibility(tenantId, plan)
 }
 
 async function checkTrialEligibility(
   tenantId: string,
-  createdAt: string,
   plan: PlanType,
 ): Promise<FeatureGateResult> {
   // If the tenant is already on a paid plan they don't need the trial
@@ -80,8 +75,16 @@ async function checkTrialEligibility(
     return { allowed: true, isTrial: false }
   }
 
+  const { data: tenant } = await supabaseAdmin
+    .from('tenants')
+    .select('created_at')
+    .eq('id', tenantId)
+    .single()
+
+  if (!tenant?.created_at) return { allowed: true, isTrial: true }
+
   // 14-day window from tenant creation
-  const daysSinceSignup = differenceInDays(new Date(), new Date(createdAt))
+  const daysSinceSignup = differenceInDays(new Date(), new Date(tenant.created_at))
   if (daysSinceSignup > 14) {
     return { allowed: false, error: 'TRIAL_EXPIRED' }
   }

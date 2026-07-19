@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from './supabase-admin'
 import { writeOutboxEvent } from './outbox'
+import { cancelFutureActions } from '@/lib/recovery/planner'
 import type { PaymentSource, PaymentEvidence, PaymentActor } from '@billzo/shared'
 
 export interface RecordPaymentInput {
@@ -57,6 +58,11 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ paymen
     correlationId: `payment:${input.invoiceId}`,
   })
 
+  // Payment completed → cancel any future scheduled recovery actions for this invoice.
+  await cancelFutureActions(input.invoiceId, input.tenantId).catch((e) =>
+    console.error('[RecordPayment] cancelFutureActions failed', e),
+  )
+
   return { paymentId }
 }
 
@@ -103,6 +109,10 @@ export async function syncPayment(input: RecordPaymentInput & { paymentId: strin
     },
     correlationId: `payment:${input.invoiceId}:sync:${input.paymentId}`,
   })
+
+  await cancelFutureActions(input.invoiceId, input.tenantId).catch((e) =>
+    console.error('[SyncPayment] cancelFutureActions failed', e),
+  )
 
   return {}
 }

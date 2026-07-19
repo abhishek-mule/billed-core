@@ -277,13 +277,13 @@ export default function WhatsAppSettingsPage() {
 
         {/* Status banners */}
         {saved && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+          <div className="flex items-center gap-2 px-4 py-3 bg-success-soft border border-success rounded-lg text-sm text-success">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             Settings saved
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600">
+          <div className="flex items-center gap-2 px-4 py-3 bg-danger-soft border border-danger rounded-lg text-sm text-danger">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -293,15 +293,15 @@ export default function WhatsAppSettingsPage() {
         {connectionState !== "disconnected" && (
           <div className={`rounded-lg border p-4 flex items-center gap-3 ${
             isConnected ? "bg-card border-border" :
-            connectionState === "auth_expired" || connectionState === "banned" ? "bg-rose-50 border-rose-200" :
-            "bg-amber-50 border-amber-200"
+            connectionState === "auth_expired" || connectionState === "banned" ? "bg-danger-soft border-danger" :
+            "bg-warning-soft border-warning"
           }`}>
             {isConnected ? (
-              <Wifi className="w-5 h-5 text-emerald-500 shrink-0" />
+              <Wifi className="w-5 h-5 text-success shrink-0" />
             ) : connectionState === "connecting" || connectionState === "reconnecting" ? (
-              <Loader2 className="w-5 h-5 text-amber-500 shrink-0 animate-spin" />
+              <Loader2 className="w-5 h-5 text-warning shrink-0 animate-spin" />
             ) : (
-              <WifiOff className="w-5 h-5 text-rose-500 shrink-0" />
+              <WifiOff className="w-5 h-5 text-danger shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">
@@ -319,8 +319,8 @@ export default function WhatsAppSettingsPage() {
               )}
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded font-medium border shrink-0 ${
-              isConnected ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-              "bg-amber-50 text-amber-700 border-amber-200"
+              isConnected ? "bg-success-soft text-success border-success" :
+              "bg-warning-soft text-warning border-warning"
             }`}>
               {connectionState}
             </span>
@@ -331,8 +331,8 @@ export default function WhatsAppSettingsPage() {
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                <Smartphone className="w-4 h-4 text-emerald-600" />
+              <div className="w-9 h-9 rounded-lg bg-success-soft flex items-center justify-center shrink-0">
+                <Smartphone className="w-4 h-4 text-success" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">WhatsApp Provider</p>
@@ -349,7 +349,7 @@ export default function WhatsAppSettingsPage() {
                   onClick={() => setProvider(provider)}
                   className={`rounded-lg border-2 p-3 text-left transition-colors ${
                     (config.whatsappProvider || "gupshup") === provider
-                      ? "border-emerald-400 bg-emerald-50"
+                      ? "border-success bg-success-soft"
                       : "border-border hover:border-border"
                   }`}
                 >
@@ -367,10 +367,10 @@ export default function WhatsAppSettingsPage() {
                 {pairStatus === "connected" ? (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Wifi className="w-4 h-4 text-emerald-500" />
+                      <Wifi className="w-4 h-4 text-success" />
                       <span className="text-sm font-medium text-foreground">Linked & Active</span>
                     </div>
-                    <button onClick={disconnectBaileys} className="text-xs text-rose-500 hover:underline font-medium">
+                    <button onClick={disconnectBaileys} className="text-xs text-danger hover:underline font-medium">
                       Disconnect
                     </button>
                   </div>
@@ -386,10 +386,10 @@ export default function WhatsAppSettingsPage() {
                         </div>
                       )}
                       <div className={`absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-mono font-bold shadow-sm dark:shadow-[0_2px_4px_rgba(0,0,0,0.25)] bg-card/90 backdrop-blur ${
-                        qrTimeLeft > 15 ? "text-emerald-600" : qrTimeLeft > 5 ? "text-amber-600" : "text-rose-600"
+                        qrTimeLeft > 15 ? "text-success" : qrTimeLeft > 5 ? "text-warning" : "text-danger"
                       }`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${
-                          qrTimeLeft > 15 ? "bg-emerald-500" : qrTimeLeft > 5 ? "bg-amber-500 animate-pulse" : "bg-rose-500 animate-pulse"
+                          qrTimeLeft > 15 ? "bg-success" : qrTimeLeft > 5 ? "bg-warning animate-pulse" : "bg-danger animate-pulse"
                         }`} />
                         {qrTimeLeft}s
                       </div>
@@ -438,7 +438,7 @@ export default function WhatsAppSettingsPage() {
                           startPairing("qr")
                         }}
                         disabled={pairingInProgress}
-                        className="rounded-lg border-2 border-border p-3 text-left hover:border-emerald-300 transition-colors disabled:opacity-50"
+                        className="rounded-lg border-2 border-border p-3 text-left hover:border-success transition-colors disabled:opacity-50"
                       >
                         <QrCode className="w-5 h-5 text-foreground mb-1" />
                         <p className="text-sm font-semibold text-foreground">Scan QR</p>
@@ -449,8 +449,8 @@ export default function WhatsAppSettingsPage() {
                         disabled={pairingInProgress}
                         className={`rounded-lg border-2 p-3 text-left transition-colors disabled:opacity-50 ${
                           pairMethod === "pairing"
-                            ? "border-emerald-400 bg-emerald-50"
-                            : "border-border hover:border-emerald-300"
+                            ? "border-success bg-success-soft"
+                            : "border-border hover:border-success"
                         }`}
                       >
                         <KeyRound className="w-5 h-5 text-foreground mb-1" />
@@ -475,7 +475,7 @@ export default function WhatsAppSettingsPage() {
                           <button
                             onClick={() => startPairing("pairing", pairingPhone)}
                             disabled={pairingInProgress || !pairingPhone.replace(/\D/g, "")}
-                            className="h-10 px-4 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                            className="h-10 px-4 rounded-lg bg-success text-white text-xs font-semibold hover:bg-success disabled:opacity-50 transition-colors flex items-center gap-1.5"
                           >
                             {pairingInProgress ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
@@ -500,7 +500,7 @@ export default function WhatsAppSettingsPage() {
                     </div>
                     <button
                       onClick={() => { setPairStatus("idle"); setPairMethod(null); if (pairPollInterval) clearInterval(pairPollInterval); setPairingInProgress(false); }}
-                      className="text-xs text-rose-500 hover:underline"
+                      className="text-xs text-danger hover:underline"
                     >
                       Cancel
                     </button>
@@ -561,8 +561,8 @@ export default function WhatsAppSettingsPage() {
           href="/settings/whatsapp/templates"
           className="bg-card border border-border rounded-lg p-4 flex items-center gap-3 hover:border-border transition-colors"
         >
-          <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-            <LayoutTemplate className="w-4 h-4 text-indigo-600" />
+          <div className="w-9 h-9 rounded-lg bg-info-soft flex items-center justify-center shrink-0">
+            <LayoutTemplate className="w-4 h-4 text-info" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Message Templates</p>
@@ -619,7 +619,7 @@ export default function WhatsAppSettingsPage() {
                     onClick={() => set("paymentLinkExpiry", days)}
                     className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                       config.paymentLinkExpiry === days
-                        ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                        ? "border-success bg-success-soft text-success"
                         : "border-border text-muted-foreground hover:border-border"
                     }`}
                   >
@@ -660,7 +660,7 @@ export default function WhatsAppSettingsPage() {
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 h-11 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            className="flex-1 h-11 rounded-lg bg-success text-white text-sm font-semibold hover:bg-success disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             {saving ? (
               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

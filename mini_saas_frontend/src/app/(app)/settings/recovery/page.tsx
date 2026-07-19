@@ -9,6 +9,9 @@ import {
 } from "lucide-react"
 import { getCookie } from "@/lib/cookies"
 import { fetchWithAuth } from "@/lib/fetch-with-auth"
+import { Card } from "@/components/billzo/Card"
+import { Skeleton, SkeletonCard } from "@/components/billzo/Skeleton"
+import { COLLECTION_RISK_STAGES, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/recovery-risk"
 
 interface RecoverySettings {
   autoReminders: boolean
@@ -40,6 +43,28 @@ const CADENCE_LABELS: Record<string, string> = {
   daily: 'Every day',
   every_3_days: 'Every 3 days',
   weekly: 'Once a week',
+}
+
+type SequenceStep = { label: string; stage: string; tone: 'success' | 'info' | 'warning' | 'danger' }
+
+/** Build the actual follow-up sequence from current settings, mapping each step
+ *  to its CollectionRisk stage so the merchant sees the risk ramp. */
+function buildSequence(s: RecoverySettings): SequenceStep[] {
+  const cadenceDays =
+    s.reminderCadence === 'daily' ? 1 : s.reminderCadence === 'every_3_days' ? 3 : 7
+  const steps: SequenceStep[] = [
+    { label: 'Invoice due', stage: 'Healthy', tone: 'success' },
+    { label: `First reminder after ${s.firstReminderDays} day${s.firstReminderDays === 1 ? '' : 's'}`, stage: 'Monitor', tone: 'info' },
+  ]
+  for (let i = 1; i < s.maxReminders; i++) {
+    const day = s.firstReminderDays + i * cadenceDays
+    steps.push({ label: `Follow-up +${day}d`, stage: day <= 7 ? 'Monitor' : day <= 15 ? 'Attention' : 'Urgent', tone: day <= 7 ? 'info' : day <= 15 ? 'warning' : 'danger' })
+  }
+  if (s.autoEscalate) {
+    steps.push({ label: `Firm escalation after ${s.escalationDays} days overdue`, stage: 'Urgent', tone: 'danger' })
+  }
+  steps.push({ label: 'Personal call', stage: 'Critical', tone: 'danger' })
+  return steps
 }
 
 const TONE_LABELS: Record<string, string> = {
@@ -127,11 +152,11 @@ export default function RecoverySettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
-        <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-8 w-48 bg-card border border-border rounded-lg animate-pulse" />
+      <div className="page-shell">
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-32 bg-card border border-border rounded-lg animate-pulse" />
+            <SkeletonCard key={i} />
           ))}
         </div>
       </div>
@@ -139,8 +164,8 @@ export default function RecoverySettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 pb-8">
-      <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+    <div className="page-shell">
+      <div className="space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -148,30 +173,30 @@ export default function RecoverySettingsPage() {
             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
           </Link>
           <div>
-            <h1 className="text-lg font-semibold text-foreground">UDHARI Recovery</h1>
+            <h1 className="text-lg font-semibold text-foreground">Recovery Settings</h1>
             <p className="text-sm text-muted-foreground">Auto-reminders, business hours, and escalation rules</p>
           </div>
         </div>
 
         {/* Status banners */}
         {saved && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+          <div className="flex items-center gap-2 px-4 py-3 bg-success-soft border border-success/30 rounded-2xl text-sm text-success">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             Settings saved
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600">
+          <div className="flex items-center gap-2 px-4 py-3 bg-danger-soft border border-danger/30 rounded-2xl text-sm text-danger">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
         )}
 
         {/* Auto-Reminders */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="p-4 flex items-center gap-3 border-b border-border">
-            <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-              <Bell className="w-4 h-4 text-amber-600" />
+        <Card>
+          <div className="p-1 flex items-center gap-3 border-b border-border pb-4">
+            <div className="w-9 h-9 rounded-lg bg-recovery-soft flex items-center justify-center shrink-0">
+              <Bell className="w-4 h-4 text-recovery" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">Auto-Reminders</p>
@@ -184,11 +209,11 @@ export default function RecoverySettingsPage() {
                 onChange={e => setSettings(s => ({ ...s, autoReminders: e.target.checked }))}
                 className="sr-only peer"
               />
-              <div className="w-10 h-6 bg-muted dark:bg-muted-foreground/30 rounded-full peer peer-checked:bg-amber-500 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all" />
+              <div className="w-10 h-6 bg-muted dark:bg-muted-foreground/30 rounded-full peer peer-checked:bg-recovery peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all" />
             </label>
           </div>
           {settings.autoReminders && (
-            <div className="p-4 space-y-4">
+            <div className="p-1 pt-4 space-y-4">
               {/* First reminder after */}
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">First reminder after</label>
@@ -199,7 +224,7 @@ export default function RecoverySettingsPage() {
                       onClick={() => setSettings(s => ({ ...s, firstReminderDays: days }))}
                       className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                         settings.firstReminderDays === days
-                          ? 'border-amber-400 bg-amber-50 text-amber-700'
+                          ? 'border-recovery bg-recovery-soft text-recovery'
                           : 'border-border text-muted-foreground hover:border-border'
                       }`}
                     >
@@ -219,7 +244,7 @@ export default function RecoverySettingsPage() {
                       onClick={() => setSettings(s => ({ ...s, reminderCadence: cadence }))}
                       className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                         settings.reminderCadence === cadence
-                          ? 'border-amber-400 bg-amber-50 text-amber-700'
+                          ? 'border-recovery bg-recovery-soft text-recovery'
                           : 'border-border text-muted-foreground hover:border-border'
                       }`}
                     >
@@ -239,7 +264,7 @@ export default function RecoverySettingsPage() {
                       onClick={() => setSettings(s => ({ ...s, maxReminders: n }))}
                       className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                         settings.maxReminders === n
-                          ? 'border-amber-400 bg-amber-50 text-amber-700'
+                          ? 'border-recovery bg-recovery-soft text-recovery'
                           : 'border-border text-muted-foreground hover:border-border'
                       }`}
                     >
@@ -259,7 +284,7 @@ export default function RecoverySettingsPage() {
                       onClick={() => setSettings(s => ({ ...s, reminderTone: tone }))}
                       className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                         settings.reminderTone === tone
-                          ? 'border-amber-400 bg-amber-50 text-amber-700'
+                          ? 'border-recovery bg-recovery-soft text-recovery'
                           : 'border-border text-muted-foreground hover:border-border'
                       }`}
                     >
@@ -278,58 +303,60 @@ export default function RecoverySettingsPage() {
               </div>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Business Hours */}
-        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-              <Clock className="w-4 h-4 text-blue-600" />
+        <Card>
+          <div className="p-1 flex items-center gap-3 pb-4">
+            <div className="w-9 h-9 rounded-lg bg-info-soft flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-info" />
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Business Hours</p>
               <p className="text-xs text-muted-foreground">Reminders only sent during these hours</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">Start time</label>
-              <input
-                type="time"
-                value={settings.businessHoursStart}
-                onChange={e => setSettings(s => ({ ...s, businessHoursStart: e.target.value }))}
-                className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
-              />
+          <div className="p-1 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Start time</label>
+                <input
+                  type="time"
+                  value={settings.businessHoursStart}
+                  onChange={e => setSettings(s => ({ ...s, businessHoursStart: e.target.value }))}
+                  className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">End time</label>
+                <input
+                  type="time"
+                  value={settings.businessHoursEnd}
+                  onChange={e => setSettings(s => ({ ...s, businessHoursEnd: e.target.value }))}
+                  className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">End time</label>
+            <label className="flex items-center gap-3 cursor-pointer">
               <input
-                type="time"
-                value={settings.businessHoursEnd}
-                onChange={e => setSettings(s => ({ ...s, businessHoursEnd: e.target.value }))}
-                className="w-full h-10 rounded-lg border border-border px-3 text-sm text-foreground focus:outline-none focus:border-primary"
+                type="checkbox"
+                checked={settings.skipWeekends}
+                onChange={e => setSettings(s => ({ ...s, skipWeekends: e.target.checked }))}
+                className="h-4 w-4 accent-recovery rounded border-border"
               />
-            </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Skip weekends</p>
+                <p className="text-xs text-muted-foreground">Don&apos;t send reminders on Saturday and Sunday</p>
+              </div>
+            </label>
           </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.skipWeekends}
-              onChange={e => setSettings(s => ({ ...s, skipWeekends: e.target.checked }))}
-              className="h-4 w-4 accent-amber-500 rounded border-border"
-            />
-            <div>
-              <p className="text-sm font-medium text-foreground">Skip weekends</p>
-              <p className="text-xs text-muted-foreground">Don&apos;t send reminders on Saturday and Sunday</p>
-            </div>
-          </label>
-        </div>
+        </Card>
 
         {/* Advanced: Escalation */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <Card>
           <button
             onClick={() => setAdvancedOpen(!advancedOpen)}
-            className="w-full p-4 flex items-center gap-3 text-left"
+            className="w-full p-1 flex items-center gap-3 text-left"
           >
             <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
               <Calendar className="w-4 h-4 text-muted-foreground" />
@@ -345,13 +372,13 @@ export default function RecoverySettingsPage() {
             )}
           </button>
           {advancedOpen && (
-            <div className="px-4 pb-4 space-y-4 border-t border-border pt-4">
+            <div className="px-1 pb-1 pt-4 space-y-4 border-t border-border">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={settings.autoEscalate}
                   onChange={e => setSettings(s => ({ ...s, autoEscalate: e.target.checked }))}
-                  className="h-4 w-4 accent-amber-500 rounded border-border"
+                  className="h-4 w-4 accent-recovery rounded border-border"
                 />
                 <div>
                   <p className="text-sm font-medium text-foreground">Auto-escalate to firm reminders</p>
@@ -368,7 +395,7 @@ export default function RecoverySettingsPage() {
                         onClick={() => setSettings(s => ({ ...s, escalationDays: days }))}
                         className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
                           settings.escalationDays === days
-                            ? 'border-amber-400 bg-amber-50 text-amber-700'
+                            ? 'border-recovery bg-recovery-soft text-recovery'
                             : 'border-border text-muted-foreground hover:border-border'
                         }`}
                       >
@@ -380,7 +407,36 @@ export default function RecoverySettingsPage() {
               )}
             </div>
           )}
-        </div>
+        </Card>
+
+        {/* Recovery sequence preview */}
+        <Card>
+          <div className="flex items-center gap-3 p-1">
+            <div className="w-9 h-9 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">Recovery sequence</p>
+              <p className="text-xs text-muted-foreground">How BillZo follows up on unpaid invoices</p>
+            </div>
+          </div>
+          <ol className="mt-4 space-y-2">
+            {buildSequence(settings).map((step, i) => {
+              const tone = COLLECTION_RISK_TONE_CLASSES[step.tone]
+              return (
+                <li key={i} className="flex items-start gap-3">
+                  <span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full ${tone.dot} text-[10px] font-bold text-white flex-shrink-0`}>
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-foreground">{step.label}</p>
+                    <p className={`text-[10px] ${tone.text}`}>{step.stage}</p>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        </Card>
 
         {/* Save */}
         <div className="flex gap-3 pt-2">
@@ -393,7 +449,7 @@ export default function RecoverySettingsPage() {
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 h-11 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             {saving ? (
               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />

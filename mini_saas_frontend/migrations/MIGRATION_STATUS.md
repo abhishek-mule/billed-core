@@ -110,3 +110,52 @@ same number.
 4. Verify with `verify_schema.sql`
 
 **Never** apply a file marked **Superseded**.
+
+## Billing Phase 1 (069–073)
+
+| File | Purpose |
+|------|---------|
+| `069_plans_and_tenant_billing.sql` | Versioned `plans` catalog + seed (Starter/Pro/Business/Enterprise). Widens `tenants.subscription_status` CHECK (was `('free','pro','trial')` — webhook set `'active'`/`'cancelled'`/`'paused'` and would violate it) and adds `subscription_id`, `subscription_state`, `plan_version`, period columns. |
+| `070_subscriptions.sql` | Provider-agnostic `subscriptions` (one active per tenant via partial unique index). Source of truth for subscription state; Razorpay is just a processor. |
+| `071_billing_events.sql` | Append-only `billing_events` (raw provider log) + `payment_attempts`. |
+| `072_tenant_usage_and_feature_flags.sql` | `tenant_usage` (monthly counters, incremented by worker — NOT synchronously) + `feature_flags` (per-tenant overrides). |
+| `073_subscription_history.sql` | Audit trail of plan/state transitions. |
+
+**Note**: `tenant.update_subscription` intents are still emitted to the external authority
+transport (which owns the `tenants` row). This repo additionally persists billing state
+in `subscriptions`/`billing_events`/`tenant_usage`/`subscription_history`/`feature_flags`
+via the outbox worker (`src/lib/billzo/billing-worker.ts`, drained by `POST /api/billing/worker`).
+
+## Review-driven refinements (post 9.9/10 review)
+
+- **Soft limits** (`recovery/queue/actions`): reminders warn at 90% (orange) / 95% (red),
+  hard-disable only past 110%. `quotaWarning` (`none|warn|critical|exceeded`) returned to UI.
+- **Capability API** (`feature-flags.ts`): `can(tenantId, 'AUTO_RECOVERY')` / `getCapabilities()`
+  — UI never references plan names. Mapped `api` + `multi_branch` as features.
+- **Prices**: Business = ₹699 (monthly) / ₹671.04 (annual) in `069` seed.
+- **Idempotency**: `UNIQUE(provider, provider_event_id) WHERE NOT NULL` on `billing_events`
+  (071); `recordBillingEvent` swallows duplicate-violation (23505) gracefully.
+- **tenant_usage** (072): added `customers`, `storage_mb` columns for future-proofing.
+
+## Sprint 2 — Recovery Workflow Engine (planner + scheduler + promise follow-up)
+
+| File | Purpose |
+|------|---------|
+| `074_recovery_policy_call_steps.sql` | Adds a `call` step (Phone Call) to seeded Standard/Aggressive/VIP policies. |
+
+**Application layer** (no schema beyond 074):
+- `src/lib/recovery/planner.ts` — `planRecoveryForInvoice` / `planPromiseFollowup` / `backfillUnplanned`. Runs ONCE per business event (invoice created, promise made, policy changed). Reads tenant default policy → generates `collection_actions`. Idempotent.
+- `src/lib/recovery/scheduler.ts` — `runRecoveryScheduler` (cron, every 5 min): finds due `collection_actions`, validates invoice still unpaid, emits `RECOVERY_REMINDER_SENT` / `SEND_MESSAGE_INTENDED` domain events to outbox, marks `in_progress`, writes `collection_action_events` audit. `drainRecoveryOutbox` hands events to transport workers. DUMB by design — no policy logic, no transport.
+- `src/app/api/recovery/plan/route.ts` — manual planner trigger (invoice_created / promise_made).
+- `src/app/api/cron/recovery/route.ts` — scheduler cron (CRON_SECRET protected): dispatch + drain + backfill.
+- `src/app/api/recovery/policies/route.ts` (+ `[id]`, `[id]/clone`, `[id]/set-default`) — full REST CRUD for versioned recovery workflows.
+
+Note: `recovery_policies` / `recovery_policy_steps` / `collection_actions` / `collection_action_events` were already established (migrations 058–068). Sprint 2 adds the missing *logic* layer on top.
+
+### Sprint 2 — Automation loop closed (final wiring)
+- `invoice.created` → `src/lib/billzo/actions.ts` createInvoice now calls `planInvoiceOnCreated()` (client helper → `POST /api/recovery/plan`). No backfill dependency.
+- `promise.made` → `recovery/queue/actions` `mark_promise` now calls `planPromiseFollowup()` automatically.
+- `payment.completed` → `recordPayment`/`syncPayment` (the single payment funnel, used by verify + webhook reconciliation + recovery record-payment) now call `cancelFutureActions()` to cancel scheduled reminders for the paid invoice.
+- Backfill removed from the production cron path; now an admin/repair endpoint `POST /api/admin/recovery/backfill` (CRON_SECRET protected).
+- `cancelFutureActions()` added to `src/lib/recovery/planner.ts`.
+- Recommended (Sprint 3 pre-work): a developer "Recovery Diagnostics" page reading collection_actions + events + timeline.

@@ -12,7 +12,7 @@ interface MetricCard {
 }
 
 function MetricCard({ label, value, good, warn, bad }: MetricCard) {
-  const color = good ? 'text-green-600' : warn ? 'text-yellow-600' : bad ? 'text-red-600' : 'text-gray-900'
+  const color = good ? 'text-success' : warn ? 'text-warning' : bad ? 'text-danger' : 'text-gray-900'
   return (
     <div className="bg-white rounded-lg border p-4">
       <div className="text-sm text-gray-500 mb-1">{label}</div>
@@ -151,9 +151,9 @@ export default async function AdminMessagingPage() {
                   <div key={e.id} className="px-4 py-2.5 text-xs font-mono">
                     <div className="flex items-center gap-2">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                        e.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                        e.status === 'read' ? 'bg-blue-100 text-blue-700' :
-                        e.status === 'failed' ? 'bg-red-100 text-red-700' :
+                        e.status === 'delivered' ? 'bg-success-soft text-success' :
+                        e.status === 'read' ? 'bg-info-soft text-info' :
+                        e.status === 'failed' ? 'bg-danger-soft text-danger' :
                         e.status === 'sent' ? 'bg-gray-100 text-gray-700' :
                         'bg-gray-100 text-gray-500'
                       }`}>
@@ -182,7 +182,7 @@ export default async function AdminMessagingPage() {
             <div className="px-4 py-3 border-b font-semibold text-gray-900 text-sm flex items-center justify-between">
               <span>Dead Letter Queue</span>
               {deadLetterCount > 0 && (
-                <span className="text-red-600 text-xs font-normal">
+                <span className="text-danger text-xs font-normal">
                   {deadLetterCount} unresolved
                 </span>
               )}
@@ -191,7 +191,7 @@ export default async function AdminMessagingPage() {
               {deadLetters.length > 0 ? (
                 deadLetters.map((dl: any) => (
                   <div key={dl.id} className="px-4 py-2.5 text-xs font-mono">
-                    <div className="text-red-700 font-semibold">{dl.reason}</div>
+                    <div className="text-danger font-semibold">{dl.reason}</div>
                     <div className="text-gray-400 mt-0.5">
                       {new Date(dl.received_at).toLocaleString()} · retries: {dl.retry_count}
                     </div>

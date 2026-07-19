@@ -26,15 +26,15 @@ const MODE_LABELS: Record<AutomationMode, string> = {
 }
 
 const MODE_COLORS: Record<AutomationMode, string> = {
-  full_auto: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  manual: "bg-amber-50 text-amber-700 border-amber-200",
-  muted: "bg-rose-50 text-rose-700 border-rose-200",
+  full_auto: "bg-success-soft text-success border-success",
+  manual: "bg-warning-soft text-warning border-warning",
+  muted: "bg-danger-soft text-danger border-danger",
 }
 
 const MODE_DOT_COLORS: Record<AutomationMode, string> = {
-  full_auto: "bg-emerald-500",
-  manual: "bg-amber-500",
-  muted: "bg-rose-500",
+  full_auto: "bg-success",
+  manual: "bg-warning",
+  muted: "bg-danger",
 }
 
 export default function PartyDetailPage() {
@@ -147,9 +147,9 @@ export default function PartyDetailPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <AlertCircle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600 mb-4">{error}</p>
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => { setLoading(true); setError(null); loadParty() }}>
               <RefreshCw className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.retry}
             </Button>
@@ -296,7 +296,7 @@ export default function PartyDetailPage() {
         <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
           <div className="flex items-start gap-4">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
-              pending > 0 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
+              pending > 0 ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
             }`}>
               {customer.name?.charAt(0)}
             </div>
@@ -397,11 +397,11 @@ export default function PartyDetailPage() {
           </div>
           <div className="bg-card border border-border rounded-lg p-3">
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.paymentsReceived}</p>
-            <p className="text-base font-semibold text-emerald-600 tabular-nums">{formatINR(totalPaid)}</p>
+            <p className="text-base font-semibold text-success tabular-nums">{formatINR(totalPaid)}</p>
           </div>
-          <div className={`bg-card border rounded-lg p-3 ${pending > 0 ? 'border-amber-200 bg-amber-50/30' : 'border-border'}`}>
+          <div className={`bg-card border rounded-lg p-3 ${pending > 0 ? 'border-warning bg-warning-soft/30' : 'border-border'}`}>
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.outstanding}</p>
-            <p className={`text-base font-semibold tabular-nums ${pending > 0 ? 'text-amber-700' : 'text-emerald-600'}`}>
+            <p className={`text-base font-semibold tabular-nums ${pending > 0 ? 'text-warning' : 'text-success'}`}>
               {formatINR(pending)}
             </p>
           </div>
@@ -436,7 +436,7 @@ export default function PartyDetailPage() {
           </div>
           {pending > 0 && (
             <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-amber-600">{formatINR(pending)}</span> outstanding across {unpaidInvoices.length} invoice{unpaidInvoices.length !== 1 ? 's' : ''}
+              <span className="font-medium text-warning">{formatINR(pending)}</span> outstanding across {unpaidInvoices.length} invoice{unpaidInvoices.length !== 1 ? 's' : ''}
             </p>
           )}
         </div>
@@ -497,16 +497,16 @@ export default function PartyDetailPage() {
 
         {/* Success banner */}
         {waSuccess && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-            <span className="text-xs text-emerald-700 font-medium">{MerchantLanguage.payment.reminderSent}</span>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-success-soft border border-success">
+            <span className="text-xs text-success font-medium">{MerchantLanguage.payment.reminderSent}</span>
           </div>
         )}
 
         {/* Manual mode notice */}
         {customer.automationMode === 'manual' && unpaidInvoices.length > 0 && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
-            <Settings2 className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-xs text-amber-700 font-medium">Manual mode — pending reminders need your approval before sending.</span>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-warning-soft border border-warning">
+            <Settings2 className="w-4 h-4 text-warning shrink-0" />
+            <span className="text-xs text-warning font-medium">Manual mode — pending reminders need your approval before sending.</span>
           </div>
         )}
 
@@ -537,12 +537,12 @@ export default function PartyDetailPage() {
               {activeTab === 'invoices' ? MerchantLanguage.customer.noInvoicesYet : MerchantLanguage.customer.noPaymentsYet}
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border">
               {filteredTransactions.map((t, i) => (
                 <div key={i} className="px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                      t.type === "invoice" ? "bg-muted text-muted-foreground" : "bg-emerald-50 text-emerald-600"
+                      t.type === "invoice" ? "bg-muted text-muted-foreground" : "bg-success-soft text-success"
                     }`}>
                       {t.type === "invoice" ? <Receipt className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
                     </div>
@@ -552,15 +552,15 @@ export default function PartyDetailPage() {
                         <Calendar className="w-3 h-3" /> {new Date(t.date).toLocaleDateString()}
                         {t.type === "invoice" && (
                           <span className={`ml-1 capitalize ${
-                            t.status === "paid" ? "text-emerald-600" :
-                            t.status === "overdue" ? "text-rose-600" : "text-amber-600"
+                            t.status === "paid" ? "text-success" :
+                            t.status === "overdue" ? "text-danger" : "text-warning"
                           }`}>· {t.status}</span>
                         )}
                       </p>
                     </div>
                   </div>
                   <div className="text-right flex items-center gap-2 shrink-0">
-                    <span className={`text-sm font-semibold tabular-nums ${t.type === "payment" ? "text-emerald-600" : "text-foreground"}`}>
+                    <span className={`text-sm font-semibold tabular-nums ${t.type === "payment" ? "text-success" : "text-foreground"}`}>
                       {t.type === "payment" ? "+" : ""}{formatINR(t.amount)}
                     </span>
                     {t.type === "invoice" && t.id && (
@@ -631,7 +631,7 @@ export default function PartyDetailPage() {
                       />
                     </div>
                     {waError && (
-                      <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">{waError}</div>
+                      <div className="p-3 rounded-lg bg-danger-soft border border-danger text-danger text-xs">{waError}</div>
                     )}
                   </div>
                   <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted">
@@ -658,7 +658,7 @@ export default function PartyDetailPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">A phone number is required to send WhatsApp reminders. This will be saved to the customer profile.</p>
                     {waError && (
-                      <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">{waError}</div>
+                      <div className="p-3 rounded-lg bg-danger-soft border border-danger text-danger text-xs">{waError}</div>
                     )}
                   </div>
                   <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted">

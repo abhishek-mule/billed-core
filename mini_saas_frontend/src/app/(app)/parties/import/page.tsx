@@ -36,7 +36,7 @@ export default function ImportCustomersPage() {
       </div>
 
       {state.error && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-danger-soft border border-danger text-danger text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {state.error}
         </div>
@@ -44,8 +44,8 @@ export default function ImportCustomersPage() {
 
       {state.contacts.length === 0 ? (
         <div className="space-y-4">
-          <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-8 text-center">
-            <Users className="h-12 w-12 text-indigo-400 mx-auto" />
+          <div className="rounded-2xl border-2 border-dashed border-info bg-info-soft/30 p-8 text-center">
+            <Users className="h-12 w-12 text-info mx-auto" />
             <h3 className="mt-4 font-bold text-lg">Choose how to import</h3>
             <p className="mt-1 text-sm text-muted-foreground">Pick from phone contacts or upload a file</p>
           </div>
@@ -56,8 +56,8 @@ export default function ImportCustomersPage() {
               disabled={state.loading}
               className="flex flex-col items-center gap-2 rounded-2xl border bg-card p-6 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:shadow-md transition-all active:scale-95"
             >
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-green-50">
-                <Phone className="h-7 w-7 text-green-600" />
+              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success-soft">
+                <Phone className="h-7 w-7 text-success" />
               </div>
               <span className="font-bold text-sm">Pick from Phonebook</span>
               <span className="text-xs text-muted-foreground">1 contact at a time</span>
@@ -68,8 +68,8 @@ export default function ImportCustomersPage() {
               disabled={state.loading}
               className="flex flex-col items-center gap-2 rounded-2xl border bg-card p-6 shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] hover:shadow-md transition-all active:scale-95"
             >
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-green-50">
-                <Users className="h-7 w-7 text-green-600" />
+              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success-soft">
+                <Users className="h-7 w-7 text-success" />
               </div>
               <span className="font-bold text-sm">Pick Multiple</span>
               <span className="text-xs text-muted-foreground">Select many contacts</span>
@@ -96,7 +96,7 @@ export default function ImportCustomersPage() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50 px-6 py-4 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                className="flex items-center gap-2 rounded-xl border-2 border-dashed border-info bg-info-soft px-6 py-4 text-sm font-medium text-info hover:bg-info-soft transition-colors"
               >
                 <FileSpreadsheet className="h-5 w-5" />
                 Upload CSV or Excel
@@ -115,7 +115,7 @@ export default function ImportCustomersPage() {
                   a.click()
                   URL.revokeObjectURL(url)
                 }}
-                className="text-xs text-indigo-600 underline"
+                className="text-xs text-info underline"
               >
                 Download template CSV
               </button>
@@ -126,18 +126,18 @@ export default function ImportCustomersPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 text-sm">
-              <span className="flex items-center gap-1 text-green-600 font-medium">
+              <span className="flex items-center gap-1 text-success font-medium">
                 <CheckCircle2 className="h-4 w-4" />
                 {state.validCount} valid
               </span>
               {state.invalidCount > 0 && (
-                <span className="flex items-center gap-1 text-red-500 font-medium">
+                <span className="flex items-center gap-1 text-danger font-medium">
                   <AlertCircle className="h-4 w-4" />
                   {state.invalidCount} invalid
                 </span>
               )}
               {state.duplicateCount > 0 && (
-                <span className="flex items-center gap-1 text-amber-500 font-medium">
+                <span className="flex items-center gap-1 text-warning font-medium">
                   <AlertCircle className="h-4 w-4" />
                   {state.duplicateCount} duplicates found
                 </span>
@@ -161,15 +161,15 @@ export default function ImportCustomersPage() {
                 </thead>
                 <tbody>
                   {state.contacts.map((c, i) => (
-                    <tr key={i} className={`border-t ${c.isDuplicate ? 'bg-amber-50' : ''}`}>
+                    <tr key={i} className={`border-t ${c.isDuplicate ? 'bg-warning-soft' : ''}`}>
                       <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
                       <td className="px-4 py-3 font-medium">{c.name}</td>
                       <td className="px-4 py-3">{formatPhoneDisplay(c.phone)}</td>
                       <td className="px-4 py-3">
                         {c.isDuplicate ? (
-                          <span className="text-xs text-amber-600 font-medium">Will skip (exists)</span>
+                          <span className="text-xs text-warning font-medium">Will skip (exists)</span>
                         ) : (
-                          <span className="text-xs text-green-600 font-medium">Will import</span>
+                          <span className="text-xs text-success font-medium">Will import</span>
                         )}
                       </td>
                     </tr>
@@ -189,7 +189,7 @@ export default function ImportCustomersPage() {
             <button
               onClick={() => handleImport('skip')}
               disabled={state.loading}
-              className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white disabled:opacity-50"
+              className="flex-1 rounded-xl bg-info py-3 text-sm font-bold text-white disabled:opacity-50"
             >
               {state.loading ? 'Importing...' : `Import ${state.contacts.filter(c => !c.isDuplicate).length} Customers`}
             </button>

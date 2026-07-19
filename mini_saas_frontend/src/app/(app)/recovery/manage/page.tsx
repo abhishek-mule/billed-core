@@ -63,11 +63,11 @@ function formatRelative(iso: string | null) {
 
 function getNextActionClass(nextActionType: string) {
   switch (nextActionType) {
-    case "send_reminder": return "bg-blue-50 text-blue-700 border-blue-200"
+    case "send_reminder": return "bg-info-soft text-info border-info"
     case "call":
-    case "follow_up_call": return "bg-amber-50 text-amber-700 border-amber-200"
-    case "wait": return "bg-purple-50 text-purple-700 border-purple-200"
-    case "merchant_review": return "bg-rose-50 text-rose-700 border-rose-200"
+    case "follow_up_call": return "bg-warning-soft text-warning border-warning"
+    case "wait": return "bg-recovery-soft text-recovery border-recovery"
+    case "merchant_review": return "bg-danger-soft text-danger border-danger"
     default: return "bg-muted/50 text-muted-foreground border-border"
   }
 }
@@ -179,13 +179,13 @@ export default function RecoveryQueuePage() {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{MerchantLanguage.recovery.atRisk}</p>
               <p className="text-xl font-bold text-foreground mt-1 tabular-nums">₹{totalAtRisk.toLocaleString('en-IN')}</p>
             </div>
-            <div className="bg-card rounded-xl border border-rose-200 p-4">
-              <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider">{MerchantLanguage.recovery.overdueToday}</p>
-              <p className="text-xl font-bold text-rose-700 mt-1 tabular-nums">{overdueCount}</p>
+            <div className="bg-card rounded-xl border border-danger p-4">
+              <p className="text-[10px] font-semibold text-danger uppercase tracking-wider">{MerchantLanguage.recovery.overdueToday}</p>
+              <p className="text-xl font-bold text-danger mt-1 tabular-nums">{overdueCount}</p>
             </div>
-            <div className="bg-card rounded-xl border border-purple-200 p-4">
-              <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">{MerchantLanguage.recovery.promises}</p>
-              <p className="text-xl font-bold text-purple-700 mt-1 tabular-nums">{promiseCount} · ₹{promiseAmount.toLocaleString('en-IN')}</p>
+            <div className="bg-card rounded-xl border border-recovery p-4">
+              <p className="text-[10px] font-semibold text-recovery uppercase tracking-wider">{MerchantLanguage.recovery.promises}</p>
+              <p className="text-xl font-bold text-recovery mt-1 tabular-nums">{promiseCount} · ₹{promiseAmount.toLocaleString('en-IN')}</p>
             </div>
           </div>
         )}
@@ -201,8 +201,8 @@ export default function RecoveryQueuePage() {
         </div>
 
         {error && (
-          <div className="border border-red-200 rounded-lg p-4 bg-card">
-            <p className="text-sm text-red-600">{error}</p>
+          <div className="border border-danger rounded-lg p-4 bg-card">
+            <p className="text-sm text-danger">{error}</p>
           </div>
         )}
 
@@ -216,7 +216,7 @@ export default function RecoveryQueuePage() {
 
         {!loading && !error && filtered.length === 0 && (
           <div className="bg-card border border-dashed border-border rounded-lg p-12 text-center">
-            <Bell className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+            <Bell className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
             <p className="font-semibold text-foreground">No upcoming actions</p>
             <p className="text-xs text-muted-foreground mt-1">{MerchantLanguage.state.allCaughtUp} New reminders will appear here when scheduled.</p>
           </div>
@@ -226,10 +226,10 @@ export default function RecoveryQueuePage() {
           <section key={group} className="space-y-3">
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                group === "Overdue" ? "bg-rose-100 text-rose-700" :
-                group === "Today" ? "bg-blue-100 text-blue-700" :
-                group === "Promises" ? "bg-purple-100 text-purple-700" :
-                group === "Needs Review" ? "bg-amber-100 text-amber-700" :
+                group === "Overdue" ? "bg-danger-soft text-danger" :
+                group === "Today" ? "bg-info-soft text-info" :
+                group === "Promises" ? "bg-recovery-soft text-recovery" :
+                group === "Needs Review" ? "bg-warning-soft text-warning" :
                 "bg-muted text-muted-foreground"
               }`}>
                 {group === "Overdue" ? "⚠" : group === "Promises" ? "🤝" : group === "Needs Review" ? "👀" : "📅"} {group}
@@ -261,11 +261,11 @@ export default function RecoveryQueuePage() {
                         </p>
                       )}
                       {item.promiseToPayDate && (
-                        <p className="text-xs text-purple-600 mt-1">
+                        <p className="text-xs text-recovery mt-1">
                           <Hand size={11} className="inline mr-1" />
                           Promise to pay by {formatDate(item.promiseToPayDate)}
                           {new Date(item.promiseToPayDate) < new Date() && (
-                            <span className="text-rose-600"> (overdue)</span>
+                            <span className="text-danger"> (overdue)</span>
                           )}
                         </p>
                       )}
@@ -281,14 +281,14 @@ export default function RecoveryQueuePage() {
                       </button>
                       <button
                         onClick={() => setPromiseFor(item)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-recovery text-recovery bg-recovery-soft hover:bg-recovery-soft transition-all"
                       >
                         <Hand size={12} />
                         Promise
                       </button>
                       <button
                         onClick={() => setPauseFor(item)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-semibold border border-warning text-warning bg-warning-soft hover:bg-warning-soft transition-all"
                       >
                         <Pause size={12} />
                         Pause
@@ -305,9 +305,9 @@ export default function RecoveryQueuePage() {
           <div className="border-t border-border pt-4 flex items-center justify-between text-xs text-muted-foreground">
             <span>{filtered.length} action{filtered.length !== 1 ? "s" : ""} scheduled</span>
             <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Send</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Call</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> Wait</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-info" /> Send</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-warning" /> Call</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-recovery" /> Wait</span>
             </div>
           </div>
         )}

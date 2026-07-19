@@ -26,6 +26,36 @@ module.exports = {
           foreground: "hsl(var(--primary-foreground))",
           glow: "hsl(var(--primary-glow))",
         },
+        recovery: {
+          DEFAULT: "hsl(var(--recovery))",
+          foreground: "hsl(var(--recovery-foreground))",
+          soft: "hsl(var(--recovery-soft))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          soft: "hsl(var(--success-soft))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          soft: "hsl(var(--info-soft))",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger))",
+          foreground: "hsl(var(--danger-foreground))",
+          soft: "hsl(var(--danger-soft))",
+        },
+        outstanding: {
+          DEFAULT: "hsl(var(--outstanding))",
+          foreground: "hsl(var(--outstanding-foreground))",
+          soft: "hsl(var(--outstanding-soft))",
+        },
+        overdue: {
+          DEFAULT: "hsl(var(--overdue))",
+          foreground: "hsl(var(--overdue-foreground))",
+          soft: "hsl(var(--overdue-soft))",
+        },
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
@@ -55,6 +85,7 @@ module.exports = {
         topbar: "var(--topbar-h)",
         'bottom-nav': "var(--bottom-nav-h)",
         safe: "env(safe-area-inset-bottom)",
+        'page-shell': "calc(100vh - var(--topbar-h) - var(--bottom-nav-h))",
       },
       boxShadow: {
         sm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",

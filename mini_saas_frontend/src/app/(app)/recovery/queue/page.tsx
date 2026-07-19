@@ -15,6 +15,10 @@ import { trackQueueEvent, events as E } from "@/lib/billzo/analytics"
 import { PromiseModal } from "@/components/billzo/PromiseModal"
 import { PaymentModal } from "@/components/billzo/PaymentModal"
 import { HistoryDrawer, prefetchCustomerTimeline } from "@/components/billzo/HistoryDrawer"
+import { PageShell } from "@/components/billzo/PageShell"
+import { ErrorState } from "@/components/billzo/ErrorState"
+import { Skeleton, SkeletonCard } from "@/components/billzo/Skeleton"
+import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/recovery-risk"
 
 interface PriorityCase {
   caseId: string
@@ -48,11 +52,11 @@ type SectionId = 'promise_due' | 'broken_promise' | 'overdue' | 'partial' | 'pro
 const SECTION_ORDER: SectionId[] = ['promise_due', 'broken_promise', 'overdue', 'partial', 'promise_made']
 
 const SECTION_CONFIG: Record<SectionId, { label: string; dot: string }> = {
-  promise_due: { label: 'Promise Due Today', dot: 'bg-amber-500' },
-  broken_promise: { label: 'Broken Promise', dot: 'bg-rose-500' },
-  overdue: { label: 'Overdue', dot: 'bg-orange-500' },
-  partial: { label: 'Partial Payment', dot: 'bg-blue-500' },
-  promise_made: { label: 'Promise Made', dot: 'bg-purple-500' },
+  promise_due: { label: 'Promise Due Today', dot: 'bg-warning' },
+  broken_promise: { label: 'Broken Promise', dot: 'bg-danger' },
+  overdue: { label: 'Overdue', dot: 'bg-outstanding' },
+  partial: { label: 'Partial Payment', dot: 'bg-info' },
+  promise_made: { label: 'Promise Made', dot: 'bg-recovery' },
 }
 
 function getSection(c: PriorityCase): SectionId {
@@ -69,14 +73,14 @@ function getSection(c: PriorityCase): SectionId {
 }
 
 function signalColor(c: PriorityCase): string {
-  if (c.brokenPromises > 0) return 'text-rose-600'
+  if (c.brokenPromises > 0) return 'text-danger'
   if (c.promiseToPayDate) {
     const due = new Date(c.promiseToPayDate)
-    if (due <= new Date()) return 'text-amber-600'
-    return 'text-purple-600'
+    if (due <= new Date()) return 'text-warning'
+    return 'text-recovery'
   }
   if (c.ignoredReminders >= 3) return 'text-muted-foreground'
-  if (c.oldestOverdueDays > 0) return 'text-orange-600'
+  if (c.oldestOverdueDays > 0) return 'text-outstanding'
   return 'text-muted-foreground'
 }
 
@@ -93,6 +97,16 @@ function formatSignal(c: PriorityCase): string {
   if (c.ignoredReminders >= 3) return 'Needs call'
   if (c.oldestOverdueDays > 0) return `Overdue by ${c.oldestOverdueDays}d`
   return 'Pending'
+}
+
+/** Unified risk for a queue case, used for the recommended-next-action chip. */
+function getCaseRisk(c: PriorityCase) {
+  return getCollectionRisk({
+    overdueDays: c.oldestOverdueDays,
+    outstanding: true,
+    brokenPromises: c.brokenPromises,
+    ignoredReminders: c.ignoredReminders,
+  })
 }
 
 function formatLastContact(dateStr: string | null | undefined): string {
@@ -261,9 +275,9 @@ export default function RecoveryQueuePage() {
       })).filter(s => s.items.length > 0)
     : null
 
-  return (
-    <div className="min-h-screen bg-muted/50 pb-8">
-      <div className="max-w-2xl mx-auto px-4 lg:px-6 py-5 lg:py-8 space-y-5">
+return (
+    <PageShell title="Recovery Queue" subtitle="Today's collection">
+      <div className="space-y-5">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -281,19 +295,14 @@ export default function RecoveryQueuePage() {
         </div>
 
         {error && (
-          <div className="border border-red-200 rounded-xl p-4 bg-card">
-            <div className="flex items-center gap-2 text-sm text-red-600">
-              <AlertTriangle size={16} />
-              {error}
-            </div>
-          </div>
+          <ErrorState severity="error" message={error} onRetry={load} />
         )}
 
         {loading && (
           <div className="space-y-4">
-            <div className="h-28 bg-card rounded-xl border border-border animate-pulse" />
+            <Skeleton className="h-28 rounded-xl" />
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 bg-card rounded-xl border border-border animate-pulse" />
+              <SkeletonCard key={i} />
             ))}
           </div>
         )}
@@ -316,8 +325,8 @@ export default function RecoveryQueuePage() {
                 </span>
                 {!isPreview && priorityCases.length > 0 && (
                   <span className="flex items-center gap-1.5">
-                    {allDone ? (
-                      <CheckCircle2 size={12} className="text-emerald-400" />
+                     {allDone ? (
+                      <CheckCircle2 size={12} className="text-success" />
                     ) : (
                       <CheckCircle2 size={12} />
                     )}
@@ -333,7 +342,7 @@ export default function RecoveryQueuePage() {
                 <div className="space-y-2">
                   {samples.length > 0 ? (
                     samples.map((s, i) => (
-                      <div key={i} className="bg-card border border-border rounded-xl p-4">
+                      <div key={i} className="bg-card border border-border rounded-2xl shadow-sm p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
@@ -352,7 +361,7 @@ export default function RecoveryQueuePage() {
                     ))
                   ) : (
                     <div className="bg-card border border-dashed border-border rounded-xl p-8 text-center">
-                      <CheckCircle2 className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                      <CheckCircle2 className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                       <p className="font-semibold text-foreground">No outstanding payments</p>
                       <p className="text-xs text-muted-foreground mt-1">Keep sending invoices to track recovery.</p>
                     </div>
@@ -360,15 +369,15 @@ export default function RecoveryQueuePage() {
                 </div>
 
                 {samples.length > 0 && (
-                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl p-5 text-center">
-                    <Zap className="h-6 w-6 text-amber-400 mx-auto mb-2" />
-                    <p className="font-bold text-white text-lg">Upgrade to Pro</p>
-                    <p className="text-sm text-slate-300 mt-1 mb-4">
+                  <div className="bg-foreground rounded-xl p-5 text-center">
+                    <Zap className="h-6 w-6 text-warning mx-auto mb-2" />
+                    <p className="font-bold text-background text-lg">Upgrade to Pro</p>
+                    <p className="text-sm text-muted-foreground mt-1 mb-4">
                       See customer names, send reminders, and track promises.
                     </p>
                     <Link
                       href="/settings"
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-foreground font-bold text-sm transition-all"
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-warning hover:bg-warning/90 text-foreground font-bold text-sm transition-all"
                     >
                       Upgrade Now
                       <ChevronRight size={16} />
@@ -380,20 +389,47 @@ export default function RecoveryQueuePage() {
 
             {/* Full Queue */}
             {!isPreview && sections === null && (
-              <div className="bg-card border border-border rounded-xl p-8 text-center">
-                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-3" />
-                <p className="font-semibold text-foreground text-lg">All caught up</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  No customers need follow-up right now.
-                </p>
-                <Link
-                  href="/pos"
-                  className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
-                >
-                  + Create Invoice
-                </Link>
-              </div>
+                <div className="bg-card border border-border rounded-2xl shadow-sm p-8 text-center">
+                  <CheckCircle2 className="h-10 w-10 text-success mx-auto mb-3" />
+                  <p className="font-semibold text-foreground text-lg">All caught up</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    No customers need follow-up right now.
+                  </p>
+                  <Link
+                    href="/pos"
+                    className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors"
+                  >
+                    + Create Invoice
+                  </Link>
+                </div>
             )}
+
+            {/* What to do — actionable summary before the list */}
+            {!isPreview && !allDone && (sections !== null || priorityCases.length > 0) && (() => {
+              const promisesDue = raw?.summary?.promiseSummary?.dueToday ?? 0
+              const broken = priorityCases.filter(c => c.brokenPromises > 0).length
+              const highPriority = priorityCases.filter(c => c.brokenPromises > 0 || (c.promiseToPayDate && new Date(c.promiseToPayDate) <= new Date())).length
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="flex items-center gap-2 bg-recovery-soft rounded-xl px-4 py-3">
+                    <AlertTriangle size={16} className="text-recovery flex-shrink-0" />
+                    <span className="text-sm font-semibold text-foreground">{needCount} customer{needCount !== 1 ? "s" : ""} need attention</span>
+                  </div>
+                  {highPriority > 0 && (
+                    <div className="flex items-center gap-2 bg-overdue-soft rounded-xl px-4 py-3">
+                      <AlertCircle size={16} className="text-overdue flex-shrink-0" />
+                      <span className="text-sm font-semibold text-foreground">{highPriority} high priority{highPriority !== 1 ? "" : ""}</span>
+                    </div>
+                  )}
+                  {promisesDue > 0 && (
+                    <div className="flex items-center gap-2 bg-outstanding-soft rounded-xl px-4 py-3">
+                      <Clock size={16} className="text-outstanding flex-shrink-0" />
+                      <span className="text-sm font-semibold text-foreground">{promisesDue} promise{promisesDue !== 1 ? "s" : ""} expire{promisesDue === 1 ? "s" : ""} today</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {!isPreview && sections !== null && !allDone && (
               <>
@@ -436,9 +472,9 @@ export default function RecoveryQueuePage() {
 
             {/* Queue Complete state — all customers actioned */}
             {!isPreview && sections !== null && allDone && (
-              <div className="bg-card border-2 border-emerald-200 rounded-xl p-8 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 mx-auto">
-                  <CheckCircle2 size={36} className="text-emerald-600" />
+              <div className="bg-card border-2 border-success/30 rounded-xl p-8 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success-soft mx-auto">
+                  <CheckCircle2 size={36} className="text-success" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mt-4">Today's actions complete</h2>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -490,7 +526,7 @@ export default function RecoveryQueuePage() {
         open={!!historyFor}
         onClose={() => setHistoryFor(null)}
       />
-    </div>
+    </PageShell>
   )
 }
 
@@ -521,15 +557,15 @@ function CustomerCard({
   // Prefetch timeline data when card mounts so History drawer opens instantly
   useEffect(() => { prefetchCustomerTimeline(c.customerId) }, [c.customerId])
   const statusColor = c.brokenPromises > 0
-    ? 'bg-rose-100 text-rose-700'
+    ? 'bg-danger-soft text-danger'
     : c.promiseToPayDate
-      ? (new Date(c.promiseToPayDate) <= new Date() ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700')
+      ? (new Date(c.promiseToPayDate) <= new Date() ? 'bg-warning-soft text-warning' : 'bg-recovery-soft text-recovery')
       : c.ignoredReminders >= 3
         ? 'bg-muted text-foreground'
-        : 'bg-orange-100 text-orange-700'
+        : 'bg-outstanding-soft text-outstanding'
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4 hover:shadow-sm dark:hover:shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-shadow">
+    <div className="bg-card border border-border rounded-2xl shadow-sm p-4 transition-shadow">
       {/* Header: name + amount */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -552,13 +588,23 @@ function CustomerCard({
       </div>
 
       {/* Status chip */}
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${statusColor}`}>
           {c.promiseToPayDate && new Date(c.promiseToPayDate) <= new Date() && <Clock size={11} />}
           {c.brokenPromises > 0 && <AlertCircle size={11} />}
           {c.lastPaymentAt && <CheckCircle2 size={11} />}
           {formatSignal}
         </span>
+        {(() => {
+          const risk = getCaseRisk(c)
+          if (risk.rank <= 1) return null
+          const tone = COLLECTION_RISK_TONE_CLASSES[risk.tone]
+          return (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${tone.text} ${tone.bg}`}>
+              {risk.label}: {risk.recommendation}
+            </span>
+          )
+        })()}
       </div>
 
       {/* Journey steps */}
@@ -566,11 +612,11 @@ function CustomerCard({
         {stages.map((s, i) => (
           <div key={s.label} className="flex items-center gap-1.5">
             <div className={`w-1.5 h-1.5 rounded-full ${s.active ? 'bg-muted-foreground/20' : 'bg-muted'}`} />
-            <span className={`text-[10px] font-medium ${s.active ? 'text-muted-foreground' : 'text-slate-300'}`}>
+            <span className={`text-[10px] font-medium ${s.active ? 'text-muted-foreground' : 'text-muted-foreground/40'}`}>
               {s.label}
             </span>
             {i < stages.length - 1 && (
-              <span className="text-slate-200 text-[10px]">—</span>
+              <span className="text-muted-foreground/40 text-[10px]">—</span>
             )}
           </div>
         ))}
@@ -600,10 +646,10 @@ function CustomerCard({
 
       {/* Last payment info */}
       {c.lastPaymentAt && c.lastPaymentAmount && (
-        <div className="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
-          <p className="text-xs text-blue-700">
+        <div className="mt-2 rounded-lg bg-info-soft border border-border px-3 py-2">
+          <p className="text-xs text-info">
             <span className="font-semibold">Last Payment:</span> {formatINR(c.lastPaymentAmount)} via {formatPaymentMethod(c.lastPaymentMethod)}
-            <span className="text-blue-500 ml-1">{formatDate(c.lastPaymentAt)}</span>
+            <span className="text-info/70 ml-1">{formatDate(c.lastPaymentAt)}</span>
           </p>
         </div>
       )}
@@ -620,7 +666,7 @@ function CustomerCard({
         <button
           onClick={() => { trackQueueEvent(E.record_payment, c.customerId, { caseId: c.caseId }); onPayment(c) }}
           disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all active:scale-[0.97]"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-success text-success-foreground text-xs font-bold hover:bg-success/90 disabled:opacity-50 transition-all active:scale-[0.97]"
         >
           <CreditCard size={13} />
           Record Payment
@@ -628,7 +674,7 @@ function CustomerCard({
         <button
           onClick={() => onSend(c)}
           disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-primary text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.97]"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.97]"
         >
           {isSending ? (
             <Loader2 size={13} className="animate-spin" />
@@ -640,7 +686,7 @@ function CustomerCard({
         <button
           onClick={() => { trackQueueEvent(E.mark_promise, c.customerId, { caseId: c.caseId }); onPromise(c) }}
           disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 text-xs font-semibold transition-all active:scale-[0.97] disabled:opacity-50"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg border border-border bg-card text-foreground text-xs font-semibold hover:bg-muted transition-all active:scale-[0.97] disabled:opacity-50"
         >
           <Hand size={13} />
           Promise

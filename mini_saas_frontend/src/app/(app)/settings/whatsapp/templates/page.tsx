@@ -118,25 +118,25 @@ export default function WhatsAppTemplatesPage() {
       </div>
 
       {saved && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-success-soft border border-success text-success text-sm">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Template saved!
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-danger-soft border border-danger text-danger text-sm">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
-      <div className="rounded-2xl border bg-amber-50 border-amber-200 p-4">
+      <div className="rounded-2xl border bg-warning-soft border-warning p-4">
         <div className="flex items-start gap-3">
-          <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <Clock className="h-5 w-5 text-warning shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-amber-800">Meta Template Requirements</p>
-            <p className="text-xs text-amber-700 mt-1">
+            <p className="text-sm font-semibold text-warning">Meta Template Requirements</p>
+            <p className="text-xs text-warning mt-1">
               WhatsApp Business API requires pre-approved templates. After creating here, submit via{' '}
               <a href="https://business.facebook.com" target="_blank" rel="noopener" className="underline">
                 Meta Business Suite
@@ -157,7 +157,7 @@ export default function WhatsAppTemplatesPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm">{label}</span>
                     {hasTemplate ? (
-                      <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <span className="text-xs text-success font-medium flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" /> Template set
                       </span>
                     ) : (
@@ -170,7 +170,7 @@ export default function WhatsAppTemplatesPage() {
                   {hasTemplate && (
                     <button
                       onClick={() => deleteTemplate(key)}
-                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      className="p-2 text-danger hover:text-danger hover:bg-danger-soft rounded-lg"
                       title="Remove template"
                     >
                       <X className="h-4 w-4" />
@@ -226,9 +226,9 @@ export default function WhatsAppTemplatesPage() {
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Available placeholders:</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(PLACEHOLDER_HELP).map(([ph, help]) => (
-                    <span key={ph} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg">
+                    <span key={ph} className="text-xs bg-info-soft text-info px-2 py-1 rounded-lg">
                       <span className="font-mono font-semibold">{ph}</span>{' '}
-                      <span className="text-indigo-400">= {help}</span>
+                      <span className="text-info">= {help}</span>
                     </span>
                   ))}
                 </div>
@@ -242,7 +242,7 @@ export default function WhatsAppTemplatesPage() {
               <button
                 onClick={saveTemplate}
                 disabled={saving || !createBody.trim()}
-                className="flex-1 h-11 rounded-xl bg-indigo-600 font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 h-11 rounded-xl bg-info font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {saving ? 'Saving...' : 'Save Template'}

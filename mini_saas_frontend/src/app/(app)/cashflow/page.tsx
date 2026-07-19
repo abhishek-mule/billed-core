@@ -13,6 +13,7 @@ import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
 import type { QueueApiSummary, QueueApiResponse, RecentEvent } from "@/lib/billzo/api-types"
+import { ErrorState } from "@/components/billzo/ErrorState"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -27,31 +28,48 @@ const bucketLabel: Record<AgingBucket, string> = {
 
 type ProbLevel = "high" | "medium" | "low"
 
-function recoveryProbability(days: number, stage?: string): ProbLevel {
-  if (days <= 7) return "high"
-  if (days <= 15 && stage !== "t4_recovery") return "high"
-  if (days <= 30) return "medium"
+import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES, type CollectionRiskTone } from "@/lib/billzo/recovery-risk"
+
+/** Map an aging bucket's representative overdue-days to a recovery probability. */
+function recoveryProbability(days: number, _stage?: string): ProbLevel {
+  const risk = getCollectionRisk({ overdueDays: days })
+  if (risk.rank <= 1) return "high"
+  if (risk.rank <= 2) return "medium"
   return "low"
 }
 
 const probLabel: Record<ProbLevel, string> = { high: "High", medium: "Med", low: "Low" }
+
+/** Probability badge colors keyed on CollectionRisk tone. */
+const PROB_TONE: Record<ProbLevel, CollectionRiskTone> = {
+  high: "success",
+  medium: "warning",
+  low: "danger",
+}
 const probColor: Record<ProbLevel, string> = {
-  high: "text-emerald-700 bg-emerald-50",
-  medium: "text-amber-700 bg-amber-50",
-  low: "text-rose-700 bg-rose-50",
+  high: `${COLLECTION_RISK_TONE_CLASSES.success.text} ${COLLECTION_RISK_TONE_CLASSES.success.bg}`,
+  medium: `${COLLECTION_RISK_TONE_CLASSES.warning.text} ${COLLECTION_RISK_TONE_CLASSES.warning.bg}`,
+  low: `${COLLECTION_RISK_TONE_CLASSES.danger.text} ${COLLECTION_RISK_TONE_CLASSES.danger.bg}`,
 }
 
+/** Each aging bucket's representative tone, derived from CollectionRisk. */
+const BUCKET_TONE: Record<AgingBucket, CollectionRiskTone> = {
+  "1-7": "success",
+  "8-15": "warning",
+  "16-30": "warning",
+  "30+": "danger",
+}
 const bucketBg: Record<AgingBucket, string> = {
-  "1-7": "border-emerald-200 bg-emerald-50/30",
-  "8-15": "border-amber-200 bg-amber-50/30",
-  "16-30": "border-orange-200 bg-orange-50/30",
-  "30+": "border-rose-200 bg-rose-50/30",
+  "1-7": `border-border ${COLLECTION_RISK_TONE_CLASSES.success.bg}`,
+  "8-15": `border-border ${COLLECTION_RISK_TONE_CLASSES.warning.bg}`,
+  "16-30": `border-border ${COLLECTION_RISK_TONE_CLASSES.warning.bg}`,
+  "30+": `border-border ${COLLECTION_RISK_TONE_CLASSES.danger.bg}`,
 }
 const bucketDot: Record<AgingBucket, string> = {
-  "1-7": "bg-emerald-500",
-  "8-15": "bg-amber-500",
-  "16-30": "bg-orange-500",
-  "30+": "bg-rose-500",
+  "1-7": COLLECTION_RISK_TONE_CLASSES.success.dot,
+  "8-15": COLLECTION_RISK_TONE_CLASSES.warning.dot,
+  "16-30": COLLECTION_RISK_TONE_CLASSES.warning.dot,
+  "30+": COLLECTION_RISK_TONE_CLASSES.danger.dot,
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -61,9 +79,10 @@ function daysSince(dateStr: string): number {
 }
 
 function getAgingBucket(days: number): AgingBucket {
-  if (days <= 7) return "1-7"
-  if (days <= 15) return "8-15"
-  if (days <= 30) return "16-30"
+  const risk = getCollectionRisk({ overdueDays: days })
+  if (risk.rank <= 1) return "1-7"
+  if (risk.rank <= 2) return "8-15"
+  if (risk.rank <= 3) return "16-30"
   return "30+"
 }
 
@@ -246,7 +265,7 @@ export default function CashflowPage() {
 
   if (loading) {
     return (
-      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto space-y-4">
+      <div className="px-4 lg:px-8 py-4 lg:py-6 max-w-5xl mx-auto space-y-3">
         <div className="h-6 bg-muted animate-pulse rounded w-48" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[...Array(4)].map((_, i) => (
@@ -265,16 +284,8 @@ export default function CashflowPage() {
 
   if (error) {
     return (
-      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-5xl mx-auto">
-        <div className="border border-red-200 rounded-lg p-8 text-center bg-card">
-          <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
-          <p className="text-xs text-red-600 mb-4">{error}</p>
-          <button onClick={() => { setError(null); setLoading(true); loadData() }}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 inline-flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" /> Retry
-          </button>
-        </div>
+      <div className="px-4 lg:px-8 py-4 lg:py-6 max-w-5xl mx-auto">
+        <ErrorState severity="error" message={error} onRetry={() => { setError(null); setLoading(true); loadData() }} />
       </div>
     )
   }
@@ -283,7 +294,7 @@ export default function CashflowPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 pb-24 lg:pb-8">
-      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-4 lg:py-6 space-y-3">
 
         {/* ══════════════════════════════════════════
             HEADER
@@ -337,10 +348,10 @@ export default function CashflowPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border">
             <div className="px-4 py-3">
               <p className="text-[11px] text-muted-foreground font-medium">Collected Today</p>
-              <p className="text-xl font-bold tabular-nums tracking-tight text-emerald-600 mt-0.5">
+              <p className="text-xl font-bold tabular-nums tracking-tight text-success mt-0.5">
                 {formatINR(summary?.totalCollectedToday || 0)}
               </p>
-              <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-0.5">
+              <p className="text-[10px] text-success mt-0.5 flex items-center gap-0.5">
                 <TrendingUp className="h-3 w-3" /> via payments
               </p>
             </div>
@@ -367,7 +378,7 @@ export default function CashflowPage() {
               </p>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  className="h-full rounded-full bg-success transition-all"
                   style={{
                     width: `${summary?.monthSales
                       ? Math.min(((summary.monthSales - totals.outstanding) / summary.monthSales) * 100, 100)
@@ -424,9 +435,9 @@ export default function CashflowPage() {
             </div>
             <div className="px-4 py-3 space-y-3">
               {[
-                { label: "Collected", value: Math.max(0, (summary?.monthSales || 0) - totals.outstanding), cls: "bg-emerald-500", color: "text-emerald-600" },
-                { label: "Outstanding", value: totals.outstanding, cls: "bg-amber-500", color: "text-amber-600" },
-                { label: "Overdue >15d", value: bucketBreakdown["16-30"].total + bucketBreakdown["30+"].total, cls: "bg-rose-500", color: "text-rose-600" },
+                { label: "Collected", value: Math.max(0, (summary?.monthSales || 0) - totals.outstanding), cls: "bg-success", color: "text-success" },
+                { label: "Outstanding", value: totals.outstanding, cls: "bg-warning", color: "text-warning" },
+                { label: "Overdue >15d", value: bucketBreakdown["16-30"].total + bucketBreakdown["30+"].total, cls: "bg-danger", color: "text-danger" },
               ].map(b => {
                 const base = summary?.monthSales || totals.outstanding || 1
                 const pct = Math.min((b.value / base) * 100, 100)
@@ -479,16 +490,16 @@ export default function CashflowPage() {
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">{b.count} customers</p>
                   {b.total > 0 && (
-                    <div className="mt-2 h-1 rounded-full bg-white/50 flex overflow-hidden">
+                    <div className="mt-2 h-1 rounded-full bg-muted flex overflow-hidden">
                       {(["high", "medium", "low"] as ProbLevel[]).map(p => {
                         const pct = b.total > 0 ? (b.prob[p] / b.total) * 100 : 0
                         if (pct === 0) return null
                         return (
-                          <div
-                            key={p}
-                            className={`h-full ${p === "high" ? "bg-emerald-500" : p === "medium" ? "bg-amber-500" : "bg-rose-500"}`}
-                            style={{ width: `${pct}%` }}
-                          />
+                        <div
+                          key={p}
+                          className={`h-full ${COLLECTION_RISK_TONE_CLASSES[PROB_TONE[p]].dot}`}
+                          style={{ width: `${pct}%` }}
+                        />
                         )
                       })}
                     </div>
@@ -509,7 +520,7 @@ export default function CashflowPage() {
                 <Bell className="h-4 w-4 text-foreground" />
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reminders</p>
                 {pendingReminders.length > 0 && (
-                  <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-semibold text-warning bg-warning-soft px-1.5 py-0.5 rounded-full">
                     {pendingReminders.length} pending
                   </span>
                 )}
@@ -522,7 +533,7 @@ export default function CashflowPage() {
                   href={`/invoices/${r.invoiceId}`}
                   className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors group"
                 >
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${r.isPending ? "bg-amber-500" : "bg-slate-300"}`} />
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${r.isPending ? "bg-warning" : "bg-muted-foreground/40"}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground truncate">{r.customerName}</p>
                     <p className="text-[10px] text-muted-foreground">
@@ -531,7 +542,7 @@ export default function CashflowPage() {
                     </p>
                   </div>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                    r.isPending ? "bg-amber-50 text-amber-700" : "bg-slate-50 text-slate-500"
+                    r.isPending ? "bg-warning-soft text-warning" : "bg-muted text-muted-foreground"
                   }`}>
                     {r.isPending ? "Pending" : "Scheduled"}
                   </span>
@@ -560,8 +571,8 @@ export default function CashflowPage() {
               {recentEvents.slice(0, 6).map((evt, i) => (
                 <div key={i} className="flex items-start gap-3 px-4 py-2.5">
                   <div className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                    evt.eventType === "transition" ? "bg-blue-500" :
-                    evt.eventType === "backfill" ? "bg-amber-500" : "bg-slate-300"
+                    evt.eventType === "transition" ? "bg-info" :
+                    evt.eventType === "backfill" ? "bg-warning" : "bg-muted-foreground/40"
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-foreground truncate">{evt.reason}</p>
@@ -584,7 +595,7 @@ export default function CashflowPage() {
 
           {filtered.length === 0 ? (
             <div className="bg-card border border-border rounded-xl px-5 py-10 text-center">
-              <Users className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+              <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm font-semibold text-foreground">
                 {q ? "No customers match" : "No outstanding invoices"}
               </p>
@@ -608,10 +619,10 @@ export default function CashflowPage() {
                         <span className="text-sm font-semibold text-foreground truncate">{group.customerName}</span>
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
                           group.daysSinceFirstDue > 15
-                            ? "text-rose-700 bg-rose-50"
+                            ? "text-danger bg-danger-soft"
                             : group.daysSinceFirstDue > 7
-                            ? "text-amber-700 bg-amber-50"
-                            : "text-emerald-700 bg-emerald-50"
+                            ? "text-warning bg-warning-soft"
+                            : "text-success bg-success-soft"
                         }`}>
                           {bucketLabel[group.agingBucket]}
                         </span>
@@ -647,7 +658,7 @@ export default function CashflowPage() {
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors group"
                           >
                             <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[10px] font-bold ${
-                              inv.status === "overdue" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                              inv.status === "overdue" ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"
                             }`}>
                               {inv.status === "overdue" ? "!" : "P"}
                             </div>

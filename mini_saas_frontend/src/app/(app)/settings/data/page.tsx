@@ -66,13 +66,13 @@ export default function DataPrivacyPage() {
 
         {/* Status */}
         {exportDone && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+          <div className="flex items-center gap-2 px-4 py-3 bg-success-soft border border-success rounded-lg text-sm text-success">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             Export downloaded
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600">
+          <div className="flex items-center gap-2 px-4 py-3 bg-danger-soft border border-danger rounded-lg text-sm text-danger">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -139,16 +139,16 @@ export default function DataPrivacyPage() {
         </div>
 
         {/* Danger Zone */}
-        <div className="border-t border-rose-200 pt-4 mt-4">
+        <div className="border-t border-danger pt-4 mt-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="w-4 h-4 text-rose-400" />
-            <p className="text-xs font-medium text-rose-500 uppercase tracking-wider">Danger Zone</p>
+            <AlertCircle className="w-4 h-4 text-danger" />
+            <p className="text-xs font-medium text-danger uppercase tracking-wider">Danger Zone</p>
           </div>
-          <div className="bg-card border border-rose-200 rounded-lg overflow-hidden">
+          <div className="bg-card border border-danger rounded-lg overflow-hidden">
             {confirmDelete ? (
               <div className="p-4 space-y-3">
-                <p className="text-sm text-rose-700 font-medium">Are you sure?</p>
-                <p className="text-xs text-rose-500">
+                <p className="text-sm text-danger font-medium">Are you sure?</p>
+                <p className="text-xs text-danger">
                   This will sign you out and clear all local data. Your data on the server is preserved.
                 </p>
                 <div className="flex gap-2">
@@ -160,7 +160,7 @@ export default function DataPrivacyPage() {
                   </button>
                   <button
                     onClick={handleDeleteAccount}
-                    className="flex-1 h-10 rounded-lg bg-rose-500 text-white text-sm font-semibold hover:bg-rose-600 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 h-10 rounded-lg bg-danger text-white text-sm font-semibold hover:bg-danger transition-colors flex items-center justify-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" />
                     Sign Out & Clear
@@ -170,14 +170,14 @@ export default function DataPrivacyPage() {
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-rose-50 transition-colors"
+                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-danger-soft transition-colors"
               >
-                <Trash2 className="w-5 h-5 text-rose-500 shrink-0" />
+                <Trash2 className="w-5 h-5 text-danger shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-rose-700">Clear local data & sign out</p>
-                  <p className="text-xs text-rose-500">Removes cached data from this device</p>
+                  <p className="text-sm font-medium text-danger">Clear local data & sign out</p>
+                  <p className="text-xs text-danger">Removes cached data from this device</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-rose-300 shrink-0" />
+                <ChevronRight className="w-4 h-4 text-danger shrink-0" />
               </button>
             )}
           </div>

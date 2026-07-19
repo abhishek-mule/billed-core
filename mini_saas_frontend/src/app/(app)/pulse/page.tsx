@@ -12,6 +12,7 @@ import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
 import type { Customer, Invoice } from "@/lib/billzo/types"
+import { ErrorState } from "@/components/billzo/ErrorState"
 
 // ── helpers ──
 const providerIcon: Record<string, React.ReactNode> = {
@@ -286,15 +287,7 @@ export default function PulsePage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="border border-red-200 rounded-lg p-8 text-center bg-card">
-            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
-            <p className="text-xs text-red-600 mb-4">{error}</p>
-            <button onClick={() => { setError(null); setLoading(true); loadData() }}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-red-700">
-              <RefreshCw className="h-4 w-4" /> Retry
-            </button>
-          </div>
+          <ErrorState severity="error" message={error} onRetry={() => { setError(null); setLoading(true); loadData() }} />
         </div>
       </div>
     )
@@ -332,7 +325,7 @@ export default function PulsePage() {
             <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
               {formatINR(todayCollected)}
             </p>
-            <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-0.5">
+            <p className="text-[10px] text-success mt-0.5 flex items-center gap-0.5">
               <TrendingUp className="h-3 w-3" /> {successPmts.filter(p => isToday(p.createdAt)).length} payments
             </p>
           </div>
@@ -345,10 +338,10 @@ export default function PulsePage() {
           </div>
           <div className="bg-card border border-border rounded-lg px-4 py-3.5">
             <p className="text-[11px] text-muted-foreground font-medium">Pending Udhar</p>
-            <p className="text-xl font-bold tabular-nums tracking-tight text-amber-700 mt-0.5">
+            <p className="text-xl font-bold tabular-nums tracking-tight text-outstanding mt-0.5">
               {formatINR(pendingUdhaari)}
             </p>
-            <p className="text-[10px] text-amber-600 mt-0.5">
+            <p className="text-[10px] text-warning mt-0.5">
               {invoices.filter(i => i.status === "overdue" || i.status === "partial").length} overdue invoices
             </p>
           </div>
@@ -359,7 +352,7 @@ export default function PulsePage() {
            ═══════════════════════════ */}
         {successPmts.length === 0 ? (
           <div className="bg-card border border-border rounded-lg px-5 py-10 text-center">
-            <Wallet className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+            <Wallet className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm font-semibold text-foreground">No payments recorded yet</p>
             <p className="text-xs text-muted-foreground mt-1 mb-5">Get started by creating an invoice or recording a payment manually</p>
             <div className="flex items-center justify-center gap-3">
@@ -413,7 +406,7 @@ export default function PulsePage() {
                           <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded capitalize">
                             {p.provider?.replace("_", " ")}
                           </span>
-                          <ChevronRight className="h-4 w-4 text-slate-300" />
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
                         </div>
                       </button>
                     )
@@ -450,7 +443,7 @@ export default function PulsePage() {
             </div>
 
             <div className="text-center py-3">
-              <p className={`text-2xl font-bold tabular-nums tracking-tight ${selectedPmt.amount < 0 ? "text-red-600" : "text-foreground"}`}>
+              <p className={`text-2xl font-bold tabular-nums tracking-tight ${selectedPmt.amount < 0 ? "text-danger" : "text-foreground"}`}>
                 {selectedPmt.amount < 0 ? `- ${formatINR(Math.abs(selectedPmt.amount))}` : formatINR(selectedPmt.amount)}
               </p>
             </div>
@@ -485,7 +478,7 @@ export default function PulsePage() {
             {selectedPmt.amount > 0 && (
               <button
                 onClick={() => { setShowReverse(true); setReverseReason("") }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-red-200 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 border border-danger-soft rounded-lg text-xs font-medium text-danger hover:bg-danger-soft transition-colors"
               >
                 <RotateCcw className="h-3.5 w-3.5" /> Reverse Payment
               </button>
@@ -523,7 +516,7 @@ export default function PulsePage() {
             <button
               onClick={submitReverse}
               disabled={!reverseReason || saving}
-              className="w-full py-2.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-lg text-xs font-medium bg-danger text-danger-foreground hover:bg-danger/90 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
               Confirm Reversal
@@ -587,11 +580,11 @@ export default function PulsePage() {
                         </div>
                         {due !== undefined && (
                           <div className="text-right shrink-0">
-                            <p className="text-xs font-semibold tabular-nums text-amber-600">{formatINR(due)}</p>
+                            <p className="text-xs font-semibold tabular-nums text-outstanding">{formatINR(due)}</p>
                             <p className="text-[10px] text-muted-foreground">outstanding</p>
                           </div>
                         )}
-                        <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
                       </button>
                     )
                   })}

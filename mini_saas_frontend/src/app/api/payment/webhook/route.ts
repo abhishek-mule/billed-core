@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { type PlanType } from '@/lib/billzo/plan-limits'
 import { processRazorpayPaymentWebhook } from '@/lib/billzo/reconciliation'
 import { submitIntent } from '@/lib/authority/transport'
+import { recordBillingEvent, publishSubscriptionChange } from '@/lib/billzo/billing-events'
 
 const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
 
@@ -102,9 +103,16 @@ export async function POST(request: NextRequest) {
           break
         }
 
+        await recordBillingEvent({
+          tenantId,
+          eventType: 'order.paid',
+          providerEventId: order?.id,
+          rawPayload: event.payload,
+        })
+
         const { data: existing } = await supabaseAdmin
           .from('tenants')
-          .select('id')
+          .select('id, plan, subscription_state')
           .eq('id', tenantId)
           .single()
 
@@ -139,12 +147,24 @@ export async function POST(request: NextRequest) {
               paywall_unlocked: true,
               subscription_id: order.id,
               subscription_status: 'active',
+              subscription_state: 'active',
               invoice_count: 0,
               reminder_count: 0,
               created_at: now,
               updated_at: now,
             })
         }
+
+        await publishSubscriptionChange({
+          tenantId,
+          fromState: existing?.subscription_state,
+          toState: 'active',
+          fromPlanCode: existing?.plan,
+          toPlanCode: plan,
+          reason: 'webhook.order_paid',
+          correlationId: order?.id,
+          idempotencyKey: `order.paid:${order?.id}`,
+        })
 
         console.log(`[Webhook] Order paid - tenant ${tenantId} upgraded to ${plan}`)
         break
@@ -155,6 +175,13 @@ export async function POST(request: NextRequest) {
         const tenantId = sub?.notes?.tenantId
         const plan = (sub?.notes?.plan || 'pro') as PlanType
         if (!tenantId) break
+
+        await recordBillingEvent({
+          tenantId,
+          eventType: 'subscription.activated',
+          providerEventId: sub?.id,
+          rawPayload: event.payload,
+        })
 
         const result = await submitIntent({
           intentId: crypto.randomUUID(),
@@ -173,18 +200,51 @@ export async function POST(request: NextRequest) {
           console.error('[Webhook] Authority rejected subscription activation:', result.error)
         }
 
+        await publishSubscriptionChange({
+          tenantId,
+          toState: 'active',
+          toPlanCode: plan,
+          reason: 'webhook.subscription_activated',
+          correlationId: sub?.id,
+          idempotencyKey: `activated:${sub?.id}`,
+        })
+
         console.log(`[Webhook] Subscription activated - tenant ${tenantId}`)
         break
       }
 
-      case 'subscription.charged':
-        console.log(`[Webhook] Subscription charged`)
+      case 'subscription.charged': {
+        const sub = event.payload.subscription
+        const tenantId = sub?.notes?.tenantId
+        if (tenantId) {
+          await recordBillingEvent({
+            tenantId,
+            eventType: 'subscription.charged',
+            providerEventId: event.payload.payment?.entity?.id,
+            rawPayload: event.payload,
+          })
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'active',
+            reason: 'webhook.subscription_charged',
+            correlationId: sub?.id,
+            idempotencyKey: `charged:${event.payload.payment?.entity?.id}`,
+          })
+        }
         break
+      }
 
       case 'subscription.cancelled': {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
         if (!tenantId) break
+
+        await recordBillingEvent({
+          tenantId,
+          eventType: 'subscription.cancelled',
+          providerEventId: sub?.id,
+          rawPayload: event.payload,
+        })
 
         const result = await submitIntent({
           intentId: crypto.randomUUID(),
@@ -203,6 +263,15 @@ export async function POST(request: NextRequest) {
           console.error('[Webhook] Authority rejected subscription cancellation:', result.error)
         }
 
+        await publishSubscriptionChange({
+          tenantId,
+          toState: 'cancelled',
+          toPlanCode: 'starter',
+          reason: 'webhook.subscription_cancelled',
+          correlationId: sub?.id,
+          idempotencyKey: `cancelled:${sub?.id}`,
+        })
+
         console.log(`[Webhook] Subscription cancelled - tenant ${tenantId}`)
         break
       }
@@ -211,6 +280,12 @@ export async function POST(request: NextRequest) {
         const sub = event.payload.subscription
         const tenantId = sub?.notes?.tenantId
         if (tenantId) {
+          await recordBillingEvent({
+            tenantId,
+            eventType: 'subscription.paused',
+            providerEventId: sub?.id,
+            rawPayload: event.payload,
+          })
           const result = await submitIntent({
             intentId: crypto.randomUUID(),
             intentType: 'tenant.update_subscription',
@@ -227,6 +302,13 @@ export async function POST(request: NextRequest) {
           if (!result.accepted) {
             console.error('[Webhook] Authority rejected subscription pause:', result.error)
           }
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'paused',
+            reason: 'webhook.subscription_paused',
+            correlationId: sub?.id,
+            idempotencyKey: `paused:${sub?.id}`,
+          })
         }
         break
       }
@@ -251,6 +333,77 @@ export async function POST(request: NextRequest) {
           if (!result.accepted) {
             console.error('[Webhook] Authority rejected subscription resume:', result.error)
           }
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'active',
+            reason: 'webhook.subscription_resumed',
+            correlationId: sub?.id,
+            idempotencyKey: `resumed:${sub?.id}`,
+          })
+        }
+        break
+      }
+
+      case 'subscription.halted': {
+        const sub = event.payload.subscription
+        const tenantId = sub?.notes?.tenantId
+        if (tenantId) {
+          await recordBillingEvent({
+            tenantId,
+            eventType: 'subscription.halted',
+            providerEventId: sub?.id,
+            rawPayload: event.payload,
+          })
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'past_due',
+            reason: 'webhook.subscription_halted',
+            correlationId: sub?.id,
+            idempotencyKey: `halted:${sub?.id}`,
+          })
+        }
+        break
+      }
+
+      case 'subscription.pending': {
+        const sub = event.payload.subscription
+        const tenantId = sub?.notes?.tenantId
+        if (tenantId) {
+          await recordBillingEvent({
+            tenantId,
+            eventType: 'subscription.pending',
+            providerEventId: sub?.id,
+            rawPayload: event.payload,
+          })
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'incomplete',
+            reason: 'webhook.subscription_pending',
+            correlationId: sub?.id,
+            idempotencyKey: `pending:${sub?.id}`,
+          })
+        }
+        break
+      }
+
+      case 'subscription.completed': {
+        const sub = event.payload.subscription
+        const tenantId = sub?.notes?.tenantId
+        if (tenantId) {
+          await recordBillingEvent({
+            tenantId,
+            eventType: 'subscription.completed',
+            providerEventId: sub?.id,
+            rawPayload: event.payload,
+          })
+          await publishSubscriptionChange({
+            tenantId,
+            toState: 'expired',
+            toPlanCode: 'starter',
+            reason: 'webhook.subscription_completed',
+            correlationId: sub?.id,
+            idempotencyKey: `completed:${sub?.id}`,
+          })
         }
         break
       }

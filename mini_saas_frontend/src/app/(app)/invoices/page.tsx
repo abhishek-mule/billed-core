@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { Button } from "@/components/billzo/Button"
+import { ErrorState } from "@/components/billzo/ErrorState"
 import {
   Search, Plus, ChevronRight,
   TrendingUp, AlertCircle, Download, FileSpreadsheet,
@@ -12,6 +14,7 @@ import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
 import type { Invoice } from "@/lib/billzo/types"
+import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/recovery-risk"
 
 // ── helpers ──
 function daysSince(s: string): number {
@@ -23,19 +26,23 @@ function getOutstanding(inv: Invoice): number {
 }
 
 function getStatusBadge(inv: Invoice) {
-  if (inv.status === "paid") return { label: "Paid", cls: "bg-emerald-600 text-white" }
-  if (inv.status === "overdue") return { label: "Overdue", cls: "bg-rose-600 text-white" }
-  if (inv.status === "partial") return { label: "Partial", cls: "bg-amber-500 text-white" }
+  if (inv.status === "paid") return { label: "Paid", cls: "bg-success text-success-foreground" }
+  if (inv.status === "overdue") return { label: "Overdue", cls: "bg-danger text-danger-foreground" }
+  if (inv.status === "partial") return { label: "Partial", cls: "bg-warning text-warning-foreground" }
   return { label: "Unpaid", cls: "bg-muted-foreground/20 text-foreground" }
 }
 
 function getRisk(inv: Invoice): { label: string; cls: string } | null {
   if (inv.status !== "overdue" && inv.status !== "partial") return null
   const d = daysSince(inv.dueAt)
-  if (d > 30) return { label: "High Risk", cls: "text-rose-600 bg-rose-50" }
-  if (d > 15) return { label: "Medium Risk", cls: "text-amber-600 bg-amber-50" }
-  if (d > 7) return { label: "At Risk", cls: "text-orange-600 bg-orange-50" }
-  return null
+  const risk = getCollectionRisk({ overdueDays: d, outstanding: true })
+  // Healthy/Monitor are not yet "at risk" enough to flag on the invoice row.
+  if (risk.rank <= 1) return null
+  const tone = COLLECTION_RISK_TONE_CLASSES[risk.tone]
+  return {
+    label: risk.stage === "Critical" ? "High Risk" : risk.stage === "Urgent" ? "Medium Risk" : "At Risk",
+    cls: `${tone.text} ${tone.bg}`,
+  }
 }
 
 // ── component ──
@@ -198,12 +205,7 @@ export default function InvoicesPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="border border-red-200 rounded-lg p-8 text-center bg-card">
-            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-red-900 mb-1">Something went wrong</p>
-            <p className="text-xs text-red-600 mb-4">{error}</p>
-            <button onClick={loadInvoices} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">Retry</button>
-          </div>
+          <ErrorState severity="error" message={error} onRetry={loadInvoices} />
         </div>
       </div>
     )
@@ -225,9 +227,9 @@ export default function InvoicesPage() {
           </div>
           <Link
             href="/pos"
-            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-foreground text-background text-xs font-medium rounded-lg hover:bg-foreground/90"
+            className="hidden lg:flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90"
           >
-            <Plus className="h-3.5 w-3.5" /> Create Invoice
+            <Plus className="h-4 w-4" /> Create Invoice
           </Link>
         </div>
 
@@ -252,7 +254,7 @@ export default function InvoicesPage() {
                 {formatINR(monthSales)}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3 text-emerald-500" /> {invoices.filter(i => new Date(i.createdAt) >= new Date(new Date().setDate(1))).length} invoices
+                <TrendingUp className="h-3 w-3 text-success" /> {invoices.filter(i => new Date(i.createdAt) >= new Date(new Date().setDate(1))).length} invoices
               </p>
             </div>
             <div className="px-4 py-3">
@@ -261,7 +263,7 @@ export default function InvoicesPage() {
                 {collectionStats.total > 0 ? Math.round((collectionStats.paidAmt / collectionStats.total) * 100) : 0}%
               </p>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full bg-emerald-500" style={{
+                <div className="h-full rounded-full bg-success" style={{
                   width: `${collectionStats.total > 0 ? (collectionStats.paidAmt / collectionStats.total) * 100 : 0}%`
                 }} />
               </div>
@@ -271,7 +273,7 @@ export default function InvoicesPage() {
               <p className="text-lg font-bold tabular-nums tracking-tight text-foreground mt-0.5">
                 {attentionInvs.length}
               </p>
-              <p className="text-[10px] text-rose-600 mt-0.5">
+              <p className="text-[10px] text-danger mt-0.5">
                 {formatINR(attentionInvs.reduce((s, i) => s + getOutstanding(i), 0))} overdue
               </p>
             </div>
@@ -283,9 +285,9 @@ export default function InvoicesPage() {
               <p className="text-[11px] font-medium text-muted-foreground">Collection breakdown</p>
               <div className="space-y-1">
                 {[
-                  { label: "Paid", amt: collectionStats.paidAmt, cls: "bg-emerald-500" },
-                  { label: "Overdue", amt: collectionStats.overdueAmt, cls: "bg-rose-500" },
-                  { label: "Partial", amt: collectionStats.partialAmt, cls: "bg-amber-500" },
+                  { label: "Paid", amt: collectionStats.paidAmt, cls: "bg-success" },
+                  { label: "Overdue", amt: collectionStats.overdueAmt, cls: "bg-danger" },
+                  { label: "Partial", amt: collectionStats.partialAmt, cls: "bg-warning" },
                 ].map(b => {
                   const pct = collectionStats.total > 0 ? (b.amt / collectionStats.total) * 100 : 0
                   if (pct === 0) return null
@@ -303,7 +305,7 @@ export default function InvoicesPage() {
             </div>
             <div className="px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-rose-700">
+                <p className="text-xs font-medium text-danger">
                   {attentionInvs.length} overdue invoice{attentionInvs.length !== 1 ? "s" : ""}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -345,10 +347,10 @@ export default function InvoicesPage() {
             {actionsOpen && (
               <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] z-20 py-1">
                 <button onClick={exportExcel} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export Excel
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-success" /> Export Excel
                 </button>
                 <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileText className="h-3.5 w-3.5 text-red-600" /> Export PDF
+                  <FileText className="h-3.5 w-3.5 text-danger" /> Export PDF
                 </button>
               </div>
             )}
@@ -360,7 +362,7 @@ export default function InvoicesPage() {
            ═══════════════════════════ */}
         {filtered.length === 0 ? (
           <div className="bg-card border border-border rounded-lg px-5 py-10 text-center">
-            <Receipt className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+            <Receipt className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm font-semibold text-foreground">
               {q ? "No invoices match" : "No invoices yet"}
             </p>
@@ -370,9 +372,9 @@ export default function InvoicesPage() {
             {!q && (
               <Link
                 href="/pos"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-foreground text-background text-xs font-medium rounded-lg hover:bg-foreground/90"
+                className="inline-flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90"
               >
-                <Plus className="h-3.5 w-3.5" /> Create Invoice
+                <Plus className="h-4 w-4" /> Create Invoice
               </Link>
             )}
           </div>
@@ -408,29 +410,29 @@ export default function InvoicesPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-muted-foreground font-medium">{inv.invoiceNumber || inv.id.slice(0, 8)}</span>
-                      <span className="text-[10px] text-slate-300">&middot;</span>
+                      <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                       <span className="text-[11px] text-muted-foreground">
                         {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <span className="text-[10px] text-slate-300">&middot;</span>
+                      <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                       <span className="text-[11px] text-muted-foreground">Due {new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
                       {inv.paymentMode && (inv.status === "paid" || inv.status === "partial") && (
                         <>
-                          <span className="text-[10px] text-slate-300">&middot;</span>
+                          <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                           <span className="text-[11px] text-muted-foreground font-medium capitalize">{inv.paymentMode}</span>
                         </>
                       )}
                       {inv.status !== "paid" && outstanding !== inv.total && (
                         <>
-                          <span className="text-[10px] text-slate-300">&middot;</span>
-                          <span className="text-[11px] text-amber-600 font-medium tabular-nums">{formatINR(outstanding)} due</span>
+                          <span className="text-[10px] text-muted-foreground/40">&middot;</span>
+                          <span className="text-[11px] text-outstanding font-medium tabular-nums">{formatINR(outstanding)} due</span>
                         </>
                       )}
                     </div>
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-2">
                     <span className="text-base font-bold tabular-nums tracking-tight text-foreground">{formatINR(inv.total)}</span>
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-muted-foreground transition-colors" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                   </div>
                 </Link>
               )
@@ -454,7 +456,7 @@ export default function InvoicesPage() {
            ═══════════════════════════ */}
         <Link
           href="/pos"
-          className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-foreground text-background shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-foreground/90 active:scale-95 transition-all"
+          className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Create invoice"
         >
           <Plus className="h-6 w-6" />

@@ -10,7 +10,7 @@ describe('Card', () => {
 
   it('has card className', () => {
     const { container } = render(<Card>card</Card>)
-    expect(container.firstChild).toHaveClass('rounded-xl')
+    expect(container.firstChild).toHaveClass('rounded-2xl')
     expect(container.firstChild).toHaveClass('border-border')
     expect(container.firstChild).toHaveClass('bg-card')
   })
@@ -36,7 +36,7 @@ describe('Card', () => {
     render(<CardTitle>Heading</CardTitle>)
     const el = screen.getByText('Heading')
     expect(el.tagName).toBe('H3')
-    expect(el).toHaveClass('text-base')
+    expect(el).toHaveClass('text-sm')
     expect(el).toHaveClass('font-semibold')
   })
 

@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Check, Sparkles } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
-import type { PlanType } from "@/lib/billzo/plan-limits"
 
 interface PlanInfo {
-  id: string
+  code: string
   name: string
-  price: number
-  currency: string
+  monthlyPrice: number
+  annualPrice: number
   features: string[]
+  purchasable: boolean
+  highlighted?: boolean
 }
 
 interface PricingState {
@@ -21,13 +22,15 @@ interface PricingState {
   selectedPlan: string | null
   processing: boolean
   razorpayLoaded: boolean
+  currentPlan: string | null
 }
 
-const PLAN_FEATURES = {
-  starter: ['3 invoices', '3 reminders', 'Basic dashboard'],
-  pro: ['Unlimited invoices', 'Unlimited reminders', 'Auto recovery', 'Priority support'],
-  growth: ['Everything in Pro', 'Multi-user', 'Analytics dashboard', 'Custom branding'],
-} as const
+const OUTCOME_COPY: Record<string, string> = {
+  starter: "See your stuck money for free. Start collecting.",
+  pro: "Automate reminders and recover faster — pay only when it works.",
+  business: "Run recovery across branches with analytics and exports.",
+  enterprise: "Custom recovery at scale with priority support.",
+}
 
 export default function PricingPage() {
   const router = useRouter()
@@ -38,133 +41,149 @@ export default function PricingPage() {
     selectedPlan: null,
     processing: false,
     razorpayLoaded: false,
+    currentPlan: null,
   })
 
   useEffect(() => {
     fetchPlans()
+    fetchMe()
     loadRazorpayScript()
   }, [])
 
   const loadRazorpayScript = () => {
     if (document.querySelector('script[src*="razorpay"]')) {
       const checkLoaded = setInterval(() => {
-        if (typeof window !== 'undefined' && (window as any).Razorpay) {
-          setState(prev => ({ ...prev, razorpayLoaded: true }))
+        if (typeof window !== "undefined" && (window as any).Razorpay) {
+          setState((prev) => ({ ...prev, razorpayLoaded: true }))
           clearInterval(checkLoaded)
         }
       }, 500)
       return () => clearInterval(checkLoaded)
     }
-
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    const script = document.createElement("script")
+    script.src = "https://checkout.razorpay.com/v1/checkout.js"
     script.async = true
-    script.onload = () => {
-      console.log('Razorpay script loaded')
-      setState(prev => ({ ...prev, razorpayLoaded: true }))
-    }
-    script.onerror = () => {
-      console.warn('Razorpay script failed to load - will use demo mode')
-    }
+    script.onload = () => setState((prev) => ({ ...prev, razorpayLoaded: true }))
+    script.onerror = () => console.warn("Razorpay script failed to load")
     document.body.appendChild(script)
   }
 
-  const fetchPlans = () => {
-    setState((prev) => ({
-      ...prev,
-      plans: [
-        { id: 'starter', name: 'Free', price: 0, currency: 'INR', features: [...PLAN_FEATURES.starter] },
-        { id: 'pro', name: 'Pro', price: 29900, currency: 'INR', features: [...PLAN_FEATURES.pro] },
-        { id: 'growth', name: 'Growth', price: 59900, currency: 'INR', features: [...PLAN_FEATURES.growth] },
-      ],
-      loading: false,
-    }))
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch("/api/plans", { cache: "no-store" })
+      if (!res.ok) throw new Error("Failed to load plans")
+      const data = await res.json()
+      setState((prev) => ({ ...prev, plans: data.plans ?? [], loading: false }))
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : "Failed to load plans",
+      }))
+    }
   }
 
-  const handleSelectPlan = async (planId: string) => {
-    if (planId === "starter") {
+  const fetchMe = async () => {
+    try {
+      const res = await fetch("/api/me", { cache: "no-store" })
+      if (res.ok) {
+        const data = await res.json()
+        setState((prev) => ({ ...prev, currentPlan: data.plan }))
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  const handleSelectPlan = async (plan: PlanInfo) => {
+    if (plan.code === "starter") {
       router.push("/dashboard")
       return
     }
+    if (!plan.purchasable) {
+      // Enterprise — route to sales, no checkout
+      setState((prev) => ({ ...prev, error: "Enterprise is custom-priced. Our team will reach out." }))
+      return
+    }
 
-    setState((prev) => ({ ...prev, selectedPlan: planId, processing: true, error: null }))
+    setState((prev) => ({ ...prev, selectedPlan: plan.code, processing: true, error: null }))
 
     try {
-      function getCookie(name: string) {
-      if (typeof document === 'undefined') return null
-      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-      return match ? match[2] : null
-    }
-    const tenantId = getCookie('bz_tenant') || ''
-    const tenantName = getCookie('bz_tenant_name') || ''
+      const tenantId = getCookie("bz_tenant") || ""
+      const tenantName = getCookie("bz_tenant_name") || ""
 
       const response = await fetch("/api/payment/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tenantId,
-          tenantName,
-          plan: planId as "pro" | "growth",
-        }),
+        body: JSON.stringify({ tenantId, tenantName, plan: plan.code }),
       })
 
       const data = await response.json()
-      console.log('Subscription API response:', data)
+      if (data.error) throw new Error(data.error)
 
-      if (data.error) {
-        throw new Error(data.error)
-      }
-
-
-
-      const rzpOptions: Record<string, unknown> = {
-        key: data.keyId,
-        order_id: data.orderId,
-        name: "BillZo",
-        description: `BillZo ${planId} Plan`,
-        handler: async (response: { razorpay_payment_id: string }) => {
-          console.log("Payment successful:", response)
-
-          if (tenantId) {
-            await fetch("/api/payment/upgrade", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ plan: planId }),
-            })
-            import("@/lib/billzo/db").then(({ db }) => {
-              db().tenants.update(tenantId, { plan: planId as PlanType, paywallUnlocked: true, updatedAt: new Date().toISOString() })
-            })
-          }
-          router.push("/dashboard")
-        },
-        prefill: {
-          name: tenantName || "Customer",
-        },
-        theme: {
-          color: "#146c4b",
-        },
-      }
-
-      if (typeof window !== 'undefined' && (window as any).Razorpay) {
-        const rzp = new (window as any).Razorpay(rzpOptions)
-        rzp.on("payment.failed", (response: { error: { description: string } }) => {
-          console.error("Payment failed:", response.error.description)
-          setState((prev) => ({
-            ...prev,
-            error: `Payment failed: ${response.error.description}`,
-            processing: false,
-          }))
+      // Order-mode: open Razorpay checkout, then verify server-side.
+      if (data.mode === "order") {
+        if (!state.razorpayLoaded || !(window as any).Razorpay) {
+          throw new Error("Payment gateway not ready. Please refresh.")
+        }
+        const rzp = new (window as any).Razorpay({
+          key: data.keyId,
+          order_id: data.orderId,
+          name: "BillZo",
+          description: `BillZo ${plan.name}`,
+          handler: async (resp: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+            await verifyPayment(data.subscriptionId, resp.razorpay_payment_id, resp.razorpay_signature, resp.razorpay_order_id)
+          },
+          prefill: { name: tenantName || "Customer" },
+          theme: { color: "#0d9488" },
+        })
+        rzp.on("payment.failed", (r: { error: { description: string } }) => {
+          setState((prev) => ({ ...prev, error: `Payment failed: ${r.error.description}`, processing: false }))
         })
         rzp.open()
-      } else {
-        throw new Error("Razorpay not loaded. Please refresh and try again.")
+        return
       }
+
+      // Subscription-mode: redirect to Razorpay hosted page.
+      if (data.shortUrl) {
+        window.location.href = data.shortUrl
+        return
+      }
+
+      // Fallback: just activate (webhook will confirm)
+      router.push("/dashboard")
     } catch (err) {
-      console.error('Payment error:', err)
       setState((prev) => ({
         ...prev,
         error: err instanceof Error ? err.message : "Failed to start payment",
+        processing: false,
+      }))
+    }
+  }
+
+  const verifyPayment = async (
+    subscriptionId: string,
+    paymentId: string,
+    signature: string,
+    orderId: string,
+  ) => {
+    try {
+      await fetch("/api/subscriptions/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          subscriptionId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          razorpay_order_id: orderId,
+        }),
+      })
+      router.push("/dashboard")
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : "Verification failed",
         processing: false,
       }))
     }
@@ -191,48 +210,62 @@ export default function PricingPage() {
     )
   }
 
-  const freePlan = state.plans.find((p) => p.id === "starter")
-  const paidPlans = state.plans.filter((p) => p.id !== "starter")
+  const freePlan = state.plans.find((p) => p.code === "starter")
+  const paidPlans = state.plans.filter((p) => p.code !== "starter")
 
   return (
     <div className="container py-8">
       <div className="mx-auto max-w-4xl text-center">
-        <h1 className="text-3xl font-bold">Choose Your Plan</h1>
+        <h1 className="text-3xl font-bold">Pricing that pays for itself</h1>
         <p className="mt-2 text-muted-foreground">
-          Start free, upgrade when you&apos;re ready to grow
+          Start free. Upgrade when you want to recover more of your stuck money.
         </p>
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-3">
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {freePlan && (
           <PlanCard
             plan={freePlan}
-            selected={state.selectedPlan === freePlan.id}
+            selected={state.selectedPlan === freePlan.code}
             processing={state.processing}
-            onSelect={() => handleSelectPlan(freePlan.id)}
+            onSelect={() => handleSelectPlan(freePlan)}
             isFree
+            outcome={OUTCOME_COPY[freePlan.code]}
+            isCurrent={state.currentPlan === freePlan.code}
           />
         )}
 
         {paidPlans.map((plan) => (
           <PlanCard
-            key={plan.id}
+            key={plan.code}
             plan={plan}
-            selected={state.selectedPlan === plan.id}
+            selected={state.selectedPlan === plan.code}
             processing={state.processing}
-            onSelect={() => handleSelectPlan(plan.id)}
-            popular={plan.id === "pro"}
+            onSelect={() => handleSelectPlan(plan)}
+            popular={plan.highlighted}
+            outcome={OUTCOME_COPY[plan.code]}
+            isCurrent={state.currentPlan === plan.code}
           />
         ))}
       </div>
 
-      <div className="mt-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          All plans include 3 invoices and 3 reminders free to try.
-          <br />
-          Upgrade anytime for unlimited access.
+      <div className="mt-10 mx-auto max-w-3xl rounded-2xl border border-border bg-secondary/40 p-6">
+        <h2 className="text-lg font-semibold">Why BillZo pays for itself</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The average shop recovers more in the first week than a year of Pro costs.
+          You only pay to automate what you&apos;d otherwise chase by hand.
         </p>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> No setup fees</li>
+          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Cancel anytime</li>
+          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Annual billing saves ~20%</li>
+          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Data export always yours</li>
+        </ul>
       </div>
+
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        Prices shown in INR, excluding GST. Annual plans available at checkout soon.
+      </p>
     </div>
   )
 }
@@ -244,6 +277,8 @@ function PlanCard({
   onSelect,
   isFree,
   popular,
+  outcome,
+  isCurrent,
 }: {
   plan: PlanInfo
   selected: boolean
@@ -251,15 +286,14 @@ function PlanCard({
   onSelect: () => void
   isFree?: boolean
   popular?: boolean
+  outcome?: string
+  isCurrent?: boolean
 }) {
-  const formatPrice = (price: number) => {
-    if (price === 0) return "Free"
-    return `₹${(price / 100).toLocaleString("en-IN")}`
-  }
+  const formatPrice = (price: number) => (price === 0 ? "Free" : `₹${price.toLocaleString("en-IN")}`)
 
   return (
     <div
-      className={`relative rounded-2xl border p-6 ${
+      className={`relative flex flex-col rounded-2xl border p-6 ${
         popular ? "border-primary shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]" : "border-border"
       }`}
     >
@@ -272,13 +306,13 @@ function PlanCard({
       <h3 className="text-xl font-bold">{plan.name}</h3>
 
       <div className="mt-4 flex items-baseline gap-1">
-        <span className="text-3xl font-bold">{formatPrice(plan.price)}</span>
-        {plan.price > 0 && (
-          <span className="text-muted-foreground">/month</span>
-        )}
+        <span className="text-3xl font-bold">{formatPrice(plan.monthlyPrice)}</span>
+        {plan.monthlyPrice > 0 && <span className="text-muted-foreground">/month</span>}
       </div>
 
-      <ul className="mt-6 space-y-3">
+      {outcome && <p className="mt-2 text-sm text-muted-foreground">{outcome}</p>}
+
+      <ul className="mt-6 flex-1 space-y-3">
         {plan.features.map((feature, i) => (
           <li key={i} className="flex items-center gap-2 text-sm">
             <Check className="h-4 w-4 text-success" />
@@ -287,23 +321,33 @@ function PlanCard({
         ))}
       </ul>
 
-        <button
-          onClick={onSelect}
-          disabled={processing}
-          className={`mt-6 w-full rounded-xl py-3 font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
-            isFree
-              ? "border-2 border-border bg-transparent text-foreground hover:bg-secondary"
-              : "bg-gradient-to-br from-primary to-emerald-600 text-primary-foreground shadow-lg"
-          }`}
-        >
+      <button
+        onClick={onSelect}
+        disabled={processing || isCurrent}
+        className={`mt-6 w-full rounded-xl py-3 font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
+          isFree
+            ? "border-2 border-border bg-transparent text-foreground hover:bg-secondary"
+            : "bg-gradient-to-br from-primary to-success text-primary-foreground shadow-lg"
+        }`}
+      >
         {processing && selected ? (
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+        ) : isCurrent ? (
+          "Current Plan"
         ) : isFree ? (
           "Continue Free"
-        ) : (
+        ) : plan.purchasable ? (
           `Get ${plan.name}`
+        ) : (
+          "Contact Sales"
         )}
       </button>
     </div>
   )
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"))
+  return match ? match[2] : null
 }

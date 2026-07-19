@@ -25,9 +25,9 @@ function getStockStatus(stock: number, lowStockAt: number): StockStatus {
 }
 
 const STATUS_CONFIG = {
-  in_stock: { icon: TrendingUp, label: 'In Stock', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  low_stock: { icon: AlertTriangle, label: 'Low Stock', bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  out_of_stock: { icon: X, label: 'Out of Stock', bg: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+  in_stock: { icon: TrendingUp, label: 'In Stock', bg: 'bg-success-soft text-success border-success', dot: 'bg-success' },
+  low_stock: { icon: AlertTriangle, label: 'Low Stock', bg: 'bg-warning-soft text-warning border-warning', dot: 'bg-warning' },
+  out_of_stock: { icon: X, label: 'Out of Stock', bg: 'bg-danger-soft text-danger border-danger', dot: 'bg-danger' },
 }
 
 type MovementEntry = {
@@ -164,9 +164,9 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-screen bg-muted/50 pb-8">
         <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-rose-200 rounded-lg p-6 text-center">
-            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-3" />
-            <p className="text-sm text-rose-600 mb-4">{error || 'Product not found'}</p>
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <AlertTriangle className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger mb-4">{error || 'Product not found'}</p>
             <Button variant="outline" size="sm" onClick={() => router.push('/products')}>
               Back to Products
             </Button>
@@ -217,7 +217,7 @@ export default function ProductDetailPage() {
             <ArrowLeft className="w-4 h-4" /> All Products
           </button>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(true)} className="text-rose-600 border-rose-200 hover:bg-rose-50">
+            <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(true)} className="text-danger border-danger hover:bg-danger-soft">
               <Trash2 className="w-4 h-4 mr-1" /> Delete
             </Button>
             <Button size="sm" onClick={handleSave} disabled={saving}>
@@ -288,14 +288,14 @@ export default function ProductDetailPage() {
                 <span className="text-right">Qty</span>
                 <span className="text-right">Balance</span>
               </div>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-border">
                 {movements.map((m, i) => (
                   <div key={i} className="grid grid-cols-[1fr_80px_100px] gap-2 px-1 py-2 items-center">
                     <div className="min-w-0">
                       <p className="text-sm text-foreground truncate">{m.reference}</p>
                       <p className="text-[10px] text-muted-foreground">{new Date(m.date).toLocaleDateString()}</p>
                     </div>
-                    <div className={`text-right text-sm font-medium tabular-nums ${m.quantity < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    <div className={`text-right text-sm font-medium tabular-nums ${m.quantity < 0 ? 'text-danger' : 'text-success'}`}>
                       {m.quantity > 0 ? '+' : ''}{m.quantity}
                     </div>
                     <div className="text-right text-sm text-foreground font-medium tabular-nums">{m.balance}</div>
@@ -320,7 +320,7 @@ export default function ProductDetailPage() {
               </div>
               <div className="flex gap-3 px-4 py-3 border-t border-border bg-muted rounded-b-lg">
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
-                <Button size="sm" className="flex-1 bg-rose-600 hover:bg-rose-700 text-white" onClick={handleDelete} disabled={deleting}>
+                <Button size="sm" className="flex-1 bg-danger hover:bg-danger text-white" onClick={handleDelete} disabled={deleting}>
                   {deleting ? 'Deleting...' : 'Delete'}
                 </Button>
               </div>

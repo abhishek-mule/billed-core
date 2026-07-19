@@ -8,6 +8,10 @@ import {
 } from "lucide-react"
 import { MerchantLanguage } from "@billzo/shared"
 import { formatINR } from "@/lib/utils"
+import { EmptyState } from "@/components/billzo/EmptyState"
+import { ErrorState } from "@/components/billzo/ErrorState"
+import { Skeleton } from "@/components/billzo/Skeleton"
+import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES, type CollectionRiskStage } from "@/lib/billzo/recovery-risk"
 
 interface HistoryEvent {
   id: string
@@ -64,20 +68,20 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  t0_soft: "bg-blue-100 text-blue-700",
-  t24_nudge: "bg-amber-100 text-amber-700",
-  t72_strong: "bg-orange-100 text-orange-700",
-  t5_warning: "bg-rose-100 text-rose-700",
+  t0_soft: "bg-info-soft text-info",
+  t24_nudge: "bg-outstanding-soft text-outstanding",
+  t72_strong: "bg-warning-soft text-warning",
+  t5_warning: "bg-danger-soft text-danger",
 }
 
 const STATUS_BADGES: Record<string, string> = {
   queued: "bg-muted text-muted-foreground",
-  sent: "bg-blue-100 text-blue-700",
-  server_ack: "bg-indigo-100 text-indigo-700",
-  delivered: "bg-emerald-100 text-emerald-700",
-  read: "bg-emerald-100 text-emerald-700",
-  failed: "bg-rose-100 text-rose-700",
-  rate_limited: "bg-amber-100 text-amber-700",
+  sent: "bg-info-soft text-info",
+  server_ack: "bg-info-soft text-info",
+  delivered: "bg-success-soft text-success",
+  read: "bg-success-soft text-success",
+  failed: "bg-danger-soft text-danger",
+  rate_limited: "bg-warning-soft text-warning",
 }
 
 const STATUS_ICONS: Record<string, typeof Clock> = {
@@ -99,11 +103,59 @@ const TYPE_ICONS: Record<string, typeof MessageSquare> = {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  reminder: "bg-blue-100 text-blue-700",
-  promise: "bg-purple-100 text-purple-700",
-  payment: "bg-emerald-100 text-emerald-700",
-  call: "bg-amber-100 text-amber-700",
+  reminder: "bg-info-soft text-info",
+  promise: "bg-outstanding-soft text-outstanding",
+  payment: "bg-success-soft text-success",
+  call: "bg-recovery-soft text-recovery",
   system: "bg-muted text-muted-foreground",
+}
+
+/** Map a reminder stage to its CollectionRisk stage so the forecast reuses
+ *  the same 5-stage scale as the rest of the product. */
+function stageToRiskStage(stage: string): CollectionRiskStage {
+  switch (stage) {
+    case "t5_warning": return "Critical"
+    case "t72_strong": return "Urgent"
+    case "t24_nudge": return "Attention"
+    default: return "Monitor"
+  }
+}
+
+function ForecastCard({ events }: { events: HistoryEvent[] }) {
+  if (events.length === 0) return null
+  const latest = events.reduce((a, b) =>
+    new Date(a.occurredAt) > new Date(b.occurredAt) ? a : b
+  )
+  const worstRisk = events
+    .map(e => getCollectionRisk({ overdueDays: stageToRiskStage(e.stage) === "Critical" ? 31 : stageToRiskStage(e.stage) === "Urgent" ? 20 : stageToRiskStage(e.stage) === "Attention" ? 10 : 3 }))
+    .sort((x, y) => y.rank - x.rank)[0]
+  const tone = COLLECTION_RISK_TONE_CLASSES[worstRisk.tone]
+
+  const cells = [
+    { label: "Last reminder", value: latest.customerName, sub: formatDateTime(latest.occurredAt) },
+    { label: "Next reminder", value: "Auto-scheduled", sub: worstRisk.recommendation },
+    {
+      label: "Recommended",
+      value: worstRisk.label,
+      sub: worstRisk.recommendation,
+      toneClass: `${tone.text} ${tone.bg}`,
+    },
+  ]
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Forecast</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {cells.map(c => (
+          <div key={c.label} className="rounded-xl bg-muted/40 px-3 py-2.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{c.label}</p>
+            <p className={`text-sm font-semibold mt-0.5 truncate ${c.toneClass || "text-foreground"}`}>{c.value}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{c.sub}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function formatDate(iso: string) {
@@ -178,8 +230,8 @@ export default function RecoveryHistoryPage() {
   const totalPages = Math.ceil(total / limit)
 
   return (
-    <div className="min-h-screen bg-muted/50 pb-8">
-      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+    <div className="page-shell max-w-5xl">
+      <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.history}</h1>
@@ -203,7 +255,7 @@ export default function RecoveryHistoryPage() {
               onClick={() => { setTab(t.key); setPage(1) }}
               className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
                 tab === t.key
-                  ? "border-slate-900 text-foreground"
+                  ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:text-muted-foreground"
               }`}
             >
@@ -241,16 +293,14 @@ export default function RecoveryHistoryPage() {
 
         {/* Error */}
         {error && (
-          <div className="border border-red-200 rounded-lg p-4 bg-card">
-            <p className="text-sm text-red-600">{error}</p>
-          </div>
+          <ErrorState message={error} severity="error" onRetry={() => tab === "reminders" ? loadReminders(page, search, statusFilter) : loadTimeline()} />
         )}
 
         {/* Loading */}
         {loading && (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-16 bg-card rounded-lg border border-border animate-pulse" />
+              <Skeleton key={i} className="h-16 rounded-xl" />
             ))}
           </div>
         )}
@@ -259,25 +309,30 @@ export default function RecoveryHistoryPage() {
         {!loading && !error && (
           <>
             {tab === "reminders" && events.length === 0 && (
-              <div className="bg-card border border-dashed border-border rounded-lg p-12 text-center">
-                <MessageSquare className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                <p className="font-semibold text-foreground">{search ? "No reminders match your search" : "No reminders sent yet"}</p>
-                <p className="text-xs text-muted-foreground mt-1">{search ? "Try a different search term." : "Reminders will appear here once sent."}</p>
-              </div>
+              <EmptyState
+                icon={<MessageSquare className="h-6 w-6" />}
+                title={search ? "No reminders match your search" : "No reminders sent yet"}
+                description={search ? "Try a different search term." : "Reminders will appear here once sent."}
+              />
             )}
             {tab === "timeline" && timeline.length === 0 && (
-              <div className="bg-card border border-dashed border-border rounded-lg p-12 text-center">
-                <Clock className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                <p className="font-semibold text-foreground">No activity yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Promises, payments, calls, and reminders will appear here.</p>
-              </div>
+              <EmptyState
+                icon={<Clock className="h-6 w-6" />}
+                title="No activity yet"
+                description="Promises, payments, calls, and reminders will appear here."
+              />
             )}
           </>
         )}
 
+        {/* Forecast — Last / Next / Recommended */}
+        {!loading && tab === "reminders" && events.length > 0 && (
+          <ForecastCard events={events} />
+        )}
+
         {/* Reminders table */}
         {!loading && tab === "reminders" && events.length > 0 && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -290,8 +345,7 @@ export default function RecoveryHistoryPage() {
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Preview</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {events.map((evt) => {
+                <tbody className="divide-y divide-border">                  {events.map((evt) => {
                     const StatusIcon = STATUS_ICONS[evt.status] || Clock
                     const stageCls = STAGE_COLORS[evt.stage] || "bg-muted text-muted-foreground"
                     const statusCls = STATUS_BADGES[evt.status] || "bg-muted text-muted-foreground"
@@ -321,10 +375,10 @@ export default function RecoveryHistoryPage() {
                             {evt.status === 'server_ack' ? 'ACK' : evt.status === 'rate_limited' ? 'RATE' : evt.status}
                           </span>
                           {evt.deliveredAt && (
-                            <p className="text-[10px] text-emerald-600 mt-0.5">Delivered {formatTime(evt.deliveredAt)}</p>
+                            <p className="text-[10px] text-success mt-0.5">Delivered {formatTime(evt.deliveredAt)}</p>
                           )}
                           {evt.readAt && (
-                            <p className="text-[10px] text-emerald-600">Read {formatTime(evt.readAt)}</p>
+                            <p className="text-[10px] text-success">Read {formatTime(evt.readAt)}</p>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground max-w-[200px] truncate">
@@ -370,7 +424,7 @@ export default function RecoveryHistoryPage() {
               const TypeIcon = TYPE_ICONS[evt.type] || Clock
               const typeColor = TYPE_COLORS[evt.type] || "bg-muted text-muted-foreground"
               return (
-                <div key={evt.id} className="bg-card border border-border rounded-xl p-4 hover:shadow-sm dark:hover:shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-shadow">
+                <div key={evt.id} className="bg-card border border-border rounded-2xl p-4 transition-shadow">
                   <div className="flex items-start gap-4">
                     <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${typeColor}`}>
                       <TypeIcon size={16} />
@@ -388,8 +442,8 @@ export default function RecoveryHistoryPage() {
                         {evt.amount > 0 && <span className="font-medium text-foreground">{formatINR(evt.amount)}</span>}
                         <span className={`capitalize ${
                           evt.status === "success" || evt.status === "delivered" || evt.status === "read" || evt.status === "fulfilled"
-                            ? "text-emerald-600" : evt.status === "failed" || evt.status === "broken"
-                            ? "text-rose-600" : "text-muted-foreground"
+                            ? "text-success" : evt.status === "failed" || evt.status === "broken"
+                            ? "text-danger" : "text-muted-foreground"
                         }`}>
                           {evt.status}
                         </span>

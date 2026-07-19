@@ -56,7 +56,7 @@ function recommendation(c: PriorityCase) {
       label: "Review Payment",
       reason: "A payment needs confirmation before this can be marked done.",
       icon: CreditCard,
-      tone: "text-emerald-700 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30",
+      tone: "text-success bg-success-soft border-success-soft dark:bg-emerald-950/20 dark:border-success/30",
       primary: "Receive Payment",
       state: "need_action" as const,
     }
@@ -66,7 +66,7 @@ function recommendation(c: PriorityCase) {
       label: "Call Customer",
       reason: "A payment promise was missed. Calling is better than another reminder.",
       icon: Phone,
-      tone: "text-rose-700 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30",
+      tone: "text-danger bg-danger-soft border-danger-soft dark:bg-rose-950/20 dark:border-danger/30",
       primary: "Call",
       state: "need_action" as const,
     }
@@ -76,7 +76,7 @@ function recommendation(c: PriorityCase) {
       label: "Call Instead",
       reason: "Three reminders were ignored. A direct follow-up is more likely to work.",
       icon: Phone,
-      tone: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30",
+      tone: "text-warning bg-warning-soft border-warning-soft dark:bg-amber-950/20 dark:border-warning/30",
       primary: "Call",
       state: "need_action" as const,
     }
@@ -90,7 +90,7 @@ function recommendation(c: PriorityCase) {
         label: "Promise Today",
         reason: `Expected today. Follow up if payment does not arrive.`,
         icon: Clock,
-        tone: "text-amber-700 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:border-amber-900/30",
+        tone: "text-warning bg-warning-soft border-warning-soft dark:bg-amber-950/20 dark:border-warning/30",
         primary: "Review",
         state: "need_action" as const,
       }
@@ -99,7 +99,7 @@ function recommendation(c: PriorityCase) {
       label: "Wait",
       reason: `Customer promised payment on ${formatDate(c.promiseToPayDate)}. No action needed now.`,
       icon: Clock,
-      tone: "text-sky-700 bg-sky-50 border-sky-100 dark:bg-sky-950/20 dark:border-sky-900/30",
+      tone: "text-info bg-info-soft border-info-soft dark:bg-sky-950/20 dark:border-info/30",
       primary: "Waiting",
       state: "waiting" as const,
     }
@@ -259,7 +259,7 @@ export default function UdharPage() {
       </header>
 
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:bg-rose-950/20 dark:border-rose-900/30">
+        <div className="rounded-xl border border-danger bg-danger-soft p-4 text-sm text-danger dark:bg-rose-950/20 dark:border-danger/30">
           <div className="flex items-center gap-2">
             <AlertCircle size={16} />
             {error}
@@ -352,7 +352,7 @@ export default function UdharPage() {
             return (
               <article key={c.caseId} className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-start gap-3">
-                  <span className={`mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl border ${done ? "border-emerald-100 bg-emerald-50 text-emerald-600" : rec.tone}`}>
+                  <span className={`mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl border ${done ? "border-success-soft bg-success-soft text-success" : rec.tone}`}>
                     <Icon size={18} />
                   </span>
                   <div className="min-w-0 flex-1">
@@ -379,7 +379,7 @@ export default function UdharPage() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           onClick={() => setPaymentFor(c)}
-                          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700"
+                          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-success px-3 text-xs font-bold text-white hover:bg-success"
                         >
                           <CreditCard size={13} />
                           Receive Payment
@@ -449,7 +449,7 @@ export default function UdharPage() {
 function EmptyUdhar() {
   return (
     <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
-      <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-500" />
+      <CheckCircle2 className="mx-auto h-9 w-9 text-success" />
       <p className="mt-3 text-sm font-bold">{MerchantLanguage.udhar.allCaughtUp}</p>
       <p className="mt-1 text-xs text-muted-foreground">{MerchantLanguage.udhar.noOutstandingPayments}</p>
       <div className="flex items-center justify-center gap-3 mt-5">

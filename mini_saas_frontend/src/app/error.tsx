@@ -11,8 +11,8 @@ export default function Error({
 }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-      <div className="grid h-16 w-16 place-items-center rounded-full bg-red-50">
-        <AlertCircle className="h-8 w-8 text-red-500" />
+      <div className="grid h-16 w-16 place-items-center rounded-full bg-danger-soft">
+        <AlertCircle className="h-8 w-8 text-danger" />
       </div>
       <div className="text-center">
         <div className="text-lg font-bold text-foreground">Something went wrong</div>

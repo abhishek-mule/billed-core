@@ -2,6 +2,7 @@
 
 import type { Invoice, Payment, WhatsAppEvent, RecoveryAttempt, InvoiceItem, Product, Customer } from './types'
 import { formatINR } from '@/lib/utils'
+import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from './recovery-risk'
 
 export type PlanType = 'starter' | 'pro' | 'growth'
 
@@ -242,11 +243,16 @@ export function computeAgingReport(
   const range = dateRange || { start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10), end: new Date().toISOString().slice(0, 10) }
   const unpaidInvoices = invoices.filter(i => i.status !== 'paid' && isInDateRange(i.dueAt, range.start, range.end))
 
+  const toneColor = (days: number) => {
+    const tone = COLLECTION_RISK_TONE_CLASSES[getCollectionRisk({ overdueDays: days }).tone]
+    return `${tone.text} ${tone.bg}`
+  }
+
   const buckets: AgingBucket[] = [
-    { label: '0-7 days', minDays: 0, maxDays: 7, count: 0, amount: 0, color: 'text-green-600 bg-green-50', invoices: [] },
-    { label: '8-30 days', minDays: 8, maxDays: 30, count: 0, amount: 0, color: 'text-yellow-600 bg-yellow-50', invoices: [] },
-    { label: '31-60 days', minDays: 31, maxDays: 60, count: 0, amount: 0, color: 'text-orange-600 bg-orange-50', invoices: [] },
-    { label: '60+ days', minDays: 61, maxDays: Infinity, count: 0, amount: 0, color: 'text-red-600 bg-red-50', invoices: [] },
+    { label: '0-7 days', minDays: 0, maxDays: 7, count: 0, amount: 0, color: toneColor(3), invoices: [] },
+    { label: '8-30 days', minDays: 8, maxDays: 30, count: 0, amount: 0, color: toneColor(14), invoices: [] },
+    { label: '31-60 days', minDays: 31, maxDays: 60, count: 0, amount: 0, color: toneColor(45), invoices: [] },
+    { label: '60+ days', minDays: 61, maxDays: Infinity, count: 0, amount: 0, color: toneColor(75), invoices: [] },
   ]
 
   for (const inv of unpaidInvoices) {

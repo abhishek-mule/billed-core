@@ -226,7 +226,7 @@ export default function POSPage() {
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-7xl mx-auto">
       {loadError && (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+        <div className="mb-4 rounded-xl border border-danger bg-danger-soft px-4 py-3 text-sm text-danger flex items-center justify-between gap-3">
           <span>{loadError}</span>
           <Button size="sm" variant="outline" onClick={() => setRetryCount(c => c + 1)}>
             Retry
@@ -234,7 +234,7 @@ export default function POSPage() {
         </div>
       )}
       {(syncHealth.failedCount > 0 || syncHealth.conflictCount > 0) && (
-        <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex items-center justify-between gap-3">
+        <div className="mb-4 rounded-xl border border-warning bg-warning-soft px-4 py-3 text-sm text-warning flex items-center justify-between gap-3">
           <span>
             {syncHealth.failedCount + syncHealth.conflictCount} billing sync operation{syncHealth.failedCount + syncHealth.conflictCount > 1 ? "s" : ""} failed. Inventory may be stale until retry succeeds.
           </span>
@@ -299,7 +299,7 @@ export default function POSPage() {
                         <div className="text-lg font-bold">{formatINR(p.salePrice)}</div>
                         <div className="text-[11px] text-muted-foreground">GST {p.gstRate}%</div>
                       </div>
-                      <div className={`text-[11px] font-medium ${(p.stock || 0) < (p.lowStockAt || 20) ? "text-yellow-600" : "text-green-600"}`}>
+                      <div className={`text-[11px] font-medium ${(p.stock || 0) < (p.lowStockAt || 20) ? "text-warning" : "text-success"}`}>
                         {p.stock} {p.unit}
                       </div>
                     </div>
@@ -448,7 +448,7 @@ export default function POSPage() {
                   <div className="text-xs text-muted-foreground">{p.whatsapp_number || p.phone || "No phone"}{p.whatsapp_number ? " 📱" : ""}</div>
                 </div>
                 {p.pending > 0 && (
-                  <span className="text-xs font-semibold text-yellow-600">{formatINR(p.pending)} due</span>
+                  <span className="text-xs font-semibold text-warning">{formatINR(p.pending)} due</span>
                 )}
               </button>
             ))}
@@ -471,13 +471,13 @@ export default function POSPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-green-500 text-white shadow-lg">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-success text-white shadow-lg">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
               <h2 className="mt-3 text-xl font-bold">Invoice {success.number}</h2>
               <div className="text-3xl font-bold mt-1">{formatINR(success.amount)}</div>
               {success.method === 'udhar' && (
-                <div className="mt-2 text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
+                <div className="mt-2 text-sm text-warning bg-warning-soft rounded-lg p-2">
                   ✓ Added to recovery queue
                 </div>
               )}
@@ -581,7 +581,7 @@ export default function POSPage() {
                   const waLink = getWhatsAppShareLink(pdfData)
                   window.open(waLink, '_blank')
                 }}
-                className="flex-1 rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors bg-green-500 text-white hover:bg-green-600"
+                className="flex-1 rounded-xl py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors bg-success text-white hover:bg-success"
               >
 
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -642,7 +642,7 @@ function CartPanel({
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h2 className="font-semibold">Cart</h2>
         {cart.length > 0 && (
-          <button onClick={onClear} className="text-xs text-muted-foreground inline-flex items-center gap-1 hover:text-red-600">
+          <button onClick={onClear} className="text-xs text-muted-foreground inline-flex items-center gap-1 hover:text-danger">
             <Trash2 className="h-3 w-3" /> Clear
           </button>
         )}

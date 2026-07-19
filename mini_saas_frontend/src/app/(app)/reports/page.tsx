@@ -36,8 +36,8 @@ function MetricRow({ label, value, trend, tag }: {
       <div className="flex items-center gap-2 mt-1">
         {trend && (
           <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${
-            trend.direction === 'up' ? 'text-emerald-600' :
-            trend.direction === 'down' ? 'text-rose-600' :
+            trend.direction === 'up' ? 'text-success' :
+            trend.direction === 'down' ? 'text-danger' :
             'text-muted-foreground'
           }`}>
             {trend.direction === 'up' ? <ArrowUpRight className="w-3 h-3" /> :
@@ -216,7 +216,7 @@ function SendReminderButton({ phone, customerName, amount }: {
     <button
       onClick={handleClick}
       className={`text-xs px-2 py-1 rounded font-medium transition-colors ${
-        sent ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+        sent ? 'bg-success-soft text-success border border-border' :
         'bg-muted/50 text-muted-foreground border border-border hover:bg-muted'
       }`}
     >
@@ -527,7 +527,7 @@ export default function ReportsPage() {
                   } : undefined} />
                 <MetricRow label="Pending" value={formatINR(moneyMetrics.pendingAmount)} />
                 <MetricRow label="Recovery Rate" value={`${moneyMetrics.recoveryRate}%`}
-                  tag={parseInt(moneyMetrics.recoveryRate) > 60 ? { label: 'Healthy', color: 'text-emerald-600' } : { label: 'Needs focus', color: 'text-amber-600' }} />
+                  tag={parseInt(moneyMetrics.recoveryRate) > 60 ? { label: 'Healthy', color: 'text-success' } : { label: 'Needs focus', color: 'text-warning' }} />
                 <MetricRow label="Avg Recovery" value={`${recovery.avgRecoveryDays}d`} />
               </MetricGrid>
               {recovery.pendingBreakdown.length > 0 && (
@@ -562,12 +562,12 @@ export default function ReportsPage() {
               <MetricGrid>
                 <MetricRow label="Total Outstanding" value={formatINR(aging.reduce((s, b) => s + b.amount, 0))} />
                 <MetricRow label="0-30 Days" value={formatINR(aging[0]?.amount || 0)}
-                  tag={{ label: 'Current', color: 'text-emerald-600' }} />
+                  tag={{ label: 'Current', color: 'text-success' }} />
                 <MetricRow label="30-60 Days" value={formatINR(aging[1]?.amount || 0)}
-                  tag={{ label: 'Watch', color: 'text-amber-600' }} />
+                  tag={{ label: 'Watch', color: 'text-warning' }} />
                 <MetricRow label="60+ Days" value={formatINR(
                   aging.slice(2).reduce((s, b) => s + b.amount, 0)
-                )} tag={{ label: 'Critical', color: 'text-rose-600' }} />
+                )} tag={{ label: 'Critical', color: 'text-danger' }} />
               </MetricGrid>
 
               <AgingBucketsBar buckets={aging} />
@@ -615,9 +615,9 @@ export default function ReportsPage() {
               <MetricGrid>
                 <MetricRow label="Total Products" value={String(inventoryMetrics.total)} />
                 <MetricRow label="Low Stock" value={String(inventoryMetrics.lowStock)}
-                  tag={inventoryMetrics.lowStock > 0 ? { label: 'Reorder soon', color: 'text-amber-600' } : { label: 'OK', color: 'text-emerald-600' }} />
+                  tag={inventoryMetrics.lowStock > 0 ? { label: 'Reorder soon', color: 'text-warning' } : { label: 'OK', color: 'text-success' }} />
                 <MetricRow label="Out of Stock" value={String(inventoryMetrics.outOfStock)}
-                  tag={inventoryMetrics.outOfStock > 0 ? { label: 'Needs restock', color: 'text-rose-600' } : { label: 'OK', color: 'text-emerald-600' }} />
+                  tag={inventoryMetrics.outOfStock > 0 ? { label: 'Needs restock', color: 'text-danger' } : { label: 'OK', color: 'text-success' }} />
                 <MetricRow label="Stock Value" value={formatINR(inventoryMetrics.stockValue)} />
               </MetricGrid>
               {reorderList.length > 0 && (
