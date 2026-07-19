@@ -59,6 +59,9 @@ typings/
 .env.test
 .env.production
 .env.local
+worker/.env
+worker/.env.local
+# Real worker secrets must never be committed. Only *.example (placeholders) are tracked.
 
 # next.js
 .next/
