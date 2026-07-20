@@ -71,6 +71,27 @@ This validates the weakest integration (real WhatsApp delivery) without involvin
 
 ---
 
+## Operator Preflight (run BEFORE touching the environment)
+
+Sounds trivial, but it prevents wasting an hour because Redis wasn't running.
+
+```
+Preflight
+
+□ Correct branch checked out (refactor/meta-direct)
+□ Tag = pilot-rc1
+□ Worker build clean (pnpm --filter billzo-worker build)
+□ Redis running
+□ Database migrated
+□ Razorpay test mode enabled
+□ Meta template approved (e.g. udharGentle)
+□ Merchant phone verified
+□ Customer phone opted in
+□ Internet stable
+```
+
+---
+
 ## Level 1 — Manual Runbook (NOW)
 
 Anyone on the team can run this. Allow **10–15 minutes** for the happy path.
@@ -263,6 +284,45 @@ master
 ```
 
 `git stash` or commit freely on the branch; `master` stays as the clean rollback point.
+
+### Do NOT merge immediately after the session
+
+```
+Pilot Session Report
+        ↓
+Sleep on it
+        ↓
+Review logs calmly
+        ↓
+Categorize issues (Critical / Medium / Low)
+        ↓
+Only then merge
+```
+
+A surprising number of "bugs" disappear after reviewing the timeline calmly. Merge only
+once the loop passed and issues are categorized.
+
+### Archiving pilot sessions
+
+Create a directory per merchant so evidence accrues without building analytics:
+
+```
+pilot/
+    001/
+        session.md
+        timeline.csv
+        merchant-before.png
+        merchant-after.png
+        whatsapp-message.png
+        worker.log
+        webhook.json
+    002/
+    003/
+```
+
+By Merchant #10 you'll have a valuable dataset — captured from observation, not infrastructure.
+(Move `scripts/meta-send-test.mjs` under `tools/internal/` post-pilot and mark it "never
+shipped" so it isn't mistaken for production code.)
 
 ---
 
