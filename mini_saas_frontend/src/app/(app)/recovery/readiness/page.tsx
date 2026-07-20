@@ -107,7 +107,7 @@ export default function RecoveryReadinessPage() {
 
   const rows = [
     { ok: true, icon: <Store className="h-4 w-4" />, label: "Business profile" },
-    { ok: data.whatsapp, icon: <MessageCircle className="h-4 w-4" />, label: data.whatsapp ? "WhatsApp connected" : "WhatsApp not connected" },
+    { ok: data.whatsapp, icon: <MessageCircle className="h-4 w-4" />, label: data.whatsapp ? "Automatic payment reminders enabled" : "Automatic payment reminders not enabled" },
     {
       ok: data.customers,
       icon: <Users className="h-4 w-4" />,

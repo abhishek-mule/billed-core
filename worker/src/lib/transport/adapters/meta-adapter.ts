@@ -1,4 +1,5 @@
 import type { TransportAdapter, OutboundMessage, SendResult, ChannelHealth } from '../types'
+import type { MetaConfig } from '@billzo/shared'
 import { supabaseAdmin } from '../../billzo/supabase-admin'
 
 const DEFAULT_API_VERSION = 'v25.0'
@@ -7,7 +8,71 @@ const MESSAGING_PRODUCT = 'whatsapp'
 export class MetaAdapter implements TransportAdapter {
   readonly provider = 'meta'
 
+  // Pilot mode (Scenario A): Meta is infrastructure, configured at boot via the
+  // bootstrap layer. When set, it takes precedence over per-channel DB config.
+  private readonly injectedConfig: MetaConfig | null
+  private cachedTemplates: any[] = []
+
+  constructor(config?: MetaConfig) {
+    this.injectedConfig =
+      config && config.accessToken && config.phoneNumberId
+        ? { ...config, apiVersion: config.apiVersion || DEFAULT_API_VERSION }
+        : null
+  }
+
+  // Boot-time validation. Throws if Meta cannot send. The worker treats a throw
+  // here as fatal and refuses to start (no degraded mode).
+  async initialize(): Promise<void> {
+    if (!this.injectedConfig) {
+      throw new Error('MetaAdapter.initialize: META_ACCESS_TOKEN / META_PHONE_NUMBER_ID not configured')
+    }
+    const cfg = this.injectedConfig
+
+    // 1. Token + phone reachable (graph API rejects bad creds with 401/403)
+    const res = await fetch(this.graphUrl(cfg.phoneNumberId, ''), {
+      headers: { Authorization: `Bearer ${cfg.accessToken}` },
+    })
+    if (!res.ok && res.status !== 400) {
+      const body = (await res.json().catch(() => ({}))) as any
+      const msg = body?.error?.message || `Meta graph returned ${res.status}`
+      throw new Error(`MetaAdapter.initialize: ${msg}`)
+    }
+
+    // 2. Templates exist on the WABA (used by reminder flow)
+    await this.loadTemplates(cfg)
+
+    console.log('[MetaAdapter] initialize: ✓ token valid, ✓ phone reachable, ✓ templates loaded')
+  }
+
+  private async loadTemplates(cfg: MetaConfig): Promise<void> {
+    const res = await fetch(
+      `https://graph.facebook.com/${cfg.apiVersion || DEFAULT_API_VERSION}/${cfg.wabaId}/message_templates`,
+      { headers: { Authorization: `Bearer ${cfg.accessToken}` } },
+    )
+    if (!res.ok) {
+      // Non-fatal for boot, but log so operators notice missing templates.
+      console.warn('[MetaAdapter] initialize: could not load templates (reminders may fail):', res.status)
+      return
+    }
+    const data = (await res.json().catch(() => ({ data: [] }))) as any
+    this.cachedTemplates = Array.isArray(data?.data) ? data.data : []
+  }
+
+  get cachedTemplateNames(): string[] {
+    return this.cachedTemplates.map((t: any) => t.name as string)
+  }
+
   private async getConfig(channelId: string): Promise<{ accessToken: string; phoneNumberId: string; wabaId: string } | null> {
+    // Infrastructure path: config injected at boot — no DB lookup.
+    if (this.injectedConfig) {
+      return {
+        accessToken: this.injectedConfig.accessToken,
+        phoneNumberId: this.injectedConfig.phoneNumberId,
+        wabaId: this.injectedConfig.wabaId || '',
+      }
+    }
+
+    // Tenant-owned path (future): read from messaging_channels.
     const { data: channel } = await supabaseAdmin
       .from('messaging_channels')
       .select('config')

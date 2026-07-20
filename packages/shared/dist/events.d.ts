@@ -30,6 +30,7 @@ export declare const EventType: {
     readonly WHATSAPP_INBOUND: "whatsapp.inbound";
     readonly SEND_MESSAGE_INTENDED: "send_message.intended";
     readonly SEND_MESSAGE_EXECUTED: "send_message.executed";
+    readonly MESSAGE_EVENT: "message.event";
     readonly SYNC_COMPLETED: "sync.completed";
     readonly SYNC_FAILED: "sync.failed";
     readonly SYNC_CONFLICT: "sync.conflict";

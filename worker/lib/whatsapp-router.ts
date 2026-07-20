@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { isBaileysConnected, isBaileysPaired, startBaileysSocket } from './baileys-socket'
 import { getRedis } from './redis'
 import { TransportRegistry } from '../src/lib/transport/registry'
+import { getMetaAdapter } from '../bootstrap/meta'
 import {
   generateBillzoMessageId,
   generateEventSequence,
@@ -159,12 +160,20 @@ export function setTransportRegistry(r: TransportRegistry): void {
   registry = r
 }
 
+// ── Pilot mode (Scenario A): Meta is infrastructure ──
+// During the pilot, BillZo operates a single Meta Cloud API WABA on behalf of
+// every merchant. It is configured once at boot via worker/bootstrap/meta.ts and
+// reached through the MetaAdapter singleton — NOT through a messaging_channels
+// row and NOT via per-tenant provider resolution. Merchants never see or choose
+// a provider. The tenant-owned multi-provider path is introduced later, above
+// this facade, without changing the adapter. See FIRST_MERCHANT_PLAYBOOK.md.
+
 async function getActiveChannel(tenantId: string): Promise<{
   id: string
   provider: string
   phoneNumber: string
 } | null> {
-  // 1. Check messaging_channels table
+  // 1. Check messaging_channels table (future tenant-owned path)
   const { data } = await supabaseAdmin
     .from('messaging_channels')
     .select('id, provider, phone_number')
@@ -357,6 +366,34 @@ export async function sendWhatsAppMessage(
   }
 
   try {
+    // Pilot (Scenario A): Meta is infrastructure, owned by BillZo. Send directly
+    // via the bootstrapped singleton — no per-tenant channel lookup, no provider
+    // resolution. The tenant-owned multi-provider path is introduced later, above
+    // this facade, without changing the adapter.
+    const meta = getMetaAdapterSafe()
+    if (meta) {
+      const sendResult = await meta.send('meta', {
+        to: cleanPhone,
+        text: message,
+        ...(options?.type === 'document' && options?.documentUrl
+          ? { document: { url: options.documentUrl, fileName: options.documentName || 'document.pdf', caption: message } }
+          : {}),
+      })
+      if (sendResult.success) {
+        return {
+          messageId: sendResult.providerMessageId || billzoMessageId,
+          provider: 'meta' as WhatsAppProvider,
+          identity,
+        }
+      }
+      return {
+        messageId: billzoMessageId,
+        provider: 'meta' as WhatsAppProvider,
+        identity,
+        error: sendResult.error || 'Meta send failed',
+      }
+    }
+
     const channel = await getActiveChannel(tenantId)
     if (!channel) {
       console.log(`[WhatsAppRouter] No active channel for tenant ${tenantId}, simulating send to ${cleanPhone}`)
@@ -446,10 +483,23 @@ export async function sendWhatsAppMessage(
 }
 
 export async function getEffectiveProvider(tenantId: string): Promise<WhatsAppProvider> {
+  // Pilot (Scenario A): Meta is the only provider for reminders.
+  if (getMetaAdapterSafe()) return 'meta'
   const channel = await getActiveChannel(tenantId)
   if (!channel) return 'gupshup'
   if (channel.provider === 'baileys' && (await isBaileysPaired(tenantId)) && isBaileysConnected(tenantId)) {
     return 'baileys'
   }
   return 'gupshup'
+}
+
+// Returns the bootstrapped pilot Meta adapter, or null if not initialized.
+// Safe to call from any send path — avoids importing the bootstrap singleton
+// directly into callers that also support the future tenant-owned path.
+function getMetaAdapterSafe(): ReturnType<typeof getMetaAdapter> | null {
+  try {
+    return getMetaAdapter()
+  } catch {
+    return null
+  }
 }
