@@ -243,7 +243,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const allCases = [...activeCases, ...synthesizedCases]
+    // ── Single source of truth: derive amounts from invoices for every case ──
+    const invAmounts = (custId: string) => {
+      const invs = groupedInvoices.get(custId) || []
+      const out = invs.reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
+      const ovd = invs
+        .filter((i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+        .reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
+      return { out, ovd }
+    }
+
+    const overrideCase = (c: any) => {
+      const { out, ovd } = invAmounts(c.customer_id)
+      c.total_outstanding = out
+      c.total_overdue = ovd
+      return c
+    }
+
+    const realCases = activeCases.map(overrideCase).filter((c: any) => c.total_outstanding > 0)
+    const allCases = [...realCases, ...synthesizedCases]
     const queue = buildQueueItems(allCases)
 
     // ── Attribution metrics ──
@@ -319,6 +337,12 @@ export async function GET(request: NextRequest) {
     // Re-sort so most important cases come first regardless of origin
     priorityCases.sort((a, b) => b.attentionScore - a.attentionScore)
 
+    // Override priority-case totals with invoice-derived amounts (single source of truth)
+    for (const pc of priorityCases) {
+      const { out } = invAmounts(pc.customerId)
+      pc.totalOverdue = out
+    }
+
     // ── Summary ──
     const outstanding = allCases.reduce(
       (s: number, c: any) => s + (parseFloat(c.total_outstanding) || 0), 0
@@ -334,7 +358,6 @@ export async function GET(request: NextRequest) {
 
     // ── Queue action counts (for "Today's Queue" progress) ──
     // Only count real recovery cases — virtual cases can't have events yet
-    const realCases = activeCases
     const virtualCount = synthesizedCases.length
     const totalActions = realCases.length
     const realCaseIds = new Set(realCases.map((c: any) => c.id))

@@ -3,8 +3,6 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { recommend } from '@/lib/recovery/recommendation-engine'
-import { scoreRelationship } from '@/lib/recovery/relationship-score'
 
 /**
  * Work Queue — the merchant's daily workbench, grouped by REQUIRED ACTION
@@ -127,37 +125,6 @@ export async function GET(request: NextRequest) {
       const lastDelivered = reminderWa.filter((w: any) => w.delivered_at).sort((x: any, y: any) => +new Date(y.delivered_at) - +new Date(x.delivered_at))[0]
       const lastRead = reminderWa.filter((w: any) => w.read_at).sort((x: any, y: any) => +new Date(y.read_at) - +new Date(x.read_at))[0]
       const undelivered = reminderWa.filter((w: any) => !w.delivered_at && w.status === 'failed').length
-      const rel = c
-        ? scoreRelationship({
-            promisesBroken: c.broken_promises || 0,
-            remindersRead: reminderWa.filter((w: any) => w.read_at).length,
-            remindersSent: Number(c.reminder_count || 0),
-            overdue30plus: Number(c.total_overdue || 0) > 30 ? 1 : 0,
-            requiredCalls: 0,
-            failedReminders: undelivered,
-            observations: 1,
-          })
-        : null
-      const rec = c
-        ? recommend({
-            rc: {
-              totalOutstanding: Number(c.total_outstanding || 0),
-              totalOverdue: Number(c.total_overdue || 0),
-              state: c.recovery_state_v2,
-              promiseToPayDate: c.promise_to_pay_date,
-              brokenPromises: c.broken_promises || 0,
-              lastPaymentAt: c.last_payment_at,
-              nextActionType: c.next_action_type,
-            },
-            signals: {
-              lastReminderDeliveredAt: lastDelivered?.delivered_at ?? null,
-              lastReminderReadAt: lastRead?.read_at ?? null,
-              reminderCount: Number(c.reminder_count || 0),
-              undeliveredReminders: undelivered,
-            },
-            action: { actionType: a.action_type, status: a.status, scheduledAt: a.scheduled_at },
-          })
-        : null
 
       return {
         actionId: a.id,
@@ -174,10 +141,6 @@ export async function GET(request: NextRequest) {
         scheduledAt: a.scheduled_at,
         completedAt: a.completed_at,
         reason,
-        recommendation: rec
-          ? { action: rec.action, confidence: rec.confidence, reasons: rec.reasons }
-          : null,
-        relationship: rel ? { stars: rel.stars, label: rel.label } : null,
         kind,
         _priority: priority(c, Number(c?.total_overdue || 0)),
       }
