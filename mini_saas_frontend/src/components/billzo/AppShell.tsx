@@ -137,13 +137,13 @@ function Sidebar({
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function TopBar({
-  title, onMobileMenu, userName,
+  title, onMobileMenu, onLogout, userName,
 }: {
   title?: string
   onMobileMenu: () => void
+  onLogout: () => void
   userName?: string
 }) {
-  const ini = initials(userName)
   return (
     <header className="bz-topbar">
       <div className="bz-topbar-left">
@@ -164,7 +164,7 @@ function TopBar({
           <Bell size={16} />
         </Link>
 
-        <button className="bz-org-btn" aria-label="Switch organisation">
+        <button className="bz-org-btn" onClick={onLogout} aria-label="Sign out">
           <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
           <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
           <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
@@ -177,10 +177,11 @@ function TopBar({
 // ─── Mobile drawer ────────────────────────────────────────────────────────────
 
 function MobileDrawer({
-  open, onClose, pathname, userName,
+  open, onClose, onLogout, pathname, userName,
 }: {
   open: boolean
   onClose: () => void
+  onLogout: () => void
   pathname: string
   userName?: string
 }) {
@@ -227,13 +228,13 @@ function MobileDrawer({
         </nav>
 
         <div className="bz-drawer-footer">
-          <div className="bz-user-row" style={{ cursor: 'default' }}>
+          <button className="bz-user-row" onClick={onLogout} style={{ width: '100%', textAlign: 'left' }}>
             <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
             <div className="bz-user-info">
               <span className="bz-user-name">{userName || 'My Shop'}</span>
-              <span className="bz-user-email" style={{ fontSize: 10.5 }}>All synced</span>
             </div>
-          </div>
+            <LogOut size={13} className="bz-logout-icon" />
+          </button>
         </div>
       </div>
     </>
@@ -352,10 +353,10 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
     <>
       <div className="bz-shell">
         <Sidebar pathname={pathname} onLogout={() => setShowLogout(true)} userName={userName} />
-        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} pathname={pathname} userName={userName} />
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowLogout(true)} pathname={pathname} userName={userName} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} userName={userName} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowLogout(true)} userName={userName} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">
