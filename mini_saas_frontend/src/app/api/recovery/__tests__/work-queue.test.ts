@@ -47,6 +47,9 @@ describe('work queue route', () => {
         last_payment_at: null, next_action_type: 'call', open_invoice_count: 1,
       }],
       customers: [{ id: 'cu1', customer_name: 'ABC Traders', phone: '999', customer_tier: 'standard' }],
+      invoices: [
+        { customer_id: 'cu1', total: '18500', paid_amount: '0', status: 'unpaid', due_date: '2025-07-01' },
+      ],
       collection_actions: [
         { id: 'ca1', customer_id: 'cu1', action_type: 'call', channel: null, template_name: null, status: 'scheduled', trigger_type: 'MANUAL', scheduled_at: new Date().toISOString(), completed_at: null, invoice_ids: [] },
         { id: 'ca2', customer_id: 'cu1', action_type: 'reminder', channel: 'whatsapp', template_name: 'R', status: 'scheduled', trigger_type: 'OVERDUE', scheduled_at: new Date().toISOString(), completed_at: null, invoice_ids: [] },
