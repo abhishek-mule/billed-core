@@ -78,6 +78,9 @@ describe('recovery center route', () => {
         { id: 'cu1', customer_name: 'ABC Traders', phone: '999', customer_tier: 'standard' },
         { id: 'cu2', customer_name: 'Aniket', phone: '888', customer_tier: 'standard' },
       ],
+      invoices: [
+        { customer_id: 'cu1', total: '12400', paid_amount: '0', status: 'unpaid', due_date: '2025-07-01' },
+      ],
       collection_actions: [
         { id: 'ca1', customer_id: 'cu1', action_type: 'reminder', channel: 'whatsapp', template_name: 'Reminder', scheduled_at: new Date().toISOString(), invoice_ids: ['inv1'] },
       ],

@@ -32,7 +32,6 @@ export default function WhatsAppTemplatesPage() {
   const [createType, setCreateType] = useState('')
   const [createBody, setCreateBody] = useState('')
   const [templates, setTemplates] = useState<Record<string, string>>({})
-  const [gupshupStatus, setGupshupStatus] = useState<'unknown' | 'ok' | 'error'>('unknown')
 
   useEffect(() => {
     loadData()
@@ -40,18 +39,13 @@ export default function WhatsAppTemplatesPage() {
 
   const loadData = async () => {
     try {
-      const [configRes] = await Promise.all([
-        fetch(`/api/tenant/whatsapp-config`, { credentials: 'include' }),
-      ])
+      const configRes = await fetch(`/api/tenant/whatsapp-config`, { credentials: 'include' })
       if (configRes.ok) {
         const data = await configRes.json()
         setTemplates(data.config?.templateNames || {})
       }
-      const statusRes = await fetch(`/api/whatsapp/status`, { credentials: 'include' })
-      if (statusRes.ok) setGupshupStatus('ok')
-      else if (statusRes.status !== 404) setGupshupStatus('error')
     } catch {
-      setGupshupStatus('error')
+      // non-fatal — templates simply won't pre-populate
     } finally {
       setLoading(false)
     }
@@ -112,7 +106,7 @@ export default function WhatsAppTemplatesPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold">WhatsApp Templates</h1>
+          <h1 className="text-2xl font-bold">Payment Reminder Templates</h1>
           <p className="text-sm text-muted-foreground">Define message templates for auto-send and reminders</p>
         </div>
       </div>
@@ -137,11 +131,11 @@ export default function WhatsAppTemplatesPage() {
           <div>
             <p className="text-sm font-semibold text-warning">Meta Template Requirements</p>
             <p className="text-xs text-warning mt-1">
-              WhatsApp Business API requires pre-approved templates. After creating here, submit via{' '}
+              WhatsApp Business API requires pre-approved templates. BillZo submits these via{' '}
               <a href="https://business.facebook.com" target="_blank" rel="noopener" className="underline">
                 Meta Business Suite
-              </a>{' '}
-              or your Gupshup dashboard. Utility templates are cheapest to approve.
+              </a>
+              . Utility templates are cheapest to approve.
             </p>
           </div>
         </div>
@@ -234,7 +228,7 @@ export default function WhatsAppTemplatesPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                After saving, submit this template in Meta Business Suite or Gupshup for approval. Once approved, it will be used for sending messages.
+                 After saving, BillZo submits this template in Meta Business Suite for approval. Once approved, it will be used for sending messages.
               </p>
             </div>
             <div className="flex gap-3 p-5 border-t bg-muted/50">

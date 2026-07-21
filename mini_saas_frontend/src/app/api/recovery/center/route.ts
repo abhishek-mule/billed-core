@@ -3,13 +3,17 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { scoreRelationship } from '@/lib/recovery/relationship-score'
 
 /**
  * Recovery Center — operational command center for the merchant's morning.
  * Four blocks only: Needs Action, Scheduled Today, Recently Recovered, Activity
- * Timeline. Derived entirely from collection_actions + recovery_cases + invoices.
+ * Timeline. Derived entirely from recovery_cases + invoices + collection_actions.
  * No analytics, no KPIs.
+ *
+ * Single source of truth: outstanding / overdue amounts are ALWAYS derived from
+ * invoices (total − paid_amount). recovery_cases is used only for *state*
+ * (promise date, recovery state, next action). This guarantees the Center never
+ * disagrees with the Customers / Ledger view.
  */
 export async function GET(request: NextRequest) {
   const auth = await verifyRequest(request)
@@ -34,6 +38,37 @@ export async function GET(request: NextRequest) {
       .limit(50)
 
     const customerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
+
+    // Invoices (open) for those customers — single source of truth for amounts.
+    const { data: invoices } = customerIds.length
+      ? await supabaseAdmin
+          .from('invoices')
+          .select('customer_id, total, paid_amount, status, due_date')
+          .eq('tenant_id', tenantId)
+          .in('customer_id', customerIds)
+          .in('status', ['unpaid', 'overdue', 'partial'])
+      : { data: [] as any[] }
+
+    const invByCust = new Map<string, any[]>()
+    for (const inv of invoices || []) {
+      const arr = invByCust.get(inv.customer_id) || []
+      arr.push(inv)
+      invByCust.set(inv.customer_id, arr)
+    }
+    const invoiceAmounts = (custId: string) => {
+      const invs = invByCust.get(custId) || []
+      const out = invs.reduce((s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0)
+      const overdueInvs = invs.filter(
+        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+      )
+      const ovd = overdueInvs.length > 0
+        ? Math.max(...overdueInvs.map((i: any) =>
+            Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
+          ))
+        : 0
+      return { out, ovd }
+    }
+
     const { data: customers } = customerIds.length
       ? await supabaseAdmin
           .from('customers')
@@ -43,34 +78,28 @@ export async function GET(request: NextRequest) {
 
     const custMap = new Map((customers || []).map((c: any) => [c.id, c]))
 
-    const needsAction = (cases || []).map((c: any) => {
-      const cust = custMap.get(c.customer_id) || {}
-      const daysOverdue = c.promise_to_pay_date
-        ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
-        : null
-      return {
-        caseId: c.id,
-        customerId: c.customer_id,
-        customerName: cust.customer_name || 'Customer',
-        phone: cust.phone || '',
-        tier: cust.customer_tier || 'standard',
-        outstanding: Number(c.total_outstanding || 0),
-        overdue: Number(c.total_overdue || 0),
-        state: c.recovery_state_v2,
-        promiseDate: c.promise_to_pay_date,
-        promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
-        recommendedAction: c.next_action_type || 'send_reminder',
-        relationship: (() => {
-          const rel = scoreRelationship({
-            promisesBroken: c.broken_promises || 0,
-            overdue30plus: Number(c.total_overdue || 0) > 30 ? 1 : 0,
-            remindersSent: Number(c.reminder_count || 0),
-            observations: 1,
-          })
-          return { stars: rel.stars, label: rel.label }
-        })(),
-      }
-    })
+    const needsAction = (cases || [])
+      .map((c: any) => {
+        const cust = custMap.get(c.customer_id) || {}
+        const { out, ovd } = invoiceAmounts(c.customer_id)
+        const daysOverdue = c.promise_to_pay_date
+          ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
+          : null
+        return {
+          caseId: c.id,
+          customerId: c.customer_id,
+          customerName: cust.customer_name || 'Customer',
+          phone: cust.phone || '',
+          tier: cust.customer_tier || 'standard',
+          outstanding: out,
+          overdue: ovd,
+          state: c.recovery_state_v2,
+          promiseDate: c.promise_to_pay_date,
+          promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
+          recommendedAction: c.next_action_type || 'send_reminder',
+        }
+      })
+      .filter((c: any) => c.outstanding > 0)
 
     // ── 2. Scheduled Today ──
     const { data: scheduled } = await supabaseAdmin
@@ -106,7 +135,7 @@ export async function GET(request: NextRequest) {
       calls: scheduledToday.filter((s) => s.actionType === 'call' || s.channel === 'phone').length,
     }
 
-    // Total under follow-up = sum of outstanding across needs-action cases.
+    // Total under follow-up = sum of invoice-derived outstanding across needs-action cases.
     const underFollowUp = needsAction.reduce((s: number, c: any) => s + (c.outstanding || 0), 0)
 
     // ── 3. Recently Recovered ──
@@ -159,6 +188,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[RecoveryCenter] failed', err)
-    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load recovery center' }, { status: 500 })
   }
 }

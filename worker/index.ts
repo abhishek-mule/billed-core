@@ -28,6 +28,7 @@ import { MutationGate } from './src/lib/mutation-gate'
 import { OutboxListener } from './src/lib/spine/outbox-listener'
 import { TransportRegistry, BaileysAdapter, GupshupAdapter, MetaAdapter, SimulationAdapter } from './src/lib/transport'
 import { setTransportRegistry } from './lib/whatsapp-router'
+import { initializeMeta } from './bootstrap/meta'
 import { applyOverride } from './src/lib/recovery/override-handler'
 import { getQrCode } from './stores/baileys-qr'
 import { getPairingCode } from './stores/baileys-pairing-code'
@@ -222,6 +223,17 @@ async function main() {
       supabase: process.env.NEXT_PUBLIC_SUPABASE_URL || 'not set',
     },
   })
+
+  // ---- Pilot bootstrap (Scenario A): Meta WABA is infrastructure ----
+  // Fail fast: if reminders cannot be sent, the worker must not start.
+  try {
+    await initializeMeta()
+    console.log('[Worker] Meta initialized — automatic payment reminders enabled')
+  } catch (err: any) {
+    console.error('[Worker] Meta initialization failed — worker refusing to start:')
+    console.error('  ' + err.message)
+    process.exit(1)
+  }
 
   // ---- PHASE 1-3: Authority initialization (policy, capabilities, core) ----
   const runtime = new AuthorityRuntime()

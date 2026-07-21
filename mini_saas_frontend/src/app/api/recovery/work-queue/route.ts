@@ -3,8 +3,6 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { recommend } from '@/lib/recovery/recommendation-engine'
-import { scoreRelationship } from '@/lib/recovery/relationship-score'
 
 /**
  * Work Queue — the merchant's daily workbench, grouped by REQUIRED ACTION
@@ -32,6 +30,37 @@ export async function GET(request: NextRequest) {
       .in('recovery_state_v2', ['active', 'overdue', 'partial_payment', 'promised', 'disputed'])
 
     const caseByCustomer = new Map<string, any>((cases || []).map((c: any) => [c.customer_id, c] as [string, any]))
+
+    // ── Single source of truth: derive amounts from invoices for every case ──
+    const caseCustomerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
+    const { data: invRows } = caseCustomerIds.length
+      ? await supabaseAdmin
+          .from('invoices')
+          .select('customer_id, total, paid_amount, status, due_date')
+          .eq('tenant_id', tenantId)
+          .in('customer_id', caseCustomerIds)
+          .in('status', ['unpaid', 'overdue', 'partial'])
+      : { data: [] as any[] }
+    const invGrouped = new Map<string, any[]>()
+    for (const inv of invRows || []) {
+      const arr = invGrouped.get(inv.customer_id) || []
+      arr.push(inv)
+      invGrouped.set(inv.customer_id, arr)
+    }
+    for (const c of cases || []) {
+      const invs = invGrouped.get(c.customer_id) || []
+      c.total_outstanding = invs.reduce(
+        (s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0,
+      )
+      const overdueInvs = invs.filter(
+        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+      )
+      c.total_overdue = overdueInvs.length > 0
+        ? Math.max(...overdueInvs.map((i: any) =>
+            Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
+          ))
+        : 0
+    }
 
     // ── All collection actions for the customer set ──
     const { data: actions } = await supabaseAdmin
@@ -127,37 +156,6 @@ export async function GET(request: NextRequest) {
       const lastDelivered = reminderWa.filter((w: any) => w.delivered_at).sort((x: any, y: any) => +new Date(y.delivered_at) - +new Date(x.delivered_at))[0]
       const lastRead = reminderWa.filter((w: any) => w.read_at).sort((x: any, y: any) => +new Date(y.read_at) - +new Date(x.read_at))[0]
       const undelivered = reminderWa.filter((w: any) => !w.delivered_at && w.status === 'failed').length
-      const rel = c
-        ? scoreRelationship({
-            promisesBroken: c.broken_promises || 0,
-            remindersRead: reminderWa.filter((w: any) => w.read_at).length,
-            remindersSent: Number(c.reminder_count || 0),
-            overdue30plus: Number(c.total_overdue || 0) > 30 ? 1 : 0,
-            requiredCalls: 0,
-            failedReminders: undelivered,
-            observations: 1,
-          })
-        : null
-      const rec = c
-        ? recommend({
-            rc: {
-              totalOutstanding: Number(c.total_outstanding || 0),
-              totalOverdue: Number(c.total_overdue || 0),
-              state: c.recovery_state_v2,
-              promiseToPayDate: c.promise_to_pay_date,
-              brokenPromises: c.broken_promises || 0,
-              lastPaymentAt: c.last_payment_at,
-              nextActionType: c.next_action_type,
-            },
-            signals: {
-              lastReminderDeliveredAt: lastDelivered?.delivered_at ?? null,
-              lastReminderReadAt: lastRead?.read_at ?? null,
-              reminderCount: Number(c.reminder_count || 0),
-              undeliveredReminders: undelivered,
-            },
-            action: { actionType: a.action_type, status: a.status, scheduledAt: a.scheduled_at },
-          })
-        : null
 
       return {
         actionId: a.id,
@@ -174,10 +172,6 @@ export async function GET(request: NextRequest) {
         scheduledAt: a.scheduled_at,
         completedAt: a.completed_at,
         reason,
-        recommendation: rec
-          ? { action: rec.action, confidence: rec.confidence, reasons: rec.reasons }
-          : null,
-        relationship: rel ? { stars: rel.stars, label: rel.label } : null,
         kind,
         _priority: priority(c, Number(c?.total_overdue || 0)),
       }
@@ -239,6 +233,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   } catch (err: any) {
     console.error('[WorkQueue] failed', err)
-    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load work queue' }, { status: 500 })
   }
 }

@@ -13,6 +13,8 @@ import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
 import { clearAuthCookies } from "@/lib/cookies"
 import { getTenantId } from "@/lib/billzo/tenant"
+import { PageShell } from "@/components/billzo/PageShell"
+
 
 type CategoryStatus = 'connected' | 'not_connected' | 'pending'
 
@@ -94,10 +96,10 @@ export default function SettingsPage() {
       id: 'whatsapp',
       href: '/settings/whatsapp',
       icon: <MessageCircle className={ICON_CLASS} />,
-      title: 'WhatsApp',
-      description: 'Connect WhatsApp, manage templates, auto-send',
-      status: tenant?.whatsappConfig?.whatsappProvider ? 'connected' as CategoryStatus : 'not_connected' as CategoryStatus,
-      statusLabel: tenant?.whatsappConfig?.whatsappProvider ? 'Connected' : 'Not Connected',
+      title: 'Payment Reminders',
+      description: 'Automatic payment reminders',
+      status: 'connected' as CategoryStatus,
+      statusLabel: 'Automatic payment reminders',
     },
     {
       id: 'recovery',
@@ -154,8 +156,8 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
-        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
+      <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+        <div className="space-y-4">
           <div className="h-16 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, i) => (
@@ -163,27 +165,25 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
-        <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-danger rounded-lg p-6 text-center">
-            <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
-            <p className="text-sm text-danger mb-4">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Again</Button>
-          </div>
+      <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+        <div className="bg-card border border-danger rounded-lg p-6 text-center">
+          <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
+          <p className="text-sm text-danger mb-4">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try Again</Button>
         </div>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 pb-8">
-      <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
+    <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+      <div className="space-y-5">
 
         {/* Shop identity banner */}
         <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-4">
@@ -205,11 +205,12 @@ export default function SettingsPage() {
           <input
             ref={searchRef}
             type="text"
-            placeholder="Search settings... (/)"
+            placeholder="Search settings..."
             value={q}
             onChange={e => setQ(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            className="w-full pl-9 pr-12 py-2.5 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
+          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-muted text-muted-foreground border border-border"> / </kbd>
         </div>
 
         {/* Category grid */}
@@ -223,8 +224,8 @@ export default function SettingsPage() {
               <Link
                 key={cat.id}
                 href={cat.href}
-                className={`bg-card border rounded-lg p-4 transition-colors hover:border-border ${
-                  cat.danger ? 'border-danger hover:border-danger' : 'border-border'
+                className={`bg-card border rounded-lg p-4 transition-colors hover:border-primary/40 ${
+                  cat.danger ? 'border-danger/40 hover:border-danger' : 'border-border'
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -238,14 +239,16 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{cat.title}</p>
-                      {cat.status && cat.statusLabel && (
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[cat.status]}`}>
+                      <p className={`text-sm font-medium ${cat.danger ? 'text-danger' : 'text-foreground'}`}>
+                        {cat.title}
+                      </p>
+                      {cat.statusLabel && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-medium border ${STATUS_STYLES[cat.status!]}`}>
                           {cat.statusLabel}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{cat.description}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{cat.description}</p>
                   </div>
                   <ChevronRight className={`w-4 h-4 shrink-0 mt-1 ${cat.danger ? 'text-danger' : 'text-muted-foreground'}`} />
                 </div>
@@ -269,7 +272,7 @@ export default function SettingsPage() {
             <button
               onClick={toggleTheme}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                theme === 'dark' ? 'bg-foreground/20' : 'bg-muted'
+                theme === 'dark' ? 'bg-primary' : 'bg-muted'
               }`}
               aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
@@ -283,26 +286,26 @@ export default function SettingsPage() {
         </div>
 
         {/* Danger zone */}
-        <div className="border-t border-danger pt-4 mt-4">
+        <div className="border-t border-border pt-4 mt-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="w-4 h-4 text-danger" />
-            <p className="text-xs font-medium text-danger uppercase tracking-wider">Danger Zone</p>
+            <p className="text-xs font-medium text-danger uppercase tracking-wider">Session & Account</p>
           </div>
-          <div className="bg-card border border-danger rounded-lg divide-y divide-danger-soft overflow-hidden">
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
             <button
               onClick={handleSignOut}
-              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-danger-soft transition-colors"
+              className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-danger-soft/40 transition-colors"
             >
               <LogOut className="w-5 h-5 text-danger" />
               <div>
                 <p className="text-sm font-medium text-danger">Sign out</p>
-                <p className="text-xs text-danger">End your current session</p>
+                <p className="text-xs text-muted-foreground">End your current session on this device</p>
               </div>
             </button>
           </div>
         </div>
 
       </div>
-    </div>
+    </PageShell>
   )
 }

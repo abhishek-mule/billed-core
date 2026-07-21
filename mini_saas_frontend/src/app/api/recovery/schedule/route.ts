@@ -27,6 +27,35 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
+    // ── Single source of truth: derive overdue days from invoices ──
+    const schedCustomerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
+    const { data: invRows } = schedCustomerIds.length
+      ? await supabaseAdmin
+          .from('invoices')
+          .select('customer_id, status, due_date')
+          .eq('tenant_id', tenantId)
+          .in('customer_id', schedCustomerIds)
+          .in('status', ['unpaid', 'overdue', 'partial'])
+      : { data: [] as any[] }
+    const invByCust = new Map<string, any[]>()
+    for (const inv of invRows || []) {
+      const arr = invByCust.get(inv.customer_id) || []
+      arr.push(inv)
+      invByCust.set(inv.customer_id, arr)
+    }
+    const nowDate = new Date(now)
+    const overdueDaysFor = (custId: string) => {
+      const invs = invByCust.get(custId) || []
+      const overdueInvs = invs.filter(
+        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < nowDate),
+      )
+      return overdueInvs.length > 0
+        ? Math.max(...overdueInvs.map((i: any) =>
+            Math.floor((nowDate.getTime() - new Date(i.due_date).getTime()) / 86400000),
+          ))
+        : 0
+    }
+
     const items = (cases || [])
       .filter((rc: any) => {
         if (rc.next_action_type === 'wait' && rc.promise_to_pay_date) return true
@@ -38,7 +67,7 @@ export async function GET(request: NextRequest) {
         customerId: rc.customer_id,
         customerName: rc.customers?.customer_name || 'Unknown',
         phone: rc.customers?.phone || '',
-        totalOverdue: Number(rc.total_overdue) || 0,
+        totalOverdue: overdueDaysFor(rc.customer_id),
         openInvoiceCount: rc.open_invoice_count || 0,
         nextActionType: rc.next_action_type || 'merchant_review',
         nextActionDueAt: rc.next_action_due_at,

@@ -102,7 +102,8 @@ function formatClock(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
 }
 
-function getSuccessLabel(score: number): string {
+function getSuccessLabel(score: number | null): string {
+  if (score == null) return "—"
   if (score >= 85) return "Excellent"
   if (score >= 70) return "Good"
   if (score >= 50) return "Fair"
@@ -496,7 +497,7 @@ function HeroCard({
 }: {
   outstanding: number
   customers: number
-  successRate: number
+  successRate: number | null
   recoveredByBillzo: number
   oneLiner: string
   isEmpty: boolean
@@ -533,7 +534,7 @@ function HeroCard({
             </div>
             <div>
               <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Collection Success</p>
-              <p className="text-3xl lg:text-4xl font-bold tracking-tight">{successRate}%</p>
+              <p className="text-3xl lg:text-4xl font-bold tracking-tight">{successRate == null ? '—' : `${successRate}%`}</p>
               <p className="text-recovery-soft/70 text-xs mt-0.5">{getSuccessLabel(successRate)}</p>
             </div>
             <div>
@@ -604,7 +605,7 @@ function EmptyRecoveryState() {
   return (
     <PageShell title="Recovery Command Center" subtitle="Welcome back">
       <div className="space-y-5">
-        <HeroCard outstanding={0} customers={0} successRate={100} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
+        <HeroCard outstanding={0} customers={0} successRate={null} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
         <CustomersAttentionCard title="Customers Requiring Attention" customers={[]} />
         <TodayQueueCard title="Today's Queue" queue={{ scheduled: 0, waiting: 0, overdue: 0 }} />
         <LiveActivityCard title="Live Recovery Activity" events={[]} />
@@ -630,7 +631,7 @@ export default function DashboardPage() {
     recovery?: {
       outstanding: number
       customers: number
-      successRate: number
+      successRate: number | null
       recoveredByBillzo: number
       oneLiner: string
       isEmpty: boolean
@@ -708,28 +709,25 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
-          label="Recovered This Month"
+          label="Recovered Today"
           value={formatINR(recovery.recoveredByBillzo)}
           icon={TrendingUp}
           color="text-recovery"
           softColor="bg-recovery-soft"
-          trend={{ value: "+12% vs last month", positive: true }}
         />
         <MetricCard
-          label="Collection Success"
-          value={`${recovery.successRate}%`}
+          label="Collection Rate"
+          value={recovery.successRate == null ? '—' : `${recovery.successRate}%`}
           icon={Target}
           color="text-primary"
           softColor="bg-primary/10"
-          trend={{ value: "+5% vs last month", positive: true }}
         />
         <MetricCard
-          label="Avg Collection Time"
-          value="13 days"
+          label="Outstanding Amount"
+          value={formatINR(recovery.outstanding)}
           icon={Clock}
           color="text-outstanding"
           softColor="bg-outstanding-soft"
-          trend={{ value: "-2 days vs last month", positive: true }}
         />
       </div>
     </PageShell>
@@ -773,7 +771,8 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Collected Today')?.value?.replace(/[₹,]/g, '') || '0')
     : 0
 
-  const successRate = Math.min(100, Math.max(0, 85 + Math.floor(Math.random() * 10)))
+  const totalMonitored = outstanding + recoveredByBillzo
+  const successRate = totalMonitored > 0 ? Math.round((recoveredByBillzo / totalMonitored) * 100) : null
 
   const workItems = todaySection?.payload?.items || []
   const isEmpty = outstanding === 0 && workItems.length === 0
@@ -803,66 +802,74 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     overdue: workItems.filter(i => i.severity === 'critical' || i.severity === 'high').length,
   }
 
-  // Live Recovery Activity (real events)
+  // Live Recovery Activity (real events only; empty array shows clean empty state when no events exist)
   const rawEvents = activitySection?.payload?.events || []
-  const activity: RecoveryEvent[] = rawEvents.length > 0
-    ? rawEvents.slice(0, 8).map(e => {
-        const label = (e.label || '').toLowerCase()
-        let type: RecoveryEvent['type'] = 'reminder'
-        if (label.includes('promise')) type = 'promise'
-        else if (label.includes('payment') || label.includes('collected')) type = 'payment'
-        else if (label.includes('delivered')) type = 'delivered'
-        else if (label.includes('read')) type = 'read'
-        else if (label.includes('scheduled')) type = 'scheduled'
-        else type = 'sent'
-        const [customer, amount] = e.detail?.includes('—') ? e.detail.split('—').map(s => s.trim()) : [e.detail, undefined]
-        return {
-          time: e.occurredAt,
-          type,
-          customer: customer || 'BillZo',
-          message: e.label,
-          amount,
-          status: type === 'payment' || type === 'delivered' || type === 'promise' ? 'completed' : 'pending',
-        }
-      })
-    : [
-        { time: new Date(Date.now() - 5 * 60000).toISOString(), type: 'sent', customer: 'Raj Traders', message: 'WhatsApp reminder sent', amount: '₹12,500', status: 'completed' as const },
-        { time: new Date(Date.now() - 45 * 60000).toISOString(), type: 'promise', customer: 'Sharma Enterprises', message: 'Promise to pay recorded', amount: '₹8,200', status: 'completed' as const },
-        { time: new Date(Date.now() - 2 * 3600000).toISOString(), type: 'payment', customer: 'Gupta Traders', message: 'Payment received', amount: '₹5,000', status: 'completed' as const },
-        { time: new Date(Date.now() - 5 * 3600000).toISOString(), type: 'reminder', customer: 'Kumar & Sons', message: 'Reminder scheduled for tomorrow', status: 'pending' as const },
-      ]
+  const activity: RecoveryEvent[] = rawEvents.slice(0, 8).map(e => {
+    const label = (e.label || '').toLowerCase()
+    let type: RecoveryEvent['type'] = 'reminder'
+    if (label.includes('promise')) type = 'promise'
+    else if (label.includes('payment') || label.includes('collected')) type = 'payment'
+    else if (label.includes('delivered')) type = 'delivered'
+    else if (label.includes('read')) type = 'read'
+    else if (label.includes('scheduled')) type = 'scheduled'
+    else type = 'sent'
+    const [customer, amount] = e.detail?.includes('—') ? e.detail.split('—').map(s => s.trim()) : [e.detail, undefined]
+    return {
+      time: e.occurredAt,
+      type,
+      customer: customer || 'BillZo',
+      message: e.label,
+      amount,
+      status: type === 'payment' || type === 'delivered' || type === 'promise' ? 'completed' : 'pending',
+    }
+  })
 
-  // Upcoming scheduled actions (derived demo; real scheduler feed lands in Phase 2 follow-up)
-  const upcoming: UpcomingAction[] = [
-    { id: 'u1', time: '3:00 PM', when: 'Today', type: 'Reminder', customer: 'ABC Traders', amount: '₹8,200' },
-    { id: 'u2', time: '5:00 PM', when: 'Today', type: 'Promise Follow-up', customer: 'XYZ Steel' },
-    { id: 'u3', time: '9:00 AM', when: 'Tomorrow', type: 'Reminder', customer: 'Sharma Traders' },
-  ]
+  // Upcoming scheduled actions derived dynamically from actual workItems
+  const upcoming: UpcomingAction[] = workItems
+    .filter(item => item.dueAt || item.primaryAction)
+    .slice(0, 5)
+    .map((item, i) => {
+      const d = item.dueAt ? new Date(item.dueAt) : new Date()
+      return {
+        id: item.id || `u-${i}`,
+        time: d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        when: d.toDateString() === new Date().toDateString() ? 'Today' : 'Tomorrow',
+        type: item.headline || 'Payment Follow-up',
+        customer: item.customerName,
+        amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
+      }
+    })
 
-  // Funnel (verb-led story, progression colors grey→teal→amber→green)
+  // Real Funnel counts
+  const reminderCount = workItems.filter(i => ['send_reminder', 'reminder', 'review'].includes(i.primaryAction?.type || '')).length
+  const promiseCount = workItems.filter(i => (i.reason || '').toLowerCase().includes('promise')).length
   const funnel: RecoveryFunnelStep[] = [
     { label: 'Awaiting Collection', value: formatINR(outstanding), percentage: 100, color: '220 15% 55%', icon: IndianRupee },
-    { label: 'Reminder Sent', value: '4', percentage: 80, color: '180 85% 35%', icon: MessageCircle },
-    { label: 'Promise Received', value: '2', percentage: 50, color: '38 92% 50%', icon: Target },
-    { label: 'Recovered', value: formatINR(recoveredByBillzo), percentage: 65, color: '145 85% 35%', icon: Coins },
+    { label: 'Reminder Scheduled', value: String(reminderCount), percentage: workItems.length ? Math.round((reminderCount / workItems.length) * 100) : 0, color: '180 85% 35%', icon: MessageCircle },
+    { label: 'Promise Recorded', value: String(promiseCount), percentage: workItems.length ? Math.round((promiseCount / workItems.length) * 100) : 0, color: '38 92% 50%', icon: Target },
+    { label: 'Recovered Today', value: formatINR(recoveredByBillzo), percentage: totalMonitored > 0 ? Math.round((recoveredByBillzo / totalMonitored) * 100) : 0, color: '145 85% 35%', icon: Coins },
   ]
 
+  const criticalOverdue = workItems.filter(i => i.severity === 'critical' || i.severity === 'high').length
+  const totalCount = Math.max(1, workItems.length)
+  const healthScoreNum = Math.max(0, Math.min(100, Math.round(100 - (criticalOverdue / totalCount) * 40)))
+
   const health: HealthScore = {
-    score: 82,
-    label: "Good",
-    color: "hsl(var(--recovery))",
+    score: healthScoreNum,
+    label: getSuccessLabel(healthScoreNum),
+    color: getHealthColor(healthScoreNum),
     metrics: [
-      { label: "Avg Payment", value: "13 days" },
-      { label: "Recovery Rate", value: "81%" },
-      { label: "Promise Kept", value: "92%" },
+      { label: "Active Items", value: `${workItems.length}` },
+      { label: "Critical Overdue", value: `${criticalOverdue}` },
+       { label: "Collection Rate", value: `${successRate == null ? '—' : `${successRate}%`}` },
     ],
   }
 
-  // Hero one-liner (intelligent assistant tone)
+  // Hero one-liner (true status)
   const invoiceCount = Math.max(customersFromItems(workItems), outstanding > 0 ? 1 : 0)
   const oneLiner = isEmpty
     ? "No customers require manual follow-up."
-    : `BillZo is monitoring ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}. Next reminder in ${47 + Math.floor(Math.random() * 10)} minutes. No customers require manual follow-up.`
+    : `BillZo is monitoring ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}. Automated recovery active.`
 
   return {
     outstanding,
@@ -879,6 +886,7 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     health,
   }
 }
+
 
 function customersFromItems(items: { customerId: string }[]): number {
   return new Set(items.map(i => i.customerId)).size

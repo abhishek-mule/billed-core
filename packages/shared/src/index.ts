@@ -1,4 +1,5 @@
 export * from './types'
+export type { MetaConfig } from './services/meta/types'
 export * from './spine'
 export * from './recovery-case'
 export * from './events'

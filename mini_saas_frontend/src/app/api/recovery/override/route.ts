@@ -42,6 +42,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status })
   } catch (err: any) {
     console.error('[Override] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to update recovery case' }, { status: 500 })
   }
 }

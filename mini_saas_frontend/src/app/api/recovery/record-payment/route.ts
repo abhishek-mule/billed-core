@@ -67,6 +67,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, paymentId: result.paymentId })
   } catch (err: any) {
     console.error('[RecordPayment] Error:', err)
-    return NextResponse.json({ error: err.message || 'Failed to record payment' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
   }
 }

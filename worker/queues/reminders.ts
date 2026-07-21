@@ -475,15 +475,9 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           return { skipped: true, reason: `invalid_phone: "${phoneNumber}"`, invoiceId, stage }
         }
         const upiId = tenant.upi_id || config.upiId
-        let effectiveProvider: WhatsAppProvider = config.whatsappProvider === 'baileys' ? 'baileys' : 'gupshup'
-        if (effectiveProvider === 'gupshup') {
-          try {
-            const hasCreds = await getRedis().exists(`baileys:creds:${tenantId}`)
-            if (hasCreds) effectiveProvider = 'baileys'
-          } catch {
-            // Redis not available — keep gupshup default
-          }
-        }
+        // The active channel (which may be BillZo's pilot-owned Meta WABA) is the
+        // source of truth for the provider — not the tenant's whatsappProvider config.
+        let effectiveProvider: WhatsAppProvider = await getEffectiveProvider(tenantId)
 
         // Rate limit check
         const withinLimit = await checkRateLimit(tenantId, effectiveProvider)

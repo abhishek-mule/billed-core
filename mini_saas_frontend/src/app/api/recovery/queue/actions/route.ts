@@ -549,7 +549,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, action, refresh: ['recovery_queue', 'dashboard'] })
   } catch (err: any) {
     console.error('[QueueAction] Action failed:', err)
-    return NextResponse.json({ error: err.message || 'Action failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Action failed' }, { status: 500 })
   }
 }
 

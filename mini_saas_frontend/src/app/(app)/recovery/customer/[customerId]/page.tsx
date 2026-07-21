@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Phone, MessageSquare, Clock, CheckCircle2, ArrowLeft, ArrowRight,
-  AlertTriangle, HeartHandshake, Bell, FileText, PartyPopper, Sparkles,
+  AlertTriangle, HeartHandshake, Bell, FileText, PartyPopper,
   Loader2, CircleDashed,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
@@ -26,13 +26,6 @@ type ActionRow = {
 }
 type PromiseRow = { id: string; promiseDate: string | null; amount: number; status: string; createdAt: string; note: string | null }
 type Comm = { at: string; kind: string; text: string; detail: string; actionId: string | null }
-type Rec = {
-  action: string
-  priority: number
-  confidence: string
-  reasons: string[]
-  expectedOutcome: string
-} | null
 
 type Workspace = {
   customer: Customer | null
@@ -41,10 +34,6 @@ type Workspace = {
   actions: ActionRow[]
   promises: PromiseRow[]
   communication: Comm[]
-  recommended: Rec
-  relationship: {
-    score: number; stars: number; label: string; trend: string; reasons: string[]
-  } | null
 }
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
@@ -132,8 +121,6 @@ export default function CustomerWorkspacePage() {
 
   const c = data.customer
   const rc = data.case
-  const rec = data.recommended
-  const rel = data.relationship
 
   return (
     <div className="rc-page">
@@ -164,22 +151,6 @@ export default function CustomerWorkspacePage() {
           </div>
         ) : null}
       </section>
-
-      {/* Relationship Score — operational indicator (separate from recommendation) */}
-      {rel ? (
-        <section className="cw-rel">
-          <div className="cw-rel-head">
-            <span className="cw-rel-stars">{'★'.repeat(rel.stars)}{'☆'.repeat(5 - rel.stars)}</span>
-            <span className="cw-rel-label">{rel.label}</span>
-            <span className={`cw-conf cw-conf--${rel.trend === 'improving' ? 'high' : rel.trend === 'declining' ? 'low' : 'medium'}`}>{rel.trend}</span>
-          </div>
-          <ul className="cw-rec-why">
-            {rel.reasons.map((r: string, i: number) => (
-              <li key={i}><CheckCircle2 size={13} /> {r}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       {/* Merchant Memory — merchant-owned long-term knowledge */}
       <section className="rc-block">
@@ -212,27 +183,6 @@ export default function CustomerWorkspacePage() {
           </button>
         </div>
       </section>
-
-      {/* Recommended next step */}
-      {rec ? (
-        <section className={`cw-rec cw-rec--${rec.action}`}>
-          <div className="cw-rec-head">
-            <Sparkles size={15} />
-            <span>BillZo Recommendation</span>
-            <span className={`cw-conf cw-conf--${rec.confidence}`}>{rec.confidence}</span>
-          </div>
-          <div className="cw-rec-action">
-            {rec.action === 'call' ? <Phone size={15} /> : rec.action === 'send_reminder' || rec.action === 'resend' ? <Bell size={15} /> : <CheckCircle2 size={15} />}
-            {actionLabel(rec.action)}
-          </div>
-          <ul className="cw-rec-why">
-            {rec.reasons.map((r: string, i: number) => (
-              <li key={i}><CheckCircle2 size={13} /> {r}</li>
-            ))}
-          </ul>
-          <p className="cw-rec-outcome">{rec.expectedOutcome}</p>
-        </section>
-      ) : null}
 
       {/* Invoices */}
       <section className="rc-block">

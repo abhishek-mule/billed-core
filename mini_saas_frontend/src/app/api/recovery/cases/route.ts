@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Recovery case not found' }, { status: 404 })
     }
 
+    // Override total_overdue with invoice-derived days (single source of truth)
+    recoveryCase.total_overdue = metrics.oldestOverdueDays
+
     // Get customer since date
     const { data: customer } = await supabaseAdmin
       .from('customers')
@@ -95,6 +98,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[RecoveryCase] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load recovery case' }, { status: 500 })
   }
 }

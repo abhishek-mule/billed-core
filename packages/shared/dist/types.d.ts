@@ -6,7 +6,7 @@ export declare function getNextStage(current: ReminderStage): ReminderStage;
 export type WhatsAppStatus = 'queued' | 'sent' | 'server_ack' | 'delivered' | 'read' | 'clicked_upi' | 'payment_confirmed' | 'failed' | 'rate_limited' | 'received';
 export type ProjectionTransportState = 'queued' | 'sent' | 'server_ack' | 'delivered' | 'received' | 'read' | 'failed_terminal';
 export type ProjectionDeliveryHealth = 'healthy' | 'retrying' | 'degraded';
-export type WhatsAppProvider = 'gupshup' | 'baileys';
+export type WhatsAppProvider = 'gupshup' | 'baileys' | 'meta';
 export type AutomationMode = 'full_auto' | 'manual' | 'muted';
 export declare const MESSAGE_ORIGINS: readonly ["automation", "manual", "webhook", "system"];
 export type MessageOrigin = (typeof MESSAGE_ORIGINS)[number];

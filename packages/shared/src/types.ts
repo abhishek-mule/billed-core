@@ -83,7 +83,9 @@ export type ProjectionDeliveryHealth =
   | 'retrying'
   | 'degraded'
 
-export type WhatsAppProvider = 'gupshup' | 'baileys'
+// During the pilot BillZo owns the WhatsApp Business Account (WABA).
+// `meta` is the BillZo-operated Cloud API channel; merchants never pick a provider.
+export type WhatsAppProvider = 'gupshup' | 'baileys' | 'meta'
 export type AutomationMode = 'full_auto' | 'manual' | 'muted'
 
 // ============================================================

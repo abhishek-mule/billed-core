@@ -50,7 +50,7 @@ describe('customer workspace route', () => {
         id: 'rc1', total_outstanding: '18500', total_overdue: '18', recovery_state_v2: 'overdue',
         promise_to_pay_date: null, broken_promises: 0, last_payment_at: null, next_action_type: 'call', updated_at: new Date().toISOString(),
       }],
-      invoices: [{ id: 'inv1', invoice_number: '201', grand_total: '18500', status: 'sent', due_date: '2025-07-01', created_at: new Date().toISOString() }],
+      invoices: [{ id: 'inv1', invoice_number: '201', grand_total: '18500', paid_amount: '0', status: 'unpaid', due_date: '2025-07-01', created_at: new Date().toISOString() }],
       collection_actions: [{
         id: 'ca1', action_type: 'reminder', channel: 'whatsapp', template_name: 'Reminder', status: 'completed',
         trigger_type: 'OVERDUE', scheduled_at: new Date().toISOString(), completed_at: new Date().toISOString(), invoice_ids: ['inv1'],
@@ -70,8 +70,6 @@ describe('customer workspace route', () => {
     expect(json.actions).toHaveLength(1)
     expect(json.actions[0].delivery.readAt).toBeTruthy()
     expect(json.communication.length).toBeGreaterThan(0)
-    // overdue > 30? no (18d) and opened+reminderSent → call recommended
-    expect(json.recommended.action).toBe('call')
   })
 
   it('recommends a call when promise is broken', async () => {
@@ -79,11 +77,12 @@ describe('customer workspace route', () => {
     tableData = {
       customers: [{ id: 'cu1', customer_name: 'X', phone: '1', email: null, customer_tier: null, gstin: null }],
       recovery_cases: [{ id: 'rc1', total_outstanding: '5000', total_overdue: '40', recovery_state_v2: 'promised', promise_to_pay_date: past, broken_promises: 1, last_payment_at: null, next_action_type: 'call', updated_at: new Date().toISOString() }],
-      invoices: [], collection_actions: [], collection_action_events: [], whatsapp_events: [], payment_promises: [],
+      invoices: [{ id: 'inv1', invoice_number: '1', grand_total: '5000', paid_amount: '0', status: 'unpaid', due_date: '2025-06-01', created_at: new Date().toISOString() }],
+      collection_actions: [], collection_action_events: [], whatsapp_events: [], payment_promises: [],
     }
     const res = await GET(makeReq('cu1'))
     const json = await res.json()
-    expect(json.recommended.action).toBe('call')
-    expect(json.recommended.reasons.join(' ')).toMatch(/broken 5 days ago/)
+    expect(json.case.outstanding).toBe(5000)
+    expect(json.case.nextAction).toBe('call')
   })
 })

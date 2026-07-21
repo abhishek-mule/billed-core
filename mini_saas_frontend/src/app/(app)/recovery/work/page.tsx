@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Phone, MessageSquare, HeartHandshake, Clock, CheckCircle2, ChevronDown,
-  Loader2, ArrowRight, Sparkles,
+  Loader2, ArrowRight,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
 
@@ -14,22 +14,11 @@ type Card = {
   outstanding: number; state: string | null; brokenPromises: number
   actionType: string; channel: string | null; templateName: string | null
   scheduledAt: string; completedAt: string | null; reason: string; kind: string
-  recommendation?: { action: string; confidence: string; reasons: string[] } | null
-  relationship?: { stars: number; label: string } | null
 }
 type Section = { items: Card[]; count: number; total: number }
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
-
-function actionLabel(a: string) {
-  return (
-    {
-      call: 'Call', send_reminder: 'Send Reminder', resend: 'Re-send Reminder',
-      follow_up_call: 'Follow-up Call', record_payment: 'Record Payment', wait: 'Wait', none: 'No Action',
-    } as Record<string, string>
-  )[a] || a.replace(/_/g, ' ')
-}
 
 function sectionIcon(kind: string) {
   return kind === 'call' ? <Phone size={16} /> : kind === 'reminder' ? <MessageSquare size={16} /> : kind === 'promise' ? <HeartHandshake size={16} /> : kind === 'completed' ? <CheckCircle2 size={16} /> : <Clock size={16} />
@@ -109,17 +98,7 @@ export default function WorkQueuePage() {
                           <span className="wq-cust">{c.customerName}</span>
                           <span className="wq-amt">{fmt(c.outstanding)}</span>
                         </div>
-                        {c.relationship ? (
-                          <div className="wq-stars" title={c.relationship.label}>{'★'.repeat(c.relationship.stars)}{'☆'.repeat(5 - c.relationship.stars)}</div>
-                        ) : null}
                         <div className="wq-reason">{c.reason}</div>
-                        {c.recommendation && c.recommendation.action !== 'none' ? (
-                          <div className="wq-rec">
-                            <Sparkles size={12} />
-                            <span>{actionLabel(c.recommendation.action)}</span>
-                            <span className={`wq-rec-conf wq-rec-conf--${c.recommendation.confidence}`}>{c.recommendation.confidence}</span>
-                          </div>
-                        ) : null}
                         {c.kind === 'scheduled' ? <div className="wq-sub">{fmtTime(c.scheduledAt)} · {c.actionType === 'call' ? 'Call' : 'Reminder'}</div> : null}
                       </button>
 
@@ -127,9 +106,6 @@ export default function WorkQueuePage() {
                         <div className="wq-expand">
                           <div className="wq-expand-row"><span>Action</span><span>{c.actionType === 'call' ? 'Phone Call' : c.actionType === 'reminder' ? 'WhatsApp Reminder' : c.actionType}</span></div>
                           <div className="wq-expand-row"><span>State</span><span>{c.state ?? '—'}</span></div>
-                          {c.recommendation ? (
-                            <div className="wq-expand-row"><span>BillZo says</span><span>{actionLabel(c.recommendation.action)} · {c.recommendation.confidence}</span></div>
-                          ) : null}
                           {c.brokenPromises > 0 ? <div className="wq-expand-row"><span>Broken promises</span><span>{c.brokenPromises}</span></div> : null}
                           <div className="wq-expand-actions">
                             {c.kind === 'call' ? (

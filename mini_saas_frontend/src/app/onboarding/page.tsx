@@ -6,12 +6,10 @@ import Image from "next/image"
 import {
   Loader2,
   Store,
-  CheckCircle2,
   ArrowRight,
   ArrowLeft,
   AlertTriangle,
   Upload,
-  MessageCircle,
   PartyPopper,
   SkipForward,
   FileSpreadsheet,
@@ -42,11 +40,10 @@ const CATEGORIES = [
   "Other",
 ]
 
-type Step = "business" | "whatsapp" | "import" | "active"
+type Step = "business" | "import" | "active"
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "business", label: "Business" },
-  { key: "whatsapp", label: "WhatsApp" },
   { key: "import", label: "Customers" },
 ]
 
@@ -62,10 +59,6 @@ export default function OnboardingPage() {
   const [businessErrors, setBusinessErrors] = useState<{ businessName?: string; phone?: string; gstin?: string; phoneDuplicate?: string }>({})
   const [creating, setCreating] = useState(false)
   const [merchantId, setMerchantId] = useState<string | null>(null)
-
-  // WhatsApp
-  const [waStatus, setWaStatus] = useState<"idle" | "connecting" | "no-key" | "ready">("idle")
-  const [waLoading, setWaLoading] = useState(false)
 
   // Import
   const [importMode, setImportMode] = useState<"skip" | "csv">("skip")
@@ -130,32 +123,13 @@ export default function OnboardingPage() {
       localStorage.setItem("tenantId", data.merchantId)
       localStorage.setItem("tenantName", data.merchantName)
       trackEvent(data.merchantId, events.login_email, { step: "registered" })
-      setStep("whatsapp")
+      setStep("import")
     } catch (err: any) {
       setBusinessErrors({ businessName: err.message || "Failed to create merchant. Please try again." })
     } finally {
       setCreating(false)
     }
   }, [businessName, phone, gstin, category, businessErrors.phoneDuplicate])
-
-  // ── Step 2: WhatsApp (required but resilient) ──
-  const checkWhatsApp = useCallback(async () => {
-    setWaLoading(true)
-    try {
-      const res = await fetch("/api/whatsapp/status")
-      const data = await res.json()
-      const ok = data?.connected || data?.status === "connected" || data?.configured
-      setWaStatus(ok ? "ready" : "no-key")
-    } catch {
-      setWaStatus("no-key")
-    } finally {
-      setWaLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (step === "whatsapp" && waStatus === "idle") checkWhatsApp()
-  }, [step, waStatus, checkWhatsApp])
 
   const finishOnboarding = useCallback(async () => {
     const tid = getCookie("bz_tenant") || merchantId
@@ -300,42 +274,9 @@ export default function OnboardingPage() {
                   {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
                   {creating ? "Creating..." : "Continue"}
                 </button>
-              </div>
-            </div>
-          ) : step === "whatsapp" ? (
-            <div className="rounded-2xl border border-border bg-card shadow-lg p-7">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-green-500/10 text-green-600 dark:text-green-400">
-                  <MessageCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-card-foreground">Connect WhatsApp</h1>
-                  <p className="text-xs text-muted-foreground">BillZo sends reminders here</p>
-                </div>
-              </div>
-              {waStatus === "no-key" ? (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">WhatsApp isn&apos;t configured yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">You can still finish setup and configure WhatsApp later from Settings. Reminders will stay pending until it&apos;s connected.</p>
-                </div>
-              ) : waStatus === "ready" ? (
-                <div className="flex items-center gap-2 rounded-xl border border-success/30 bg-success/5 p-4 text-success">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <span className="text-sm font-medium">WhatsApp is connected</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-xl border border-border p-4 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Checking connection...
-                </div>
-              )}
-              <div className="mt-5 flex gap-3">
-                <button onClick={() => setStep("business")} className="px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2">
-                  <ArrowLeft className="h-4 w-4" /> Back
-                </button>
-                <button onClick={finishOnboarding} disabled={waLoading}
-                  className="flex-1 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 transition-colors shadow-sm">
-                  {waStatus === "no-key" ? "Finish setup" : "Continue"} <ArrowRight className="h-4 w-4" />
-                </button>
+                <p className="text-[11px] text-muted-foreground text-center mt-3">
+                  BillZo sends payment reminders on your behalf via its own WhatsApp channel — no setup needed.
+                </p>
               </div>
             </div>
           ) : (
@@ -384,7 +325,7 @@ export default function OnboardingPage() {
               )}
               {importError && <p className="mt-3 text-sm text-destructive">{importError}</p>}
               <div className="mt-5 flex gap-3">
-                <button onClick={() => setStep("whatsapp")} className="px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2">
+                <button onClick={() => setStep("business")} className="px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-accent transition-colors flex items-center gap-2">
                   <ArrowLeft className="h-4 w-4" /> Back
                 </button>
                 <button onClick={submitImport} disabled={importing || (importMode === "csv" && importState.loading)}

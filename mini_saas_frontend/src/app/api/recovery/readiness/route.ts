@@ -53,7 +53,16 @@ export async function GET(request: NextRequest) {
     ).length
 
     const whatsappConfig = (tenantRes.data as any)?.whatsapp_config
-    const whatsappConnected = Boolean(whatsappConfig?.gupshupApiKey || whatsappConfig?.connected)
+    // During the pilot BillZo owns the Reminder Channel (Meta WABA) as infrastructure.
+    // The merchant cannot influence it, so we only confirm the feature is enabled at the
+    // operator level via env presence — the worker itself fails fast at boot if Meta is
+    // misconfigured, so a started worker already implies reminders are operational.
+    const reminderChannelActive = Boolean(
+      whatsappConfig?.gupshupApiKey ||
+        whatsappConfig?.connected ||
+        process.env.NEXT_PUBLIC_REMINDERS_ENABLED === 'true',
+    )
+    const whatsappConnected = reminderChannelActive
 
     const recoverableAmount = invoiceRows
       .filter((r) => r.status !== 'paid' && r.due_date != null && new Date(r.due_date).getTime() < new Date(now).getTime())

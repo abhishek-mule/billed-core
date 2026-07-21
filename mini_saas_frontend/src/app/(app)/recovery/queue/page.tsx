@@ -18,7 +18,6 @@ import { HistoryDrawer, prefetchCustomerTimeline } from "@/components/billzo/His
 import { PageShell } from "@/components/billzo/PageShell"
 import { ErrorState } from "@/components/billzo/ErrorState"
 import { Skeleton, SkeletonCard } from "@/components/billzo/Skeleton"
-import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/recovery-risk"
 
 interface PriorityCase {
   caseId: string
@@ -97,16 +96,6 @@ function formatSignal(c: PriorityCase): string {
   if (c.ignoredReminders >= 3) return 'Needs call'
   if (c.oldestOverdueDays > 0) return `Overdue by ${c.oldestOverdueDays}d`
   return 'Pending'
-}
-
-/** Unified risk for a queue case, used for the recommended-next-action chip. */
-function getCaseRisk(c: PriorityCase) {
-  return getCollectionRisk({
-    overdueDays: c.oldestOverdueDays,
-    outstanding: true,
-    brokenPromises: c.brokenPromises,
-    ignoredReminders: c.ignoredReminders,
-  })
 }
 
 function formatLastContact(dateStr: string | null | undefined): string {
@@ -595,16 +584,6 @@ function CustomerCard({
           {c.lastPaymentAt && <CheckCircle2 size={11} />}
           {formatSignal}
         </span>
-        {(() => {
-          const risk = getCaseRisk(c)
-          if (risk.rank <= 1) return null
-          const tone = COLLECTION_RISK_TONE_CLASSES[risk.tone]
-          return (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${tone.text} ${tone.bg}`}>
-              {risk.label}: {risk.recommendation}
-            </span>
-          )
-        })()}
       </div>
 
       {/* Journey steps */}
