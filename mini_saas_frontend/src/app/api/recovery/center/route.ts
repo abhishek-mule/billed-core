@@ -188,6 +188,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[RecoveryCenter] failed', err)
-    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load recovery center' }, { status: 500 })
   }
 }

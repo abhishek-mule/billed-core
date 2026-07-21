@@ -65,6 +65,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ windowDays, analytics })
   } catch (err: any) {
     console.error('[OutcomeAnalytics] failed', err)
-    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load outcome analytics' }, { status: 500 })
   }
 }

@@ -233,6 +233,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result)
   } catch (err: any) {
     console.error('[WorkQueue] failed', err)
-    return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load work queue' }, { status: 500 })
   }
 }

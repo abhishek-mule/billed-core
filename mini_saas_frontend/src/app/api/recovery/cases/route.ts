@@ -98,6 +98,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[RecoveryCase] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load recovery case' }, { status: 500 })
   }
 }
