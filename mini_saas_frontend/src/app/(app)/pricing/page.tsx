@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Check, ArrowUpRight, X } from "lucide-react"
+import { Loader2, Check, ArrowUpRight, X, ChevronDown } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { Modal } from "@/components/billzo/Modal"
 
@@ -18,7 +18,7 @@ const PLANS = [
       'Unlimited invoices',
       'Unlimited customers',
       'Payment links',
-      'Dashboard',
+      'Basic dashboard',
       'Recover up to 5 overdue invoices / month',
     ],
     cta: 'Start Free',
@@ -30,12 +30,11 @@ const PLANS = [
     price: 299,
     desc: 'Best for most merchants.',
     features: [
-      'Everything in Free',
-      'Automatic WhatsApp recovery',
+      'Recover up to 100 overdue invoices every month',
+      'Automatic WhatsApp payment reminders',
       'Recovery Queue',
       'Payment tracking',
       'Recovery history',
-      'Automatically follow up on up to 100 overdue invoices every month',
     ],
     cta: 'Start Recovering',
     highlight: true,
@@ -46,13 +45,13 @@ const PLANS = [
     price: 499,
     desc: 'Growing business.',
     features: [
-      'Everything in Starter',
       'Recover up to 250 overdue invoices / month',
-      'Priority reminder processing',
+      'Priority reminder scheduling',
       'Advanced recovery reports',
+      'Merchant memory & follow-up history',
       'Faster support',
     ],
-    cta: 'Request Access',
+    cta: 'Join Waitlist',
     highlight: false,
   },
   {
@@ -61,10 +60,9 @@ const PLANS = [
     price: 1499,
     desc: 'Teams & branches.',
     features: [
-      'Everything in Growth',
       'Recover 1000+ overdue invoices / month',
-      'Team access',
-      'Branch support',
+      'Multi-user team access',
+      'Multiple business locations',
       'Priority support',
       'Early access to new features',
     ],
@@ -77,13 +75,13 @@ const PLANS = [
     price: null,
     desc: 'Custom recovery workflows.',
     features: [
-      'Custom recovery capacity',
+      'Unlimited recovery workflows',
       'Dedicated onboarding',
       'SLA support',
       'Custom integrations',
       'Volume pricing',
     ],
-    cta: 'Talk to Us',
+    cta: 'Contact Sales',
     highlight: false,
   },
 ]
@@ -316,8 +314,8 @@ export default function PricingPage() {
               </div>
 
               {plan.code === 'starter' && (
-                <p className="mt-2 text-xs font-medium text-success">
-                  Recover ₹50,000+ for less than ₹10/day
+                <p className="mt-2 text-sm font-bold text-success">
+                  Recover ₹50,000+ for less than <span className="text-base">₹10/day</span>
                 </p>
               )}
 
@@ -375,6 +373,53 @@ export default function PricingPage() {
           <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Annual billing saves ~20%</li>
           <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Data export always yours</li>
         </ul>
+      </div>
+
+      <div className="mx-auto mt-10 max-w-3xl">
+        <h2 className="text-center text-lg font-semibold">Frequently Asked Questions</h2>
+        <div className="mt-4 space-y-4">
+          <details className="group rounded-xl border border-border bg-card p-4">
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-foreground">
+              What is an overdue recovery?
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              An overdue recovery is when BillZo automatically follows up with a customer who
+              hasn&apos;t paid on time. Each overdue invoice under recovery counts as one
+              recovery — whether it takes 1 reminder or 5 to collect.
+            </p>
+          </details>
+          <details className="group rounded-xl border border-border bg-card p-4">
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-foreground">
+              Do unused recoveries roll over?
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              No. Recovery capacity resets at the start of each billing cycle. Upgrade to a
+              higher plan if you regularly need more.
+            </p>
+          </details>
+          <details className="group rounded-xl border border-border bg-card p-4">
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-foreground">
+              Can I upgrade anytime?
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Yes. Upgrades take effect immediately and you&apos;re only charged the prorated
+              difference for the rest of the month. Downgrades apply at the next billing cycle.
+            </p>
+          </details>
+          <details className="group rounded-xl border border-border bg-card p-4">
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-foreground">
+              Can I cancel anytime?
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Absolutely. Cancel from Settings and your plan stays active until the end of the
+              billing period. Your data is always yours to export.
+            </p>
+          </details>
+        </div>
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
