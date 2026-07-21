@@ -11,87 +11,93 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
-  const { token } = await params
+  try {
+    const { token } = await params
 
-  const payload = verifyUpiToken(token)
-  if (!payload) {
-    return NextResponse.json({ error: 'Invalid or expired link' }, { status: 400 })
-  }
+    const payload = verifyUpiToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid or expired link' }, { status: 400 })
+    }
 
-  const { invoiceId, tenantId, amount, upiId } = payload
+    const { invoiceId, tenantId, amount, upiId } = payload
 
-  if (!upiId) {
-    return NextResponse.json({ error: 'Payment link is misconfigured — missing UPI ID' }, { status: 400 })
-  }
+    if (!upiId) {
+      return NextResponse.json({ error: 'Payment link is misconfigured — missing UPI ID' }, { status: 400 })
+    }
 
-  const now = new Date().toISOString()
+    const now = new Date().toISOString()
 
-  // Find the latest billzo_message_id for this invoice
-  const { data: latest } = await supabaseAdmin
-    .from('whatsapp_events')
-    .select('billzo_message_id')
-    .eq('invoice_id', invoiceId)
-    .eq('tenant_id', tenantId)
-    .not('billzo_message_id', 'is', null)
-    .order('event_sequence', { ascending: false })
-    .limit(1)
-    .single()
+    const { data: latest } = await supabaseAdmin
+      .from('whatsapp_events')
+      .select('billzo_message_id')
+      .eq('invoice_id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .not('billzo_message_id', 'is', null)
+      .order('event_sequence', { ascending: false })
+      .limit(1)
+      .single()
 
-  const billzoMessageId = latest?.billzo_message_id || `upi_${invoiceId}`
-  const eventId = crypto.randomUUID()
+    const billzoMessageId = latest?.billzo_message_id || `upi_${invoiceId}`
+    const eventId = crypto.randomUUID()
 
-  await supabaseAdmin
-    .from('whatsapp_events')
-    .insert({
-      id: eventId,
-      billzo_message_id: billzoMessageId,
-      event_sequence: Number(generateEventSequence()),
+    await supabaseAdmin
+      .from('whatsapp_events')
+      .insert({
+        id: eventId,
+        billzo_message_id: billzoMessageId,
+        event_sequence: Number(generateEventSequence()),
+        status: 'clicked_upi',
+        invoice_id: invoiceId,
+        tenant_id: tenantId,
+        provider: 'upi',
+        direction: 'outbound',
+        event_layer: 'behavioral',
+        occurred_at: now,
+        created_at: now,
+        sync_status: 'synced',
+      })
+
+    await emitWhatsAppStatusUpdated({
+      eventId,
+      billzoMessageId,
+      invoiceId,
+      tenantId,
       status: 'clicked_upi',
-      invoice_id: invoiceId,
-      tenant_id: tenantId,
       provider: 'upi',
-      direction: 'outbound',
-      event_layer: 'behavioral',
-      occurred_at: now,
-      created_at: now,
-      sync_status: 'synced',
+      providerMessageId: null,
+      timestamp: now,
     })
 
-  await emitWhatsAppStatusUpdated({
-    eventId,
-    billzoMessageId,
-    invoiceId,
-    tenantId,
-    status: 'clicked_upi',
-    provider: 'upi',
-    providerMessageId: null,
-    timestamp: now,
-  })
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('customer_id')
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
 
-  // Dual-write: log payment_request to collection_actions
-  const { data: invoice } = await supabaseAdmin
-    .from('invoices')
-    .select('customer_id')
-    .eq('id', invoiceId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
+    await supabaseAdmin.from('collection_actions').insert({
+      id: `CA_${crypto.randomUUID()}`,
+      tenant_id: tenantId,
+      customer_id: invoice?.customer_id || null,
+      invoice_ids: [invoiceId],
+      action_type: 'payment_request',
+      status: 'completed',
+      source: 'customer',
+      provider: 'upi',
+      amount,
+      completed_at: now,
+      reason: 'Customer clicked UPI payment link',
+      priority: 5,
+      metadata: { billzoMessageId, whatsappEventId: eventId },
+    }).maybeSingle()
 
-  await supabaseAdmin.from('collection_actions').insert({
-    id: `CA_${crypto.randomUUID()}`,
-    tenant_id: tenantId,
-    customer_id: invoice?.customer_id || null,
-    invoice_ids: [invoiceId],
-    action_type: 'payment_request',
-    status: 'completed',
-    source: 'customer',
-    provider: 'upi',
-    amount,
-    completed_at: now,
-    reason: 'Customer clicked UPI payment link',
-    priority: 5,
-    metadata: { billzoMessageId, whatsappEventId: eventId },
-  }).maybeSingle()
-
-  const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('BillZo')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + invoiceId)}`
-  return NextResponse.redirect(upiUrl, 302)
+    const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('BillZo')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + invoiceId)}`
+    return NextResponse.redirect(upiUrl, 302)
+  } catch (err) {
+    console.error('[PayToken] Error processing payment link:', err)
+    return NextResponse.json(
+      { error: 'Something went wrong. Please try again or contact support.' },
+      { status: 500 },
+    )
+  }
 }
