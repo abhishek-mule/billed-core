@@ -1,0 +1,136 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import {
+  Store, CreditCard, MessageCircle, Crown, Users, Settings,
+  HelpCircle, MessageSquare, LogOut, Wifi, CheckCircle2,
+  XCircle, IndianRupee, Activity,
+} from 'lucide-react'
+import { getDiceBearAvatarUrl } from './Avatar'
+import { getCookie } from '@/lib/cookies'
+import { cn } from '@/lib/utils'
+
+interface ProfileMenuProps {
+  onClose: () => void
+  onLogout: () => void
+}
+
+interface ConnectionStatus {
+  label: string
+  icon: typeof Wifi
+  ok: boolean
+}
+
+export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
+  const [userName, setUserName] = useState('')
+  const [outstanding, setOutstanding] = useState<number | null>(null)
+
+  useEffect(() => {
+    const name = getCookie('bz_tenant_name')
+    setUserName(name ? decodeURIComponent(name) : 'My Shop')
+
+    fetch('/api/recovery/center')
+      .then(r => r.json())
+      .then(d => {
+        const total = d?.underFollowUp ?? d?.needsAction?.reduce?.((s: number, c: any) => s + (c.outstanding || 0), 0) ?? null
+        setOutstanding(total)
+      })
+      .catch(() => {})
+  }, [])
+
+  const connections: ConnectionStatus[] = [
+    { label: 'WhatsApp', icon: MessageCircle, ok: true },
+    { label: 'Payment Gateway', icon: CreditCard, ok: true },
+    { label: 'UPI', icon: IndianRupee, ok: true },
+  ]
+
+  const menuItems = [
+    { href: '/settings/business', icon: Store, label: 'Business Profile', sub: 'GST, Address, Logo' },
+    { href: '/settings/billing', icon: CreditCard, label: 'Payment Settings', sub: 'UPI, Razorpay, Bank' },
+    { href: '/settings/whatsapp', icon: MessageCircle, label: 'WhatsApp Connection', sub: 'Connected ✓' },
+    { href: '/settings/billing', icon: Crown, label: 'Subscription', sub: 'Starter Plan' },
+    { href: '/settings/team', icon: Users, label: 'Team Members', sub: 'Staff & Permissions' },
+    { href: '/settings', icon: Activity, label: 'Usage', sub: 'Invoices · Reminder balance' },
+    { href: '/settings', icon: Settings, label: 'Settings' },
+    { href: '/settings', icon: HelpCircle, label: 'Help & Support' },
+    { href: '/settings', icon: MessageSquare, label: 'Send Feedback' },
+  ]
+
+  return (
+    <div className="bz-modal-backdrop" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        onClick={e => e.stopPropagation()}
+        style={{ maxHeight: 'calc(100dvh - 2rem)', overflowY: 'auto' }}
+      >
+        {/* Merchant header */}
+        <div className="p-4 flex items-center gap-3 border-b border-border">
+          <img src={getDiceBearAvatarUrl(userName, 'glyphs')} alt="" className="w-10 h-10 rounded-full shrink-0 bg-muted/20" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-foreground truncate">{userName}</p>
+            <p className="text-xs text-muted-foreground truncate">Sharma Hardware</p>
+          </div>
+        </div>
+
+        {/* Outstanding stat */}
+        {outstanding !== null && outstanding > 0 && (
+          <div className="px-4 py-3 bg-primary/5 border-b border-border">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding Today</p>
+            <p className="text-xl font-bold text-primary mt-0.5">₹{outstanding.toLocaleString('en-IN')}</p>
+          </div>
+        )}
+
+        {/* Connection health */}
+        <div className="px-4 py-3 border-b border-border space-y-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Wifi className="w-3 h-3" />
+            System Status
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {connections.map(c => (
+              <div key={c.label} className="flex items-center gap-1.5">
+                {c.ok
+                  ? <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
+                  : <XCircle className="w-3 h-3 text-danger shrink-0" />
+                }
+                <span className="text-xs text-muted-foreground">{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Menu items */}
+        <div className="py-2">
+          {menuItems.map((item, i) => (
+            <Link
+              key={i}
+              href={item.href}
+              onClick={onClose}
+              className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors"
+            >
+              <item.icon className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-foreground">{item.label}</span>
+                {item.sub && (
+                  <span className="text-xs text-muted-foreground ml-2">{item.sub}</span>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {/* Logout */}
+        <div className="border-t border-border p-2">
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-sm text-danger hover:bg-danger-soft transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

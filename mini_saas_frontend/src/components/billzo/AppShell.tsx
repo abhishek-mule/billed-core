@@ -8,6 +8,7 @@ import {
   Users, Package, BarChart3, Settings, Menu,
   LogOut, ChevronDown, WifiOff, Zap, CreditCard, Target,
 } from 'lucide-react'
+import { ProfileMenu } from './ProfileMenu'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
 import { getDiceBearAvatarUrl } from './Avatar'
@@ -277,30 +278,13 @@ function BottomNav({ pathname }: { pathname: string }) {
   )
 }
 
-// ─── Logout modal ─────────────────────────────────────────────────────────────
-
-function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div className="bz-modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="logout-title">
-      <div className="bz-modal" onClick={e => e.stopPropagation()}>
-        <h2 id="logout-title" className="bz-modal-title">Sign out?</h2>
-        <p className="bz-modal-body">Your local data stays on this device. You can sign back in anytime.</p>
-        <div className="bz-modal-actions">
-          <Button variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
-          <Button variant="danger"  onClick={onConfirm} className="flex-1">Sign out</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen]   = useState(false)
   const [isOnline, setIsOnline]       = useState(true)
-  const [showLogout, setShowLogout]   = useState(false)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [userName, setUserName]       = useState<string>()
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
@@ -352,11 +336,11 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
   return (
     <>
       <div className="bz-shell">
-        <Sidebar pathname={pathname} onLogout={() => setShowLogout(true)} userName={userName} />
-        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowLogout(true)} pathname={pathname} userName={userName} />
+        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} userName={userName} />
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowLogout(true)} userName={userName} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">
@@ -370,7 +354,7 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
         </div>
       </div>
 
-      {showLogout && <LogoutModal onCancel={() => setShowLogout(false)} onConfirm={() => { setShowLogout(false); doLogout() }} />}
+      {showProfileMenu && <ProfileMenu onClose={() => setShowProfileMenu(false)} onLogout={() => { setShowProfileMenu(false); doLogout() }} />}
     </>
   )
 }
