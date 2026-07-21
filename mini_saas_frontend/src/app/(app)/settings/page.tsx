@@ -87,10 +87,10 @@ export default function SettingsPage() {
     },
     {
       id: 'billing',
-      href: '/settings/billing',
+      href: '/pricing',
       icon: <Receipt className={ICON_CLASS} />,
-      title: 'Billing & Invoice',
-      description: 'Default actions, print format, white-label',
+      title: 'Plans & Billing',
+      description: 'Manage your subscription, invoices, and billing details',
     },
     {
       id: 'whatsapp',

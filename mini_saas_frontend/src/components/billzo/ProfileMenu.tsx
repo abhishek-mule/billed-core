@@ -5,11 +5,20 @@ import Link from 'next/link'
 import {
   Store, CreditCard, MessageCircle, Crown, Users, Settings,
   HelpCircle, MessageSquare, LogOut, Wifi, CheckCircle2,
-  XCircle, IndianRupee, Activity,
+  XCircle, IndianRupee, ArrowRight, BarChart3,
 } from 'lucide-react'
 import { getDiceBearAvatarUrl } from './Avatar'
 import { getCookie } from '@/lib/cookies'
-import { cn } from '@/lib/utils'
+import { getTenantId } from '@/lib/billzo/tenant'
+import { db } from '@/lib/billzo/db'
+import { PLAN_LIMITS } from '@/lib/billzo/plan-limits'
+
+const PLAN_LABELS: Record<string, string> = {
+  starter: 'Starter Plan',
+  pro: 'Growth Plan',
+  business: 'Business Plan',
+  enterprise: 'Enterprise',
+}
 
 interface ProfileMenuProps {
   onClose: () => void
@@ -25,10 +34,19 @@ interface ConnectionStatus {
 export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
   const [userName, setUserName] = useState('')
   const [outstanding, setOutstanding] = useState<number | null>(null)
+  const [plan, setPlan] = useState<string>('starter')
+  const [usageCount, setUsageCount] = useState<number>(0)
 
   useEffect(() => {
     const name = getCookie('bz_tenant_name')
     setUserName(name ? decodeURIComponent(name) : 'My Shop')
+
+    const tid = getTenantId()
+    if (tid) {
+      db().tenants.get(tid).then(t => {
+        if (t?.plan) setPlan(t.plan)
+      })
+    }
 
     fetch('/api/recovery/center')
       .then(r => r.json())
@@ -38,6 +56,10 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
       })
       .catch(() => {})
   }, [])
+
+  const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.reminders ?? 3
+  const planLabel = PLAN_LABELS[plan] ?? 'Starter Plan'
+  const daysLeft = 23
 
   const connections: ConnectionStatus[] = [
     { label: 'WhatsApp', icon: MessageCircle, ok: true },
@@ -49,9 +71,9 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
     { href: '/settings/business', icon: Store, label: 'Business Profile', sub: 'GST, Address, Logo' },
     { href: '/settings/billing', icon: CreditCard, label: 'Payment Settings', sub: 'UPI, Razorpay, Bank' },
     { href: '/settings/whatsapp', icon: MessageCircle, label: 'WhatsApp Connection', sub: 'Connected ✓' },
-    { href: '/settings/billing', icon: Crown, label: 'Subscription', sub: 'Starter Plan' },
+    { href: '/pricing', icon: Crown, label: 'Plans & Billing', sub: `${planLabel} · ${daysLeft}d left` },
     { href: '/settings/team', icon: Users, label: 'Team Members', sub: 'Staff & Permissions' },
-    { href: '/settings', icon: Activity, label: 'Usage', sub: 'Invoices · Reminder balance' },
+    { href: '/settings', icon: BarChart3, label: 'Usage', sub: 'Invoices · Reminder balance' },
     { href: '/settings', icon: Settings, label: 'Settings' },
     { href: '/settings', icon: HelpCircle, label: 'Help & Support' },
     { href: '/settings', icon: MessageSquare, label: 'Send Feedback' },
@@ -80,6 +102,29 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
             <p className="text-xl font-bold text-primary mt-0.5">₹{outstanding.toLocaleString('en-IN')}</p>
           </div>
         )}
+
+        {/* Subscription card */}
+        <Link
+          href="/pricing"
+          onClick={onClose}
+          className="block px-4 py-3 border-b border-border hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subscription</span>
+            <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-bold text-foreground">{planLabel}</p>
+          <div className="flex items-center gap-3 mt-1.5">
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.min(100, (usageCount / limit) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">{usageCount}/{limit} actions</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">{daysLeft} days remaining</p>
+        </Link>
 
         {/* Connection health */}
         <div className="px-4 py-3 border-b border-border space-y-2">
