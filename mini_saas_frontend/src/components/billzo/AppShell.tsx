@@ -8,8 +8,10 @@ import {
   Users, Package, BarChart3, Settings, Menu,
   LogOut, ChevronDown, WifiOff, Zap, CreditCard, Target,
 } from 'lucide-react'
+import { ProfileMenu } from './ProfileMenu'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
+import { getDiceBearAvatarUrl } from './Avatar'
 import '@/styles/app-shell.css'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ function Sidebar({
 
       <div className="bz-sidebar-footer">
         <button className="bz-user-row" onClick={onLogout} title="Sign out">
-          <div className="bz-user-avatar" aria-hidden="true">{ini}</div>
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
           <div className="bz-user-info">
             <span className="bz-user-name">{userName || 'My Shop'}</span>
           </div>
@@ -136,13 +138,13 @@ function Sidebar({
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function TopBar({
-  title, onMobileMenu, userName,
+  title, onMobileMenu, onLogout, userName,
 }: {
   title?: string
   onMobileMenu: () => void
+  onLogout: () => void
   userName?: string
 }) {
-  const ini = initials(userName)
   return (
     <header className="bz-topbar">
       <div className="bz-topbar-left">
@@ -163,8 +165,8 @@ function TopBar({
           <Bell size={16} />
         </Link>
 
-        <button className="bz-org-btn" aria-label="Switch organisation">
-          <div className="bz-topbar-avatar" aria-hidden="true">{ini}</div>
+        <button className="bz-org-btn" onClick={onLogout} aria-label="Sign out">
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
           <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
           <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
         </button>
@@ -176,10 +178,11 @@ function TopBar({
 // ─── Mobile drawer ────────────────────────────────────────────────────────────
 
 function MobileDrawer({
-  open, onClose, pathname, userName,
+  open, onClose, onLogout, pathname, userName,
 }: {
   open: boolean
   onClose: () => void
+  onLogout: () => void
   pathname: string
   userName?: string
 }) {
@@ -226,13 +229,13 @@ function MobileDrawer({
         </nav>
 
         <div className="bz-drawer-footer">
-          <div className="bz-user-row" style={{ cursor: 'default' }}>
-            <div className="bz-user-avatar">{ini}</div>
+          <button className="bz-user-row" onClick={onLogout} style={{ width: '100%', textAlign: 'left' }}>
+            <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
             <div className="bz-user-info">
               <span className="bz-user-name">{userName || 'My Shop'}</span>
-              <span className="bz-user-email" style={{ fontSize: 10.5 }}>All synced</span>
             </div>
-          </div>
+            <LogOut size={13} className="bz-logout-icon" />
+          </button>
         </div>
       </div>
     </>
@@ -275,30 +278,13 @@ function BottomNav({ pathname }: { pathname: string }) {
   )
 }
 
-// ─── Logout modal ─────────────────────────────────────────────────────────────
-
-function LogoutModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div className="bz-modal-backdrop" onClick={onCancel} role="dialog" aria-modal="true" aria-labelledby="logout-title">
-      <div className="bz-modal" onClick={e => e.stopPropagation()}>
-        <h2 id="logout-title" className="bz-modal-title">Sign out?</h2>
-        <p className="bz-modal-body">Your local data stays on this device. You can sign back in anytime.</p>
-        <div className="bz-modal-actions">
-          <Button variant="outline" onClick={onCancel} className="flex-1">Cancel</Button>
-          <Button variant="danger"  onClick={onConfirm} className="flex-1">Sign out</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── AppShell ─────────────────────────────────────────────────────────────────
 
 export function AppShell({ children, title }: { children: React.ReactNode; title?: string }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen]   = useState(false)
   const [isOnline, setIsOnline]       = useState(true)
-  const [showLogout, setShowLogout]   = useState(false)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [userName, setUserName]       = useState<string>()
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
@@ -350,11 +336,11 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
   return (
     <>
       <div className="bz-shell">
-        <Sidebar pathname={pathname} onLogout={() => setShowLogout(true)} userName={userName} />
-        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} pathname={pathname} userName={userName} />
+        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} userName={userName} />
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} userName={userName} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">
@@ -368,7 +354,7 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
         </div>
       </div>
 
-      {showLogout && <LogoutModal onCancel={() => setShowLogout(false)} onConfirm={() => { setShowLogout(false); doLogout() }} />}
+      {showProfileMenu && <ProfileMenu onClose={() => setShowProfileMenu(false)} onLogout={() => { setShowProfileMenu(false); doLogout() }} />}
     </>
   )
 }
