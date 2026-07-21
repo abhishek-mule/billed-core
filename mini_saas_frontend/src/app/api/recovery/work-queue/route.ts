@@ -31,6 +31,37 @@ export async function GET(request: NextRequest) {
 
     const caseByCustomer = new Map<string, any>((cases || []).map((c: any) => [c.customer_id, c] as [string, any]))
 
+    // ── Single source of truth: derive amounts from invoices for every case ──
+    const caseCustomerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
+    const { data: invRows } = caseCustomerIds.length
+      ? await supabaseAdmin
+          .from('invoices')
+          .select('customer_id, total, paid_amount, status, due_date')
+          .eq('tenant_id', tenantId)
+          .in('customer_id', caseCustomerIds)
+          .in('status', ['unpaid', 'overdue', 'partial'])
+      : { data: [] as any[] }
+    const invGrouped = new Map<string, any[]>()
+    for (const inv of invRows || []) {
+      const arr = invGrouped.get(inv.customer_id) || []
+      arr.push(inv)
+      invGrouped.set(inv.customer_id, arr)
+    }
+    for (const c of cases || []) {
+      const invs = invGrouped.get(c.customer_id) || []
+      c.total_outstanding = invs.reduce(
+        (s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0,
+      )
+      const overdueInvs = invs.filter(
+        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+      )
+      c.total_overdue = overdueInvs.length > 0
+        ? Math.max(...overdueInvs.map((i: any) =>
+            Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
+          ))
+        : 0
+    }
+
     // ── All collection actions for the customer set ──
     const { data: actions } = await supabaseAdmin
       .from('collection_actions')

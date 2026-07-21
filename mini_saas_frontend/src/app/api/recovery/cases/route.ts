@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Recovery case not found' }, { status: 404 })
     }
 
+    // Override total_overdue with invoice-derived days (single source of truth)
+    recoveryCase.total_overdue = metrics.oldestOverdueDays
+
     // Get customer since date
     const { data: customer } = await supabaseAdmin
       .from('customers')

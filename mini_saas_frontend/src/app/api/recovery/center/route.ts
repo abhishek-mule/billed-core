@@ -58,9 +58,14 @@ export async function GET(request: NextRequest) {
     const invoiceAmounts = (custId: string) => {
       const invs = invByCust.get(custId) || []
       const out = invs.reduce((s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0)
-      const ovd = invs
-        .filter((i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
-        .reduce((s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0)
+      const overdueInvs = invs.filter(
+        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+      )
+      const ovd = overdueInvs.length > 0
+        ? Math.max(...overdueInvs.map((i: any) =>
+            Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
+          ))
+        : 0
       return { out, ovd }
     }
 

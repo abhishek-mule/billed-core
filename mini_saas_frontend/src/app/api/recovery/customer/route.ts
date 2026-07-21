@@ -150,9 +150,14 @@ export async function GET(request: NextRequest) {
     const invoiceOutstanding = (i: any) =>
       Math.max(0, (Number(i.grand_total) || 0) - (Number(i.paid_amount) || 0))
     const outstanding = openInvoices.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
-    const overdue = openInvoices
-      .filter((i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
-      .reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
+    const overdueInvs = openInvoices.filter(
+      (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+    )
+    const overdue = overdueInvs.length > 0
+      ? Math.max(...overdueInvs.map((i: any) =>
+          Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
+        ))
+      : 0
     const promiseDate = rc?.promise_to_pay_date ?? null
 
     return NextResponse.json({
