@@ -9,6 +9,7 @@ import {
   Mail, MoreHorizontal, Wallet, TrendingUp, Hand, CalendarClock, IndianRupee,
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
+import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar"
 import { db } from "@/lib/billzo/db"
 
 import { formatINR } from "@/lib/utils"
@@ -295,11 +296,7 @@ export default function PartyDetailPage() {
         {/* Party header */}
         <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
           <div className="flex items-start gap-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shrink-0 ${
-              pending > 0 ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
-            }`}>
-              {customer.name?.charAt(0)}
-            </div>
+            <img src={getDiceBearAvatarUrl(customer.name || 'Customer', 'shapes')} alt="" className="w-12 h-12 rounded-full shrink-0 bg-muted/20" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 {editing ? (

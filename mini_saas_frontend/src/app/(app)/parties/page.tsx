@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { EmptyState } from "@/components/billzo/EmptyState"
+import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
@@ -148,11 +149,7 @@ function PartyCard({ party, isSelected, onSelect }: {
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-          <span className="text-sm font-semibold text-muted-foreground">
-            {party.name.charAt(0).toUpperCase()}
-          </span>
-        </div>
+        <img src={getDiceBearAvatarUrl(party.name, 'shapes')} alt="" className="w-9 h-9 rounded-full shrink-0 mt-0.5 bg-muted/20" loading="lazy" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <p className="font-medium text-foreground truncate">{party.name}</p>
@@ -205,11 +202,7 @@ function PartyDetail({ party, onBack }: {
       {/* Party header */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-            <span className="text-lg font-bold text-muted-foreground">
-              {party.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
+          <img src={getDiceBearAvatarUrl(party.name, 'shapes')} alt="" className="w-12 h-12 rounded-full shrink-0 bg-muted/20" />
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-semibold text-foreground">{party.name}</h2>
             <p className="text-sm text-muted-foreground">{party.phone}</p>

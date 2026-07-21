@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
+import { getDiceBearAvatarUrl } from './Avatar'
 import '@/styles/app-shell.css'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ function Sidebar({
 
       <div className="bz-sidebar-footer">
         <button className="bz-user-row" onClick={onLogout} title="Sign out">
-          <div className="bz-user-avatar" aria-hidden="true">{ini}</div>
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
           <div className="bz-user-info">
             <span className="bz-user-name">{userName || 'My Shop'}</span>
           </div>
@@ -164,7 +165,7 @@ function TopBar({
         </Link>
 
         <button className="bz-org-btn" aria-label="Switch organisation">
-          <div className="bz-topbar-avatar" aria-hidden="true">{ini}</div>
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
           <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
           <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
         </button>
@@ -227,7 +228,7 @@ function MobileDrawer({
 
         <div className="bz-drawer-footer">
           <div className="bz-user-row" style={{ cursor: 'default' }}>
-            <div className="bz-user-avatar">{ini}</div>
+            <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
             <div className="bz-user-info">
               <span className="bz-user-name">{userName || 'My Shop'}</span>
               <span className="bz-user-email" style={{ fontSize: 10.5 }}>All synced</span>

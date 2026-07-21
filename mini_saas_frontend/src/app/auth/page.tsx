@@ -246,7 +246,6 @@ function RadialProgress({ value, size = 34 }: { value: number; size?: number }) 
           fill="none"
           strokeDasharray={c}
           strokeDashoffset={offset}
-          style={{ filter: "drop-shadow(0 0 3px rgba(74,222,128,0.5))" }}
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-[8px] font-ledger text-success">
@@ -256,77 +255,7 @@ function RadialProgress({ value, size = 34 }: { value: number; size?: number }) 
   )
 }
 
-// ── Abstract India geometric pattern SVG ──
 
-function IndiaPattern() {
-  return (
-    <svg
-      className="absolute inset-0 w-full h-full opacity-[0.04] pointer-events-none"
-      viewBox="0 0 800 600"
-      preserveAspectRatio="xMidYMid slice"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern id="india-grid" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
-          <polygon points="60,0 120,30 120,90 60,120 0,90 0,30" fill="none" stroke="white" strokeWidth="0.5" />
-          <polygon points="60,0 120,30 120,90 60,120 0,90 0,30" fill="none" stroke="white" strokeWidth="0.5" transform="translate(60,60)" />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#india-grid)" />
-      <g transform="translate(400,300) scale(1.1)" opacity="0.6" fill="none" stroke="white" strokeWidth="1">
-        <path d="
-          M-20,-80 L-30,-70 L-45,-65 L-55,-50
-          L-60,-35 L-70,-25 L-85,-15 L-95,5
-          L-100,20 L-95,35 L-85,45 L-70,55
-          L-55,65 L-40,85 L-25,95 L-10,100
-          L5,105 L20,100 L30,90 L40,75
-          L50,60 L55,45 L50,30 L45,15
-          L40,5 L45,-5 L55,-15 L60,-25
-          L55,-35 L50,-45 L45,-55 L35,-65
-          L20,-75 L5,-80 L-20,-80
-        " />
-      </g>
-    </svg>
-  )
-}
-
-// ── Animated Background Nodes ──
-
-function AnimatedBackground() {
-  return (
-    <svg
-      className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none"
-      viewBox="0 0 800 600"
-      preserveAspectRatio="xMidYMid slice"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-      </defs>
-      <line x1="120" y1="80" x2="250" y2="200" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
-      <line x1="250" y1="200" x2="400" y2="150" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
-      <line x1="400" y1="150" x2="550" y2="280" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
-      <line x1="550" y1="280" x2="680" y2="220" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.3" />
-      <line x1="120" y1="80" x2="300" y2="420" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
-      <line x1="680" y1="220" x2="500" y2="450" stroke="white" strokeWidth="0.5" strokeDasharray="2,4" opacity="0.2" />
-      <circle cx="120" cy="80" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
-      <circle cx="250" cy="200" r="2.5" fill="white" opacity="0.3" />
-      <circle cx="400" cy="150" r="3" fill="white" opacity="0.35" filter="url(#glow)" />
-      <circle cx="550" cy="280" r="2" fill="white" opacity="0.25" />
-      <circle cx="680" cy="220" r="3" fill="white" opacity="0.4" filter="url(#glow)" />
-      <circle cx="300" cy="420" r="2.5" fill="white" opacity="0.3" />
-      <circle cx="500" cy="450" r="2" fill="white" opacity="0.25" />
-      <circle cx="180" cy="140" r="1" fill="white" opacity="0.2" />
-      <circle cx="450" cy="90" r="1" fill="white" opacity="0.15" />
-      <circle cx="620" cy="350" r="1" fill="white" opacity="0.2" />
-      <circle cx="340" cy="380" r="1" fill="white" opacity="0.15" />
-      <circle cx="80" cy="280" r="1" fill="white" opacity="0.2" />
-      <circle cx="720" cy="100" r="1" fill="white" opacity="0.15" />
-      <circle cx="200" cy="480" r="1.2" fill="white" opacity="0.2" />
-      <circle cx="600" cy="500" r="1" fill="white" opacity="0.15" />
-    </svg>
-  )
-}
 
 // ── Live Recovery Journey Preview ──
 
@@ -343,7 +272,7 @@ function RecoveryJourneyPreview() {
     <div className="bg-white/[0.05] backdrop-blur-sm border border-white/[0.08] p-4">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <span className="w-1 h-1 rounded-full bg-success animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.5)]" />
+          <span className="w-1 h-1 rounded-full bg-success" />
           <span className="text-[9px] font-ledger text-white/40 uppercase tracking-[0.15em]">Live Recovery</span>
         </div>
         <span className="text-[8px] font-ledger text-white/25">#INV-4471</span>
@@ -469,9 +398,7 @@ function RecoveryEngineStatus() {
 function LeftPanel() {
   return (
     <div className="hidden lg:flex lg:w-[50%] relative overflow-hidden flex-col">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#0f1f3d] to-[#162d50]" />
-      <IndiaPattern />
-      <AnimatedBackground />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a1628] to-[#162d50]" />
 
       <div className="absolute top-0 left-0 right-0 h-1 flex">
         <div className="flex-1 bg-[#FF9933]" />
@@ -479,8 +406,8 @@ function LeftPanel() {
         <div className="flex-1 bg-[#138808]" />
       </div>
 
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-black/10">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-transparent pointer-events-none" />
 
         <div className="relative h-full flex flex-col items-center text-white">
           {/* Top section: logo, heading, description */}
