@@ -296,7 +296,7 @@ export default function PartyDetailPage() {
         {/* Party header */}
         <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
           <div className="flex items-start gap-4">
-            <img src={getDiceBearAvatarUrl(customer.name || 'Customer', 'shapes')} alt="" className="w-12 h-12 rounded-full shrink-0 bg-muted/20" />
+            <img src={getDiceBearAvatarUrl(customer.name || 'Customer')} alt="" className="w-12 h-12 rounded-full shrink-0 bg-muted/20" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 {editing ? (

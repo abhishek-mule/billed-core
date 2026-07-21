@@ -123,7 +123,7 @@ function Sidebar({
 
       <div className="bz-sidebar-footer">
         <button className="bz-user-row" onClick={onLogout} title="Sign out">
-          <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
           <div className="bz-user-info">
             <span className="bz-user-name">{userName || 'My Shop'}</span>
           </div>
@@ -165,7 +165,7 @@ function TopBar({
         </Link>
 
         <button className="bz-org-btn" onClick={onLogout} aria-label="Sign out">
-          <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
+          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
           <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
           <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
         </button>
@@ -229,7 +229,7 @@ function MobileDrawer({
 
         <div className="bz-drawer-footer">
           <button className="bz-user-row" onClick={onLogout} style={{ width: '100%', textAlign: 'left' }}>
-            <img src={getDiceBearAvatarUrl(userName || 'BillZo', 'shapes')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
+            <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
             <div className="bz-user-info">
               <span className="bz-user-name">{userName || 'My Shop'}</span>
             </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
-export function getDiceBearAvatarUrl(seed: string, style: 'glyphs' | 'shapes' = 'shapes'): string {
+export function getDiceBearAvatarUrl(seed: string, style: 'glyphs' | 'shapes' = 'glyphs'): string {
   const safeSeed = encodeURIComponent(seed.trim() || 'BillZo')
   return `https://api.dicebear.com/10.x/${style}/svg?seed=${safeSeed}`
 }
@@ -19,7 +19,7 @@ interface AvatarProps {
 export function Avatar({
   seed = 'BillZo',
   alt = 'avatar',
-  style = 'shapes',
+  style = 'glyphs',
   className,
   size = 40,
 }: AvatarProps) {
