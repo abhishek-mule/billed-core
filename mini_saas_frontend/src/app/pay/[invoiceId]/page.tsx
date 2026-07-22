@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Loader2, CheckCircle, XCircle, ArrowLeft, CreditCard } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, ArrowLeft, Copy, Check, ExternalLink, Smartphone } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/billzo/Card"
 
@@ -12,12 +12,14 @@ interface InvoiceInfo {
   total: number
   status: string
   customerName: string
-  customerPhone: string
   description: string
   dueDate: string
+  upiId: string
+  merchantName: string
+  upiLink: string
 }
 
-type PageState = "loading" | "ready" | "processing" | "success" | "error"
+type PageState = "loading" | "ready" | "success" | "error"
 
 export default function PayInvoicePage() {
   const params = useParams()
@@ -27,45 +29,34 @@ export default function PayInvoicePage() {
   const [state, setState] = useState<PageState>("loading")
   const [error, setError] = useState<string | null>(null)
   const [invoice, setInvoice] = useState<InvoiceInfo | null>(null)
-  const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    loadRazorpayScript()
     fetchInvoice()
   }, [])
-
-  const loadRazorpayScript = () => {
-    if (document.querySelector('script[src*="razorpay"]')) {
-      const checkLoaded = setInterval(() => {
-        if (typeof window !== "undefined" && (window as any).Razorpay) {
-          setRazorpayLoaded(true)
-          clearInterval(checkLoaded)
-        }
-      }, 500)
-      return () => clearInterval(checkLoaded)
-    }
-    const script = document.createElement("script")
-    script.src = "https://checkout.razorpay.com/v1/checkout.js"
-    script.async = true
-    script.onload = () => setRazorpayLoaded(true)
-    script.onerror = () => setError("Failed to load payment gateway")
-    document.body.appendChild(script)
-  }
 
   const fetchInvoice = async () => {
     try {
       const res = await fetch(`/api/invoices/${invoiceId}`, { cache: "no-store" })
       if (!res.ok) throw new Error("Invoice not found")
       const data = await res.json()
+
+      const upiId = data.upi_id || ""
+
       setInvoice({
         id: data.id,
         invoiceNumber: data.invoice_number || data.id.slice(-8),
         total: data.total,
         status: data.status,
         customerName: data.customer_name || "Customer",
-        customerPhone: data.customer_phone || "",
         description: data.description || `Invoice ${data.invoice_number || data.id.slice(-8)}`,
         dueDate: data.due_date || "",
+        upiId,
+        merchantName: data.merchant_name || "Business",
+        upiLink: upiId
+          ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(data.merchant_name || "Business")}&am=${data.total}&cu=INR&tn=${encodeURIComponent(`Invoice ${data.invoice_number || data.id.slice(-8)}`)}`
+          : "",
       })
       setState("ready")
     } catch (err) {
@@ -74,90 +65,59 @@ export default function PayInvoicePage() {
     }
   }
 
-  const handlePay = useCallback(async () => {
-    if (!invoice || !razorpayLoaded || !(window as any).Razorpay) {
-      setError("Payment gateway not ready. Please refresh.")
-      return
-    }
-
-    setState("processing")
-    setError(null)
-
+  const handleMarkPaid = async () => {
+    if (!invoice || submitting) return
+    setSubmitting(true)
     try {
-      const orderRes = await fetch("/api/payment/orders", {
+      const res = await fetch("/api/payment/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           invoiceId: invoice.id,
           amount: invoice.total,
-          customerName: invoice.customerName,
-          customerPhone: invoice.customerPhone,
+          source: "upi",
+          collectedVia: "customer_portal",
         }),
       })
-
-      const orderData = await orderRes.json()
-      if (!orderRes.ok || orderData.error) {
-        throw new Error(orderData.error || "Failed to create order")
-      }
-
-      const rzp = new (window as any).Razorpay({
-        key: orderData.key_id,
-        order_id: orderData.order_id,
-        amount: orderData.amount,
-        currency: orderData.currency || "INR",
-        name: invoice.customerName,
-        description: invoice.description,
-        prefill: {
-          name: invoice.customerName,
-          contact: invoice.customerPhone,
-        },
-        theme: { color: "#0d9488" },
-        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
-          setState("processing")
-          const verifyRes = await fetch("/api/payment/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              invoiceId: invoice.id,
-              amount: invoice.total,
-            }),
-          })
-
-          const verifyData = await verifyRes.json()
-          if (!verifyRes.ok || verifyData.error) {
-            throw new Error(verifyData.error || "Payment verification failed")
-          }
-
-          setState("success")
-        },
-        modal: {
-          ondismiss: () => {
-            setState("ready")
-          },
-        },
-      })
-
-      rzp.on("payment.failed", (response: { error: { description: string } }) => {
-        setError(`Payment failed: ${response.error.description}`)
-        setState("ready")
-      })
-
-      rzp.open()
+      if (!res.ok) throw new Error("Failed to record payment")
+      setState("success")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment failed")
-      setState("ready")
+      setError(err instanceof Error ? err.message : "Failed to record payment")
+    } finally {
+      setSubmitting(false)
     }
-  }, [invoice, razorpayLoaded])
+  }
+
+  const handleCopyUpi = () => {
+    if (!invoice?.upiId) return
+    navigator.clipboard.writeText(invoice.upiId)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   if (state === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (state === "success") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-success-soft">
+          <CheckCircle className="h-8 w-8 text-success" />
+        </div>
+        <div className="text-center">
+          <h1 className="text-lg font-bold text-foreground">Payment Submitted</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Thanks! Your payment of <span className="font-semibold">₹{invoice?.total.toLocaleString("en-IN")}</span> has been recorded.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The merchant will confirm receipt shortly.
+          </p>
+        </div>
       </div>
     )
   }
@@ -177,23 +137,6 @@ export default function PayInvoicePage() {
     )
   }
 
-  if (state === "success") {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-        <div className="grid h-16 w-16 place-items-center rounded-full bg-success-soft">
-          <CheckCircle className="h-8 w-8 text-success" />
-        </div>
-        <div className="text-center">
-          <h1 className="text-lg font-bold text-foreground">Payment Successful</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your payment of <span className="font-semibold">₹{invoice?.total.toLocaleString("en-IN")}</span> has been processed.
-          </p>
-        </div>
-        <Button onClick={() => router.push("/dashboard")}>Go to Dashboard</Button>
-      </div>
-    )
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -207,11 +150,15 @@ export default function PayInvoicePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Pay Invoice</CardTitle>
+            <CardTitle>Pay via UPI</CardTitle>
           </CardHeader>
           <CardContent>
             {invoice && (
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">To</span>
+                  <span className="text-sm font-medium">{invoice.merchantName}</span>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Invoice</span>
                   <span className="text-sm font-medium">{invoice.invoiceNumber}</span>
@@ -226,34 +173,69 @@ export default function PayInvoicePage() {
                     <span className="text-sm font-medium">{new Date(invoice.dueDate).toLocaleDateString()}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Status</span>
-                  <span className="text-sm font-medium capitalize">{invoice.status}</span>
-                </div>
 
                 {error && (
                   <div className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{error}</div>
                 )}
 
-                <Button
-                  onClick={handlePay}
-                  disabled={state === "processing" || !razorpayLoaded}
-                  className="w-full"
-                  size="lg"
-                >
-                  {state === "processing" ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <CreditCard className="h-5 w-5" />
-                      Pay ₹{invoice.total.toLocaleString("en-IN")}
-                    </>
-                  )}
-                </Button>
+                {/* UPI Payment Section */}
+                {invoice.upiId ? (
+                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Smartphone className="w-4 h-4" />
+                      Pay with any UPI app
+                    </div>
 
-                <p className="text-center text-xs text-muted-foreground">
-                  Secured by Razorpay
-                </p>
+                    <div className="flex items-center justify-between rounded-lg bg-card border border-border px-3 py-2.5">
+                      <span className="text-sm font-mono text-foreground">{invoice.upiId}</span>
+                      <button
+                        onClick={handleCopyUpi}
+                        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                        title="Copy UPI ID"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+                      </button>
+                    </div>
+
+                    <a
+                      href={invoice.upiLink}
+                      className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Pay ₹{invoice.total.toLocaleString("en-IN")} via UPI
+                    </a>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      Opens your UPI app (Google Pay, PhonePe, Paytm, etc.)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-border bg-warning-soft p-4 text-center">
+                    <p className="text-sm text-warning font-medium">UPI payment not available</p>
+                    <p className="text-xs text-warning mt-1">
+                      Please contact the merchant for payment instructions.
+                    </p>
+                  </div>
+                )}
+
+                {/* Mark as paid */}
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs text-muted-foreground text-center mb-3">
+                    Already paid? Let the merchant know.
+                  </p>
+                  <Button
+                    onClick={handleMarkPaid}
+                    disabled={submitting}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "I've Paid — Notify Merchant"
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

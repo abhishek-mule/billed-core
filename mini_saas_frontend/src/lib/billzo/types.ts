@@ -93,6 +93,7 @@ export type Tenant = {
   upiId?: string
   gstin?: string
   pan?: string
+  logo?: string
   bankDetails?: BankDetails
   whiteLabel: boolean
   autoMode: boolean

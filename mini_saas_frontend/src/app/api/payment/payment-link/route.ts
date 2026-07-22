@@ -26,84 +26,40 @@ export async function POST(request: NextRequest) {
     if (body.response) return body.response
     const { invoiceId, amount, customerName, customerPhone, purpose } = body.data!
 
+    // Fetch tenant UPI ID
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
-      .select('whatsapp_config')
+      .select('upi_id, name')
       .eq('id', tenantId)
       .single()
 
-    const config = (tenant?.whatsapp_config as Record<string, any>) || {}
-    const expiry = config.paymentLinkExpiry || 7
-    const expiryDate = new Date(Date.now() + expiry * 24 * 60 * 60 * 1000)
+    const upiId = tenant?.upi_id || ''
+    const merchantName = tenant?.name || 'Business'
 
-    // If Razorpay isn't configured, return a mock link for local dev
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      const mockId = `plink_${Date.now()}`
-      const mockUrl = `${request.nextUrl.origin}/pay/${invoiceId}`
+    const linkId = `upl_${Date.now()}`
+    const payPageUrl = `${request.nextUrl.origin}/pay/${invoiceId}`
 
-      await supabaseAdmin
-        .from('invoices')
-        .update({
-          payment_link_id: mockId,
-        })
-        .eq('id', invoiceId)
-
-      return NextResponse.json({
-        id: mockId,
-        short_url: mockUrl,
-        url: mockUrl,
-        amount,
-        expiry: expiryDate.toISOString(),
-      })
-    }
-
-    const razorpayAuth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')
-
-    const payload = {
-      amount: Math.round(amount * 100),
-      currency: 'INR',
-      description: purpose || `Invoice payment for ${invoiceId}`,
-      customer_name: customerName || 'Customer',
-      customer_email: '',
-      expiry,
-      notify: { email: 0, sms: 0 },
-      notes: {
-        tenantId,
-        invoiceId,
-        source: 'billzo',
-      },
-    }
-
-    const res = await fetch('https://api.razorpay.com/v1/payment_links', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Basic ${razorpayAuth}`,
-      },
-      body: JSON.stringify(payload),
-    })
-
-    if (!res.ok) {
-      const err = await res.json()
-      console.error('[PaymentLink] Razorpay error:', err)
-      return NextResponse.json({ error: err.error?.description || 'Failed to create payment link' }, { status: 502 })
-    }
-
-    const data = await res.json()
+    // Generate UPI deep link
+    const upiLink = upiId
+      ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(merchantName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(purpose || `Invoice payment`)}`
+      : ''
 
     await supabaseAdmin
       .from('invoices')
       .update({
-        payment_link_id: data.id,
+        payment_link_id: linkId,
+        upi_id: upiId,
       })
       .eq('id', invoiceId)
 
     return NextResponse.json({
-      id: data.id,
-      short_url: data.short_url,
-      url: data.url,
-      amount: data.amount / 100,
-      expiry: data.expiry_at,
+      id: linkId,
+      short_url: payPageUrl,
+      url: payPageUrl,
+      upi_link: upiLink,
+      upi_id: upiId,
+      merchant_name: merchantName,
+      amount,
     })
   } catch (err: any) {
     console.error('[PaymentLink] Error:', err)
@@ -119,16 +75,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const invoiceId = searchParams.get('invoiceId')
 
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return NextResponse.json({ links: [] })
-    }
-
-    const razorpayAuth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')
-
     if (invoiceId) {
       const { data: invoice } = await supabaseAdmin
         .from('invoices')
-        .select('payment_link_id')
+        .select('payment_link_id, upi_id')
         .eq('id', invoiceId)
         .eq('tenant_id', tenantId)
         .single()
@@ -137,67 +87,30 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'No payment link found' }, { status: 404 })
       }
 
-      // Fetch link details from Razorpay
-      const linkRes = await fetch(`https://api.razorpay.com/v1/payment_links/${invoice.payment_link_id}`, {
-        headers: { Authorization: `Basic ${razorpayAuth}` },
-      })
-
-      if (!linkRes.ok) {
-        return NextResponse.json({ error: 'Payment link not found' }, { status: 404 })
-      }
-
-      const link = await linkRes.json()
       return NextResponse.json({
-        id: link.id,
-        short_url: link.short_url,
-        status: link.status,
-        amount: link.amount / 100,
-        expiry: link.expiry_at,
+        id: invoice.payment_link_id,
+        short_url: `${request.nextUrl.origin}/pay/${invoiceId}`,
+        status: 'active',
+        upi_id: invoice.upi_id || '',
       })
     }
 
-    // List all payment links for this tenant
     const { data: invoices } = await supabaseAdmin
       .from('invoices')
-      .select('id, payment_link_id')
+      .select('id, payment_link_id, upi_id')
       .eq('tenant_id', tenantId)
       .not('payment_link_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(50)
 
-    const linkIds = (invoices || []).filter(i => i.payment_link_id).map(i => i.payment_link_id!)
-
-    if (linkIds.length === 0) {
-      return NextResponse.json({ links: [] })
-    }
-
-    // Fetch all links from Razorpay (batched via individual fetches if needed)
-    const links = await Promise.allSettled(
-      linkIds.map(async (linkId) => {
-        try {
-          const linkRes = await fetch(`https://api.razorpay.com/v1/payment_links/${linkId}`, {
-            headers: { Authorization: `Basic ${razorpayAuth}` },
-          })
-          if (!linkRes.ok) return null
-          return await linkRes.json()
-        } catch {
-          return null
-        }
-      }),
-    )
-
-    const paymentLinks = links
-      .map(r => (r.status === 'fulfilled' ? r.value : null))
-      .filter(Boolean)
-      .map(link => ({
-        id: link.id,
-        short_url: link.short_url,
-        status: link.status,
-        amount: link.amount / 100,
-        expiry: link.expiry_at,
-      }))
-
-    return NextResponse.json({ links: paymentLinks })
+    return NextResponse.json({
+      links: (invoices || []).map(i => ({
+        id: i.payment_link_id,
+        short_url: `${request.nextUrl.origin}/pay/${i.id}`,
+        status: 'active',
+        upi_id: i.upi_id || '',
+      })),
+    })
   } catch (err: any) {
     console.error('[PaymentLink] GET error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -211,36 +124,13 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const invoiceId = searchParams.get('invoiceId')
-
     if (!invoiceId) return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
 
-    const { data: invoice } = await supabaseAdmin
+    await supabaseAdmin
       .from('invoices')
-      .select('payment_link_id, tenant_id')
+      .update({ payment_link_id: null })
       .eq('id', invoiceId)
-      .single()
-
-    if (!invoice || invoice.tenant_id !== tenantId) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
-
-    if (invoice.payment_link_id) {
-      try {
-        await fetch(`https://api.razorpay.com/v1/payment_links/${invoice.payment_link_id}/cancel`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')}`,
-          },
-        })
-      } catch {
-        console.warn('[PaymentLink] Could not cancel Razorpay link')
-      }
-
-      await supabaseAdmin
-        .from('invoices')
-        .update({ payment_link_id: null })
-        .eq('id', invoiceId)
-    }
+      .eq('tenant_id', tenantId)
 
     return NextResponse.json({ success: true })
   } catch (err: any) {
