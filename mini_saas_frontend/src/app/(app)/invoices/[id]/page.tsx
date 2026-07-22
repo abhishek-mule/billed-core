@@ -3,9 +3,8 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote, Smartphone, Copy, Check } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
-import { RazorpayCheckoutButton } from "@/components/billzo/RazorpayCheckoutButton";
 import { db } from "@/lib/billzo/db";
 import RecoveryJourney from "@/components/recovery/RecoveryJourney";
 import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
@@ -33,6 +32,8 @@ export default function InvoiceDetailPage() {
   const [missingPhone, setMissingPhone] = useState('');
   const [genLinkLoading, setGenLinkLoading] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
+  const [upiId, setUpiId] = useState('');
+  const [upiCopied, setUpiCopied] = useState(false);
   const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -176,6 +177,7 @@ export default function InvoiceDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to generate link')
       setPaymentLink(data.short_url)
+      setUpiId(data.upi_id || '')
       await loadInvoice()
     } catch (err: any) {
       setWaError(err.message)
@@ -364,64 +366,39 @@ export default function InvoiceDetailPage() {
             WhatsApp
           </button>
 
-          {!paid && (
-            <RazorpayCheckoutButton
-              invoiceId={invoice.id}
-              amount={total}
-              customerName={invoice.customerName}
-              customerPhone={invoice.customerPhone}
-              onPaymentSuccess={() => { loadInvoice(); loadAttribution(); }}
-              className="rounded-2xl py-4"
-            />
-          )}
-
           {paid ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl bg-success-soft py-4 text-sm font-bold text-success">
               <CheckCircle2 className="h-4 w-4" />
               Paid
             </div>
           ) : (
-            <button
-              onClick={() => {
-                const link = paymentLink || invoice?.paymentLinkUrl
-                if (link) {
-                  navigator.clipboard.writeText(link)
-                } else {
-                  generatePaymentLink()
-                }
-              }}
-              disabled={genLinkLoading}
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-              {paymentLink || invoice?.paymentLinkUrl ? 'Copy Link' : 'Payment Link'}
-            </button>
-          )}
-
-          {!paid && (
-            <button
-              onClick={() => setShowRecordPaymentModal(true)}
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
-            >
-              <Banknote className="h-4 w-4" />
-              Record Payment
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  if (upiId || invoice?.upiId) {
+                    navigator.clipboard.writeText(upiId || invoice?.upiId || '')
+                    setUpiCopied(true)
+                    setTimeout(() => setUpiCopied(false), 2000)
+                  } else {
+                    generatePaymentLink()
+                  }
+                }}
+                disabled={genLinkLoading}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-bold text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+              >
+                {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
+                {upiCopied ? 'UPI ID Copied!' : (upiId || invoice?.upiId ? 'Copy UPI ID' : 'Get UPI ID')}
+              </button>
+              <button
+                onClick={() => setShowRecordPaymentModal(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <Banknote className="h-4 w-4" />
+                Record Payment
+              </button>
+            </>
           )}
         </div>
-
-        {(paymentLink || invoice?.paymentLinkUrl) && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
-            <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
-            <a
-              href={paymentLink || invoice?.paymentLinkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-success font-medium underline break-all"
-            >
-              {paymentLink || invoice?.paymentLinkUrl}
-            </a>
-          </div>
-        )}
 
         {(waSuccess) && (
           <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
@@ -448,7 +425,7 @@ export default function InvoiceDetailPage() {
                     <div className="rounded-xl bg-muted/50 p-3 text-sm text-foreground leading-relaxed">
                       {paid
                         ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
-                        : `Hello ${invoice.customerName}, your invoice for ₹${total} is ready. Pay now: ${invoice.paymentLinkUrl || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
+                        : `Hello ${invoice.customerName}, ₹${total} due on invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Pay via UPI: ${upiId || invoice?.upiId || '[UPI ID]'}${personalNote ? `\n\n${personalNote}` : ''}`}
                     </div>
                   </div>
                   <div>

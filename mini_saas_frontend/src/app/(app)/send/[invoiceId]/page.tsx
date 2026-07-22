@@ -816,7 +816,7 @@ export default function InvoiceSendPage() {
                 Retry
               </button>
             )}
-            <p className="text-[10px] text-muted-foreground">Automatically included in message. Customer can pay via UPI, Card, or Bank Transfer.</p>
+            <p className="text-[10px] text-muted-foreground">Automatically included in message. Customer can pay directly via UPI.</p>
           </section>
         )}
 
