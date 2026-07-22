@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  Store, Receipt, MessageCircle, Users, Shield, ChevronRight, LogOut,
+  Store, Crown, MessageCircle, Users, Shield, ChevronRight, LogOut,
   Search, Clock, Download, Trash2, Zap, CheckCircle2, AlertCircle, XCircle,
   Wifi, Sun, Moon, Bug,
 } from "lucide-react"
@@ -83,21 +83,21 @@ export default function SettingsPage() {
       href: '/settings/business',
       icon: <Store className={ICON_CLASS} />,
       title: 'Business Profile',
-      description: 'Shop name, address, GST, PAN, UPI ID',
+      description: 'Logo, shop name, GST, PAN, address',
     },
     {
       id: 'billing',
-      href: '/pricing',
-      icon: <Receipt className={ICON_CLASS} />,
-      title: 'Plans & Billing',
-      description: 'Manage your subscription, invoices, and billing details',
+      href: '/settings/billing',
+      icon: <Crown className={ICON_CLASS} />,
+      title: 'Subscription & Usage',
+      description: 'Plan, recovery usage, billing history',
     },
     {
       id: 'whatsapp',
       href: '/settings/whatsapp',
       icon: <MessageCircle className={ICON_CLASS} />,
-      title: 'Payment Reminders',
-      description: 'Automatic payment reminders',
+      title: 'WhatsApp',
+      description: 'Payment reminders & message templates',
       status: 'connected' as CategoryStatus,
       statusLabel: 'Automatic payment reminders',
     },
@@ -105,22 +105,15 @@ export default function SettingsPage() {
       id: 'recovery',
       href: '/settings/recovery',
       icon: <Clock className={ICON_CLASS} />,
-      title: 'UDHARI Recovery',
-      description: 'Auto-reminders, business hours, reminder tone',
+      title: 'Recovery',
+      description: 'Reminder timing, tone, business hours',
     },
     {
-      id: 'team',
-      href: '/settings/team',
-      icon: <Users className={ICON_CLASS} />,
-      title: 'Team & Access',
-      description: 'Users, roles, permissions',
-    },
-    {
-      id: 'network',
-      href: '/settings/network',
-      icon: <Wifi className={ICON_CLASS} />,
-      title: 'Network & Sync',
-      description: 'Connection status, offline queue, sync health',
+      id: 'help',
+      href: '/settings/help',
+      icon: <Shield className={ICON_CLASS} />,
+      title: 'Help & Support',
+      description: 'WhatsApp, email, docs, report issue',
     },
     {
       id: 'data',
@@ -156,7 +149,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+      <PageShell variant="wide" title="Settings" subtitle="Business profile, subscription, WhatsApp, and more">
         <div className="space-y-4">
           <div className="h-16 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -171,7 +164,7 @@ export default function SettingsPage() {
 
   if (error) {
     return (
-      <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+      <PageShell variant="wide" title="Settings" subtitle="Business profile, subscription, WhatsApp, and more">
         <div className="bg-card border border-danger rounded-lg p-6 text-center">
           <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
           <p className="text-sm text-danger mb-4">{error}</p>
@@ -182,7 +175,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <PageShell variant="wide" title="Settings" subtitle="Shop profile, billing, communication & security">
+    <PageShell variant="wide" title="Settings" subtitle="Business profile, subscription, WhatsApp, and more">
       <div className="space-y-5">
 
         {/* Shop identity banner */}

@@ -1,10 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, MessageCircle, Plus, CheckCircle2, AlertCircle, Loader2, Clock, X } from 'lucide-react'
+import { ArrowLeft, MessageCircle, Plus, CheckCircle2, AlertCircle, Loader2, Clock, X, Eye } from 'lucide-react'
 import type { TenantWhatsAppConfig } from '@/lib/billzo/types'
 import { fetchWithAuth } from '@/lib/fetch-with-auth'
+
+const SAMPLE_DATA: Record<string, string> = {
+  '{{1}}': 'Amit',
+  '{{2}}': '₹4,320',
+  '{{3}}': '#203',
+  '{{4}}': 'https://billzo.app/pay/abc',
+}
+
+function previewMessage(template: string): string {
+  return template.replace(/\{\{\d+\}\}/g, (m) => SAMPLE_DATA[m] || m)
+}
 
 const TEMPLATE_TYPES = [
   { key: 'invoice', label: 'Invoice Notification', desc: 'Sent when a new invoice is created for a customer', placeholder: 'Hello {{1}}, your invoice #{{2}} for ₹{{3}} is ready. Pay now: {{4}}' },
@@ -179,11 +190,15 @@ export default function WhatsAppTemplatesPage() {
                 </div>
               </div>
               {hasTemplate && (
-                <div className="px-4 pb-4">
+                <div className="px-4 pb-4 space-y-3">
                   <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground font-mono leading-relaxed">
                     {templates[key]}
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="rounded-xl border border-border bg-white dark:bg-card p-3 text-xs text-foreground shadow-sm leading-relaxed whitespace-pre-wrap">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Live preview</span>
+                    {previewMessage(templates[key])}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {Object.entries(PLACEHOLDER_HELP).map(([ph, help]) => (
                       <span key={ph} className="text-[10px] bg-muted px-2 py-0.5 rounded text-muted-foreground">
                         {ph} = {help}
@@ -216,6 +231,23 @@ export default function WhatsAppTemplatesPage() {
                   className="w-full rounded-xl border bg-card px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                 />
               </div>
+
+              {/* Live preview */}
+              {createBody.trim() && (
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Eye className="w-3.5 h-3.5" />
+                    Preview
+                  </div>
+                  <div className="rounded-xl bg-white dark:bg-card border border-border p-3 text-sm text-foreground shadow-sm leading-relaxed whitespace-pre-wrap">
+                    {previewMessage(createBody)}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Sample: Amit · ₹4,320 · Invoice #203
+                  </p>
+                </div>
+              )}
+
               <div>
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Available placeholders:</p>
                 <div className="flex flex-wrap gap-2">
