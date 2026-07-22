@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="apple-touch-icon" href="/icon.svg" />
         <script
           dangerouslySetInnerHTML={{
