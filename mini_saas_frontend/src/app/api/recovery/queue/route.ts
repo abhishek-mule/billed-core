@@ -85,6 +85,36 @@ export async function GET(request: NextRequest) {
           : 0,
       }))
 
+      // Build priority cases from invoice data so Dashboard work items populate
+      const previewPriorityCases = enriched.map((r: any) => {
+        const daysOverdue = r.due_date
+          ? Math.floor((now.getTime() - new Date(r.due_date).getTime()) / (1000 * 60 * 60 * 24))
+          : 0
+        return {
+          caseId: `preview-${r.customer_id}`,
+          customerId: r.customer_id,
+          customerName: r.customer_name || 'Customer',
+          phone: '',
+          totalOverdue: r.outstanding,
+          oldestOverdueDays: Math.max(0, daysOverdue),
+          attentionScore: Math.min(daysOverdue * 5 + 10, 100),
+          nextActionType: daysOverdue > 0 ? 'send_reminder' : 'wait',
+          promiseToPayDate: null,
+          ignoredReminders: 0,
+          brokenPromises: 0,
+          openInvoiceCount: enriched.filter((x: any) => x.customer_id === r.customer_id).length,
+          automationMode: 'manual' as const,
+        }
+      })
+      // Deduplicate by customer (take the highest overdue per customer)
+      const seenCust = new Set<string>()
+      const dedupedPreview = previewPriorityCases.filter((p: any) => {
+        if (seenCust.has(p.customerId)) return false
+        seenCust.add(p.customerId)
+        return true
+      })
+      dedupedPreview.sort((a: any, b: any) => b.attentionScore - a.attentionScore)
+
       return NextResponse.json({
         access: 'preview',
         data: {
@@ -102,6 +132,7 @@ export async function GET(request: NextRequest) {
           queueSize: 0,
           recoveredToday: 0,
           collectibleToday: 0,
+          priorityCases: dedupedPreview,
         },
       })
     }

@@ -1,11 +1,11 @@
-<svg width="512" height="512" viewBox="80 27 630 780" fill="none" xmlns="http://www.w3.org/2000/svg">
-<ellipse cx="622.082" cy="215.82" rx="182.148" ry="186.5" fill="#299787"/>
-<ellipse cx="635.434" cy="619.82" rx="168.5" ry="186.5" fill="#299787"/>
-<rect x="424.934" y="29.3204" width="211" height="373" fill="#299787"/>
-<rect x="424.934" y="433.32" width="211" height="373" fill="#299787"/>
-<rect x="322.5" y="698.5" width="74" height="105" fill="#0D223B"/>
-<rect x="141.5" y="698.5" width="74" height="105" fill="#0D223B"/>
-<rect x="322.5" y="27.5" width="74" height="105" fill="#0D223B"/>
-<rect x="141.5" y="27.5" width="255" height="776" rx="91.5" fill="#0D223B"/>
-<path d="M703 103L514.808 176.601L672.644 302.78L703 103ZM141 806L154.669 816.927L618.322 236.948L604.653 226.021L590.984 215.094L127.331 795.073L141 806Z" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="25 -31 896 896">
+  <rect x="141.5" y="27.5" width="255" height="776" rx="91.5" fill="#0D223B"/>
+  <rect x="322.5" y="698.5" width="74" height="105" fill="#0D223B"/>
+  <rect x="141.5" y="698.5" width="74" height="105" fill="#0D223B"/>
+  <rect x="322.5" y="27.5" width="74" height="105" fill="#0D223B"/>
+  <ellipse cx="622.082" cy="215.82" rx="182.148" ry="186.5" fill="#299787"/>
+  <ellipse cx="635.434" cy="619.82" rx="168.5" ry="186.5" fill="#299787"/>
+  <rect x="424.934" y="29.3204" width="211" height="373" fill="#299787"/>
+  <rect x="424.934" y="433.32" width="211" height="373" fill="#299787"/>
+  <path d="M703 103L514.808 176.601L672.644 302.78L703 103ZM141 806L154.669 816.927L618.322 236.948L604.653 226.021L590.984 215.094L127.331 795.073L141 806Z" fill="white"/>
 </svg>

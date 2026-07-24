@@ -6,7 +6,7 @@ import Link from "next/link"
 import {
   Store, Crown, MessageCircle, Users, Shield, ChevronRight, LogOut,
   Search, Clock, Download, Trash2, Zap, CheckCircle2, AlertCircle, XCircle,
-  Wifi, Sun, Moon, Bug,
+  Wifi, Sun, Moon, Bug, IndianRupee,
 } from "lucide-react"
 import { useTheme } from "@/lib/billzo/theme"
 import { Button } from "@/components/billzo/Button"
@@ -84,6 +84,13 @@ export default function SettingsPage() {
       icon: <Store className={ICON_CLASS} />,
       title: 'Business Profile',
       description: 'Logo, shop name, GST, PAN, address',
+    },
+    {
+      id: 'payments',
+      href: '/settings/payments',
+      icon: <IndianRupee className={ICON_CLASS} />,
+      title: 'Receive Payments',
+      description: 'UPI, bank transfer, cash payment setup',
     },
     {
       id: 'billing',

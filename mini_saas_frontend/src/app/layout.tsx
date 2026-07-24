@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { ServiceWorkerRegister } from '@/components/billzo/ServiceWorkerRegister';
-import { SplashScreen } from '@/components/billzo/SplashScreen';
 import { ThemeProvider } from '@/lib/billzo/theme';
 import { Toaster } from 'sonner';
 import './globals.css';
@@ -43,7 +42,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ServiceWorkerRegister />
-        <SplashScreen />
         <ThemeProvider>
           <Toaster position="top-center" richColors />
           {children}

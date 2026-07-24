@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Loader2, CheckCircle, XCircle, ArrowLeft, Copy, Check, ExternalLink, Smartphone } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, ArrowLeft, Copy, Check, ExternalLink, Smartphone, Building, Banknote } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/billzo/Card"
+import { PaymentEngine } from "@/lib/billzo/payment/engine"
+import type { PaymentConfig, PaymentPresentation } from "@/lib/billzo/payment/types"
 
 interface InvoiceInfo {
   id: string
@@ -14,12 +16,17 @@ interface InvoiceInfo {
   customerName: string
   description: string
   dueDate: string
-  upiId: string
   merchantName: string
-  upiLink: string
+  paymentConfig: PaymentConfig | null
 }
 
 type PageState = "loading" | "ready" | "success" | "error"
+
+const METHOD_ICONS: Record<string, any> = {
+  upi: Smartphone,
+  bank: Building,
+  cash: Banknote,
+}
 
 export default function PayInvoicePage() {
   const params = useParams()
@@ -42,8 +49,6 @@ export default function PayInvoicePage() {
       if (!res.ok) throw new Error("Invoice not found")
       const data = await res.json()
 
-      const upiId = data.upi_id || ""
-
       setInvoice({
         id: data.id,
         invoiceNumber: data.invoice_number || data.id.slice(-8),
@@ -52,11 +57,8 @@ export default function PayInvoicePage() {
         customerName: data.customer_name || "Customer",
         description: data.description || `Invoice ${data.invoice_number || data.id.slice(-8)}`,
         dueDate: data.due_date || "",
-        upiId,
         merchantName: data.merchant_name || "Business",
-        upiLink: upiId
-          ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(data.merchant_name || "Business")}&am=${data.total}&cu=INR&tn=${encodeURIComponent(`Invoice ${data.invoice_number || data.id.slice(-8)}`)}`
-          : "",
+        paymentConfig: data.payment_config || null,
       })
       setState("ready")
     } catch (err) {
@@ -88,12 +90,21 @@ export default function PayInvoicePage() {
     }
   }
 
-  const handleCopyUpi = () => {
-    if (!invoice?.upiId) return
-    navigator.clipboard.writeText(invoice.upiId)
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const presentation = useMemo<PaymentPresentation | null>(() => {
+    if (!invoice || !invoice.paymentConfig) return null
+    return PaymentEngine.buildPresentation({
+      invoice,
+      paymentConfig: invoice.paymentConfig,
+    })
+  }, [invoice])
+
+  const isPaid = invoice?.status === "paid"
 
   if (state === "loading") {
     return (
@@ -110,9 +121,9 @@ export default function PayInvoicePage() {
           <CheckCircle className="h-8 w-8 text-success" />
         </div>
         <div className="text-center">
-          <h1 className="text-lg font-bold text-foreground">Payment Submitted</h1>
+          <h1 className="text-lg font-bold text-foreground">Mark Payment Received</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Thanks! Your payment of <span className="font-semibold">₹{invoice?.total.toLocaleString("en-IN")}</span> has been recorded.
+            You have reported a payment of <span className="font-semibold">₹{invoice?.total.toLocaleString("en-IN")}</span>.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             The merchant will confirm receipt shortly.
@@ -150,7 +161,7 @@ export default function PayInvoicePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Pay via UPI</CardTitle>
+            <CardTitle>Pay {invoice?.merchantName}</CardTitle>
           </CardHeader>
           <CardContent>
             {invoice && (
@@ -178,40 +189,82 @@ export default function PayInvoicePage() {
                   <div className="rounded-lg bg-warning-soft p-3 text-sm text-warning">{error}</div>
                 )}
 
-                {/* UPI Payment Section */}
-                {invoice.upiId ? (
+                {/* Payment section */}
+                {isPaid ? (
+                  <div className="rounded-xl border border-success bg-success-soft p-4 text-center">
+                    <CheckCircle className="w-8 h-8 text-success mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-success">Invoice Paid</p>
+                    <p className="text-xs text-success mt-1">This invoice has been paid.</p>
+                  </div>
+                ) : presentation ? (
                   <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Smartphone className="w-4 h-4" />
-                      Pay with any UPI app
+                      {(() => {
+                        const Icon = invoice.paymentConfig ? METHOD_ICONS[invoice.paymentConfig.method] || Smartphone : Smartphone
+                        return <Icon className="w-4 h-4" />
+                      })()}
+                      {presentation.title}
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg bg-card border border-border px-3 py-2.5">
-                      <span className="text-sm font-mono text-foreground">{invoice.upiId}</span>
-                      <button
-                        onClick={handleCopyUpi}
-                        className="p-1.5 rounded-md hover:bg-muted transition-colors"
-                        title="Copy UPI ID"
-                      >
-                        {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
-                      </button>
-                    </div>
+                    {presentation.paymentMethod === 'upi' && presentation.metadata.upiId && (
+                      <>
+                        <div className="flex items-center justify-between rounded-lg bg-card border border-border px-3 py-2.5">
+                          <span className="text-sm font-mono text-foreground">{presentation.metadata.upiId}</span>
+                          <button
+                            onClick={() => handleCopy(presentation.metadata.upiId!)}
+                            className="p-1.5 rounded-md hover:bg-muted transition-colors"
+                            title="Copy UPI ID"
+                          >
+                            {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+                          </button>
+                        </div>
+                        {presentation.button?.url && (
+                          <a
+                            href={presentation.button.url}
+                            className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            {presentation.button.label}
+                          </a>
+                        )}
+                      </>
+                    )}
 
-                    <a
-                      href={invoice.upiLink}
-                      className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Pay ₹{invoice.total.toLocaleString("en-IN")} via UPI
-                    </a>
+                    {presentation.paymentMethod === 'bank' && (
+                      <div className="space-y-2 rounded-lg bg-card border border-border p-3">
+                        <p className="text-xs text-muted-foreground">Transfer to:</p>
+                        <div className="space-y-1.5 text-sm">
+                          {presentation.metadata.accountHolderName && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Account Holder</span>
+                              <span className="font-medium">{presentation.metadata.accountHolderName}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Account</span>
+                            <span className="font-mono font-medium">{presentation.metadata.accountNumber}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">IFSC</span>
+                            <span className="font-mono font-medium">{presentation.metadata.ifsc}</span>
+                          </div>
+                          {presentation.metadata.bankName && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Bank</span>
+                              <span className="font-medium">{presentation.metadata.bankName}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-                    <p className="text-xs text-muted-foreground text-center">
-                      Opens your UPI app (Google Pay, PhonePe, Paytm, etc.)
+                    <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                      {presentation.subtitle}
                     </p>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-border bg-warning-soft p-4 text-center">
-                    <p className="text-sm text-warning font-medium">UPI payment not available</p>
+                    <p className="text-sm text-warning font-medium">Online payment not available</p>
                     <p className="text-xs text-warning mt-1">
                       Please contact the merchant for payment instructions.
                     </p>
@@ -219,23 +272,25 @@ export default function PayInvoicePage() {
                 )}
 
                 {/* Mark as paid */}
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs text-muted-foreground text-center mb-3">
-                    Already paid? Let the merchant know.
-                  </p>
-                  <Button
-                    onClick={handleMarkPaid}
-                    disabled={submitting}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    {submitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "I've Paid — Notify Merchant"
-                    )}
-                  </Button>
-                </div>
+                {!isPaid && (
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs text-muted-foreground text-center mb-3">
+                      Already paid? Let the merchant know.
+                    </p>
+                    <Button
+                      onClick={handleMarkPaid}
+                      disabled={submitting}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {submitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "I've Paid — Notify Merchant"
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

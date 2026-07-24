@@ -235,7 +235,7 @@ export default function RecoveryCenterPage() {
       <header className="rc-header">
         <div>
           <h1 className="rc-greeting">
-            {greeting()}{name ? `, ${name}` : ''}
+            {greeting()}{name ? ` ${name}!` : ''}
           </h1>
           <p className="rc-sub">
             {data.needsAction.length > 0

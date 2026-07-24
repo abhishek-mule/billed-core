@@ -69,13 +69,13 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
 
   const menuItems = [
     { href: '/settings/business', icon: Store, label: 'Business Profile', sub: 'GST, Address, Logo' },
-    { href: '/settings/billing', icon: CreditCard, label: 'Payment Settings', sub: 'UPI, Razorpay, Bank' },
-    { href: '/settings/whatsapp', icon: MessageCircle, label: 'WhatsApp Connection', sub: 'Connected ✓' },
+    { href: '/settings/payments', icon: CreditCard, label: 'Receive Payments', sub: 'UPI, Bank, Cash' },
+    { href: '/settings/whatsapp', icon: MessageCircle, label: 'WhatsApp', sub: 'Connected ✓' },
     { href: '/pricing', icon: Crown, label: 'Plans & Billing', sub: `${planLabel} · ${daysLeft}d left` },
     { href: '/settings/team', icon: Users, label: 'Team Members', sub: 'Staff & Permissions' },
-    { href: '/settings', icon: BarChart3, label: 'Usage', sub: 'Invoices · Reminder balance' },
+    { href: '/settings/billing', icon: BarChart3, label: 'Usage', sub: 'Invoices · Reminder balance' },
     { href: '/settings', icon: Settings, label: 'Settings' },
-    { href: '/settings', icon: HelpCircle, label: 'Help & Support' },
+    { href: '/settings/help', icon: HelpCircle, label: 'Help & Support' },
     { href: '/settings', icon: MessageSquare, label: 'Send Feedback' },
   ]
 
@@ -91,7 +91,6 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
           <img src={getDiceBearAvatarUrl(userName, 'glyphs')} alt="" className="w-10 h-10 rounded-full shrink-0 bg-muted/20" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">{userName}</p>
-            <p className="text-xs text-muted-foreground truncate">Sharma Hardware</p>
           </div>
         </div>
 

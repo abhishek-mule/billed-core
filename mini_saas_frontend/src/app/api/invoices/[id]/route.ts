@@ -27,6 +27,12 @@ export async function GET(
       return NextResponse.json(invoice)
     }
 
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('payment_config, name')
+      .eq('id', invoice.tenant_id)
+      .single()
+
     return NextResponse.json({
       id: invoice.id,
       invoice_number: invoice.invoice_number,
@@ -35,6 +41,8 @@ export async function GET(
       customer_name: invoice.customer_name,
       due_date: invoice.due_date,
       description: invoice.description || `Invoice ${invoice.invoice_number}`,
+      merchant_name: tenant?.name || 'Business',
+      payment_config: tenant?.payment_config || null,
     })
   } catch (err: any) {
     console.error('[Invoice GET] Error:', err)

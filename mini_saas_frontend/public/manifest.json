@@ -11,12 +11,11 @@
   "icons": [
     {
       "src": "/icon.svg",
-      "sizes": "512x512",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
   "categories": ["business", "finance", "productivity"],
   "prefer_related_applications": false,
   "launch_handler": {

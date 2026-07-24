@@ -80,7 +80,7 @@ export async function PUT(request: NextRequest) {
     }, 'app')
 
     if (!intentResult.accepted) {
-      return NextResponse.json({ error: 'Authority rejected update' }, { status: 500 })
+      return NextResponse.json({ error: intentResult.error || 'Authority rejected update' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

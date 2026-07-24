@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -18,6 +18,7 @@ import { getCookie } from "@/lib/cookies"
 import { getTenantId } from "@/lib/billzo/tenant"
 import { downloadInvoicePDF, generateInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
 import type { Tenant } from "@/lib/billzo/types"
+import type { PaymentConfig } from "@/lib/billzo/payment-renderer"
 
 interface InvoiceDataFull {
   id: string
@@ -118,6 +119,15 @@ export default function InvoiceSendPage() {
 
   const isUdhar = paymentMethod === "udhar" || (invoice ? invoice.status !== "paid" && invoice.paidAmount === 0 : false)
   const totalExposure = invoice ? invoice.total + customerOutstanding : 0
+
+  const paymentReady = useMemo(() => {
+    const cfg = tenantData?.paymentConfig
+    if (!cfg) return !!tenantData?.upiId
+    if (cfg.method === 'upi') return !!cfg.upiId
+    if (cfg.method === 'bank') return !!cfg.bankAccount && !!cfg.bankIfsc
+    if (cfg.method === 'cash') return true
+    return false
+  }, [tenantData])
 
   const loadData = useCallback(async () => {
     if (!invoiceId) { setError("No invoice ID"); setLoading(false); return }
@@ -558,20 +568,40 @@ export default function InvoiceSendPage() {
         {/* ────── Recommended Action ────── */}
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Recommended Action</p>
-          <button
-            onClick={() => {
-              if (!customerPhone) {
-                setShowNoPhoneSheet(true)
-              } else {
-                setShowMessagePreview(true)
-                setActionView('send_now')
-              }
-            }}
-            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
-          >
-            <Send size={18} />
-            {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
-          </button>
+          {isUdhar && !paymentReady ? (
+            <div className="rounded-xl bg-warning-soft dark:bg-amber-950/30 border border-warning p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-warning">Configure Payments First</p>
+                  <p className="text-xs text-warning mt-1">
+                    Customers won't be able to pay this invoice online. Set up a payment method before sharing.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/settings/payments"
+                className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-warning text-white text-sm font-semibold hover:bg-warning/90 transition-colors"
+              >
+                Configure Payments
+              </Link>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                if (!customerPhone) {
+                  setShowNoPhoneSheet(true)
+                } else {
+                  setShowMessagePreview(true)
+                  setActionView('send_now')
+                }
+              }}
+              className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+            >
+              <Send size={18} />
+              {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
+            </button>
+          )}
         </div>
 
         {/* ────── Communication ────── */}
@@ -738,6 +768,12 @@ export default function InvoiceSendPage() {
         {!customerPhone && (
           <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
             No customer WhatsApp number. We'll open your WhatsApp so you can forward the invoice manually.
+          </div>
+        )}
+
+        {isUdhar && !paymentReady && (
+          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
+            Payment method not configured. Customers won't be able to pay online.
           </div>
         )}
 

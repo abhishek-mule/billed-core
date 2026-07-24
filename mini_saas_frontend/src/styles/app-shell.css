@@ -473,6 +473,12 @@ body {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   padding: 10px 10px;
+  will-change: transform;
+  animation: bottomNavIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes bottomNavIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 @media (min-width: 1024px) {
   .bz-bottom-nav { display: none !important; }
@@ -493,9 +499,15 @@ body {
   transition: color 0.2s var(--ease), transform 0.22s var(--ease);
 }
 .bz-bottom-item:active {
-  transform: translateY(-3px) scale(0.94);
+  transform: scale(0.92);
 }
-.bz-bottom-item--active { color: hsl(var(--primary)); }
+.bz-bottom-item--active {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1);
+  border-radius: 8px;
+  padding: 4px 0;
+  margin: -4px 2px;
+}
 .bz-bottom-item--primary { color: hsl(var(--primary)); }
 .bz-bottom-fab {
   width: 56px;
@@ -509,7 +521,7 @@ body {
   flex-shrink: 0;
   transition: transform 0.22s var(--ease);
 }
-.bz-bottom-fab:active { transform: scale(0.92); }
+.bz-bottom-fab:active { transform: scale(0.88); }
 
 /* ─── Logout modal ──────────────────────────────────────────────────────── */
 

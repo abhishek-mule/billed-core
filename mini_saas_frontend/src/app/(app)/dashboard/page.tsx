@@ -763,8 +763,8 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     payload: { events: { occurredAt: string; label: string; detail: string }[] }
   }
 
-  const outstanding = cashSection?.payload?.metrics?.find(m => m.label === 'Outstanding')?.value
-    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Outstanding')?.value?.replace(/[₹,]/g, '') || '0')
+  const outstanding = cashSection?.payload?.metrics?.find(m => m.label === 'Money to Collect')?.value
+    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Money to Collect')?.value?.replace(/[₹,]/g, '') || '0')
     : 0
 
   const recoveredByBillzo = cashSection?.payload?.metrics?.find(m => m.label === 'Collected Today')?.value

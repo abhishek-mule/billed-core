@@ -106,6 +106,7 @@ export type Tenant = {
   subscriptionStatus?: string
   cancelledAt?: string
   whatsappConfig?: TenantWhatsAppConfig
+  paymentConfig?: PaymentConfig
   allowNegativeStock?: boolean
   createdAt: string
   updatedAt: string
@@ -256,6 +257,16 @@ export type InventoryMovement = {
   qtyDelta: number
   stockAfter: number
   createdAt: string
+}
+
+export type PaymentConfig = {
+  method: 'upi' | 'bank' | 'cash'
+  upiId?: string
+  bankAccount?: string
+  bankIfsc?: string
+  bankName?: string
+  accountHolderName?: string
+  upiVerifiedByMerchant?: boolean
 }
 
 export type Payment = {

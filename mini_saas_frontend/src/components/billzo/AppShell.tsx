@@ -248,7 +248,7 @@ function BottomNav({ pathname }: { pathname: string }) {
   return (
     <nav className="bz-bottom-nav" aria-label="Main navigation">
       {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
-        const active = pathname.startsWith(href)
+        const active = pathname === href
         if (primary) {
           return (
             <Link
