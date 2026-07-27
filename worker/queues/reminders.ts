@@ -271,7 +271,6 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           .select('id, total, outstanding_amount, due_date')
           .eq('tenant_id', tenantId)
           .eq('customer_id', customer.id)
-          .in('status', ['unpaid', 'overdue', 'partial'])
           .gt('outstanding_amount', 0)
           .order('due_date', { ascending: true })
         if (invoices1 && invoices1.length > 0) {
@@ -282,8 +281,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             .select('id, total, outstanding_amount, due_date')
             .eq('tenant_id', tenantId)
             .eq('customer_id', customer.id)
-            .in('status', ['unpaid', 'overdue', 'partial'])
-            .gt('total', 0)
+            .gt('outstanding_amount', 0)
             .order('due_date', { ascending: true })
           unpaidInvoicesResult = invoices2
         }

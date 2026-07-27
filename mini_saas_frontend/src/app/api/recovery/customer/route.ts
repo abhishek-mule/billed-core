@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     // Invoices (open / unpaid first) — single source of truth for amounts
     const { data: invoices } = await supabaseAdmin
       .from('invoices')
-      .select('id, invoice_number, grand_total, paid_amount, status, due_date, created_at')
+      .select('id, invoice_number, grand_total, paid_amount, status, due_date, created_at, customer_name')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false })
@@ -145,13 +145,13 @@ export async function GET(request: NextRequest) {
     // ── Single source of truth: derive amounts from invoices ──
     const now = new Date()
     const openInvoices = (invoices || []).filter((i: any) =>
-      ['unpaid', 'overdue', 'partial'].includes(i.status),
+      Number(i.grand_total || 0) - Number(i.paid_amount || 0) > 0,
     )
     const invoiceOutstanding = (i: any) =>
       Math.max(0, (Number(i.grand_total) || 0) - (Number(i.paid_amount) || 0))
     const outstanding = openInvoices.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
     const overdueInvs = openInvoices.filter(
-      (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+      (i: any) => i.due_date && new Date(i.due_date) < now,
     )
     const overdue = overdueInvs.length > 0
       ? Math.max(...overdueInvs.map((i: any) =>
@@ -159,6 +159,9 @@ export async function GET(request: NextRequest) {
         ))
       : 0
     const promiseDate = rc?.promise_to_pay_date ?? null
+
+    // Fallback customer name from invoices when customers table has no matching row
+    const invoiceCustomerName = (invoices || [])[0]?.customer_name || null
 
     return NextResponse.json({
       customer: cust ? {
@@ -168,6 +171,13 @@ export async function GET(request: NextRequest) {
         email: cust.email,
         tier: cust.customer_tier,
         gstin: cust.gstin,
+      } : invoiceCustomerName ? {
+        id: customerId,
+        name: invoiceCustomerName,
+        phone: '',
+        email: null,
+        tier: null,
+        gstin: null,
       } : null,
       case: rc ? {
         id: rc.id,

@@ -574,7 +574,7 @@ function HeroCard({
 
 function LoadingSkeleton() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5 animate-pulse">
         <div className="h-32 bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl" />
         <div className="h-48 bg-muted rounded-xl" />
@@ -587,7 +587,7 @@ function LoadingSkeleton() {
 
 function ErrorState() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="text-center py-12">
         <div className="mx-auto h-12 w-12 rounded-full bg-overdue-soft flex items-center justify-center">
           <AlertTriangle className="h-6 w-6 text-overdue" />
@@ -603,7 +603,7 @@ function ErrorState() {
 
 function EmptyRecoveryState() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5">
         <HeroCard outstanding={0} customers={0} successRate={null} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
         <CustomersAttentionCard title="Customers Requiring Attention" customers={[]} />
@@ -673,7 +673,7 @@ export default function DashboardPage() {
     : undefined
 
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <HeroCard
         outstanding={recovery.outstanding}
         customers={recovery.customers}

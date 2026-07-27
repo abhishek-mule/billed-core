@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       .from('invoices')
       .select('customer_id, total, paid_amount, status, recovery_stage, next_recovery_at, last_whatsapp_at, created_at')
       .eq('tenant_id', tenantId)
-      .in('status', ['unpaid', 'overdue', 'partial'])
+      .gt('outstanding_amount', 0)
 
     if (invErr) throw invErr
 

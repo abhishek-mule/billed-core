@@ -222,7 +222,7 @@ export async function backfillUnplanned(tenantId: string, limit = 100): Promise<
     .from('invoices')
     .select('id, tenant_id, customer_id, due_date')
     .eq('tenant_id', tenantId)
-    .in('status', ['unpaid', 'overdue', 'partial'])
+    .gt('outstanding_amount', 0)
     .limit(limit)
 
   if (!invoices) return 0

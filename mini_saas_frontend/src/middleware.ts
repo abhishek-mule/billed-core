@@ -64,7 +64,7 @@ function applyRoutingRules(response: NextResponse, pathname: string, hasAuth: bo
   }
 
   if (hasAuth && isAuthRoute && !isAuthResolverRoute) {
-    const destination = hasTenant ? '/dashboard' : '/onboarding'
+    const destination = hasTenant ? '/recovery' : '/onboarding'
     if (DEBUG) console.log(`[Middleware] Redirecting to ${destination} (auth, auth route)`)
     return NextResponse.redirect(new URL(destination, requestUrl))
   }
@@ -75,8 +75,8 @@ function applyRoutingRules(response: NextResponse, pathname: string, hasAuth: bo
   }
 
   if (hasAuth && hasTenant && isOnboardingRoute) {
-    if (DEBUG) console.log(`[Middleware] Redirecting to /dashboard (auth, has tenant, onboarding)`)
-    return NextResponse.redirect(new URL('/dashboard', requestUrl))
+    if (DEBUG) console.log(`[Middleware] Redirecting to /recovery (auth, has tenant, onboarding)`)
+    return NextResponse.redirect(new URL('/recovery', requestUrl))
   }
 
   if (DEBUG) console.log(`[Middleware] Allowing request`)

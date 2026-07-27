@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         .from('invoices')
         .select('total, paid_amount, due_date, customer_id, customer_name')
         .eq('tenant_id', tenantId!)
-        .in('status', ['unpaid', 'overdue', 'partial'])
+        .gt('outstanding_amount', 0)
         .order('due_date', { ascending: true })
 
       const now = new Date()
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
         .from('invoices')
         .select('*, customers(id, customer_name, phone, customer_tier)')
         .eq('tenant_id', tenantId)
-        .in('status', ['unpaid', 'overdue', 'partial'])
+        .gt('outstanding_amount', 0)
         .order('created_at', { ascending: false }),
       supabase
         .from('recovery_attributions')
@@ -245,7 +245,7 @@ export async function GET(request: NextRequest) {
       if (!existingCustIds.has(custId)) {
         const first = invs[0]
         const total = invs.reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
-        const overdue = invs.filter(i => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+        const overdue = invs.filter(i => i.due_date && new Date(i.due_date) < now)
           .reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
         
         const dueDates = invs
@@ -279,7 +279,7 @@ export async function GET(request: NextRequest) {
       const invs = groupedInvoices.get(custId) || []
       const out = invs.reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
       const ovd = invs
-        .filter((i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+        .filter((i: any) => i.due_date && new Date(i.due_date) < now)
         .reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
       return { out, ovd }
     }
@@ -356,6 +356,7 @@ export async function GET(request: NextRequest) {
         totalOverdue: sc.total_overdue || sc.total_outstanding || 0,
         oldestOverdueDays: sc.oldest_overdue_days || 0,
         attentionScore: sc.attention_score || 10,
+        priorityScore: sc.attention_score || 10,
         nextActionType: (sc.total_overdue || 0) > 0 ? 'send_reminder' : 'wait',
         promiseToPayDate: null,
         ignoredReminders: sc.reminder_count || 0,

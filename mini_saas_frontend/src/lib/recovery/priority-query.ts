@@ -9,6 +9,7 @@ export interface PriorityCase {
   totalOverdue: number
   oldestOverdueDays: number
   attentionScore: number
+  priorityScore: number
   nextActionType: NextActionType
   promiseToPayDate: string | null
   ignoredReminders: number
@@ -40,6 +41,7 @@ function mapPriorityCase(row: any): PriorityCase {
     totalOverdue: parseFloat(row.total_overdue) || 0,
     oldestOverdueDays: parseInt(row.oldest_overdue_days) || 0,
     attentionScore: parseInt(row.attention_score) || 0,
+    priorityScore: parseInt(row.priority_score) || 0,
     nextActionType: row.next_action_type as NextActionType,
     promiseToPayDate: row.promise_to_pay_date,
     ignoredReminders: parseInt(row.ignored_reminders) || 0,
@@ -72,7 +74,7 @@ export async function fetchCustomerRecoveryMetrics(tenantId: string, customerId:
       .select('id, total, outstanding_amount')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
-      .in('status', ['unpaid', 'overdue', 'partial']),
+      .gt('outstanding_amount', 0),
     supabaseAdmin
       .from('payments')
       .select('paid_at')
@@ -85,7 +87,7 @@ export async function fetchCustomerRecoveryMetrics(tenantId: string, customerId:
       .select('due_date')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
-      .in('status', ['unpaid', 'overdue', 'partial'])
+      .gt('outstanding_amount', 0)
       .order('due_date', { ascending: true })
       .limit(1)
   ])

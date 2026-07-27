@@ -207,9 +207,9 @@ async function validateAction(action: ActionRow): Promise<string | 'ok'> {
   const invoiceIds = action.invoice_ids
   const { data: invoices } = await supabaseAdmin
     .from('invoices')
-    .select('id, status, customer_id')
+    .select('id, customer_id')
     .in('id', invoiceIds)
-    .in('status', ['unpaid', 'overdue', 'partial'])
+    .gt('outstanding_amount', 0)
 
   if (!invoices || invoices.length === 0) {
     return 'all_invoices_paid'

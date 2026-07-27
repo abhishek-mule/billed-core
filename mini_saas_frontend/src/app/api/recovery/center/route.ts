@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
           .select('customer_id, total, paid_amount, status, due_date')
           .eq('tenant_id', tenantId)
           .in('customer_id', customerIds)
-          .in('status', ['unpaid', 'overdue', 'partial'])
+          .gt('outstanding_amount', 0)
       : { data: [] as any[] }
 
     const invByCust = new Map<string, any[]>()
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       const invs = invByCust.get(custId) || []
       const out = invs.reduce((s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0)
       const overdueInvs = invs.filter(
-        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now),
+        (i: any) => i.due_date && new Date(i.due_date) < now,
       )
       const ovd = overdueInvs.length > 0
         ? Math.max(...overdueInvs.map((i: any) =>
