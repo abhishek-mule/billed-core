@@ -13,6 +13,7 @@ import type {
   Product,
   Purchase,
   QueueItem,
+  RecoveryActivity,
   RecoveryAttempt,
   RecoveryCase,
   RecoveryAttribution,
@@ -43,6 +44,7 @@ class BillzoDB extends Dexie {
   recoveryAttempts!: Table<RecoveryAttempt, string>
   recoveryCases!: Table<RecoveryCase, string>
   recoveryAttributions!: Table<RecoveryAttribution, string>
+  recoveryActivities!: Table<RecoveryActivity, string>
   promises!: Table<CustomerPromise, string>
   queue!: Table<QueueItem, string>
   activity!: Table<Activity, string>
@@ -91,6 +93,9 @@ class BillzoDB extends Dexie {
     })
     this.version(8).stores({
       invoices: 'id, tenantId, customerId, status, customerName, dueAt, nextRecoveryAt, lastWhatsAppStatus, lastReminderAt, isSnoozed, updatedAt, syncStatus',
+    })
+    this.version(9).stores({
+      recoveryActivities: 'id, tenantId, invoiceId, customerId, type, actor, createdAt',
     })
   }
 }
