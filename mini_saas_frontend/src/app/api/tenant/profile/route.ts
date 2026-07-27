@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('tenants')
-      .select('name, phone, email, address, upi_id, gstin, pan, bank_details')
+      .select('name, phone, email, address, upi_id, gstin, pan, bank_details, logo')
       .eq('id', tenantId)
       .single()
 
@@ -40,6 +40,7 @@ export async function PUT(request: NextRequest) {
       upiId?: string
       gstin?: string
       pan?: string
+      logo?: string
     }>(request, {
       fields: {
         name: { type: 'string' },
@@ -49,10 +50,11 @@ export async function PUT(request: NextRequest) {
         upiId: { type: 'string' },
         gstin: { type: 'string' },
         pan: { type: 'string' },
+        logo: { type: 'string' },
       },
     })
     if (body.response) return body.response
-    const { name, phone, email, address, upiId, gstin, pan } = body.data!
+    const { name, phone, email, address, upiId, gstin, pan, logo } = body.data!
 
     if (!supabase) return NextResponse.json({ error: 'Database not available' }, { status: 503 })
 
@@ -64,6 +66,7 @@ export async function PUT(request: NextRequest) {
     if (upiId !== undefined) updates.upi_id = upiId
     if (gstin !== undefined) updates.gstin = gstin
     if (pan !== undefined) updates.pan = pan
+    if (logo !== undefined) updates.logo = logo
 
     const intentResult = await submitIntent({
       intentId: crypto.randomUUID(),
