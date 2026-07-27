@@ -8,12 +8,14 @@ import { getActiveSession, getTenantId } from './tenant'
 
 import { trackEvent, events } from './analytics'
 import { triggerWhatsAppNotification, triggerPushNotification } from './automation'
+import { logRecoveryActivity } from './recovery/activity'
 import type { RecoveryAttempt } from './types'
 import type {
   Activity,
   BillzoSnapshot,
   Customer,
   CustomerPromise,
+  DocumentType,
   Invoice,
   InvoiceItem,
   InventoryMovement,
@@ -53,7 +55,7 @@ async function log(label: string, amount?: number, cta?: string) {
   await db().activity.add(activity)
 }
 
-function enqueue(entity: QueueItem['entity'], entityId: string, action: QueueItem['action'], payload: unknown) {
+export function enqueue(entity: QueueItem['entity'], entityId: string, action: QueueItem['action'], payload: unknown) {
   const session = getSession()
   const current = now()
   const idempotencyKey = `${session.tenantId}:${entity}:${entityId}:${action}`
@@ -177,6 +179,7 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
     total: item.lineTotal,
     paidAmount: 0,
     status: 'unpaid',
+    documentType: product.gstRate && product.gstRate > 0 ? 'tax_invoice' : 'bill',
     dueAt: current,
     createdAt: current,
     updatedAt: current,
@@ -236,6 +239,14 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
       invoiceId: invoice.id,
       customerId: customer.id,
       dueAt: invoice.dueAt,
+    })
+
+    logRecoveryActivity({
+      invoiceId: invoice.id,
+      customerId: customer.id,
+      type: 'invoice_created',
+      actor: 'merchant',
+      metadata: { total: invoice.total, documentType: invoice.documentType },
     })
 
     return { success: true, data: { ...invoice, items: [item] } }
@@ -308,6 +319,15 @@ export async function markPaid(invoice: Invoice, amount = invoice.total - invoic
     })
     notifyChanged()
     scheduleBackgroundSync()
+
+    logRecoveryActivity({
+      invoiceId: invoice.id,
+      customerId: invoice.customerId,
+      type: 'payment_confirmed',
+      actor: 'merchant',
+      metadata: { amount: paidAmount, status },
+    })
+
     return { success: true }
   } catch (error) {
     console.error('Failed to mark paid:', error)
@@ -374,6 +394,15 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
 
     notifyChanged()
     scheduleBackgroundSync()
+
+    logRecoveryActivity({
+      invoiceId: invoice.id,
+      customerId: invoice.customerId,
+      type: 'reminder_sent',
+      actor: 'system',
+      metadata: { stage: invoice.recoveryStage },
+    })
+
     return { success: true }
   } catch (error) {
     console.error('Failed to send reminder:', error)
@@ -427,7 +456,8 @@ export async function handlePOSInvoice(
   customerName: string,
   customerPhone: string,
   method: 'upi' | 'cash' | 'udhar',
-  customerId?: string
+  customerId?: string,
+  documentType?: DocumentType
 ): Promise<ActionResult> {
   if (cart.length === 0) {
     return { success: false, error: 'Cart is empty. Add items before billing.' }
@@ -446,8 +476,8 @@ export async function handlePOSInvoice(
     const d = new Date(); const y = d.getFullYear(); const m = d.getMonth() + 1
     return m >= 4 ? `${y}-${(y + 1).toString().slice(2)}` : `${y - 1}-${y.toString().slice(2)}`
   })()
-  const prefix = (currentTenant?.name || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() || 'BIZ'
-  const invoiceNumber = `${prefix}-${fy}-${String(nextCounter).padStart(6, '0')}`
+  const invPrefix = documentType === 'bill' ? 'BILL' : 'INV'
+  const invoiceNumber = `${invPrefix}-${fy}-${String(nextCounter).padStart(6, '0')}`
 
   const invoice: Invoice & { paymentMode?: string } = {
     id: invoiceId,
@@ -459,6 +489,7 @@ export async function handlePOSInvoice(
     paidAmount,
     status: method === 'udhar' ? 'unpaid' : 'paid',
     invoiceNumber,
+    documentType: documentType || 'tax_invoice',
     dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     createdAt: current,
     updatedAt: current,
@@ -617,6 +648,14 @@ export async function handlePOSInvoice(
       trackEvent(session.tenantId, events.invoice_created, { invoiceId, total, customer: customerName })
     }
 
+    logRecoveryActivity({
+      invoiceId,
+      customerId: customerId || undefined,
+      type: 'invoice_created',
+      actor: 'merchant',
+      metadata: { total, method, documentType },
+    })
+
     return { success: true, data: { ...invoice, items } as any }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Failed to create invoice. Please try again.'
@@ -666,6 +705,8 @@ export async function recordPromise(
 
 export async function fulfillPromise(promiseId: string): Promise<ActionResult> {
   const current = now()
+  const promise = await db().promises.get(promiseId)
+
   try {
     await db().transaction('rw', [db().promises, db().queue, db().activity], async () => {
       await db().promises.update(promiseId, {
@@ -678,6 +719,16 @@ export async function fulfillPromise(promiseId: string): Promise<ActionResult> {
     })
     notifyChanged()
     scheduleBackgroundSync()
+
+    if (promise && promise.invoiceIds.length > 0) {
+      logRecoveryActivity({
+        invoiceId: promise.invoiceIds[0],
+        customerId: promise.customerId,
+        type: 'promise_fulfilled',
+        actor: 'merchant',
+      })
+    }
+
     return { success: true }
   } catch (error) {
     console.error('Failed to fulfill promise:', error)
