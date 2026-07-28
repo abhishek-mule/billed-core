@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import '@/styles/recovery-center.css'
+import { formatScheduledSlot } from '@/lib/recovery/business-hours'
 import {
   Phone, MessageSquare, Clock, CheckCircle2, ArrowRight, TrendingUp,
   AlertTriangle, HeartHandshake, RotateCcw, Bell, Loader2,
@@ -378,7 +379,7 @@ export default function RecoveryCenterPage() {
                       : s.templateName || 'Reminder'}
                   </span>
                 </div>
-                <div className="rc-row-time">{fmtTime(s.scheduledAt)}</div>
+                <div className="rc-row-time">{formatScheduledSlot(s.scheduledAt)}</div>
               </div>
             ))}
           </div>

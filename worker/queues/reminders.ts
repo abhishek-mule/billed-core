@@ -35,6 +35,33 @@ const logger = createQueueLogger('reminders')
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 
+// ── Business-hours slot aligner ──
+function nextBusinessSlot(candidate: Date): Date {
+  const tz = 'Asia/Kolkata'
+  const hour = parseInt(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(candidate),
+    10,
+  )
+  const minute = parseInt(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, minute: '2-digit' }).format(candidate),
+    10,
+  )
+  const currentMinutes = hour * 60 + minute
+  // Window: 09:00 – 19:59 (last slot starts at 19:00)
+  if (currentMinutes >= 9 * 60 && currentMinutes < 20 * 60) return candidate
+  // Before 9 AM → move to 9 AM today
+  if (currentMinutes < 9 * 60) {
+    const ist = new Date(candidate.getTime() + 5.5 * 60 * 60 * 1000)
+    ist.setUTCHours(9, 0, 0, 0)
+    return new Date(ist.getTime() - 5.5 * 60 * 60 * 1000)
+  }
+  // After 8 PM → move to 9 AM next day
+  const next = new Date(candidate.getTime() + 24 * 60 * 60 * 1000)
+  const ist = new Date(next.getTime() + 5.5 * 60 * 60 * 1000)
+  ist.setUTCHours(9, 0, 0, 0)
+  return new Date(ist.getTime() - 5.5 * 60 * 60 * 1000)
+}
+
 // ── Message Variation Library (Rule 12) ──
 // 3 variations per stage; cycles through them so customers never see the same text twice.
 // 4th param (paidText) used for partial payment acknowledgment.
@@ -623,7 +650,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
               recoveryStage: nextStage,
               nextRecoveryAt: maxStageReached
                 ? null
-                : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
+                : nextBusinessSlot(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter())).toISOString(),
               recoveryState: newRecoveryState,
             },
           }, 'trusted_sync')
@@ -635,7 +662,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             recovery_stage: nextStage,
             next_recovery_at: maxStageReached
               ? null
-              : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
+              : nextBusinessSlot(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + jitter())).toISOString(),
             sync_status: 'pending',
           }
           if (newRecoveryState) {
@@ -809,13 +836,13 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
                   actor: 'reminder-worker',
                   payload: {
                     invoiceId,
-                    nextRecoveryAt: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
+                    nextRecoveryAt: nextBusinessSlot(new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter())).toISOString(),
                   },
                 }, 'trusted_sync')
               } else {
                 spineDiagnostics.dualWrite('reminders:updateCadence', 'invoices')
                 const cadenceUpdate: Record<string, any> = {
-                  next_recovery_at: new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter()).toISOString(),
+                  next_recovery_at: nextBusinessSlot(new Date(Date.now() + nextFollowUpDays * 24 * 60 * 60 * 1000 + jitter())).toISOString(),
                 }
                 // authority:fallback reminder.update_cadence
                 await supabaseAdmin.from('invoices').update(cadenceUpdate).eq('id', invoiceId)

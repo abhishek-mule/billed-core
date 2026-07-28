@@ -4,6 +4,8 @@
 // It never sends messages and never runs on the cron — see scheduler.ts.
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
+import { nextBusinessSlot, DEFAULTS as DEFAULT_HOURS } from './business-hours'
+import type { OperatingHours } from './business-hours'
 
 const SYSTEM_TENANT = '00000000-0000-0000-0000-000000000000'
 
@@ -107,7 +109,12 @@ export async function planRecoveryForInvoice(ctx: PlanContext): Promise<{ create
   }
 
   const anchor = ctx.anchorAt ?? new Date()
-  const created = await insertSteps(ctx, policy, anchor)
+  const { data: customer } = await supabaseAdmin
+    .from('customers')
+    .select('customer_tier')
+    .eq('id', ctx.customerId)
+    .maybeSingle()
+  const created = await insertSteps(ctx, policy, anchor, customer?.customer_tier)
 
   // Audit the planning decision.
   await writeOutboxEvent({
@@ -145,6 +152,12 @@ export async function planPromiseFollowup(ctx: PlanContext): Promise<{ created: 
 
   if (existing && existing.length > 0) return { created: 0 }
 
+  const { data: cust } = await supabaseAdmin
+    .from('customers')
+    .select('customer_tier')
+    .eq('id', ctx.customerId)
+    .maybeSingle()
+
   const actionId = `CA_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   const { error } = await supabaseAdmin.from('collection_actions').insert({
     id: actionId,
@@ -155,7 +168,7 @@ export async function planPromiseFollowup(ctx: PlanContext): Promise<{ created: 
     status: 'scheduled',
     source: 'system',
     trigger_type: 'PROMISE_DATE',
-    scheduled_at: ctx.promiseDate.toISOString(),
+    scheduled_at: nextBusinessSlot(ctx.promiseDate, DEFAULT_HOURS, cust?.customer_tier).toISOString(),
     reason: 'Promise follow-up scheduled',
     metadata: { reason: ctx.reason, promiseDate: ctx.promiseDate.toISOString() },
     created_at: new Date().toISOString(),
@@ -182,11 +195,13 @@ async function insertSteps(
   ctx: PlanContext,
   policy: { policyId: string; steps: any[] },
   anchor: Date,
+  customerTier?: string,
 ): Promise<number> {
   let count = 0
   for (const step of policy.steps) {
     if (step.triggerType !== 'DUE_DATE' && step.triggerType !== 'INVOICE_CREATED') continue
-    const scheduled = new Date(anchor.getTime() + step.offsetDays * 24 * 60 * 60 * 1000)
+    const raw = new Date(anchor.getTime() + step.offsetDays * 24 * 60 * 60 * 1000)
+    const scheduled = nextBusinessSlot(raw, DEFAULT_HOURS, customerTier)
     const actionId = `CA_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}_${step.sequence}`
     const { error } = await supabaseAdmin.from('collection_actions').insert({
       id: actionId,
