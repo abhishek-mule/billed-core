@@ -60,6 +60,11 @@ export default function CaseWorkspacePage() {
   const [notes, setNotes] = useState<any[]>([])
   const [draft, setDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [showOutcome, setShowOutcome] = useState(false)
+  const [outcomeNote, setOutcomeNote] = useState('')
+  const [promiseDate, setPromiseDate] = useState('')
+  const [submittingOutcome, setSubmittingOutcome] = useState<string | null>(null)
+  const [outcomeMsg, setOutcomeMsg] = useState<string | null>(null)
 
   const customerId = data?.customer?.id || null
 
@@ -122,6 +127,48 @@ export default function CaseWorkspacePage() {
     if (!customerId) return
     await fetch(`/api/recovery/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' })
     await reloadNotes()
+  }
+
+  const recordOutcome = async (outcome: string) => {
+    setSubmittingOutcome(outcome)
+    setOutcomeMsg(null)
+    try {
+      const res = await fetch('/api/recovery/outcome', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          caseId,
+          outcome,
+          note: outcomeNote,
+          promiseDate: outcome === 'promised' ? promiseDate || undefined : undefined,
+          customerId,
+        }),
+      })
+      if (res.ok) {
+        const outcomeLabels: Record<string, string> = {
+          promised: 'Promise recorded',
+          wrong_number: 'Marked as wrong number',
+          no_answer: 'Marked as no answer',
+          dispute: 'Dispute raised',
+          paid: 'Marked as paid',
+          not_interested: 'Marked as not interested',
+        }
+        setOutcomeMsg(outcomeLabels[outcome] || 'Outcome recorded')
+        setShowOutcome(false)
+        setOutcomeNote('')
+        setPromiseDate('')
+        // Reload workspace data after a moment
+        setTimeout(() => window.location.reload(), 1500)
+      } else {
+        const err = await res.json()
+        setOutcomeMsg(`Failed: ${err.error || 'unknown'}`)
+      }
+    } catch {
+      setOutcomeMsg('Network error')
+    } finally {
+      setSubmittingOutcome(null)
+    }
   }
 
   if (loading) return <div className="rc-loading"><Loader2 className="spin" size={22} /><span>Loading workspace…</span></div>
@@ -326,15 +373,67 @@ export default function CaseWorkspacePage() {
         )}
       </section>
 
+      {/* Outcome capture dialog */}
+      {showOutcome ? (
+        <div className="oc-overlay" onClick={() => setShowOutcome(false)}>
+          <div className="oc-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="oc-title">What happened?</h3>
+            <div className="oc-grid">
+              <button className="oc-btn oc-btn--promised" onClick={() => recordOutcome('promised')} disabled={!!submittingOutcome}>
+                <HeartHandshake size={16} /> Promised Payment
+              </button>
+              <button className="oc-btn oc-btn--paid" onClick={() => recordOutcome('paid')} disabled={!!submittingOutcome}>
+                <CheckCircle2 size={16} /> Paid
+              </button>
+              <button className="oc-btn oc-btn--noans" onClick={() => recordOutcome('no_answer')} disabled={!!submittingOutcome}>
+                <Phone size={16} /> No Answer
+              </button>
+              <button className="oc-btn oc-btn--wrong" onClick={() => recordOutcome('wrong_number')} disabled={!!submittingOutcome}>
+                <Phone size={16} /> Wrong Number
+              </button>
+              <button className="oc-btn oc-btn--dispute" onClick={() => recordOutcome('dispute')} disabled={!!submittingOutcome}>
+                <AlertTriangle size={16} /> Dispute Raised
+              </button>
+              <button className="oc-btn oc-btn--nointerest" onClick={() => recordOutcome('not_interested')} disabled={!!submittingOutcome}>
+                ✕ Not Interested
+              </button>
+            </div>
+            <input
+              className="oc-note"
+              placeholder="Add note (optional)"
+              value={outcomeNote}
+              onChange={(e) => setOutcomeNote(e.target.value)}
+            />
+            {outcomeNote ? (
+              <input
+                className="oc-date"
+                type="date"
+                value={promiseDate}
+                onChange={(e) => setPromiseDate(e.target.value)}
+                placeholder="Promise date"
+              />
+            ) : null}
+            <button className="oc-cancel" onClick={() => setShowOutcome(false)}>Cancel</button>
+            {outcomeMsg ? <div className="oc-msg">{outcomeMsg}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
       {/* Bottom action bar */}
       {rc && rc.outstanding > 0 ? (
         <div className="cw-actions">
-          <Link href={`/recovery/work`} className="rc-btn rc-btn--ghost">Open in Queue</Link>
+          <button className="rc-btn rc-btn--ghost" onClick={() => setShowOutcome(true)}>
+            <CheckCircle2 size={14} /> Record Outcome
+          </button>
           {c?.phone ? (
-            <a href={`tel:${c.phone}`} className="rc-btn rc-btn--primary">
+            <a href={`tel:${c.phone}`} className="rc-btn rc-btn--primary" onClick={() => setShowOutcome(true)}>
               <Phone size={15} /> Call
             </a>
-          ) : null}
+          ) : (
+            <button className="rc-btn rc-btn--primary" onClick={() => setShowOutcome(true)}>
+              <MessageSquare size={15} /> Record Outcome
+            </button>
+          )}
         </div>
       ) : null}
     </div>

@@ -740,4 +740,90 @@
 .wq-expand-actions { display: flex; gap: 8px; padding-top: 10px; }
 .wq-expand-actions .rc-btn { flex: 1; padding: 10px; font-size: 13px; }
 
+/* ─── Outcome Capture ───────────────────────────────────────────────── */
+.oc-overlay {
+  position: fixed;
+  inset: 0;
+  background: hsl(0 0% 0% / 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.oc-dialog {
+  background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 16px 24px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.oc-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.oc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.oc-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bd);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .1s;
+}
+.oc-btn:disabled { opacity: 0.5; cursor: default; }
+.oc-btn--promised { border-color: hsl(var(--warning) / 0.3); color: hsl(var(--warning)); }
+.oc-btn--promised:hover { background: hsl(var(--warning) / 0.08); }
+.oc-btn--paid { border-color: hsl(var(--success) / 0.3); color: hsl(var(--success)); }
+.oc-btn--paid:hover { background: hsl(var(--success) / 0.08); }
+.oc-btn--noans { border-color: hsl(var(--muted-foreground) / 0.3); }
+.oc-btn--noans:hover { background: hsl(var(--muted) / 0.3); }
+.oc-btn--wrong { border-color: hsl(var(--muted-foreground) / 0.3); }
+.oc-btn--wrong:hover { background: hsl(var(--muted) / 0.3); }
+.oc-btn--dispute { border-color: hsl(var(--destructive) / 0.3); color: hsl(var(--destructive)); }
+.oc-btn--dispute:hover { background: hsl(var(--destructive) / 0.08); }
+.oc-btn--nointerest { border-color: hsl(var(--muted-foreground) / 0.3); }
+.oc-btn--nointerest:hover { background: hsl(var(--muted) / 0.3); }
+.oc-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bd);
+  background: hsl(var(--muted) / 0.3);
+  font-size: 13px;
+  color: var(--foreground);
+}
+.oc-date {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bd);
+  background: hsl(var(--muted) / 0.3);
+  font-size: 13px;
+  color: var(--foreground);
+}
+.oc-cancel {
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.oc-msg {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--success));
+  padding: 6px;
+}
+
 
