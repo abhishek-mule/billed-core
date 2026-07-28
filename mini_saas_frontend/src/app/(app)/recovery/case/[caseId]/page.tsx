@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Phone, MessageSquare, CheckCircle2, ArrowLeft, ArrowRight,
+  Phone, MessageSquare, CheckCircle2, ArrowLeft,
   HeartHandshake, Bell, FileText, Loader2, CircleDashed,
-  AlertTriangle, Clock,
+  AlertTriangle,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
 
@@ -92,6 +92,21 @@ export default function CaseWorkspacePage() {
     })()
     return () => { active = false }
   }, [caseId])
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && sessionStorage.getItem('pendingOutcome') === 'true') {
+        sessionStorage.removeItem('pendingOutcome')
+        setShowOutcome(true)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  const handleCall = () => {
+    sessionStorage.setItem('pendingOutcome', 'true')
+  }
 
   const reloadNotes = async () => {
     if (!customerId) return
@@ -426,7 +441,11 @@ export default function CaseWorkspacePage() {
             <CheckCircle2 size={14} /> Record Outcome
           </button>
           {c?.phone ? (
-            <a href={`tel:${c.phone}`} className="rc-btn rc-btn--primary" onClick={() => setShowOutcome(true)}>
+            <a
+              href={`tel:${c.phone}`}
+              className="rc-btn rc-btn--primary"
+              onClick={handleCall}
+            >
               <Phone size={15} /> Call
             </a>
           ) : (
