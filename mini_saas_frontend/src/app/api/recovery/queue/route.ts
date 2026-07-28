@@ -240,6 +240,22 @@ export async function GET(request: NextRequest) {
       if (!groupedInvoices.has(inv.customer_id)) groupedInvoices.set(inv.customer_id, [])
       groupedInvoices.get(inv.customer_id)!.push(inv)
     }
+
+    // Detect & repair: null customer_ids would create virtual cases with customerId=null,
+    // which breaks the workspace navigation. Repair by assigning a walk-in customer.
+    const nullInvs = groupedInvoices.get('null' as any) || groupedInvoices.get(null as any) || []
+    if (nullInvs.length > 0) {
+      console.warn('[RecoveryQueue] repair: repairing', nullInvs.length, 'invoices with null customer_id')
+      const walkinId = await recoverWalkInCustomer(tenantId!)
+      // Re-key the grouped invoices from null → walkinId
+      groupedInvoices.delete(null as any)
+      groupedInvoices.delete('null' as any)
+      for (const inv of nullInvs) {
+        inv.customer_id = walkinId
+        if (!groupedInvoices.has(walkinId)) groupedInvoices.set(walkinId, [])
+        groupedInvoices.get(walkinId)!.push(inv)
+      }
+    }
     
     for (const [custId, invs] of groupedInvoices.entries()) {
       if (!existingCustIds.has(custId)) {
@@ -493,4 +509,71 @@ export async function GET(request: NextRequest) {
     console.error('[RecoveryQueue] Error:', err)
     return NextResponse.json({ items: [], recoveredToday: 0, summary: zeroSummary() })
   }
+}
+
+/**
+ * Self-heal: find or create a walk-in customer for a tenant,
+ * then link orphaned invoices that have null customer_id.
+ *
+ * This prevents customerId=null from breaking workspace navigation.
+ */
+async function recoverWalkInCustomer(tenantId: string): Promise<string> {
+  const walkinId = 'cust_walkin_' + tenantId
+
+  const { data: existing } = await supabaseAdmin
+    .from('customers')
+    .select('id')
+    .eq('id', walkinId)
+    .maybeSingle()
+
+  if (existing) {
+    // Link any still-orphan invoices
+    await supabaseAdmin
+      .from('invoices')
+      .update({ customer_id: walkinId })
+      .eq('tenant_id', tenantId)
+      .is('customer_id', null)
+      .gt('outstanding_amount', 0)
+    return walkinId
+  }
+
+  await supabaseAdmin.from('customers').insert({
+    id: walkinId,
+    tenant_id: tenantId,
+    customer_name: 'Walk-in Customer',
+    phone: null,
+    customer_tier: 'regular',
+    is_active: true,
+    automation_mode: 'full_auto',
+    phone_verification: 'unknown',
+    reputation_score: 50,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+
+  // Link orphan invoices
+  const { data: updated } = await supabaseAdmin
+    .from('invoices')
+    .update({ customer_id: walkinId })
+    .eq('tenant_id', tenantId)
+    .is('customer_id', null)
+    .gt('outstanding_amount', 0)
+    .select('id, outstanding_amount')
+
+  // Create a recovery case for the walk-in if there are invoices
+  if (updated && updated.length > 0) {
+    const totalOs = updated.reduce((s: number, inv: any) => s + (parseFloat(inv.outstanding_amount) || 0), 0)
+    await supabaseAdmin.from('recovery_cases').upsert({
+      tenant_id: tenantId,
+      customer_id: walkinId,
+      total_outstanding: totalOs,
+      recovery_state_v2: 'overdue',
+      next_action_type: 'send_reminder',
+      attention_score: 50,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'tenant_id,customer_id' })
+  }
+
+  return walkinId
 }

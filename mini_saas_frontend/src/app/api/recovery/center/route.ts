@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     // ── 1. Needs Action ──
     // Cases that are past due / promised / disputed and still owe money.
-    const { data: cases } = await supabaseAdmin
+    let { data: cases } = await supabaseAdmin
       .from('recovery_cases')
       .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type, broken_promises, reminder_count')
       .eq('tenant_id', tenantId)
@@ -36,6 +36,15 @@ export async function GET(request: NextRequest) {
       .in('recovery_state_v2', ['active', 'overdue', 'partial_payment', 'promised', 'disputed'])
       .order('total_overdue', { ascending: false })
       .limit(50)
+
+    // Detect & repair: never let a null customer_id silently break navigation
+    const nullCustCases = (cases || []).filter(c => !c.customer_id)
+    for (const nc of nullCustCases) {
+      console.warn('[RecoveryCenter] repair: null customer_id on case', nc.id)
+      const walkinId = await ensureWalkinCustomer(tenantId)
+      await supabaseAdmin.from('recovery_cases').update({ customer_id: walkinId }).eq('id', nc.id)
+      nc.customer_id = walkinId
+    }
 
     const customerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
 
@@ -143,7 +152,7 @@ export async function GET(request: NextRequest) {
     const underFollowUp = needsAction.reduce((s: number, c: any) => s + (c.outstanding || 0), 0)
 
     // ── 3. Recently Recovered ──
-    const { data: recovered } = await supabaseAdmin
+    let { data: recovered } = await supabaseAdmin
       .from('recovery_cases')
       .select('id, customer_id, total_outstanding, recovery_state_v2, updated_at')
       .eq('tenant_id', tenantId)
@@ -151,6 +160,14 @@ export async function GET(request: NextRequest) {
       .gte('updated_at', new Date(now.getTime() - 7 * 86400000).toISOString())
       .order('updated_at', { ascending: false })
       .limit(20)
+
+    const nullRecCases = (recovered || []).filter(c => !c.customer_id)
+    for (const nc of nullRecCases) {
+      console.warn('[RecoveryCenter] repair: null customer_id on recovered case', nc.id)
+      const walkinId = await ensureWalkinCustomer(tenantId)
+      await supabaseAdmin.from('recovery_cases').update({ customer_id: walkinId }).eq('id', nc.id)
+      nc.customer_id = walkinId
+    }
 
     const recCustomerIds = [...new Set((recovered || []).map((c: any) => c.customer_id))]
     const { data: recCustomers } = recCustomerIds.length
@@ -194,4 +211,48 @@ export async function GET(request: NextRequest) {
     console.error('[RecoveryCenter] failed', err)
     return NextResponse.json({ error: 'Failed to load recovery center' }, { status: 500 })
   }
+}
+
+/**
+ * Find or create the walk-in customer for a tenant.
+ * This is a self-healing mechanism: if data somehow has null customer_ids
+ * (migration gap, race condition, manual SQL), this ensures we never
+ * silently drop recovery work.
+ */
+async function ensureWalkinCustomer(tenantId: string): Promise<string> {
+  const walkinId = 'cust_walkin_' + tenantId
+
+  // Check if it already exists
+  const { data: existing } = await supabaseAdmin
+    .from('customers')
+    .select('id')
+    .eq('id', walkinId)
+    .maybeSingle()
+
+  if (existing) return walkinId
+
+  // Create it
+  await supabaseAdmin.from('customers').insert({
+    id: walkinId,
+    tenant_id: tenantId,
+    customer_name: 'Walk-in Customer',
+    phone: null,
+    customer_tier: 'regular',
+    is_active: true,
+    automation_mode: 'full_auto',
+    phone_verification: 'unknown',
+    reputation_score: 50,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+
+  // Also link any orphan invoices with null customer_id
+  await supabaseAdmin
+    .from('invoices')
+    .update({ customer_id: walkinId })
+    .eq('tenant_id', tenantId)
+    .is('customer_id', null)
+    .gt('outstanding_amount', 0)
+
+  return walkinId
 }

@@ -273,33 +273,26 @@ export default function RecoveryCenterPage() {
         ) : (
           <div className="rc-list">
             {data.needsAction.map((c) => {
-              const badge = stateBadge(c.state)
               return (
                 <Link
                   key={c.caseId}
                   href={`/recovery/customer/${c.customerId}`}
                   className="rc-card rc-card--red"
                 >
-                  <div className="rc-card-top">
-                    <span className="rc-cust">{c.customerName}</span>
-                    <span className={badge.cls}>{badge.label}</span>
-                  </div>
+                  {c.overdue > 0 ? (
+                    <div className="rc-overdue-badge">
+                      <span className="rc-overdue-num">{c.overdue}</span>
+                      <span className="rc-overdue-lbl">DAYS OVERDUE</span>
+                    </div>
+                  ) : c.promiseBrokenDays != null ? (
+                    <div className="rc-overdue-badge rc-overdue-badge--warn">
+                      <AlertTriangle size={14} />
+                      Promise broken {c.promiseBrokenDays}d ago
+                    </div>
+                  ) : null}
                   <div className="rc-amount">{fmt(c.outstanding)}</div>
+                  <div className="rc-cust">{c.customerName}</div>
                   <div className="rc-meta">
-                    {c.promiseBrokenDays != null ? (
-                      <span className="rc-meta-warn">
-                        <AlertTriangle size={13} />
-                        Promise broken {c.promiseBrokenDays}d ago
-                      </span>
-                    ) : c.overdue > 0 ? (
-                      <span>
-                        <Clock size={13} /> {c.overdue} days overdue
-                      </span>
-                    ) : (
-                      <span>Outstanding balance</span>
-                    )}
-                  </div>
-                  <div className="rc-card-foot">
                     <span className="rc-rec">
                       {c.recommendedAction === 'call' ? (
                         <><Phone size={13} /> Call</>
@@ -311,6 +304,9 @@ export default function RecoveryCenterPage() {
                       {' · '}
                       {actionLabel(c.recommendedAction)}
                     </span>
+                  </div>
+                  <div className="rc-card-foot">
+                    <span className="rc-arrow-label">Open →</span>
                     <ArrowRight size={15} className="rc-arrow" />
                   </div>
                 </Link>
@@ -449,7 +445,13 @@ export default function RecoveryCenterPage() {
 
       {first ? (
         <Link href={`/recovery/customer/${first.customerId}`} className="rc-fab">
-          <Phone size={18} /> Start with {first.customerName}
+          {first.recommendedAction === 'call' ? (
+            <><Phone size={18} /> Call {first.customerName}</>
+          ) : first.recommendedAction === 'record_payment' ? (
+            <><HeartHandshake size={18} /> Record Payment</>
+          ) : (
+            <><Bell size={18} /> Send Reminder</>
+          )}
         </Link>
       ) : null}
     </div>

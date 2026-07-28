@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     // Invoices (open / unpaid first) — single source of truth for amounts
     const { data: invoices } = await supabaseAdmin
       .from('invoices')
-      .select('id, invoice_number, grand_total, paid_amount, status, due_date, created_at, customer_name')
+      .select('id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, created_at, customer_name')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false })

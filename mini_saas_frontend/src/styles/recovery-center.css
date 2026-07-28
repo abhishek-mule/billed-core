@@ -106,7 +106,27 @@
   justify-content: space-between;
   gap: 8px;
 }
-.rc-cust { font-weight: 600; font-size: 15px; }
+.rc-cust { font-weight: 600; font-size: 15px; margin: 4px 0; }
+.rc-overdue-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.rc-overdue-badge--warn {
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
+}
+.rc-overdue-num { font-size: 16px; }
+.rc-overdue-lbl { font-size: 11px; opacity: 0.8; }
+.rc-arrow-label { font-size: 12px; color: hsl(var(--muted-foreground)); }
 .rc-amount {
   font-size: 22px;
   font-weight: 700;
@@ -296,6 +316,28 @@
 .cw-hero-lbl { font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: .04em; }
 .cw-hero-num { font-size: 18px; font-weight: 700; }
 
+.rc-block--action { margin-bottom: 16px; }
+.cw-action-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: hsl(var(--recovery) / 0.06);
+  border: 1px solid hsl(var(--recovery) / 0.2);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.cw-action-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: hsl(var(--recovery) / 0.12);
+  color: hsl(var(--recovery));
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cw-action-body { display: flex; flex-direction: column; gap: 2px; }
+.cw-action-label { font-size: 15px; font-weight: 700; }
+.cw-action-reason { font-size: 12.5px; color: hsl(var(--muted-foreground)); }
+
 .cw-rec {
   background: hsl(var(--recovery) / 0.07);
   border: 1px solid hsl(var(--recovery) / 0.25);
@@ -409,7 +451,7 @@
   color: var(--foreground);
 }
 .cw-mem-input:focus { outline: 2px solid hsl(var(--recovery) / 0.4); border-color: transparent; }
-.cw-mem-save { flex: 0 0 auto; padding: 10px 16px; }
+.cw-mem-save { flex: 0 0 auto; padding: 6px 12px; font-size: 12px; font-weight: 500; }
 
 /* ─── Recovery Insights ─────────────────────────────────────────────────── */
 .ri-list { display: flex; flex-direction: column; gap: 8px; }

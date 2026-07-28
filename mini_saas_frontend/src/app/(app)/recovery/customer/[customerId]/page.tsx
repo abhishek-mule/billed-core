@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Phone, MessageSquare, Clock, CheckCircle2, ArrowLeft, ArrowRight,
-  AlertTriangle, HeartHandshake, Bell, FileText, PartyPopper,
+  Phone, MessageSquare, CheckCircle2, ArrowLeft, ArrowRight,
+  HeartHandshake, Bell, FileText,
   Loader2, CircleDashed,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
@@ -122,6 +122,15 @@ export default function CustomerWorkspacePage() {
   const c = data.customer
   const rc = data.case
 
+  const nextAction = (() => {
+    if (rc?.nextAction === 'call') return { icon: <Phone size={15} />, label: 'Call Today', reason: 'Needs direct conversation' }
+    if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed' }
+    if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid' }
+    if (rc?.overdue && rc.overdue > 7) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${rc.overdue} days overdue, ignored previous reminders` }
+    if (rc?.overdue && rc.overdue > 0) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${rc.overdue} days overdue` }
+    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Outstanding balance' }
+  })()
+
   return (
     <div className="rc-page">
       <header className="cw-header">
@@ -142,7 +151,7 @@ export default function CustomerWorkspacePage() {
         </div>
         <div className="cw-hero-item">
           <span className="cw-hero-lbl">Overdue</span>
-          <span className="cw-hero-num">{rc && rc.overdue > 0 ? `${rc.overdue}d` : '—'}</span>
+          <span className="cw-hero-num">{rc && rc.overdue > 0 ? `${rc.overdue} days` : 'Current'}</span>
         </div>
         {rc?.promiseDate ? (
           <div className="cw-hero-item">
@@ -152,36 +161,39 @@ export default function CustomerWorkspacePage() {
         ) : null}
       </section>
 
-      {/* Merchant Memory — merchant-owned long-term knowledge */}
+      {/* Next Best Action */}
+      <section className="rc-block rc-block--action">
+        <div className="rc-block-head"><h2>Recommended Action</h2></div>
+        <div className="cw-action-card">
+          <div className="cw-action-icon">{nextAction.icon}</div>
+          <div className="cw-action-body">
+            <span className="cw-action-label">{nextAction.label}</span>
+            <span className="cw-action-reason">{nextAction.reason}</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Recovery Timeline */}
       <section className="rc-block">
-        <div className="rc-block-head"><h2>Merchant Memory</h2><span className="rc-count rc-count--muted">{notes.length}</span></div>
-        {notes.length === 0 ? (
-          <div className="rc-empty"><span>No memory yet. Add what you learn about this customer.</span></div>
+        <div className="rc-block-head">
+          <h2>Recovery Timeline</h2>
+          <Link href={`/recovery/timeline?customerId=${encodeURIComponent(customerId)}`} className="cw-link">Full timeline →</Link>
+        </div>
+        {data.communication.length === 0 ? (
+          <div className="rc-empty"><MessageSquare size={18} /><span>No recovery activity yet.</span></div>
         ) : (
-          <div className="rc-list rc-list--tight">
-            {notes.map((n) => (
-              <div key={n.id} className="cw-mem">
-                <button className="cw-mem-pin" onClick={() => togglePin(n.id, n.is_pinned)} title={n.is_pinned ? 'Unpin' : 'Pin'}>
-                  {n.is_pinned ? '📌' : '📝'}
-                </button>
-                <span className="cw-mem-text">{n.note}</span>
-                <button className="cw-mem-del" onClick={() => deleteNote(n.id)} title="Delete">✕</button>
+          <div className="rc-timeline">
+            {data.communication.map((m, i) => (
+              <div key={i} className="rc-tl-item">
+                <div className={`rc-tl-dot ${m.kind === 'wa' && m.text === 'read' ? 'rc-tl-dot--read' : m.kind === 'wa' && m.text === 'delivered' ? 'rc-tl-dot--delivered' : ''}`} />
+                <div className="rc-tl-body">
+                  <span className="rc-tl-text">{m.text}{m.detail ? ` · ${m.detail}` : ''}</span>
+                </div>
+                <div className="rc-tl-time">{fmtTime(m.at)}</div>
               </div>
             ))}
           </div>
         )}
-        <div className="cw-mem-add">
-          <input
-            className="cw-mem-input"
-            placeholder="Add memory (e.g. Only answers after 7PM)"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !savingNote) saveNote() }}
-          />
-          <button className="rc-btn rc-btn--primary cw-mem-save" onClick={saveNote} disabled={savingNote || !draft.trim()}>
-            {savingNote ? 'Saving…' : 'Save'}
-          </button>
-        </div>
       </section>
 
       {/* Invoices */}
@@ -200,29 +212,6 @@ export default function CustomerWorkspacePage() {
                 </div>
                 <div className="rc-row-time">{fmt(inv.total)}</div>
               </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Communication */}
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <h2>Communication</h2>
-          <Link href={`/recovery/timeline?customerId=${encodeURIComponent(customerId)}`} className="cw-link">Full timeline →</Link>
-        </div>
-        {data.communication.length === 0 ? (
-          <div className="rc-empty"><MessageSquare size={18} /><span>No communication yet.</span></div>
-        ) : (
-          <div className="rc-timeline">
-            {data.communication.map((m, i) => (
-              <div key={i} className="rc-tl-item">
-                <div className={`rc-tl-dot ${m.kind === 'wa' && m.text === 'read' ? 'rc-tl-dot--read' : m.kind === 'wa' && m.text === 'delivered' ? 'rc-tl-dot--delivered' : ''}`} />
-                <div className="rc-tl-body">
-                  <span className="rc-tl-text">{m.text}{m.detail ? ` · ${m.detail}` : ''}</span>
-                </div>
-                <div className="rc-tl-time">{fmtTime(m.at)}</div>
-              </div>
             ))}
           </div>
         )}
@@ -278,6 +267,38 @@ export default function CustomerWorkspacePage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Remember about this customer — notes */}
+      <section className="rc-block">
+        <div className="rc-block-head"><h2>Remember about this customer</h2><span className="rc-count rc-count--muted">{notes.length}</span></div>
+        {notes.length === 0 ? (
+          <div className="rc-empty"><span>No notes yet. Add what you learn about this customer.</span></div>
+        ) : (
+          <div className="rc-list rc-list--tight">
+            {notes.map((n) => (
+              <div key={n.id} className="cw-mem">
+                <button className="cw-mem-pin" onClick={() => togglePin(n.id, n.is_pinned)} title={n.is_pinned ? 'Unpin' : 'Pin'}>
+                  {n.is_pinned ? '📌' : '📝'}
+                </button>
+                <span className="cw-mem-text">{n.note}</span>
+                <button className="cw-mem-del" onClick={() => deleteNote(n.id)} title="Delete">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="cw-mem-add">
+          <input
+            className="cw-mem-input"
+            placeholder="Only answers after 7PM, always asks for 3 days, talk to his accountant"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !savingNote) saveNote() }}
+          />
+          <button className="rc-btn cw-mem-save" onClick={saveNote} disabled={savingNote || !draft.trim()}>
+            {savingNote ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </section>
 
       {/* Bottom action bar */}
