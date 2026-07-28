@@ -276,7 +276,7 @@ export default function RecoveryCenterPage() {
               return (
                 <Link
                   key={c.caseId}
-                  href={`/recovery/customer/${c.customerId}`}
+                  href={`/recovery/case/${c.caseId}`}
                   className="rc-card rc-card--red"
                 >
                   {c.overdue > 0 ? (
@@ -444,7 +444,7 @@ export default function RecoveryCenterPage() {
       </section>
 
       {first ? (
-        <Link href={`/recovery/customer/${first.customerId}`} className="rc-fab">
+        <Link href={`/recovery/case/${first.caseId}`} className="rc-fab">
           {first.recommendedAction === 'call' ? (
             <><Phone size={18} /> Call {first.customerName}</>
           ) : first.recommendedAction === 'record_payment' ? (

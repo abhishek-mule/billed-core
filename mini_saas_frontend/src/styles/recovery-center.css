@@ -315,6 +315,7 @@
 }
 .cw-hero-lbl { font-size: 11px; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: .04em; }
 .cw-hero-num { font-size: 18px; font-weight: 700; }
+.cw-hero-sub { font-size: 11px; color: hsl(var(--muted-foreground)); margin-top: 1px; }
 
 .rc-block--action { margin-bottom: 16px; }
 .cw-action-card {
