@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       .select('id, total, paid_amount, invoice_number, due_date')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
-      .in('status', ['unpaid', 'overdue', 'partial'])
+      .gt('outstanding_amount', 0)
       .order('due_date', { ascending: true, nullsFirst: false })
 
     if (!invoices || invoices.length === 0) {

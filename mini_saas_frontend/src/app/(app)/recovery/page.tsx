@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import '@/styles/recovery-center.css'
+import { formatScheduledSlot } from '@/lib/recovery/business-hours'
 import {
   Phone, MessageSquare, Clock, CheckCircle2, ArrowRight, TrendingUp,
   AlertTriangle, HeartHandshake, RotateCcw, Bell, Loader2,
@@ -235,12 +236,14 @@ export default function RecoveryCenterPage() {
       <header className="rc-header">
         <div>
           <h1 className="rc-greeting">
-            {greeting()}{name ? `, ${name}` : ''}
+            {greeting()}{name ? ` ${name}!` : ''}
           </h1>
           <p className="rc-sub">
             {data.needsAction.length > 0
               ? `${data.needsAction.length} customer${data.needsAction.length > 1 ? 's' : ''} need your attention`
-              : 'Everything is under control. Relax — we\'ll notify you if something changes.'}
+              : data.underFollowUp > 0
+                ? 'Invoices are outstanding but none require recovery yet.'
+                : 'No outstanding invoices. Great — you\'re fully paid up.'}
           </p>
         </div>
         <button className="rc-refresh" onClick={refresh} aria-label="Refresh">
@@ -265,7 +268,7 @@ export default function RecoveryCenterPage() {
         {data.needsAction.length === 0 ? (
           <div className="rc-empty">
             <CheckCircle2 size={18} />
-            <span>No customers need action today.</span>
+            <span>No customers need action today. {data.underFollowUp ? 'Invoices exist but are not yet overdue.' : ''}</span>
           </div>
         ) : (
           <div className="rc-list">
@@ -328,7 +331,7 @@ export default function RecoveryCenterPage() {
         {data.scheduledToday.length === 0 ? (
           <div className="rc-empty">
             <Clock size={18} />
-            <span>Nothing scheduled today. {fmt(data.underFollowUp)} under follow-up.</span>
+            <span>No follow-ups scheduled today. {data.underFollowUp > 0 ? `${fmt(data.underFollowUp)} under follow-up.` : 'Outstanding invoices will appear here automatically.'}</span>
           </div>
         ) : (
           <div className="rc-summary">
@@ -376,7 +379,7 @@ export default function RecoveryCenterPage() {
                       : s.templateName || 'Reminder'}
                   </span>
                 </div>
-                <div className="rc-row-time">{fmtTime(s.scheduledAt)}</div>
+                <div className="rc-row-time">{formatScheduledSlot(s.scheduledAt)}</div>
               </div>
             ))}
           </div>
@@ -394,7 +397,7 @@ export default function RecoveryCenterPage() {
         {data.recentlyRecovered.length === 0 ? (
           <div className="rc-empty">
             <CheckCircle2 size={18} />
-            <span>No recoveries this week.</span>
+            <span>No recoveries recorded this week.</span>
           </div>
         ) : (
           <div className="rc-list rc-list--tight">
@@ -426,7 +429,7 @@ export default function RecoveryCenterPage() {
         {data.timeline.length === 0 ? (
           <div className="rc-empty">
             <Clock size={18} />
-            <span>No activity in the last 24 hours.</span>
+            <span>No activity recorded in the last 24 hours. Activity appears when reminders are sent or payments received.</span>
           </div>
         ) : (
           <div className="rc-timeline">

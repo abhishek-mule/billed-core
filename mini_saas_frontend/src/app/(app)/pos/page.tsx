@@ -47,6 +47,7 @@ export default function POSPage() {
   const [showPay, setShowPay] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [success, setSuccess] = useState<POSSuccessResult | null>(null);
+  const [documentType, setDocumentType] = useState<'tax_invoice' | 'bill'>('tax_invoice');
   const [showScanner, setShowScanner] = useState(false);
   const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
   const [tenantData, setTenantData] = useState<Tenant | null>(null);
@@ -139,7 +140,7 @@ export default function POSPage() {
     setShowPay(false);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
-    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId);
+    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId, documentType);
 
     if (!result.success) {
       setSubmitting(false);
@@ -374,6 +375,20 @@ export default function POSPage() {
                 type="tel"
                 className="flex-1 bg-transparent text-sm focus:outline-none"
               />
+            </div>
+            <div className="flex items-center gap-2 rounded-xl border border-input p-1">
+              <button
+                onClick={() => setDocumentType('tax_invoice')}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${documentType === 'tax_invoice' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Tax Invoice (GST)
+              </button>
+              <button
+                onClick={() => setDocumentType('bill')}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${documentType === 'bill' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Bill
+              </button>
             </div>
             {submitting ? (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">

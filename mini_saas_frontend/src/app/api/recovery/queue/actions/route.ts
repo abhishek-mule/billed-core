@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
         .select('id, total, outstanding_amount, invoice_number, recovery_stage')
         .eq('tenant_id', tid)
         .eq('customer_id', recoveryCase.customer_id)
-        .in('status', ['unpaid', 'overdue', 'partial'])
+        .gt('outstanding_amount', 0)
         .order('due_date', { ascending: true })
 
       if (!unpaidInvoices || unpaidInvoices.length === 0) {
@@ -561,7 +561,7 @@ async function resolveInvoiceIdForCase(supabase: any, tenantId: string, recovery
     .select('id')
     .eq('tenant_id', tenantId)
     .eq('customer_id', recoveryCase.customer_id)
-    .in('status', ['unpaid', 'overdue', 'partial'])
+    .in('status', ['issued', 'partial', 'draft'])
     .order('due_date', { ascending: true, nullsFirst: false })
     .limit(1)
     .maybeSingle()

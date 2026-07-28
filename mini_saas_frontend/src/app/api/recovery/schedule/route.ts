@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
     const { data: invRows } = schedCustomerIds.length
       ? await supabaseAdmin
           .from('invoices')
-          .select('customer_id, status, due_date')
+          .select('customer_id, status, due_date, outstanding_amount')
           .eq('tenant_id', tenantId)
           .in('customer_id', schedCustomerIds)
-          .in('status', ['unpaid', 'overdue', 'partial'])
+          .gt('outstanding_amount', 0)
       : { data: [] as any[] }
     const invByCust = new Map<string, any[]>()
     for (const inv of invRows || []) {
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const overdueDaysFor = (custId: string) => {
       const invs = invByCust.get(custId) || []
       const overdueInvs = invs.filter(
-        (i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < nowDate),
+        (i: any) => i.due_date && new Date(i.due_date) < nowDate,
       )
       return overdueInvs.length > 0
         ? Math.max(...overdueInvs.map((i: any) =>

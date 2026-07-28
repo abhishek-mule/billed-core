@@ -26,15 +26,23 @@ export async function POST(request: NextRequest) {
     if (body.response) return body.response
     const { invoiceId, amount, customerName, customerPhone, purpose } = body.data!
 
-    // Fetch tenant UPI ID
+    // Fetch tenant payment config
     const { data: tenant } = await supabaseAdmin
       .from('tenants')
-      .select('upi_id, name')
+      .select('upi_id, name, payment_config')
       .eq('id', tenantId)
       .single()
 
-    const upiId = tenant?.upi_id || ''
+    const paymentConfig = tenant?.payment_config
+    const upiId = paymentConfig?.upiId || tenant?.upi_id || ''
     const merchantName = tenant?.name || 'Business'
+
+    if (paymentConfig?.method === 'upi' && !paymentConfig.upiId) {
+      return NextResponse.json({ error: 'Payment not configured.', redirect: '/settings/payments' }, { status: 400 })
+    }
+    if (paymentConfig?.method === 'bank' && (!paymentConfig.bankAccount || !paymentConfig.bankIfsc)) {
+      return NextResponse.json({ error: 'Payment not configured.', redirect: '/settings/payments' }, { status: 400 })
+    }
 
     const linkId = `upl_${Date.now()}`
     const payPageUrl = `${request.nextUrl.origin}/pay/${invoiceId}`

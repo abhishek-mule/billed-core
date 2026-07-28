@@ -1,4 +1,5 @@
 import { db, uuid } from '@/lib/billzo/db'
+import { enqueue } from '@/lib/billzo/actions'
 import type { Invoice, InvoiceItem, Customer } from '@/lib/billzo/types'
 import { generateInvoicePDF } from '@/lib/billzo/pdf'
 import type { ParsedInvoice } from '@/lib/billzo/whatsapp-parser'
@@ -35,6 +36,7 @@ export async function createInvoiceFromWhatsApp(
         updatedAt: now,
       }
       await db().customers.add(customer)
+      enqueue('customer', customer.id, 'upsert', customer)
     } else {
       await db().customers.update(customer.id, {
         name: parsed.customerName,

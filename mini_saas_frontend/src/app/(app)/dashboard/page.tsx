@@ -13,6 +13,7 @@ import {
   AlertCircle, CircleSlash, MessageCircle, Coins,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatScheduledSlot } from "@/lib/recovery/business-hours"
 import type { AnyDashboardSection } from "@billzo/shared"
 import { workStore } from "@/lib/billzo/work-store-instance"
 import { getCollectionRisk } from "@/lib/billzo/recovery-risk"
@@ -66,9 +67,10 @@ interface RecoveryEvent {
 interface AttentionCustomer {
   id: string
   name: string
-  amount: number
-  ageDays: number
-  status: string
+  amount: number        // total across their invoices
+  invoiceCount: number  // how many unpaid invoices
+  ageDays: number       // oldest overdue days
+  status: string        // specific reason, never generic
   severity: 'critical' | 'high' | 'normal' | 'low'
   badges: string[]
   callHref?: string
@@ -83,11 +85,19 @@ interface QueueSummary {
 
 interface UpcomingAction {
   id: string
-  time: string
-  when: string
+  dueAt: string
   type: string
   customer: string
   amount?: string
+}
+
+interface PrioritiesItem {
+  customerId: string
+  customerName: string
+  amount: number
+  status: string
+  severity: AttentionCustomer['severity']
+  actionType: 'call' | 'reminder'
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -162,27 +172,35 @@ const SEVERITY_RING: Record<AttentionCustomer['severity'], string> = {
   low: "border-l-muted-foreground/30",
 }
 
+function severityClass(sev: AttentionCustomer['severity']): string {
+  switch (sev) {
+    case 'critical': return 'bg-overdue text-white'
+    case 'high': return 'bg-outstanding text-white'
+    default: return 'bg-recovery/20 text-recovery'
+  }
+}
+
 function AttentionCustomerRow({ c }: { c: AttentionCustomer }) {
   return (
-    <div className={cn("flex items-center gap-3 p-3 bg-card border border-border border-l-4 rounded-lg hover:bg-muted/40 transition-colors", SEVERITY_RING[c.severity])}>
+    <div className={cn("flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:bg-muted/40 transition-colors")}>
       <span className={cn("flex-shrink-0 h-2.5 w-2.5 rounded-full", SEVERITY_DOT[c.severity])} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
           {c.badges.map(b => (
-            <span key={b} className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              {b}
-            </span>
+            <span key={b} className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{b}</span>
           ))}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
           <span className="font-semibold text-foreground tabular-nums">{formatINR(c.amount)}</span>
-          {" • "}
-          <span className={c.ageDays >= 15 ? "text-overdue font-medium" : ""}>{c.ageDays} days overdue</span>
+          {c.invoiceCount > 1 && <span className="text-muted-foreground"> · {c.invoiceCount} invoices</span>}
         </p>
-        <p className="text-xs text-muted-foreground mt-0.5">{c.status}</p>
+        <p className={cn("text-xs mt-0.5", c.severity === 'critical' ? 'text-overdue font-medium' : 'text-muted-foreground')}>{c.status}</p>
       </div>
-      <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", severityClass(c.severity))}>
+          {c.severity === 'critical' ? 'Overdue' : c.severity === 'high' ? 'Follow-up' : 'Active'}
+        </span>
         {c.callHref && (
           <a href={c.callHref} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-muted text-foreground text-xs font-semibold hover:bg-muted/70">
             <Phone size={13} /> Call
@@ -362,9 +380,8 @@ function UpcomingActionsCard({ actions, title }: { actions: UpcomingAction[]; ti
         {actions.length > 0 ? (
           actions.map(a => (
             <div key={a.id} className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg">
-              <div className="flex-shrink-0 text-right w-20">
-                <p className="text-xs font-bold text-foreground tabular-nums">{a.time}</p>
-                <p className="text-[10px] text-muted-foreground">{a.when}</p>
+              <div className="flex-shrink-0 text-right w-28">
+                <p className="text-[11px] font-semibold text-foreground tabular-nums">{formatScheduledSlot(a.dueAt)}</p>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{a.type}</p>
@@ -484,11 +501,109 @@ function HealthScoreWidget({ health }: { health: HealthScore }) {
   )
 }
 
+// ─── Today's Priorities ──────────────────────────────────────────────────────
+
+const PRIORITY_ICONS: Record<PrioritiesItem['actionType'], React.ElementType> = {
+  call: Phone,
+  reminder: MessageCircle,
+}
+
+function TodayPrioritiesCard({ title, items, urgentCount }: { title: string; items: PrioritiesItem[]; urgentCount: number }) {
+  return (
+    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overdue-soft text-overdue">
+            <Target size={15} />
+          </span>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          {urgentCount > 0 && (
+            <span className="text-[10px] font-bold text-white bg-overdue px-2 py-0.5 rounded-full">{urgentCount} urgent</span>
+          )}
+        </div>
+        <Link href="/recovery/queue" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+          View all <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+      <div className="space-y-2">
+        {items.length > 0 ? (
+          items.map((p, i) => {
+            const Icon = PRIORITY_ICONS[p.actionType]
+            const severityColor = p.severity === 'critical' ? 'border-l-overdue' : p.severity === 'high' ? 'border-l-outstanding' : 'border-l-recovery'
+            const label = p.severity === 'critical' ? 'Overdue' : p.severity === 'high' ? 'Follow-up' : 'Active'
+            return (
+              <Link key={p.customerId} href={`/recovery/customer/${encodeURIComponent(p.customerId)}`}
+                className={cn("flex items-center gap-3 p-3 bg-card border border-border border-l-4 rounded-lg hover:bg-muted/40 transition-colors", severityColor)}>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  <Icon size={15} className="text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground truncate">{p.customerName}</p>
+                    <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
+                      p.severity === 'critical' ? 'bg-overdue text-white' : 'bg-muted text-muted-foreground')}>
+                      {label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{p.status}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground tabular-nums">{formatINR(p.amount)}</p>
+                  <p className="text-[10px] text-muted-foreground">{p.actionType === 'call' ? 'Call' : 'Reminder'}</p>
+                </div>
+              </Link>
+            )
+          })
+        ) : (
+          <div className="text-center py-6">
+            <CheckCircle2 className="h-9 w-9 text-recovery mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground">All caught up!</p>
+            <p className="text-xs text-muted-foreground mt-1">No follow-ups needed right now.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MinimumStatusCard({ outstanding, customers, attention }: { outstanding: number; customers: number; attention: AttentionCustomer[] }) {
+  const overdueCount = attention.filter(a => a.ageDays > 0).length
+  const promiseDue = attention.filter(a => a.status.toLowerCase().includes('promise')).length
+  return (
+    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+      <h3 className="text-sm font-semibold text-foreground mb-4">Quick Summary</h3>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Outstanding</span>
+          <span className="text-sm font-bold text-foreground tabular-nums">{formatINR(outstanding)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Customers</span>
+          <span className="text-sm font-bold text-foreground">{customers}</span>
+        </div>
+        {overdueCount > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-overdue">Overdue</span>
+            <span className="text-sm font-bold text-overdue">{overdueCount}</span>
+          </div>
+        )}
+        {promiseDue > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-outstanding">Promises due</span>
+            <span className="text-sm font-bold text-outstanding">{promiseDue}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Hero Card ───────────────────────────────────────────────────────────────
 
 function HeroCard({
   outstanding,
   customers,
+  invoiceCount,
   successRate,
   recoveredByBillzo,
   oneLiner,
@@ -497,6 +612,7 @@ function HeroCard({
 }: {
   outstanding: number
   customers: number
+  invoiceCount: number
   successRate: number | null
   recoveredByBillzo: number
   oneLiner: string
@@ -524,45 +640,45 @@ function HeroCard({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div>
               <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Awaiting Collection</p>
               <p className="text-4xl lg:text-5xl font-bold tracking-tight tabular-nums leading-tight">
                 {formatINR(outstanding)}
               </p>
-              <p className="text-recovery-soft/70 text-xs mt-0.5">{customers} customers</p>
+              <p className="text-recovery-soft/70 text-xs mt-0.5">{customers} customers · {invoiceCount} invoices</p>
             </div>
             <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Collection Success</p>
-              <p className="text-3xl lg:text-4xl font-bold tracking-tight">{successRate == null ? '—' : `${successRate}%`}</p>
-              <p className="text-recovery-soft/70 text-xs mt-0.5">{getSuccessLabel(successRate)}</p>
-            </div>
-            <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Next Action</p>
+              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Next Priority</p>
               {nextAction ? (
                 <>
                   <p className="text-lg font-bold tracking-tight">{nextAction.stage}</p>
                   <p className="text-recovery-soft/70 text-xs mt-0.5">{nextAction.recommendation}</p>
                 </>
+              ) : customers > 0 ? (
+                <>
+                  <p className="text-lg font-bold tracking-tight">Call</p>
+                  <p className="text-recovery-soft/70 text-xs mt-0.5">Check on customers</p>
+                </>
               ) : (
                 <>
                   <p className="text-lg font-bold tracking-tight">Auto</p>
-                  <p className="text-recovery-soft/70 text-xs mt-0.5">Scheduled</p>
+                  <p className="text-recovery-soft/70 text-xs mt-0.5">Recovery active</p>
                 </>
               )}
             </div>
             <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Recovered by BillZo</p>
+              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Recovered This Month</p>
               <p className="text-2xl lg:text-3xl font-bold tracking-tight tabular-nums">{formatINR(recoveredByBillzo)}</p>
-              <p className="text-recovery-soft/70 text-xs mt-0.5">This month</p>
+              <p className="text-recovery-soft/70 text-xs mt-0.5">Since recovery started</p>
             </div>
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-white/10">
           <p className="text-sm text-white/95 font-medium flex-1 min-w-[220px]">{oneLiner}</p>
-          <Link href="/recovery/queue" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-recovery font-semibold text-xs hover:bg-white/90 transition-colors">
-            View Recovery Center <ArrowUpRight size={14} className="rotate-45" />
+          <Link href="/recovery/queue" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-recovery font-bold text-sm hover:bg-white/90 transition-colors">
+            {outstanding > 0 ? `Recover ${formatINR(outstanding)} →` : 'Open Recovery Center'} <ArrowUpRight size={14} className="rotate-45" />
           </Link>
         </div>
       </div>
@@ -574,7 +690,7 @@ function HeroCard({
 
 function LoadingSkeleton() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5 animate-pulse">
         <div className="h-32 bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl" />
         <div className="h-48 bg-muted rounded-xl" />
@@ -587,7 +703,7 @@ function LoadingSkeleton() {
 
 function ErrorState() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="text-center py-12">
         <div className="mx-auto h-12 w-12 rounded-full bg-overdue-soft flex items-center justify-center">
           <AlertTriangle className="h-6 w-6 text-overdue" />
@@ -603,21 +719,12 @@ function ErrorState() {
 
 function EmptyRecoveryState() {
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5">
-        <HeroCard outstanding={0} customers={0} successRate={null} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
+        <HeroCard outstanding={0} customers={0} invoiceCount={0} successRate={null} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
         <CustomersAttentionCard title="Customers Requiring Attention" customers={[]} />
         <TodayQueueCard title="Today's Queue" queue={{ scheduled: 0, waiting: 0, overdue: 0 }} />
-        <LiveActivityCard title="Live Recovery Activity" events={[]} />
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2"><FunnelWidget title="Recovery Funnel" steps={[]} /></div>
-          <HealthScoreWidget health={{ score: 0, label: "Good", color: "hsl(var(--recovery))", metrics: [] }} />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <MetricCard label="Recovered This Month" value={formatINR(0)} icon={TrendingUp} color="text-recovery" softColor="bg-recovery-soft" />
-          <MetricCard label="Collection Success Rate" value="100%" icon={Target} color="text-primary" softColor="bg-primary/10" />
-          <MetricCard label="Avg Collection Time" value="—" icon={Clock} color="text-outstanding" softColor="bg-outstanding-soft" />
-        </div>
+        <AutomationStatusCard title="Automation Status" />
       </div>
     </PageShell>
   )
@@ -631,6 +738,7 @@ export default function DashboardPage() {
     recovery?: {
       outstanding: number
       customers: number
+      invoiceCount: number
       successRate: number | null
       recoveredByBillzo: number
       oneLiner: string
@@ -639,8 +747,6 @@ export default function DashboardPage() {
       queue: QueueSummary
       activity: RecoveryEvent[]
       upcoming: UpcomingAction[]
-      funnel: RecoveryFunnelStep[]
-      health: HealthScore
     }
   } | null>(null)
   const [error, setError] = useState(false)
@@ -672,11 +778,22 @@ export default function DashboardPage() {
         .sort((x, y) => y.rank - x.rank)[0]
     : undefined
 
+  const priorities: PrioritiesItem[] = recovery.attention.slice(0, 4).map(c => ({
+    customerId: c.id,
+    customerName: c.name,
+    amount: c.amount,
+    status: c.status,
+    severity: c.severity,
+    actionType: c.callHref ? 'call' as const : 'reminder' as const,
+  }))
+  const urgentCount = recovery.attention.filter(a => a.severity === 'critical').length
+
   return (
-    <PageShell title="Recovery Command Center" subtitle="Welcome back">
+    <PageShell title="Overview" subtitle="Welcome back">
       <HeroCard
         outstanding={recovery.outstanding}
         customers={recovery.customers}
+        invoiceCount={recovery.invoiceCount}
         successRate={recovery.successRate}
         recoveredByBillzo={recovery.recoveredByBillzo}
         oneLiner={recovery.oneLiner}
@@ -687,48 +804,14 @@ export default function DashboardPage() {
       <CustomersAttentionCard title="Customers Requiring Attention" customers={recovery.attention} />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <TodayQueueCard title="Today's Queue" queue={recovery.queue} />
-        </div>
-        <div className="lg:col-span-2">
-          <UpcomingActionsCard title="Upcoming Scheduled Actions" actions={recovery.upcoming} />
-        </div>
-      </div>
-
-      <LiveActivityCard title="Live Recovery Activity" events={recovery.activity} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <FunnelWidget title="Recovery Funnel" steps={recovery.funnel} />
+        <div className="lg:col-span-2 space-y-4">
+          <TodayPrioritiesCard title="Today's Priorities" items={priorities} urgentCount={urgentCount} />
+          <UpcomingActionsCard title="Upcoming Schedule" actions={recovery.upcoming} />
         </div>
         <div className="space-y-4">
-          <HealthScoreWidget health={recovery.health} />
+          <MinimumStatusCard outstanding={recovery.outstanding} customers={recovery.customers} attention={recovery.attention} />
           <AutomationStatusCard title="Automation Status" />
         </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard
-          label="Recovered Today"
-          value={formatINR(recovery.recoveredByBillzo)}
-          icon={TrendingUp}
-          color="text-recovery"
-          softColor="bg-recovery-soft"
-        />
-        <MetricCard
-          label="Collection Rate"
-          value={recovery.successRate == null ? '—' : `${recovery.successRate}%`}
-          icon={Target}
-          color="text-primary"
-          softColor="bg-primary/10"
-        />
-        <MetricCard
-          label="Outstanding Amount"
-          value={formatINR(recovery.outstanding)}
-          icon={Clock}
-          color="text-outstanding"
-          softColor="bg-outstanding-soft"
-        />
       </div>
     </PageShell>
   )
@@ -763,8 +846,8 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     payload: { events: { occurredAt: string; label: string; detail: string }[] }
   }
 
-  const outstanding = cashSection?.payload?.metrics?.find(m => m.label === 'Outstanding')?.value
-    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Outstanding')?.value?.replace(/[₹,]/g, '') || '0')
+  const outstanding = cashSection?.payload?.metrics?.find(m => m.label === 'Money to Collect')?.value
+    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Money to Collect')?.value?.replace(/[₹,]/g, '') || '0')
     : 0
 
   const recoveredByBillzo = cashSection?.payload?.metrics?.find(m => m.label === 'Collected Today')?.value
@@ -777,23 +860,68 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
   const workItems = todaySection?.payload?.items || []
   const isEmpty = outstanding === 0 && workItems.length === 0
 
-  // Customers requiring attention (real WorkItems)
-  const attention: AttentionCustomer[] = workItems.slice(0, 6).map(item => {
-    const ageDays = item.dueAt ? Math.max(0, Math.floor((Date.now() - new Date(item.dueAt).getTime()) / 86400000)) : 0
-    const badges: string[] = []
-    if (item.severity === 'critical') badges.push('VIP')
-    return {
-      id: item.id || item.customerId,
-      name: item.customerName,
-      amount: item.moneyImpact || 0,
-      ageDays,
-      status: item.reason || item.headline,
-      severity: item.severity,
-      badges,
-      callHref: item.primaryAction?.type === 'call' ? `tel:` : undefined,
-      openHref: `/recovery/queue?customer=${encodeURIComponent(item.customerId)}`,
-    }
-  })
+  // Group workItems by customerId — one card per customer with aggregated info
+  const byCustomer = new Map<string, typeof workItems[0][]>()
+  for (const item of workItems) {
+    const arr = byCustomer.get(item.customerId) || []
+    arr.push(item)
+    byCustomer.set(item.customerId, arr)
+  }
+
+  function statusLabel(items: typeof workItems): string {
+    // Pick the most specific actionable status
+    const reasons = items.map(i => (i.reason || '').toLowerCase()).filter(Boolean)
+    if (reasons.some(r => r.includes('promise'))) return 'Promise due'
+    if (reasons.some(r => r.includes('wrong') || r.includes('number'))) return 'Wrong number — update contact'
+    if (reasons.some(r => r.includes('delivered'))) return 'Reminder delivered — awaiting response'
+    if (reasons.some(r => r.includes('viewed') || r.includes('open'))) return 'Customer viewed invoice'
+    if (reasons.some(r => r.includes('sent'))) return 'Invoice sent'
+    const maxDays = Math.max(...items.map(i => i.dueAt ? Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86400000) : 0))
+    if (maxDays > 30) return `${maxDays} days overdue`
+    if (maxDays > 0) return `Overdue by ${maxDays} days`
+    return 'Due today'
+  }
+
+  function computeSeverity(items: typeof workItems): 'critical' | 'high' | 'normal' {
+    const sevs = items.map(i => i.severity)
+    if (sevs.some(s => s === 'critical')) return 'critical'
+    if (sevs.some(s => s === 'high')) return 'high'
+    return 'normal'
+  }
+
+  // Urgency ordering: promise broken > high amount > long overdue > newly due
+  const attention: AttentionCustomer[] = [...byCustomer.entries()]
+    .map(([customerId, items]) => {
+      const totalAmount = items.reduce((s, i) => s + (i.moneyImpact || 0), 0)
+      const maxDays = Math.max(...items.map(i => i.dueAt ? Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86400000) : 0))
+      const first = items[0]
+      const severity = computeSeverity(items)
+      const badges: string[] = severity === 'critical' ? ['VIP'] : []
+      return {
+        id: customerId,
+        name: first.customerName,
+        amount: totalAmount,
+        invoiceCount: items.length,
+        ageDays: maxDays,
+        status: statusLabel(items),
+        severity,
+        badges,
+        callHref: items.some(i => i.primaryAction?.type === 'call') ? `tel:` : undefined,
+        openHref: `/recovery/customer/${encodeURIComponent(customerId)}`,
+        // Sort key: 0 = promise broken, 1 = highest amount, 2 = longest overdue, 3 = newly due
+        _urgency: (reasons => {
+          if (reasons.some(r => r.includes('promise'))) return 0
+          if (reasons.some(r => r.includes('wrong') || r.includes('number'))) return 1
+          if (maxDays > 15) return 2
+          if (maxDays > 0) return 3
+          return 4
+        })(items.map(i => (i.reason || '').toLowerCase())),
+      }
+    })
+    .sort((a, b) => a._urgency - b._urgency || b.amount - a.amount)
+    .slice(0, 10)
+    // Remove sort key
+    .map(({ _urgency, ...rest }) => rest)
 
   // Today's Queue counts (scheduler-aligned)
   const queue: QueueSummary = {
@@ -828,52 +956,24 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
   const upcoming: UpcomingAction[] = workItems
     .filter(item => item.dueAt || item.primaryAction)
     .slice(0, 5)
-    .map((item, i) => {
-      const d = item.dueAt ? new Date(item.dueAt) : new Date()
-      return {
-        id: item.id || `u-${i}`,
-        time: d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }),
-        when: d.toDateString() === new Date().toDateString() ? 'Today' : 'Tomorrow',
-        type: item.headline || 'Payment Follow-up',
-        customer: item.customerName,
-        amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
-      }
-    })
-
-  // Real Funnel counts
-  const reminderCount = workItems.filter(i => ['send_reminder', 'reminder', 'review'].includes(i.primaryAction?.type || '')).length
-  const promiseCount = workItems.filter(i => (i.reason || '').toLowerCase().includes('promise')).length
-  const funnel: RecoveryFunnelStep[] = [
-    { label: 'Awaiting Collection', value: formatINR(outstanding), percentage: 100, color: '220 15% 55%', icon: IndianRupee },
-    { label: 'Reminder Scheduled', value: String(reminderCount), percentage: workItems.length ? Math.round((reminderCount / workItems.length) * 100) : 0, color: '180 85% 35%', icon: MessageCircle },
-    { label: 'Promise Recorded', value: String(promiseCount), percentage: workItems.length ? Math.round((promiseCount / workItems.length) * 100) : 0, color: '38 92% 50%', icon: Target },
-    { label: 'Recovered Today', value: formatINR(recoveredByBillzo), percentage: totalMonitored > 0 ? Math.round((recoveredByBillzo / totalMonitored) * 100) : 0, color: '145 85% 35%', icon: Coins },
-  ]
-
-  const criticalOverdue = workItems.filter(i => i.severity === 'critical' || i.severity === 'high').length
-  const totalCount = Math.max(1, workItems.length)
-  const healthScoreNum = Math.max(0, Math.min(100, Math.round(100 - (criticalOverdue / totalCount) * 40)))
-
-  const health: HealthScore = {
-    score: healthScoreNum,
-    label: getSuccessLabel(healthScoreNum),
-    color: getHealthColor(healthScoreNum),
-    metrics: [
-      { label: "Active Items", value: `${workItems.length}` },
-      { label: "Critical Overdue", value: `${criticalOverdue}` },
-       { label: "Collection Rate", value: `${successRate == null ? '—' : `${successRate}%`}` },
-    ],
-  }
+    .map((item, i) => ({
+      id: item.id || `u-${i}`,
+      dueAt: item.dueAt || new Date().toISOString(),
+      type: item.headline || 'Payment Follow-up',
+      customer: item.customerName,
+      amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
+    }))
 
   // Hero one-liner (true status)
-  const invoiceCount = Math.max(customersFromItems(workItems), outstanding > 0 ? 1 : 0)
+  const invoiceCount = workItems.reduce((s, i) => s + 1, 0)
   const oneLiner = isEmpty
     ? "No customers require manual follow-up."
     : `BillZo is monitoring ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}. Automated recovery active.`
 
   return {
     outstanding,
-    customers: workItems.length,
+    customers: byCustomer.size,
+    invoiceCount,
     successRate,
     recoveredByBillzo,
     oneLiner,
@@ -882,8 +982,6 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     queue,
     activity,
     upcoming,
-    funnel,
-    health,
   }
 }
 

@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         .from('invoices')
         .select('total, paid_amount, due_date, customer_id, customer_name')
         .eq('tenant_id', tenantId!)
-        .in('status', ['unpaid', 'overdue', 'partial'])
+        .gt('outstanding_amount', 0)
         .order('due_date', { ascending: true })
 
       const now = new Date()
@@ -85,6 +85,36 @@ export async function GET(request: NextRequest) {
           : 0,
       }))
 
+      // Build priority cases from invoice data so Dashboard work items populate
+      const previewPriorityCases = enriched.map((r: any) => {
+        const daysOverdue = r.due_date
+          ? Math.floor((now.getTime() - new Date(r.due_date).getTime()) / (1000 * 60 * 60 * 24))
+          : 0
+        return {
+          caseId: `preview-${r.customer_id}`,
+          customerId: r.customer_id,
+          customerName: r.customer_name || 'Customer',
+          phone: '',
+          totalOverdue: r.outstanding,
+          oldestOverdueDays: Math.max(0, daysOverdue),
+          attentionScore: Math.min(daysOverdue * 5 + 10, 100),
+          nextActionType: daysOverdue > 0 ? 'send_reminder' : 'wait',
+          promiseToPayDate: null,
+          ignoredReminders: 0,
+          brokenPromises: 0,
+          openInvoiceCount: enriched.filter((x: any) => x.customer_id === r.customer_id).length,
+          automationMode: 'manual' as const,
+        }
+      })
+      // Deduplicate by customer (take the highest overdue per customer)
+      const seenCust = new Set<string>()
+      const dedupedPreview = previewPriorityCases.filter((p: any) => {
+        if (seenCust.has(p.customerId)) return false
+        seenCust.add(p.customerId)
+        return true
+      })
+      dedupedPreview.sort((a: any, b: any) => b.attentionScore - a.attentionScore)
+
       return NextResponse.json({
         access: 'preview',
         data: {
@@ -102,6 +132,7 @@ export async function GET(request: NextRequest) {
           queueSize: 0,
           recoveredToday: 0,
           collectibleToday: 0,
+          priorityCases: dedupedPreview,
         },
       })
     }
@@ -142,7 +173,7 @@ export async function GET(request: NextRequest) {
         .from('invoices')
         .select('*, customers(id, customer_name, phone, customer_tier)')
         .eq('tenant_id', tenantId)
-        .in('status', ['unpaid', 'overdue', 'partial'])
+        .gt('outstanding_amount', 0)
         .order('created_at', { ascending: false }),
       supabase
         .from('recovery_attributions')
@@ -214,7 +245,7 @@ export async function GET(request: NextRequest) {
       if (!existingCustIds.has(custId)) {
         const first = invs[0]
         const total = invs.reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
-        const overdue = invs.filter(i => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+        const overdue = invs.filter(i => i.due_date && new Date(i.due_date) < now)
           .reduce((s, i) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
         
         const dueDates = invs
@@ -248,7 +279,7 @@ export async function GET(request: NextRequest) {
       const invs = groupedInvoices.get(custId) || []
       const out = invs.reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
       const ovd = invs
-        .filter((i: any) => i.status === 'overdue' || (i.due_date && new Date(i.due_date) < now))
+        .filter((i: any) => i.due_date && new Date(i.due_date) < now)
         .reduce((s: number, i: any) => s + (parseFloat(i.total) || 0) - (parseFloat(i.paid_amount) || 0), 0)
       return { out, ovd }
     }
@@ -325,6 +356,7 @@ export async function GET(request: NextRequest) {
         totalOverdue: sc.total_overdue || sc.total_outstanding || 0,
         oldestOverdueDays: sc.oldest_overdue_days || 0,
         attentionScore: sc.attention_score || 10,
+        priorityScore: sc.attention_score || 10,
         nextActionType: (sc.total_overdue || 0) > 0 ? 'send_reminder' : 'wait',
         promiseToPayDate: null,
         ignoredReminders: sc.reminder_count || 0,

@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft, Phone, CheckCircle2,
   Loader2, AlertTriangle, Send, IndianRupee,
   Clock, ExternalLink, FileText, CreditCard,
-  Bell, MessageSquare, Hand,
+  Bell, MessageSquare, Hand, Printer,
   CalendarClock, Copy, Check,
   Download, Repeat, Sun, Sunrise, Sunset, Moon,
 } from "lucide-react"
@@ -16,8 +16,13 @@ import { toast } from "sonner"
 import { db } from "@/lib/billzo/db"
 import { getCookie } from "@/lib/cookies"
 import { getTenantId } from "@/lib/billzo/tenant"
-import { downloadInvoicePDF, generateInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
+import { downloadInvoicePDF, generateInvoicePDF, printInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
+import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline"
+import { NextBestAction } from "@/components/billzo/NextBestAction"
+import { CallCustomer } from "@/components/billzo/CallCustomer"
+import { logRecoveryActivity } from "@/lib/billzo/recovery/activity"
 import type { Tenant } from "@/lib/billzo/types"
+import type { PaymentConfig } from "@/lib/billzo/payment-renderer"
 
 interface InvoiceDataFull {
   id: string
@@ -29,6 +34,7 @@ interface InvoiceDataFull {
   paidAmount: number
   status: string
   dueAt: string
+  documentType?: 'tax_invoice' | 'bill'
   items: Array<{ name: string; hsn?: string; qty: number; price: number; gstRate: number }>
   createdAt: string
   method?: string
@@ -90,6 +96,8 @@ export default function InvoiceSendPage() {
   const [paymentLinkLoading, setPaymentLinkLoading] = useState(false)
   const [paymentLinkError, setPaymentLinkError] = useState(false)
 
+  const [showCallFlow, setShowCallFlow] = useState(false)
+
   // Promise fields
   const [promiseAmount, setPromiseAmount] = useState(0)
   const [promiseDate, setPromiseDate] = useState("")
@@ -118,6 +126,15 @@ export default function InvoiceSendPage() {
 
   const isUdhar = paymentMethod === "udhar" || (invoice ? invoice.status !== "paid" && invoice.paidAmount === 0 : false)
   const totalExposure = invoice ? invoice.total + customerOutstanding : 0
+
+  const paymentReady = useMemo(() => {
+    const cfg = tenantData?.paymentConfig
+    if (!cfg) return !!tenantData?.upiId
+    if (cfg.method === 'upi') return !!cfg.upiId
+    if (cfg.method === 'bank') return !!cfg.bankAccount && !!cfg.bankIfsc
+    if (cfg.method === 'cash') return true
+    return false
+  }, [tenantData])
 
   const loadData = useCallback(async () => {
     if (!invoiceId) { setError("No invoice ID"); setLoading(false); return }
@@ -248,13 +265,16 @@ export default function InvoiceSendPage() {
       total: inv.total,
       businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
       businessPhone: tenantData?.phone,
+      businessEmail: tenantData?.email,
       businessGstin: tenantData?.gstin,
       businessPan: tenantData?.pan,
       businessAddress: tenantData?.address,
+      logo: tenantData?.logo,
       bankDetails: tenantData?.bankDetails,
       upiId: tenantData?.upiId,
       whiteLabel: tenantData?.whiteLabel,
       placeOfSupply: tenantData?.gstin ? tenantData.gstin.slice(0, 2) : undefined,
+      documentType: inv.documentType || 'tax_invoice',
     }
   }
 
@@ -287,6 +307,7 @@ export default function InvoiceSendPage() {
         businessName,
         businessPhone: getCookie("bz_tenant_phone") || undefined,
         whiteLabel: true,
+        documentType: invoice.documentType || 'tax_invoice',
       }
       const waLink = getWhatsAppShareLink(waData)
       window.open(waLink, "_blank")
@@ -326,6 +347,13 @@ export default function InvoiceSendPage() {
           customerName: invoice.customerName,
           customerPhone: customerPhone,
         }),
+      })
+
+      logRecoveryActivity({
+        invoiceId: invoice.id,
+        customerId: invoice.customerId,
+        type: "invoice_sent",
+        actor: "merchant",
       })
 
       setSent(true)
@@ -558,26 +586,82 @@ export default function InvoiceSendPage() {
         {/* ────── Recommended Action ────── */}
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Recommended Action</p>
-          <button
-            onClick={() => {
-              if (!customerPhone) {
-                setShowNoPhoneSheet(true)
-              } else {
-                setShowMessagePreview(true)
-                setActionView('send_now')
-              }
-            }}
-            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
-          >
-            <Send size={18} />
-            {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
-          </button>
+          {isUdhar && !paymentReady ? (
+            <div className="rounded-xl bg-warning-soft dark:bg-amber-950/30 border border-warning p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-warning">Configure Payments First</p>
+                  <p className="text-xs text-warning mt-1">
+                    Customers won't be able to pay this invoice online. Set up a payment method before sharing.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/settings/payments"
+                className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-warning text-white text-sm font-semibold hover:bg-warning/90 transition-colors"
+              >
+                Configure Payments
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <NextBestAction
+                invoiceId={invoiceId as string}
+                outstanding={i ? i.total - i.paidAmount : undefined}
+                promiseDate={promiseDate}
+                customerPhone={customerPhone}
+                onCall={() => {
+                  if (customerPhone) {
+                    window.location.href = `tel:${customerPhone}`
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (!customerPhone) {
+                    setShowNoPhoneSheet(true)
+                  } else {
+                    setShowMessagePreview(true)
+                    setActionView('send_now')
+                  }
+                }}
+                className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+              >
+                <Send size={16} />
+                {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ────── Communication ────── */}
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Communication</p>
           <div className="grid grid-cols-2 gap-2">
+            {customerPhone && (
+              <div className={showCallFlow ? "col-span-2" : ""}>
+                {showCallFlow ? (
+                  <CallCustomer
+                    invoiceId={invoiceId as string}
+                    customerPhone={customerPhone}
+                    customerName={invoice?.customerName || 'Customer'}
+                    onLogged={() => setShowCallFlow(false)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setShowCallFlow(true)}
+                    className="w-full rounded-xl border-2 border-border p-4 flex items-center gap-3 hover:border-primary hover:bg-secondary/40 transition-all text-left"
+                  >
+                    <Phone className="w-5 h-5 text-muted-foreground" />
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Call Customer</div>
+                      <div className="text-[10px] text-muted-foreground">{customerPhone.replace(/\d(?=\d{4})/g, 'x')}</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            )}
             <SecondaryAction
               icon={CalendarClock}
               label="Schedule Reminder"
@@ -637,23 +721,38 @@ export default function InvoiceSendPage() {
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Documents</p>
           <div className="grid grid-cols-2 gap-2">
             <SecondaryAction
-              icon={FileText}
-              label="Share PDF"
-              onClick={async () => {
-                const pdfData = buildPdfData()
-                const doc = await generateInvoicePDF(pdfData)
-                const blob = (doc as any).output('blob')
-                const url = URL.createObjectURL(blob)
-                window.open(url, '_blank')
-              }}
-            />
-            <SecondaryAction
               icon={Download}
               label="Download PDF"
               onClick={async () => {
                 const pdfData = buildPdfData()
                 await downloadInvoicePDF(pdfData)
               }}
+            />
+            <SecondaryAction
+              icon={Printer}
+              label="Print PDF"
+              onClick={async () => {
+                const pdfData = buildPdfData()
+                await printInvoicePDF(pdfData)
+              }}
+            />
+            <SecondaryAction
+              icon={MessageSquare}
+              label="Share WhatsApp"
+              onClick={() => {
+                if (!customerPhone) {
+                  setShowNoPhoneSheet(true)
+                } else {
+                  setShowMessagePreview(true)
+                  setActionView('send_now')
+                }
+              }}
+            />
+            <SecondaryAction
+              icon={paymentLinkUrl ? Copy : ExternalLink}
+              label={paymentLinkUrl ? "Copy Payment Link" : "Payment Link"}
+              description={paymentLinkUrl ? "Tap to copy" : "Generating..."}
+              onClick={() => { if (paymentLinkUrl) copyPaymentLink() }}
             />
           </div>
         </div>
@@ -688,6 +787,14 @@ export default function InvoiceSendPage() {
             </div>
           </div>
         </section>
+
+        {/* ────── Activity Timeline ────── */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Activity</p>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <RecoveryTimeline invoiceId={invoiceId} />
+          </div>
+        </div>
 
         {/* Bottom nav */}
         <div className="flex gap-3 pt-1">
@@ -738,6 +845,12 @@ export default function InvoiceSendPage() {
         {!customerPhone && (
           <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
             No customer WhatsApp number. We'll open your WhatsApp so you can forward the invoice manually.
+          </div>
+        )}
+
+        {isUdhar && !paymentReady && (
+          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
+            Payment method not configured. Customers won't be able to pay online.
           </div>
         )}
 

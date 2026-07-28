@@ -106,6 +106,7 @@ export type Tenant = {
   subscriptionStatus?: string
   cancelledAt?: string
   whatsappConfig?: TenantWhatsAppConfig
+  paymentConfig?: PaymentConfig
   allowNegativeStock?: boolean
   createdAt: string
   updatedAt: string
@@ -189,6 +190,33 @@ export type Product = {
   updatedAt: string
 }
 
+export type RecoveryActivityType =
+  | 'invoice_created'
+  | 'invoice_sent'
+  | 'customer_viewed'
+  | 'payment_link_opened'
+  | 'reminder_sent'
+  | 'merchant_called'
+  | 'call_outcome'
+  | 'promise_received'
+  | 'promise_fulfilled'
+  | 'promise_broken'
+  | 'payment_received'
+  | 'customer_payment_reported'
+  | 'payment_confirmed'
+  | 'note_added'
+
+export type RecoveryActivity = {
+  id: string
+  tenantId: string
+  invoiceId: string
+  customerId?: string
+  type: RecoveryActivityType
+  actor: 'merchant' | 'customer' | 'system'
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
 export type InvoiceItem = {
   id: string
   tenantId: string
@@ -204,6 +232,8 @@ export type InvoiceItem = {
   updatedAt: string
 }
 
+export type DocumentType = 'tax_invoice' | 'bill'
+
 export type Invoice = {
   id: string
   tenantId: string
@@ -214,6 +244,7 @@ export type Invoice = {
   paidAmount: number
   status: InvoiceStatus
   invoiceNumber?: string
+  documentType?: DocumentType
   dueAt: string
   createdAt: string
   updatedAt: string
@@ -256,6 +287,16 @@ export type InventoryMovement = {
   qtyDelta: number
   stockAfter: number
   createdAt: string
+}
+
+export type PaymentConfig = {
+  method: 'upi' | 'bank' | 'cash'
+  upiId?: string
+  bankAccount?: string
+  bankIfsc?: string
+  bankName?: string
+  accountHolderName?: string
+  upiVerifiedByMerchant?: boolean
 }
 
 export type Payment = {
