@@ -16,6 +16,8 @@ type NeedsActionItem = {
   phone: string
   tier: string
   outstanding: number
+  recoverableAmount: number
+  recoveryConfidence: number
   overdue: number
   state: string
   promiseDate: string | null
@@ -146,21 +148,27 @@ export default function RecoveryCenterPage() {
         if (!json || json.needsAction?.length === 0) {
           const localCases = await loadQueueCases()
           if (localCases.length > 0) {
-            const fallbackActions = localCases.map((c: any) => ({
-              caseId: c.caseId,
-              customerId: c.customerId,
-              customerName: c.customerName,
-              phone: c.phone || '',
-              tier: 'standard',
-              outstanding: c.totalOverdue,
-              overdue: c.oldestOverdueDays,
-              state: c.oldestOverdueDays > 0 ? 'overdue' : 'active',
-              promiseDate: c.promiseToPayDate,
-              promiseBrokenDays: null,
-              recommendedAction: c.nextActionType || 'send_reminder',
-              reminderCount: c.ignoredReminders || 0,
-              brokenPromises: c.brokenPromises || 0,
-            }))
+            const fallbackActions = localCases.map((c: any) => {
+              const out = c.totalOverdue || 0
+              const confidence = 50
+              return {
+                caseId: c.caseId,
+                customerId: c.customerId,
+                customerName: c.customerName,
+                phone: c.phone || '',
+                tier: 'standard',
+                outstanding: out,
+                recoverableAmount: Math.round(out * confidence / 100),
+                recoveryConfidence: confidence,
+                overdue: c.oldestOverdueDays,
+                state: c.oldestOverdueDays > 0 ? 'overdue' : 'active',
+                promiseDate: c.promiseToPayDate,
+                promiseBrokenDays: null,
+                recommendedAction: c.nextActionType || 'send_reminder',
+                reminderCount: c.ignoredReminders || 0,
+                brokenPromises: c.brokenPromises || 0,
+              }
+            })
             const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
             json = {
               generatedAt: new Date().toISOString(),
@@ -260,7 +268,9 @@ export default function RecoveryCenterPage() {
   }
 
   const needsAction = data.needsAction
-  const totalExpected = needsAction.reduce((s, i) => s + i.outstanding, 0)
+  const totalExpected = needsAction.reduce((s, i) => s + i.recoverableAmount, 0)
+  const totalOutstanding = needsAction.reduce((s, i) => s + i.outstanding, 0)
+  const highConfItems = needsAction.filter(i => i.recoveryConfidence >= 70).slice(0, 3)
 
   // Group by recommended action
   const callItems = needsAction.filter(i => i.recommendedAction === 'call')
@@ -293,11 +303,14 @@ export default function RecoveryCenterPage() {
             const reasons = whyReasons(item)
             return (
               <Link key={item.caseId} href={`/recovery/case/${item.caseId}`} className="rp-item">
-                <div className="rp-item-head">
-                  <span className="rp-item-num">{idx + 1}</span>
-                  <span className="rp-item-name">{item.customerName}</span>
-                  <span className="rp-item-amount">{fmt(item.outstanding)}</span>
-                </div>
+                  <div className="rp-item-head">
+                    <span className="rp-item-num">{idx + 1}</span>
+                    <span className={`rp-conf rp-conf--${item.recoveryConfidence >= 80 ? 'high' : item.recoveryConfidence >= 50 ? 'med' : 'low'}`}>
+                      {item.recoveryConfidence}%
+                    </span>
+                    <span className="rp-item-name">{item.customerName}</span>
+                    <span className="rp-item-amount">{fmt(item.outstanding)}</span>
+                  </div>
                 <div className="rp-item-days">
                   {item.overdue > 0 ? (
                     <span className="rp-item-overdue">{item.overdue} days overdue</span>
@@ -402,8 +415,24 @@ export default function RecoveryCenterPage() {
 
             {needsAction.length > 0 ? (
               <div className="rp-expected">
-                <span className="rp-expected-lbl">Expected Recovery Today</span>
-                <span className="rp-expected-amt">{fmt(totalExpected)}</span>
+                <div className="rp-expected-main">
+                  <span className="rp-expected-lbl">Expected Recovery Today</span>
+                  <span className="rp-expected-amt">{fmt(totalExpected)}</span>
+                  <span className="rp-expected-sub">of {fmt(totalOutstanding)} total outstanding</span>
+                </div>
+                {highConfItems.length > 0 ? (
+                  <div className="rp-expected-items">
+                    {highConfItems.map(i => (
+                      <div key={i.caseId} className="rp-expected-item">
+                        <span className={`rp-conf rp-conf--${i.recoveryConfidence >= 80 ? 'high' : i.recoveryConfidence >= 50 ? 'med' : 'low'}`}>
+                          {i.recoveryConfidence}%
+                        </span>
+                        <span className="rp-expected-name">{i.customerName}</span>
+                        <span className="rp-expected-val">{fmt(i.recoverableAmount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

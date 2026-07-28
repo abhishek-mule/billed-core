@@ -91,6 +91,37 @@ export async function GET(request: NextRequest) {
 
     const custMap = new Map((customers || []).map((c: any) => [c.id, c]))
 
+    const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
+      let confidence = 0.65 // baseline
+
+      // Tier adjustment
+      const tier = (cust.customer_tier || 'standard').toLowerCase()
+      if (tier === 'vip') confidence += 0.20
+      else if (tier === 'regular') confidence += 0.05
+      else if (tier === 'risky') confidence -= 0.20
+
+      // Broken promises penalty (each -15%)
+      const broken = c.broken_promises || 0
+      confidence -= broken * 0.15
+
+      // Reminder fatigue (each unsucceeded reminder -8%, max -40%)
+      const reminders = c.reminder_count || 0
+      confidence -= Math.min(reminders * 0.08, 0.40)
+
+      // Overdue age
+      const state = c.recovery_state_v2 || 'active'
+      if (state === 'promised' || state === 'partial_payment') confidence += 0.10
+      else if (state === 'disputed') confidence -= 0.40
+
+      // Clamp 0.05–0.95
+      confidence = Math.max(0.05, Math.min(0.95, confidence))
+
+      return {
+        recoverableAmount: Math.round(outstanding * confidence),
+        recoveryConfidence: Math.round(confidence * 100),
+      }
+    }
+
     const needsAction = (cases || [])
       .map((c: any) => {
         const cust = custMap.get(c.customer_id) || {}
@@ -98,6 +129,7 @@ export async function GET(request: NextRequest) {
         const daysOverdue = c.promise_to_pay_date
           ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
           : null
+        const { recoverableAmount, recoveryConfidence } = estimateRecoverable(out, c, cust)
         return {
           caseId: c.id,
           customerId: c.customer_id,
@@ -105,6 +137,8 @@ export async function GET(request: NextRequest) {
           phone: cust.phone || '',
           tier: cust.customer_tier || 'standard',
           outstanding: out,
+          recoverableAmount,
+          recoveryConfidence,
           overdue: ovd,
           state: c.recovery_state_v2,
           promiseDate: c.promise_to_pay_date,
