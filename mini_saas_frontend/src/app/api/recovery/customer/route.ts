@@ -144,11 +144,11 @@ export async function GET(request: NextRequest) {
 
     // ── Single source of truth: derive amounts from invoices ──
     const now = new Date()
-    const openInvoices = (invoices || []).filter((i: any) =>
-      Number(i.grand_total || 0) - Number(i.paid_amount || 0) > 0,
-    )
     const invoiceOutstanding = (i: any) =>
-      Math.max(0, (Number(i.grand_total) || 0) - (Number(i.paid_amount) || 0))
+      Number(i.outstanding_amount) > 0
+        ? Number(i.outstanding_amount)
+        : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
+    const openInvoices = (invoices || []).filter((i: any) => invoiceOutstanding(i) > 0)
     const outstanding = openInvoices.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
     const overdueInvs = openInvoices.filter(
       (i: any) => i.due_date && new Date(i.due_date) < now,
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
       invoices: (invoices || []).map((i: any) => ({
         id: i.id,
         number: i.invoice_number,
-        total: Number(i.grand_total || 0),
+        total: invoiceOutstanding(i),
         status: i.status,
         dueDate: i.due_date,
         createdAt: i.created_at,

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const { data: invoices } = customerIds.length
       ? await supabaseAdmin
           .from('invoices')
-          .select('customer_id, total, paid_amount, status, due_date')
+          .select('customer_id, total, grand_total, paid_amount, outstanding_amount, status, due_date')
           .eq('tenant_id', tenantId)
           .in('customer_id', customerIds)
           .gt('outstanding_amount', 0)
@@ -55,9 +55,13 @@ export async function GET(request: NextRequest) {
       arr.push(inv)
       invByCust.set(inv.customer_id, arr)
     }
+    const invoiceOutstanding = (i: any) =>
+      Number(i.outstanding_amount) > 0
+        ? Number(i.outstanding_amount)
+        : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
     const invoiceAmounts = (custId: string) => {
       const invs = invByCust.get(custId) || []
-      const out = invs.reduce((s: number, i: any) => s + (Number(i.total) || 0) - (Number(i.paid_amount) || 0), 0)
+      const out = invs.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
       const overdueInvs = invs.filter(
         (i: any) => i.due_date && new Date(i.due_date) < now,
       )
