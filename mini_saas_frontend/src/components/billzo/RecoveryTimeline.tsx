@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Send, Eye, Bell, Phone, HeartHandshake, CheckCircle2, XCircle, FileText, Plus, Clock, CreditCard, ExternalLink } from "lucide-react"
+import { Loader2, Send, Eye, Bell, Phone, HeartHandshake, CheckCircle2, XCircle, FileText, Plus, CreditCard, ExternalLink, Clock } from "lucide-react"
 import type { RecoveryActivity, RecoveryActivityType } from "@/lib/billzo/types"
 
 interface TimelineProps {
@@ -25,35 +25,115 @@ const ACTIVITY_ICONS: Record<RecoveryActivityType, any> = {
   note_added: Plus,
 }
 
-const ACTIVITY_LABELS: Record<RecoveryActivityType, string> = {
-  invoice_created: 'Invoice Created',
-  invoice_sent: 'Invoice Sent',
-  customer_viewed: 'Customer Viewed',
-  payment_link_opened: 'Payment Link Opened',
-  reminder_sent: 'Reminder Sent',
-  merchant_called: 'Call Made',
-  call_outcome: 'Call Outcome',
-  promise_received: 'Promise to Pay',
-  promise_fulfilled: 'Promise Fulfilled',
-  promise_broken: 'Promise Broken',
-  payment_received: 'Payment Received',
-  customer_payment_reported: 'Payment Reported',
-  payment_confirmed: 'Payment Confirmed',
-  note_added: 'Note Added',
+function storyLine(activity: RecoveryActivity): string {
+  const m = (activity.metadata || {}) as Record<string, unknown>
+
+  switch (activity.type) {
+    case 'invoice_created':
+      return typeof m.invoiceRef === 'string' ? `Invoice ${m.invoiceRef} created` : 'Invoice created'
+    case 'invoice_sent':
+      return 'Invoice sent to customer'
+    case 'customer_viewed':
+      return 'Customer viewed the invoice'
+    case 'payment_link_opened':
+      return 'Customer opened the payment link'
+    case 'reminder_sent': {
+      const ch = typeof m.channel === 'string' ? m.channel : 'reminder'
+      return `Reminder sent — ${ch}`
+    }
+    case 'merchant_called':
+      return 'You called'
+    case 'call_outcome': {
+      const outcome = typeof m.outcome === 'string' ? m.outcome : ''
+      const labels: Record<string, string> = {
+        no_answer: 'No answer',
+        busy: 'Line was busy',
+        answered: 'Call was answered',
+        switched_off: 'Phone was switched off',
+        wrong_number: 'Wrong number',
+        promised: 'Promised to pay',
+        paid: 'Confirmed payment made',
+        dispute: 'Customer disputed the invoice',
+        not_interested: 'Customer not interested',
+      }
+      return labels[outcome] || outcome.replace(/_/g, ' ')
+    }
+    case 'promise_received': {
+      const pd = typeof m.promiseDate === 'string' ? new Date(m.promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''
+      return pd ? `Promised payment by ${pd}` : 'Promised to pay'
+    }
+    case 'promise_fulfilled':
+      return 'Promise was kept'
+    case 'promise_broken':
+      return 'Promise was broken'
+    case 'payment_received': {
+      const amt = typeof m.amount === 'number' ? `₹${m.amount.toLocaleString('en-IN')}` : ''
+      return amt ? `Payment received — ${amt}` : 'Payment received'
+    }
+    case 'customer_payment_reported': {
+      const amt = typeof m.amount === 'number' ? `₹${m.amount.toLocaleString('en-IN')}` : ''
+      return amt ? `Customer reported payment — ${amt}` : 'Customer reported payment'
+    }
+    case 'payment_confirmed': {
+      const amt = typeof m.amount === 'number' ? `₹${m.amount.toLocaleString('en-IN')}` : ''
+      return amt ? `Payment confirmed — ${amt}` : 'Payment confirmed'
+    }
+    case 'note_added': {
+      const note = typeof m.note === 'string' ? m.note : ''
+      return `Note: ${note}`
+    }
+    default:
+      return (activity.type as string).replace(/_/g, ' ')
+  }
 }
 
-const ACTOR_LABELS: Record<string, string> = {
-  merchant: 'You',
-  customer: 'Customer',
-  system: 'BillZo',
+function storyDetail(activity: RecoveryActivity): string | null {
+  const m = (activity.metadata || {}) as Record<string, unknown>
+
+  switch (activity.type) {
+    case 'call_outcome': {
+      const note = typeof m.note === 'string' ? m.note : ''
+      return note || null
+    }
+    case 'invoice_created': {
+      const amt = typeof m.amount === 'number' ? `₹${m.amount.toLocaleString('en-IN')}` : ''
+      return amt || null
+    }
+    case 'invoice_sent': {
+      const ch = typeof m.channel === 'string' ? m.channel : ''
+      return ch ? `via ${ch}` : null
+    }
+    case 'note_added':
+      return null
+    default: {
+      const note = typeof m.note === 'string' ? m.note : ''
+      return note || null
+    }
+  }
 }
 
-const CALL_OUTCOME_LABEL: Record<string, string> = {
-  no_answer: 'No Answer',
-  busy: 'Busy',
-  answered: 'Answered',
-  switched_off: 'Switched Off',
-  wrong_number: 'Wrong Number',
+function dateGroupLabel(date: Date): string {
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return 'Today'
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+
+  const diffDays = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays <= 7) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    return days[date.getDay()]
+  }
+
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function isNewDay(activities: RecoveryActivity[], index: number): boolean {
+  if (index === 0) return true
+  const curr = new Date(activities[index].createdAt).toDateString()
+  const prev = new Date(activities[index - 1].createdAt).toDateString()
+  return curr !== prev
 }
 
 export function RecoveryTimeline({ invoiceId }: TimelineProps) {
@@ -98,45 +178,34 @@ export function RecoveryTimeline({ invoiceId }: TimelineProps) {
   }
 
   return (
-    <div className="space-y-0">
+    <div className="tls">
       {activities.map((activity, i) => {
         const Icon = ACTIVITY_ICONS[activity.type] || FileText
-        const isLast = i === activities.length - 1
         const date = new Date(activity.createdAt)
-        const today = new Date()
-        const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
         const timeStr = date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
-        const isToday = date.toDateString() === today.toDateString()
+        const showDateHeader = isNewDay(activities, i)
+        const line = storyLine(activity)
+        const detail = storyDetail(activity)
+        const isCallOutcome = activity.type === 'call_outcome'
 
         return (
-          <div key={activity.id} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-secondary">
-                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+          <div key={activity.id}>
+            {showDateHeader && (
+              <div className="tls-head">
+                <span>{dateGroupLabel(date)}</span>
               </div>
-              {!isLast && <div className="w-px flex-1 bg-border" />}
-            </div>
-            <div className={`pb-5 ${isLast ? '' : ''}`}>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-foreground">{ACTIVITY_LABELS[activity.type] || activity.type}</p>
-                <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
-                  {ACTOR_LABELS[activity.actor] || activity.actor}
-                </span>
+            )}
+            <div className={`tls-row ${isCallOutcome ? 'tls-row--sub' : ''}`}>
+              <div className="tls-icon">
+                <Icon className="h-3.5 w-3.5" />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isToday ? timeStr : `${dateStr}, ${timeStr}`}
-              </p>
-              {activity.metadata && Object.keys(activity.metadata).length > 0 && (() => {
-                const m = activity.metadata as Record<string, unknown>
-                return (
-                  <div className="mt-1 text-[10px] text-muted-foreground/70 space-y-0.5">
-                    {activity.type === 'call_outcome' && typeof m.outcome === 'string' && <p>Outcome: {CALL_OUTCOME_LABEL[m.outcome] || m.outcome.replace(/_/g, ' ')}</p>}
-                    {typeof m.amount === 'number' && <p>Amount: ₹{m.amount.toLocaleString('en-IN')}</p>}
-                    {typeof m.dueDate === 'string' && <p>Due: {new Date(m.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>}
-                    {typeof m.note === 'string' && m.note && <p className="italic">"{m.note}"</p>}
-                  </div>
-                )
-              })()}
+              <div className="tls-body">
+                <p className={`tls-line ${isCallOutcome ? 'tls-line--sub' : ''}`}>
+                  {line}
+                </p>
+                {detail && <p className="tls-detail">{detail}</p>}
+                <span className="tls-time">{timeStr}</span>
+              </div>
             </div>
           </div>
         )
