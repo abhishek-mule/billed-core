@@ -21,6 +21,8 @@ type NeedsActionItem = {
   promiseDate: string | null
   promiseBrokenDays: number | null
   recommendedAction: string
+  reminderCount: number
+  brokenPromises: number
 }
 
 type ScheduledItem = {
@@ -83,17 +85,42 @@ function actionLabel(a: string) {
   }
 }
 
-function stateBadge(state: string) {
-  const map: Record<string, { label: string; cls: string }> = {
-    active: { label: 'Active', cls: 'tag tag--info' },
-    overdue: { label: 'Overdue', cls: 'tag tag--warning' },
-    partial_payment: { label: 'Partial', cls: 'tag tag--warning' },
-    promised: { label: 'Promised', cls: 'tag tag--info' },
-    disputed: { label: 'Disputed', cls: 'tag tag--warning' },
-    recovered: { label: 'Recovered', cls: 'tag tag--success' },
-    closed: { label: 'Closed', cls: 'tag tag--success' },
+function whyReasons(item: NeedsActionItem): string[] {
+  const reasons: string[] = []
+  if (item.brokenPromises > 0) reasons.push('Promised payment last week but didn\'t follow through')
+  if (item.promiseBrokenDays != null) reasons.push(`Promise broken ${item.promiseBrokenDays}d ago`)
+  if (item.reminderCount > 0) reasons.push(`Ignored ${item.reminderCount} reminder${item.reminderCount > 1 ? 's' : ''}`)
+  if (item.overdue > 0) reasons.push(`${item.overdue} days overdue`)
+  if (item.tier === 'vip') reasons.push('High value customer — usually pays after calls')
+  if (item.tier === 'risky') reasons.push('At-risk customer — needs personal attention')
+  if (reasons.length === 0) reasons.push('Outstanding balance needs attention')
+  return reasons
+}
+
+function planIcon(action: string) {
+  switch (action) {
+    case 'call': return <Phone size={16} />
+    case 'record_payment': return <HeartHandshake size={16} />
+    default: return <Bell size={16} />
   }
-  return map[state] ?? { label: state, cls: 'tag' }
+}
+
+function planLabel(action: string) {
+  switch (action) {
+    case 'call': return 'Call Today'
+    case 'record_payment': return 'Record Payment'
+    case 'visit': return 'Visit'
+    default: return 'Send Reminder'
+  }
+}
+
+function planColor(action: string) {
+  switch (action) {
+    case 'call': return 'rp--call'
+    case 'record_payment': return 'rp--payment'
+    case 'visit': return 'rp--visit'
+    default: return 'rp--remind'
+  }
 }
 
 import { loadQueueCases } from '@/lib/billzo/repositories/recovery'
@@ -131,6 +158,8 @@ export default function RecoveryCenterPage() {
               promiseDate: c.promiseToPayDate,
               promiseBrokenDays: null,
               recommendedAction: c.nextActionType || 'send_reminder',
+              reminderCount: c.ignoredReminders || 0,
+              brokenPromises: c.brokenPromises || 0,
             }))
             const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
             json = {
@@ -182,10 +211,12 @@ export default function RecoveryCenterPage() {
             overdue: c.oldestOverdueDays,
             state: c.oldestOverdueDays > 0 ? 'overdue' : 'active',
             promiseDate: c.promiseToPayDate,
-              promiseBrokenDays: null,
-              recommendedAction: c.nextActionType || 'send_reminder',
-            }))
-            const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
+            promiseBrokenDays: null,
+            recommendedAction: c.nextActionType || 'send_reminder',
+            reminderCount: c.ignoredReminders || 0,
+            brokenPromises: c.brokenPromises || 0,
+          }))
+          const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
           json = {
             generatedAt: new Date().toISOString(),
             needsAction: fallbackActions,
@@ -228,7 +259,76 @@ export default function RecoveryCenterPage() {
     )
   }
 
-  const first = data.needsAction[0]
+  const needsAction = data.needsAction
+  const totalExpected = needsAction.reduce((s, i) => s + i.outstanding, 0)
+
+  // Group by recommended action
+  const callItems = needsAction.filter(i => i.recommendedAction === 'call')
+  const remindItems = needsAction.filter(i => i.recommendedAction === 'send_reminder' || i.recommendedAction === 'reminder')
+  const paymentItems = needsAction.filter(i => i.recommendedAction === 'record_payment')
+  const otherItems = needsAction.filter(i =>
+    i.recommendedAction !== 'call' &&
+    i.recommendedAction !== 'send_reminder' &&
+    i.recommendedAction !== 'reminder' &&
+    i.recommendedAction !== 'record_payment'
+  )
+
+  const PlanSection = ({ items, icon, label, color, emptyText }: {
+    items: NeedsActionItem[]
+    icon: React.ReactNode
+    label: string
+    color: string
+    emptyText: string
+  }) => {
+    if (items.length === 0) return null
+    return (
+      <div className={`rp-group ${color}`}>
+        <div className="rp-group-head">
+          {icon}
+          <span className="rp-group-label">{label}</span>
+          <span className="rp-count">{items.length}</span>
+        </div>
+        <div className="rp-list">
+          {items.map((item, idx) => {
+            const reasons = whyReasons(item)
+            return (
+              <Link key={item.caseId} href={`/recovery/case/${item.caseId}`} className="rp-item">
+                <div className="rp-item-head">
+                  <span className="rp-item-num">{idx + 1}</span>
+                  <span className="rp-item-name">{item.customerName}</span>
+                  <span className="rp-item-amount">{fmt(item.outstanding)}</span>
+                </div>
+                <div className="rp-item-days">
+                  {item.overdue > 0 ? (
+                    <span className="rp-item-overdue">{item.overdue} days overdue</span>
+                  ) : item.promiseBrokenDays != null ? (
+                    <span className="rp-item-overdue">Promise broken {item.promiseBrokenDays}d ago</span>
+                  ) : null}
+                </div>
+                <div className="rp-item-why">
+                  {reasons.map((r, ri) => (
+                    <span key={ri} className="rp-item-reason">• {r}</span>
+                  ))}
+                </div>
+                <div className="rp-item-action">
+                  {item.recommendedAction === 'call' ? (
+                    <span className="rp-btn rp-btn--call" onClick={(e) => { if (item.phone) { e.stopPropagation(); window.location.href = `tel:${item.phone}` } }}>
+                      <Phone size={13} /> Call Now
+                    </span>
+                  ) : item.recommendedAction === 'record_payment' ? (
+                    <span className="rp-btn rp-btn--payment"><HeartHandshake size={13} /> Record</span>
+                  ) : (
+                    <span className="rp-btn rp-btn--remind"><MessageSquare size={13} /> Send WhatsApp</span>
+                  )}
+                  <span className="rp-item-open">Open →</span>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rc-page">
@@ -239,8 +339,8 @@ export default function RecoveryCenterPage() {
             {greeting()}{name ? ` ${name}!` : ''}
           </h1>
           <p className="rc-sub">
-            {data.needsAction.length > 0
-              ? `${data.needsAction.length} customer${data.needsAction.length > 1 ? 's' : ''} need your attention`
+            {needsAction.length > 0
+              ? `${needsAction.length} customer${needsAction.length > 1 ? 's' : ''} need your attention`
               : data.underFollowUp > 0
                 ? 'Invoices are outstanding but none require recovery yet.'
                 : 'No outstanding invoices. Great — you\'re fully paid up.'}
@@ -257,66 +357,60 @@ export default function RecoveryCenterPage() {
         </Link>
       </header>
 
-      {/* 1. Needs Action */}
+      {/* Today's Recovery Plan */}
       <section className="rc-block">
         <div className="rc-block-head">
           <span className="rc-dot rc-dot--red" />
-          <h2>Needs Action</h2>
-          <span className="rc-count">{data.needsAction.length}</span>
+          <h2>Today&apos;s Recovery Plan</h2>
         </div>
 
-        {data.needsAction.length === 0 ? (
+        {needsAction.length === 0 ? (
           <div className="rc-empty">
             <CheckCircle2 size={18} />
             <span>No customers need action today. {data.underFollowUp ? 'Invoices exist but are not yet overdue.' : ''}</span>
           </div>
         ) : (
-          <div className="rc-list">
-            {data.needsAction.map((c) => {
-              return (
-                <Link
-                  key={c.caseId}
-                  href={`/recovery/case/${c.caseId}`}
-                  className="rc-card rc-card--red"
-                >
-                  {c.overdue > 0 ? (
-                    <div className="rc-overdue-badge">
-                      <span className="rc-overdue-num">{c.overdue}</span>
-                      <span className="rc-overdue-lbl">DAYS OVERDUE</span>
-                    </div>
-                  ) : c.promiseBrokenDays != null ? (
-                    <div className="rc-overdue-badge rc-overdue-badge--warn">
-                      <AlertTriangle size={14} />
-                      Promise broken {c.promiseBrokenDays}d ago
-                    </div>
-                  ) : null}
-                  <div className="rc-amount">{fmt(c.outstanding)}</div>
-                  <div className="rc-cust">{c.customerName}</div>
-                  <div className="rc-meta">
-                    <span className="rc-rec">
-                      {c.recommendedAction === 'call' ? (
-                        <><Phone size={13} /> Call</>
-                      ) : c.recommendedAction === 'record_payment' ? (
-                        <><HeartHandshake size={13} /> Record Payment</>
-                      ) : (
-                        <><Bell size={13} /> Remind</>
-                      )}
-                      {' · '}
-                      {actionLabel(c.recommendedAction)}
-                    </span>
-                  </div>
-                  <div className="rc-card-foot">
-                    <span className="rc-arrow-label">Open →</span>
-                    <ArrowRight size={15} className="rc-arrow" />
-                  </div>
-                </Link>
-              )
-            })}
+          <div className="rp-container">
+            <PlanSection
+              items={callItems}
+              icon={<Phone size={16} />}
+              label="Call Today"
+              color="rp--call"
+              emptyText="No calls needed"
+            />
+            <PlanSection
+              items={remindItems}
+              icon={<Bell size={16} />}
+              label="Send Reminder"
+              color="rp--remind"
+              emptyText="No reminders needed"
+            />
+            <PlanSection
+              items={paymentItems}
+              icon={<HeartHandshake size={16} />}
+              label="Record Payment"
+              color="rp--payment"
+              emptyText="No payments to record"
+            />
+            <PlanSection
+              items={otherItems}
+              icon={<Clock size={16} />}
+              label="Other Actions"
+              color="rp--other"
+              emptyText=""
+            />
+
+            {needsAction.length > 0 ? (
+              <div className="rp-expected">
+                <span className="rp-expected-lbl">Expected Recovery Today</span>
+                <span className="rp-expected-amt">{fmt(totalExpected)}</span>
+              </div>
+            ) : null}
           </div>
         )}
       </section>
 
-      {/* 2. Scheduled Today */}
+      {/* Scheduled Today */}
       <section className="rc-block">
         <div className="rc-block-head">
           <span className="rc-dot rc-dot--orange" />
@@ -382,7 +476,7 @@ export default function RecoveryCenterPage() {
         )}
       </section>
 
-      {/* 3. Recently Recovered */}
+      {/* Recently Recovered */}
       <section className="rc-block">
         <div className="rc-block-head">
           <span className="rc-dot rc-dot--green" />
@@ -414,7 +508,7 @@ export default function RecoveryCenterPage() {
         )}
       </section>
 
-      {/* 4. Activity Timeline */}
+      {/* Activity Timeline */}
       <section className="rc-block">
         <div className="rc-block-head">
           <span className="rc-dot rc-dot--blue" />
@@ -442,18 +536,6 @@ export default function RecoveryCenterPage() {
           </div>
         )}
       </section>
-
-      {first ? (
-        <Link href={`/recovery/case/${first.caseId}`} className="rc-fab">
-          {first.recommendedAction === 'call' ? (
-            <><Phone size={18} /> Call {first.customerName}</>
-          ) : first.recommendedAction === 'record_payment' ? (
-            <><HeartHandshake size={18} /> Record Payment</>
-          ) : (
-            <><Bell size={18} /> Send Reminder</>
-          )}
-        </Link>
-      ) : null}
     </div>
   )
 }

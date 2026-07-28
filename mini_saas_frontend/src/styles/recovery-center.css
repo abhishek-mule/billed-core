@@ -75,6 +75,105 @@
 }
 .rc-count--muted { background: transparent; }
 
+/* ─── Today's Recovery Plan ──────────────────────────────────────────── */
+.rp-container { display: flex; flex-direction: column; gap: 14px; }
+.rp-group {
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 12px;
+}
+.rp-group.rp--call { border-left: 3px solid hsl(var(--destructive)); }
+.rp-group.rp--remind { border-left: 3px solid hsl(210 80% 55%); }
+.rp-group.rp--payment { border-left: 3px solid hsl(var(--success)); }
+.rp-group.rp--other { border-left: 3px solid hsl(var(--muted-foreground)); }
+.rp-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  color: hsl(var(--muted-foreground));
+}
+.rp-group.rp--call .rp-group-head { color: hsl(var(--destructive)); }
+.rp-group.rp--remind .rp-group-head { color: hsl(210 80% 55%); }
+.rp-group.rp--payment .rp-group-head { color: hsl(var(--success)); }
+.rp-group-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.rp-count {
+  font-size: 11px; font-weight: 600;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 999px; padding: 0 7px;
+  color: hsl(var(--muted-foreground));
+}
+.rp-list { display: flex; flex-direction: column; gap: 8px; }
+.rp-item {
+  display: block;
+  background: hsl(var(--muted) / 0.25);
+  border-radius: 12px;
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: background .1s ease;
+}
+.rp-item:hover { background: hsl(var(--muted) / 0.45); }
+.rp-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rp-item-num {
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  background: hsl(var(--muted) / 0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.rp-item-name { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-item-amount { font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.rp-item-days { margin: 4px 0 2px 30px; }
+.rp-item-overdue { font-size: 12px; color: hsl(var(--destructive)); font-weight: 500; }
+.rp-item-why {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 4px 0 8px 30px;
+}
+.rp-item-reason { font-size: 11.5px; color: hsl(var(--muted-foreground)); line-height: 1.4; }
+.rp-item-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 30px;
+}
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .1s ease;
+}
+.rp-btn--call { background: hsl(var(--destructive) / 0.12); color: hsl(var(--destructive)); }
+.rp-btn--remind { background: hsl(210 80% 50% / 0.1); color: hsl(210 80% 40%); }
+.rp-btn--payment { background: hsl(var(--success) / 0.12); color: hsl(var(--success)); }
+.rp-btn:hover { opacity: 0.8; }
+.rp-item-open { margin-left: auto; font-size: 11px; color: hsl(var(--muted-foreground)); }
+.rp-expected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: hsl(var(--recovery) / 0.06);
+  border: 1px solid hsl(var(--recovery) / 0.2);
+  border-radius: 12px;
+}
+.rp-expected-lbl { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); }
+.rp-expected-amt { font-size: 18px; font-weight: 700; color: hsl(var(--recovery)); }
+
 .rc-dot {
   width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
 }

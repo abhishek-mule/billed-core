@@ -110,6 +110,8 @@ export async function GET(request: NextRequest) {
           promiseDate: c.promise_to_pay_date,
           promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
           recommendedAction: c.next_action_type || 'send_reminder',
+          reminderCount: c.reminder_count || 0,
+          brokenPromises: c.broken_promises || 0,
         }
       })
       .filter((c: any) => c.outstanding > 0)
