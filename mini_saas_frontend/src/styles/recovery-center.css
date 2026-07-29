@@ -909,4 +909,137 @@
   padding: 6px;
 }
 
+/* ─── Customer State Badge ───────────────────────────────────────────── */
+.cw-state {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.cw-state--green { background: hsl(var(--success) / 0.15); color: hsl(var(--success)); }
+.cw-state--blue { background: hsl(var(--info, 210) / 0.15); color: hsl(210 70% 40%); }
+.cw-state--orange { background: hsl(var(--warning) / 0.15); color: hsl(var(--warning)); }
+.cw-state--red { background: hsl(var(--destructive) / 0.15); color: hsl(var(--destructive)); }
+.cw-state--gray { background: hsl(var(--muted) / 0.4); color: hsl(var(--muted-foreground)); }
+
+/* ─── Invoice Age ────────────────────────────────────────────────────── */
+.rc-age { font-size: 11px; font-weight: 600; margin-right: 6px; }
+.rc-age--overdue { color: hsl(var(--destructive)); }
+.rc-age--current { color: hsl(var(--success)); }
+.rc-row-date { font-size: 10.5px; color: hsl(var(--muted-foreground) / 0.6); display: block; }
+
+/* ─── Recovery Score ─────────────────────────────────────────────────── */
+.rs-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--bd);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rs--green { border-color: hsl(var(--success) / 0.3); background: hsl(var(--success) / 0.04); }
+.rs--orange { border-color: hsl(var(--warning) / 0.3); background: hsl(var(--warning) / 0.04); }
+.rs--red { border-color: hsl(var(--destructive) / 0.3); background: hsl(var(--destructive) / 0.04); }
+.rs-bar-wrap { display: flex; align-items: center; gap: 10px; }
+.rs-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: hsl(var(--muted) / 0.4);
+  overflow: hidden;
+}
+.rs-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width .4s ease;
+}
+.rs--green .rs-fill { background: hsl(var(--success)); }
+.rs--orange .rs-fill { background: hsl(var(--warning)); }
+.rs--red .rs-fill { background: hsl(var(--destructive)); }
+.rs-pct {
+  font-size: 16px;
+  font-weight: 800;
+  flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+}
+.rs--green .rs-pct { color: hsl(var(--success)); }
+.rs--orange .rs-pct { color: hsl(var(--warning)); }
+.rs--red .rs-pct { color: hsl(var(--destructive)); }
+.rs-label { font-size: 13px; font-weight: 600; }
+.rs-meta { font-size: 11px; color: hsl(var(--muted-foreground) / 0.7); }
+
+/* ─── Action Block Colors ────────────────────────────────────────────── */
+.rc-block--red .rc-block-head h2 { color: hsl(var(--destructive)); }
+.rc-block--blue .rc-block-head h2 { color: hsl(210 70% 40%); }
+.rc-block--orange .rc-block-head h2 { color: hsl(var(--warning)); }
+
+/* ─── Today's First Action ───────────────────────────────────────────── */
+.cw-first-action {
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  padding: 10px 14px 16px;
+  background: linear-gradient(to top, hsl(var(--background)) 60%, transparent);
+  z-index: 50;
+}
+.cfa-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.cfa-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); }
+.cfa-close { background: none; border: none; cursor: pointer; font-size: 14px; color: hsl(var(--muted-foreground)); padding: 2px; }
+.cfa-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--bd);
+  background: var(--surface);
+}
+.cfa--red { border-color: hsl(var(--destructive) / 0.3); }
+.cfa--orange { border-color: hsl(var(--warning) / 0.3); }
+.cfa--blue { border-color: hsl(210 70% 40% / 0.2); }
+.cfa-icon {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cfa--red .cfa-icon { background: hsl(var(--destructive) / 0.12); color: hsl(var(--destructive)); }
+.cfa--orange .cfa-icon { background: hsl(var(--warning) / 0.12); color: hsl(var(--warning)); }
+.cfa--blue .cfa-icon { background: hsl(210 70% 40% / 0.1); color: hsl(210 70% 40%); }
+.cfa-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cfa-action { font-size: 13px; font-weight: 700; }
+.cfa-customer { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.cfa-amount { font-size: 14px; font-weight: 700; }
+.cfa-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 13px; font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.cfa-btn--red { background: hsl(var(--destructive)); color: white; }
+.cfa-btn--orange { background: hsl(var(--warning)); color: white; }
+.cfa-btn--blue { background: hsl(210 70% 40%); color: white; }
+.cfa-btn--red { background: hsl(var(--destructive)); color: white; }
+
+/* ─── Page bottom padding for fixed first-action ────────────────────── */
+.rc-page { padding-bottom: max(100px, env(safe-area-inset-bottom)); }
+
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Phone, MessageSquare, CheckCircle2, ArrowLeft, ArrowRight,
+  Phone, MessageSquare, CheckCircle2, ArrowLeft,
   HeartHandshake, Bell, FileText,
   Loader2, CircleDashed,
 } from 'lucide-react'
@@ -40,14 +40,57 @@ const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
-const daysBetween = (a: string | null, b = Date.now()) =>
-  a ? Math.floor((b - new Date(a).getTime()) / 86400000) : null
 
 function actionLabel(a: string) {
   return (
     { call: 'Call', send_reminder: 'Send Reminder', reminder: 'Reminder', promise_followup: 'Promise Follow-up',
       visit: 'Visit', escalate: 'Escalate', payment_request: 'Payment Request', wait: 'Wait', record_payment: 'Record Payment' } as any
   )[a] || a.replace(/_/g, ' ')
+}
+
+function statusColor(state: string): string {
+  if (state === 'recovered' || state === 'paid') return 'green'
+  if (state === 'promised' || state === 'partial_payment') return 'blue'
+  if (state === 'overdue' || state === 'active') return 'orange'
+  if (state === 'disputed') return 'red'
+  return 'gray'
+}
+
+function overdueDays(dueDate: string | null): number | null {
+  if (!dueDate) return null
+  const diff = Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000)
+  return diff > 0 ? diff : 0
+}
+
+function recoveryScore(rc: CaseInfo | null): { score: number; label: string; color: string } {
+  if (!rc || rc.outstanding === 0) return { score: 100, label: 'Cleared', color: 'green' }
+
+  let score = 65
+
+  const tierMap: Record<string, number> = { vip: 15, regular: 5, standard: 0, risky: -15 }
+  score += tierMap[(rc as any).tier] || 0
+
+  score -= (rc.brokenPromises || 0) * 12
+
+  if (rc.overdue > 0) {
+    if (rc.overdue <= 7) score += 5
+    else if (rc.overdue > 60) score -= 15
+  }
+
+  if (rc.promiseDate) {
+    const daysPast = Math.floor((Date.now() - new Date(rc.promiseDate).getTime()) / 86400000)
+    if (daysPast > 0) score -= Math.min(daysPast * 3, 20)
+    else score += 10
+  }
+
+  if (rc.state === 'promised' || rc.state === 'partial_payment') score += 10
+  if (rc.state === 'disputed') score -= 25
+
+  score = Math.max(5, Math.min(100, score))
+
+  const label = score >= 75 ? 'Likely to recover' : score >= 45 ? 'Needs attention' : 'At risk'
+  const color = score >= 75 ? 'green' : score >= 45 ? 'orange' : 'red'
+  return { score, label, color }
 }
 
 export default function CustomerWorkspacePage() {
@@ -60,6 +103,7 @@ export default function CustomerWorkspacePage() {
   const [notes, setNotes] = useState<any[]>([])
   const [draft, setDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [hideFirstAction, setHideFirstAction] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -121,15 +165,19 @@ export default function CustomerWorkspacePage() {
 
   const c = data.customer
   const rc = data.case
+  const rs = recoveryScore(rc)
+  const overdueDaysValue = rc && rc.overdue > 0 ? rc.overdue : null
 
   const nextAction = (() => {
-    if (rc?.nextAction === 'call') return { icon: <Phone size={15} />, label: 'Call Today', reason: 'Needs direct conversation' }
-    if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed' }
-    if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid' }
-    if (rc?.overdue && rc.overdue > 7) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${rc.overdue} days overdue, ignored previous reminders` }
-    if (rc?.overdue && rc.overdue > 0) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${rc.overdue} days overdue` }
-    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Outstanding balance' }
+    if (rc?.nextAction === 'call') return { icon: <Phone size={15} />, label: 'Call Today', reason: 'Needs direct conversation', action: 'call' }
+    if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed', action: 'visit' }
+    if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid', action: 'record_payment' }
+    if (overdueDaysValue && overdueDaysValue > 7) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue, ${rc?.brokenPromises ? 'promises broken, ' : ''}ignored previous reminders`, action: 'send_reminder' }
+    if (overdueDaysValue && overdueDaysValue > 0) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue`, action: 'send_reminder' }
+    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Outstanding balance', action: 'send_reminder' }
   })()
+
+  const actionColor = nextAction.action === 'call' ? 'red' : nextAction.action === 'visit' ? 'orange' : 'blue'
 
   return (
     <div className="rc-page">
@@ -140,6 +188,7 @@ export default function CustomerWorkspacePage() {
         <div className="cw-head-main">
           <h1 className="cw-name">{c?.name ?? 'Customer'}</h1>
           {c?.phone ? <a className="cw-phone" href={`tel:${c.phone}`}>{c.phone}</a> : null}
+          {rc ? <span className={`cw-state cw-state--${statusColor(rc.state)}`}>{rc.state.replace(/_/g, ' ')}</span> : null}
         </div>
       </header>
 
@@ -148,10 +197,13 @@ export default function CustomerWorkspacePage() {
         <div className="cw-hero-item">
           <span className="cw-hero-lbl">Outstanding</span>
           <span className="cw-hero-num">{rc ? fmt(rc.outstanding) : fmt(0)}</span>
+          {data.invoices.length > 1 ? (
+            <span className="cw-hero-sub">Across {data.invoices.length} invoices</span>
+          ) : null}
         </div>
         <div className="cw-hero-item">
           <span className="cw-hero-lbl">Overdue</span>
-          <span className="cw-hero-num">{rc && rc.overdue > 0 ? `${rc.overdue} days` : 'Current'}</span>
+          <span className="cw-hero-num">{overdueDaysValue ? `${overdueDaysValue} days` : 'Current'}</span>
         </div>
         {rc?.promiseDate ? (
           <div className="cw-hero-item">
@@ -161,8 +213,31 @@ export default function CustomerWorkspacePage() {
         ) : null}
       </section>
 
+      {/* Recovery Score */}
+      {rc && rc.outstanding > 0 ? (
+        <section className="rc-block">
+          <div className="rc-block-head"><h2>Recovery Score</h2></div>
+          <div className={`rs-card rs--${rs.color}`}>
+            <div className="rs-bar-wrap">
+              <div className="rs-bar">
+                <div className="rs-fill" style={{ width: `${rs.score}%` }} />
+              </div>
+              <span className="rs-pct">{rs.score}%</span>
+            </div>
+            <span className="rs-label">{rs.label}</span>
+            {rc.lastPaymentAt ? (
+              <span className="rs-meta">Last payment: {fmtDate(rc.lastPaymentAt)}</span>
+            ) : null}
+            {overdueDaysValue ? (
+              <span className="rs-meta">Last activity: {overdueDaysValue}d overdue</span>
+            ) : null}
+            <span className="rs-meta">Next: {nextAction.label}</span>
+          </div>
+        </section>
+      ) : null}
+
       {/* Next Best Action */}
-      <section className="rc-block rc-block--action">
+      <section className={`rc-block rc-block--action rc-block--${actionColor}`}>
         <div className="rc-block-head"><h2>Recommended Action</h2></div>
         <div className="cw-action-card">
           <div className="cw-action-icon">{nextAction.icon}</div>
@@ -171,6 +246,38 @@ export default function CustomerWorkspacePage() {
             <span className="cw-action-reason">{nextAction.reason}</span>
           </div>
         </div>
+      </section>
+
+      {/* Invoices with age */}
+      <section className="rc-block">
+        <div className="rc-block-head"><h2>Invoices</h2><span className="rc-count">{data.invoices.length}</span></div>
+        {data.invoices.length === 0 ? (
+          <div className="rc-empty"><FileText size={18} /><span>No invoices.</span></div>
+        ) : (
+          <div className="rc-list rc-list--tight">
+            {data.invoices.map((inv) => {
+              const od = overdueDays(inv.dueDate)
+              return (
+                <Link key={inv.id} href={`/invoices/${inv.id}`} className="rc-row">
+                  <div className="rc-row-icon"><FileText size={15} /></div>
+                  <div className="rc-row-main">
+                    <span className="rc-row-title">{inv.number ?? 'Invoice'} · {fmt(inv.total)}</span>
+                    <span className="rc-row-sub">
+                      {od != null ? (
+                        od > 0
+                          ? <span className="rc-age rc-age--overdue">{od} days overdue</span>
+                          : <span className="rc-age rc-age--current">Due today</span>
+                      ) : null}
+                      <span>{inv.status}</span>
+                    </span>
+                    <span className="rc-row-date">Issued {fmtDate(inv.createdAt)}</span>
+                  </div>
+                  <div className="rc-row-time">{fmt(inv.total)}</div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       {/* Recovery Timeline */}
@@ -183,7 +290,7 @@ export default function CustomerWorkspacePage() {
           <div className="rc-empty"><MessageSquare size={18} /><span>No recovery activity yet.</span></div>
         ) : (
           <div className="rc-timeline">
-            {data.communication.map((m, i) => (
+            {data.communication.slice(0, 5).map((m, i) => (
               <div key={i} className="rc-tl-item">
                 <div className={`rc-tl-dot ${m.kind === 'wa' && m.text === 'read' ? 'rc-tl-dot--read' : m.kind === 'wa' && m.text === 'delivered' ? 'rc-tl-dot--delivered' : ''}`} />
                 <div className="rc-tl-body">
@@ -191,27 +298,6 @@ export default function CustomerWorkspacePage() {
                 </div>
                 <div className="rc-tl-time">{fmtTime(m.at)}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Invoices */}
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Invoices</h2><span className="rc-count">{data.invoices.length}</span></div>
-        {data.invoices.length === 0 ? (
-          <div className="rc-empty"><FileText size={18} /><span>No invoices.</span></div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {data.invoices.map((inv) => (
-              <Link key={inv.id} href={`/invoices/${inv.id}`} className="rc-row">
-                <div className="rc-row-icon"><FileText size={15} /></div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{inv.number ?? 'Invoice'}</span>
-                  <span className="rc-row-sub">{fmtDate(inv.dueDate)} · {inv.status}</span>
-                </div>
-                <div className="rc-row-time">{fmt(inv.total)}</div>
-              </Link>
             ))}
           </div>
         )}
@@ -238,7 +324,7 @@ export default function CustomerWorkspacePage() {
         )}
       </section>
 
-      {/* Action plan */}
+      {/* Recovery Plan */}
       <section className="rc-block">
         <div className="rc-block-head"><h2>Recovery Plan</h2><span className="rc-count">{data.actions.length}</span></div>
         {data.actions.length === 0 ? (
@@ -269,9 +355,9 @@ export default function CustomerWorkspacePage() {
         )}
       </section>
 
-      {/* Remember about this customer — notes */}
+      {/* Customer Notes */}
       <section className="rc-block">
-        <div className="rc-block-head"><h2>Remember about this customer</h2><span className="rc-count rc-count--muted">{notes.length}</span></div>
+        <div className="rc-block-head"><h2>Customer Notes</h2><span className="rc-count rc-count--muted">{notes.length}</span></div>
         {notes.length === 0 ? (
           <div className="rc-empty"><span>No notes yet. Add what you learn about this customer.</span></div>
         ) : (
@@ -301,13 +387,26 @@ export default function CustomerWorkspacePage() {
         </div>
       </section>
 
-      {/* Bottom action bar */}
-      {rc && rc.outstanding > 0 ? (
-        <div className="cw-actions">
-          <Link href={`/recovery/work`} className="rc-btn rc-btn--ghost">Open in Queue</Link>
-          <a href={`tel:${c?.phone ?? ''}`} className="rc-btn rc-btn--primary">
-            <Phone size={15} /> Call
-          </a>
+      {/* Today's First Action — replaces floating CTA */}
+      {rc && rc.outstanding > 0 && !hideFirstAction ? (
+        <div className="cw-first-action">
+          <div className="cfa-head">
+            <span className="cfa-label">Today&apos;s First Action</span>
+            <button className="cfa-close" onClick={() => setHideFirstAction(true)}>✕</button>
+          </div>
+          <div className={`cfa-card cfa--${actionColor}`}>
+            <div className="cfa-icon">{nextAction.icon}</div>
+            <div className="cfa-body">
+              <span className="cfa-action">{nextAction.label}</span>
+              <span className="cfa-customer">{c?.name ?? 'Customer'}</span>
+              <span className="cfa-amount">{rc ? fmt(rc.outstanding) : ''}</span>
+            </div>
+            {c?.phone ? (
+              <a href={`tel:${c.phone}`} className={`cfa-btn cfa-btn--${actionColor}`}>
+                <Phone size={15} /> {nextAction.action === 'call' ? 'Call Now' : 'Action'}
+              </a>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
