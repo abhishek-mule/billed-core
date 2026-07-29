@@ -350,9 +350,9 @@ function LiveActivityCard({ events, title }: { events: RecoveryEvent[]; title: s
           })
         ) : (
           <div className="text-center py-8">
-            <CheckCircle2 className="h-10 w-10 text-recovery mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">All caught up!</p>
-            <p className="text-xs text-muted-foreground mt-1">BillZo will notify you when there's new activity.</p>
+            <Activity className="h-10 w-10 text-muted-foreground/50 mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground">No new activity</p>
+            <p className="text-xs text-muted-foreground mt-1">Recovery engine is monitoring.</p>
           </div>
         )}
       </div>
@@ -405,9 +405,9 @@ function UpcomingActionsCard({ actions, title }: { actions: UpcomingAction[]; ti
 
 function AutomationStatusCard({ title }: { title: string }) {
   const items = [
-    { icon: CalendarClock, label: "Scheduler running", ok: true },
-    { icon: MessageCircle, label: "WhatsApp connected", ok: true },
-    { icon: RefreshCw, label: "Last sync 2 min ago", ok: true },
+    { icon: CalendarClock, label: "Scheduler", ok: true, detail: "Running" },
+    { icon: MessageCircle, label: "WhatsApp", ok: true, detail: "Connected" },
+    { icon: RefreshCw, label: "Last job", ok: true, detail: "2 min ago" },
   ]
   return (
     <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
@@ -418,7 +418,8 @@ function AutomationStatusCard({ title }: { title: string }) {
           return (
             <div key={it.label} className="flex items-center gap-2.5">
               <Icon size={15} className="text-muted-foreground" />
-              <span className="text-sm text-foreground flex-1">{it.label}</span>
+              <span className="text-sm text-foreground">{it.label}</span>
+              <span className="text-xs text-muted-foreground ml-auto">{it.detail}</span>
               <CheckCircle size={16} className="text-recovery" />
             </div>
           )
@@ -468,7 +469,7 @@ function HealthScoreWidget({ health }: { health: HealthScore }) {
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-sm font-semibold text-foreground mb-2">Cashflow Health</h3>
-          <p className="text-xs text-muted-foreground">{health.label}</p>
+          <p className="text-xs text-muted-foreground">Based on overdue ratio, payment velocity, promises kept</p>
         </div>
         <div className="relative" style={{ width: 80, height: 80 }}>
           <svg viewBox="0 0 80 80">
@@ -556,9 +557,8 @@ function TodayPrioritiesCard({ title, items, urgentCount }: { title: string; ite
           })
         ) : (
           <div className="text-center py-6">
-            <CheckCircle2 className="h-9 w-9 text-recovery mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">All caught up!</p>
-            <p className="text-xs text-muted-foreground mt-1">No follow-ups needed right now.</p>
+            <CheckCircle2 className="h-9 w-9 text-muted-foreground/50 mx-auto mb-2" />
+            <p className="text-sm font-medium text-muted-foreground">No follow-ups needed right now.</p>
           </div>
         )}
       </div>
@@ -801,11 +801,12 @@ export default function DashboardPage() {
         nextAction={nextAction ? { stage: nextAction.label, recommendation: nextAction.recommendation } : undefined}
       />
 
-      <CustomersAttentionCard title="Customers Requiring Attention" customers={recovery.attention} />
+      {/* Today's Priorities — action-first */}
+      <TodayPrioritiesCard title="Today's Recovery Plan" items={priorities} urgentCount={urgentCount} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
-          <TodayPrioritiesCard title="Today's Priorities" items={priorities} urgentCount={urgentCount} />
+          <CustomersAttentionCard title="Customers Requiring Attention" customers={recovery.attention} />
           <UpcomingActionsCard title="Upcoming Schedule" actions={recovery.upcoming} />
         </div>
         <div className="space-y-4">
@@ -869,7 +870,6 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
   }
 
   function statusLabel(items: typeof workItems): string {
-    // Pick the most specific actionable status
     const reasons = items.map(i => (i.reason || '').toLowerCase()).filter(Boolean)
     if (reasons.some(r => r.includes('promise'))) return 'Promise due'
     if (reasons.some(r => r.includes('wrong') || r.includes('number'))) return 'Wrong number — update contact'
@@ -879,7 +879,7 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
     const maxDays = Math.max(...items.map(i => i.dueAt ? Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86400000) : 0))
     if (maxDays > 30) return `${maxDays} days overdue`
     if (maxDays > 0) return `Overdue by ${maxDays} days`
-    return 'Due today'
+    return 'Due soon'
   }
 
   function computeSeverity(items: typeof workItems): 'critical' | 'high' | 'normal' {
@@ -956,19 +956,31 @@ function extractRecoveryData(sections: AnyDashboardSection[]) {
   const upcoming: UpcomingAction[] = workItems
     .filter(item => item.dueAt || item.primaryAction)
     .slice(0, 5)
-    .map((item, i) => ({
-      id: item.id || `u-${i}`,
-      dueAt: item.dueAt || new Date().toISOString(),
-      type: item.headline || 'Payment Follow-up',
-      customer: item.customerName,
-      amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
-    }))
+    .map((item, i) => {
+      const actionType = item.primaryAction?.type || 'reminder'
+      const labels: Record<string, string> = {
+        call: 'Call',
+        send_reminder: 'Reminder',
+        reminder: 'Reminder',
+        record_payment: 'Record Payment',
+        review: 'Review',
+        wait: 'Wait',
+        promise_followup: 'Promise Follow-up',
+      }
+      return {
+        id: item.id || `u-${i}`,
+        dueAt: item.dueAt || new Date().toISOString(),
+        type: `${labels[actionType] || 'Action'}`,
+        customer: item.customerName,
+        amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
+      }
+    })
 
   // Hero one-liner (true status)
   const invoiceCount = workItems.reduce((s, i) => s + 1, 0)
   const oneLiner = isEmpty
     ? "No customers require manual follow-up."
-    : `BillZo is monitoring ${invoiceCount} invoice${invoiceCount === 1 ? '' : 's'}. Automated recovery active.`
+    : `${formatINR(outstanding)} pending across ${byCustomer.size} customer${byCustomer.size === 1 ? '' : 's'}. Ready to recover.`
 
   return {
     outstanding,
