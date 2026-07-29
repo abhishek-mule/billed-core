@@ -65,6 +65,7 @@ export default function CaseWorkspacePage() {
   const [promiseDate, setPromiseDate] = useState('')
   const [submittingOutcome, setSubmittingOutcome] = useState<string | null>(null)
   const [outcomeMsg, setOutcomeMsg] = useState<string | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
   const customerId = data?.customer?.id || null
 
@@ -83,6 +84,24 @@ export default function CaseWorkspacePage() {
             const nj = await nres.json()
             if (active) setNotes(nj.notes || [])
           }
+        }
+
+        // Start recovery session
+        const rc = json.case || json.rc
+        const recommendedAction = rc?.nextAction || rc?.next_action_type || null
+        const sesRes = await fetch('/api/recovery/session', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            caseId,
+            customerId: json.customer?.id || null,
+            startingRecommendation: recommendedAction,
+          }),
+        })
+        if (sesRes.ok) {
+          const sesJson = await sesRes.json()
+          if (active) setSessionId(sesJson.session?.id || null)
         }
       } catch (e: any) {
         if (active) setError(e.message || 'Failed')
@@ -106,6 +125,14 @@ export default function CaseWorkspacePage() {
 
   const handleCall = () => {
     sessionStorage.setItem('pendingOutcome', 'true')
+    if (sessionId) {
+      fetch('/api/recovery/session', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, action: 'call' }),
+      }).catch(() => {})
+    }
   }
 
   const reloadNotes = async () => {
@@ -161,6 +188,22 @@ export default function CaseWorkspacePage() {
         }),
       })
       if (res.ok) {
+        // Log outcome to session
+        if (sessionId) {
+          fetch('/api/recovery/session', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              end: true,
+              outcome,
+              notes: outcomeNote || undefined,
+              recommendationAccepted: outcome !== 'dispute' && outcome !== 'not_interested',
+            }),
+          }).catch(() => {})
+        }
+
         const outcomeLabels: Record<string, string> = {
           promised: 'Promise recorded',
           wrong_number: 'Marked as wrong number',
