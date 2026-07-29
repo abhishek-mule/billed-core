@@ -3,699 +3,115 @@
 import { useEffect, useState } from "react"
 import { formatINR } from "@/lib/utils"
 import { PageShell } from "@/components/billzo/PageShell"
-import { Button } from "@/components/billzo/Button"
 import Link from "next/link"
 import {
-  Shield, Clock, Users, TrendingUp, CreditCard, ArrowUpRight,
-  ArrowDownRight, AlertTriangle, CheckCircle2, ExternalLink,
-  Zap, Target, BarChart2, Activity, IndianRupee, Phone,
-  CalendarClock, RefreshCw, Wifi, CheckCircle, CircleDashed,
-  AlertCircle, CircleSlash, MessageCircle, Coins,
+  Phone, MessageSquare, ArrowUpRight,
+  AlertTriangle, CheckCircle2, ExternalLink,
+  Target, CalendarClock,
+  MessageCircle, RefreshCw, CircleDashed,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatScheduledSlot } from "@/lib/recovery/business-hours"
-import type { AnyDashboardSection } from "@billzo/shared"
-import { workStore } from "@/lib/billzo/work-store-instance"
-import { getCollectionRisk } from "@/lib/billzo/recovery-risk"
 
-interface RecoveryMetric {
-  label: string
-  value: string
-  icon: React.ElementType
-  color: string
-  softColor: string
-  trend?: { value: string; positive: boolean }
-}
-
-interface RecoveryAction {
-  type: 'whatsapp' | 'call' | 'promise' | 'payment'
-  label: string
-  customer: string
-  amount: string
-  time: string
-  icon: React.ElementType
-  color: string
-}
-
-interface RecoveryFunnelStep {
-  label: string
-  value: string
-  percentage: number
-  color: string
-  icon: React.ElementType
-}
-
-interface HealthScore {
-  score: number
-  label: string
-  color: string
-  metrics: {
-    label: string
-    value: string
-  }[]
-}
-
-interface RecoveryEvent {
-  time: string
-  type: 'sent' | 'delivered' | 'read' | 'promise' | 'payment' | 'reminder' | 'scheduled'
-  customer: string
-  message: string
-  amount?: string
-  status: 'completed' | 'pending' | 'failed'
-}
-
-interface AttentionCustomer {
-  id: string
-  name: string
-  amount: number        // total across their invoices
-  invoiceCount: number  // how many unpaid invoices
-  ageDays: number       // oldest overdue days
-  status: string        // specific reason, never generic
-  severity: 'critical' | 'high' | 'normal' | 'low'
-  badges: string[]
-  callHref?: string
-  openHref: string
-}
-
-interface QueueSummary {
-  scheduled: number
-  waiting: number
-  overdue: number
-}
-
-interface UpcomingAction {
-  id: string
-  dueAt: string
-  type: string
-  customer: string
-  amount?: string
-}
-
-interface PrioritiesItem {
+type ActionItem = {
+  caseId: string
   customerId: string
   customerName: string
+  phone: string | null
   amount: number
-  status: string
-  severity: AttentionCustomer['severity']
-  actionType: 'call' | 'reminder'
+  recoverableAmount: number
+  overdue: number
+  actionType: string
+  state: string
+  reasons: { type: string; impact: string }[]
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  if (diff < 60000) return "just now"
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+type AttentionItem = ActionItem & {
+  invoiceCount: number
+  severity: 'critical' | 'high' | 'normal'
+  badges: string[]
 }
 
-function formatClock(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
+type ScheduledItem = {
+  id: string
+  actionType: string
+  customerName: string
+  scheduledAt: string
+  amount?: string
 }
 
-function getSuccessLabel(score: number | null): string {
-  if (score == null) return "—"
-  if (score >= 85) return "Excellent"
-  if (score >= 70) return "Good"
-  if (score >= 50) return "Fair"
-  return "Needs attention"
+type HealthDriver = {
+  title: string
+  status: 'good' | 'warning' | 'critical'
+  impact: 'high' | 'medium' | 'low'
 }
 
-function getHealthColor(score: number) {
-  if (score >= 80) return "text-recovery"
-  if (score >= 60) return "text-outstanding"
-  return "text-overdue"
+type DashboardData = {
+  hero: {
+    outstanding: number
+    customerCount: number
+    invoiceCount: number
+    bestOpportunity: {
+      customerId: string
+      caseId: string
+      customerName: string
+      amount: number
+      actionType: string
+      phone: string | null
+    } | null
+  }
+  todayPlan: ActionItem[]
+  attention: AttentionItem[]
+  upcoming: ScheduledItem[]
+  health: {
+    score: number
+    drivers: HealthDriver[]
+  }
 }
 
-function getHealthSoftColor(score: number) {
-  if (score >= 80) return "bg-recovery-soft"
-  if (score >= 60) return "bg-outstanding-soft"
-  return "bg-overdue-soft"
-}
+const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
 
-// ─── Metric card ──────────────────────────────────────────────────────────────
-
-function MetricCard({ label, value, icon: Icon, color, softColor, trend }: RecoveryMetric) {
+function actionLabel(a: string) {
   return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-2 text-2xl lg:text-3xl font-bold tabular-nums tracking-tight text-foreground">{value}</p>
-          {trend && (
-            <p className={cn("mt-1 flex items-center gap-1 text-xs font-medium", trend.positive ? "text-recovery" : "text-overdue")}>
-              <ArrowUpRight size={10} className={cn(trend.positive ? "rotate-0" : "rotate-180")} />
-              <span>{trend.value}</span>
-            </p>
-          )}
-        </div>
-        <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl", softColor)}>
-          <Icon size={22} className={color} />
-        </div>
-      </div>
-    </div>
-  )
+    { call: 'Call', send_reminder: 'Send Reminder', reminder: 'Reminder',
+      record_payment: 'Record Payment', wait: 'Wait', visit: 'Visit',
+      promise_followup: 'Promise Follow-up' } as any
+  )[a] || a.replace(/_/g, ' ')
 }
 
-// ─── Customers requiring attention ────────────────────────────────────────────
-
-const SEVERITY_DOT: Record<AttentionCustomer['severity'], string> = {
+const SEVERITY_DOT: Record<string, string> = {
   critical: "bg-overdue",
   high: "bg-outstanding",
   normal: "bg-recovery",
-  low: "bg-muted-foreground/40",
 }
 
-const SEVERITY_RING: Record<AttentionCustomer['severity'], string> = {
-  critical: "border-l-overdue",
-  high: "border-l-outstanding",
-  normal: "border-l-recovery",
-  low: "border-l-muted-foreground/30",
+function healthColor(score: number) {
+  if (score >= 75) return 'text-recovery'
+  if (score >= 45) return 'text-outstanding'
+  return 'text-overdue'
 }
 
-function severityClass(sev: AttentionCustomer['severity']): string {
-  switch (sev) {
-    case 'critical': return 'bg-overdue text-white'
-    case 'high': return 'bg-outstanding text-white'
-    default: return 'bg-recovery/20 text-recovery'
-  }
+function healthBg(score: number) {
+  if (score >= 75) return 'bg-recovery-soft'
+  if (score >= 45) return 'bg-outstanding-soft'
+  return 'bg-overdue-soft'
 }
 
-function AttentionCustomerRow({ c }: { c: AttentionCustomer }) {
-  return (
-    <div className={cn("flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:bg-muted/40 transition-colors")}>
-      <span className={cn("flex-shrink-0 h-2.5 w-2.5 rounded-full", SEVERITY_DOT[c.severity])} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-          {c.badges.map(b => (
-            <span key={b} className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{b}</span>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          <span className="font-semibold text-foreground tabular-nums">{formatINR(c.amount)}</span>
-          {c.invoiceCount > 1 && <span className="text-muted-foreground"> · {c.invoiceCount} invoices</span>}
-        </p>
-        <p className={cn("text-xs mt-0.5", c.severity === 'critical' ? 'text-overdue font-medium' : 'text-muted-foreground')}>{c.status}</p>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", severityClass(c.severity))}>
-          {c.severity === 'critical' ? 'Overdue' : c.severity === 'high' ? 'Follow-up' : 'Active'}
-        </span>
-        {c.callHref && (
-          <a href={c.callHref} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-muted text-foreground text-xs font-semibold hover:bg-muted/70">
-            <Phone size={13} /> Call
-          </a>
-        )}
-        <Link href={c.openHref} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90">
-          Open
-        </Link>
-      </div>
-    </div>
-  )
+function statusIcon(status: string) {
+  if (status === 'good') return <CheckCircle2 size={14} className="text-recovery" />
+  if (status === 'warning') return <AlertTriangle size={14} className="text-outstanding" />
+  return <AlertTriangle size={14} className="text-overdue" />
 }
 
-function CustomersAttentionCard({ customers, title }: { customers: AttentionCustomer[]; title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overdue-soft text-overdue">
-            <AlertTriangle size={15} />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          {customers.length > 0 && (
-            <span className="text-xs font-bold text-overdue bg-overdue-soft px-2 py-0.5 rounded-full">{customers.length}</span>
-          )}
-        </div>
-        <Link href="/recovery/queue" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-          View all <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-      <div className="space-y-2">
-        {customers.length > 0 ? (
-          customers.map(c => <AttentionCustomerRow key={c.id} c={c} />)
-        ) : (
-          <div className="text-center py-8">
-            <CheckCircle2 className="h-10 w-10 text-recovery mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">No customers need attention right now.</p>
-            <p className="text-xs text-muted-foreground mt-1">BillZo is handling follow-ups automatically.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Today's Queue ────────────────────────────────────────────────────────────
-
-function TodayQueueCard({ queue, title }: { queue: QueueSummary; title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <CalendarClock size={15} />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        </div>
-        <Link href="/recovery/queue" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-          View Queue <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="p-3 bg-muted/50 rounded-lg text-center">
-          <p className="text-2xl font-bold text-foreground tabular-nums">{queue.scheduled}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-0.5">Scheduled</p>
-        </div>
-        <div className="p-3 bg-muted/50 rounded-lg text-center">
-          <p className="text-2xl font-bold text-foreground tabular-nums">{queue.waiting}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-0.5">Waiting</p>
-        </div>
-        <div className="p-3 bg-muted/50 rounded-lg text-center">
-          <p className="text-2xl font-bold text-overdue tabular-nums">{queue.overdue}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-0.5">Overdue</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Live Recovery Activity ───────────────────────────────────────────────────
-
-function eventVisual(type: RecoveryEvent['type']) {
-  switch (type) {
-    case 'sent':
-    case 'reminder':
-      return { icon: MessageCircle, color: 'text-primary', ring: 'bg-primary/10' }
-    case 'delivered':
-    case 'read':
-      return { icon: CheckCircle, color: 'text-muted-foreground', ring: 'bg-muted' }
-    case 'promise':
-      return { icon: Target, color: 'text-outstanding', ring: 'bg-outstanding-soft' }
-    case 'payment':
-      return { icon: Coins, color: 'text-recovery', ring: 'bg-recovery-soft' }
-    case 'scheduled':
-      return { icon: CalendarClock, color: 'text-muted-foreground', ring: 'bg-muted' }
-    default:
-      return { icon: Activity, color: 'text-muted-foreground', ring: 'bg-muted' }
-  }
-}
-
-function LiveActivityCard({ events, title }: { events: RecoveryEvent[]; title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-recovery opacity-75 animate-ping" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-recovery" />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        </div>
-        <Link href="/recovery/history" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-          Open Activity <ArrowUpRight className="h-3 w-3" />
-        </Link>
-      </div>
-      <div className="space-y-1">
-        {events.length > 0 ? (
-          events.map((event, i) => {
-            const v = eventVisual(event.type)
-            const Icon = v.icon
-            return (
-              <div key={i} className="flex items-start gap-3 pb-3 last:pb-0">
-                <div className="flex flex-col items-center flex-shrink-0">
-                  <div className={cn("flex h-8 w-8 items-center justify-center rounded-full", v.ring)}>
-                    <Icon size={15} className={v.color} />
-                  </div>
-                  {i < events.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
-                </div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{event.customer}</p>
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">{formatClock(event.time)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{event.message}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {event.amount && <span className="text-xs font-bold text-recovery tabular-nums">{event.amount}</span>}
-                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                      event.status === 'completed' ? "bg-recovery-soft text-recovery" :
-                      event.status === 'pending' ? "bg-outstanding-soft text-outstanding" :
-                      "bg-overdue-soft text-overdue")}>
-                      {event.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <div className="text-center py-8">
-            <Activity className="h-10 w-10 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">No new activity</p>
-            <p className="text-xs text-muted-foreground mt-1">Recovery engine is monitoring.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Upcoming Scheduled Actions ───────────────────────────────────────────────
-
-function UpcomingActionsCard({ actions, title }: { actions: UpcomingAction[]; title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <CalendarClock size={15} />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        </div>
-        <Link href="/recovery/queue" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-          View schedule <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-      <div className="space-y-2">
-        {actions.length > 0 ? (
-          actions.map(a => (
-            <div key={a.id} className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg">
-              <div className="flex-shrink-0 text-right w-28">
-                <p className="text-[11px] font-semibold text-foreground tabular-nums">{formatScheduledSlot(a.dueAt)}</p>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{a.type}</p>
-                <p className="text-xs text-muted-foreground truncate">{a.customer}{a.amount ? ` · ${a.amount}` : ""}</p>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="text-center py-6">
-            <CircleDashed className="h-9 w-9 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">No scheduled actions.</p>
-            <p className="text-xs text-muted-foreground mt-1">BillZo will schedule follow-ups automatically.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Automation Status ───────────────────────────────────────────────────────
-
-function AutomationStatusCard({ title }: { title: string }) {
-  const items = [
-    { icon: CalendarClock, label: "Scheduler", ok: true, detail: "Running" },
-    { icon: MessageCircle, label: "WhatsApp", ok: true, detail: "Connected" },
-    { icon: RefreshCw, label: "Last job", ok: true, detail: "2 min ago" },
-  ]
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <h3 className="text-sm font-semibold text-foreground mb-4">{title}</h3>
-      <div className="space-y-2.5">
-        {items.map(it => {
-          const Icon = it.icon
-          return (
-            <div key={it.label} className="flex items-center gap-2.5">
-              <Icon size={15} className="text-muted-foreground" />
-              <span className="text-sm text-foreground">{it.label}</span>
-              <span className="text-xs text-muted-foreground ml-auto">{it.detail}</span>
-              <CheckCircle size={16} className="text-recovery" />
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ─── Recovery Funnel ─────────────────────────────────────────────────────────
-
-function FunnelWidget({ steps, title }: { steps: RecoveryFunnelStep[]; title: string }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <h3 className="text-sm font-semibold text-foreground mb-4">{title}</h3>
-      <div className="space-y-4">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `hsl(${step.color} / 0.12)`, color: `hsl(${step.color})` }}>
-              <step.icon size={14} />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">{step.label}</span>
-                <span className="font-bold tabular-nums text-foreground">{step.value}</span>
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1.5">
-                <div
-                  className="h-full rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${step.percentage}%`, backgroundColor: `hsl(${step.color})` }}
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Cashflow Health ─────────────────────────────────────────────────────────
-
-function HealthScoreWidget({ health }: { health: HealthScore }) {
-  const scorePercent = Math.min(100, Math.max(0, health.score))
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground mb-2">Cashflow Health</h3>
-          <p className="text-xs text-muted-foreground">Based on overdue ratio, payment velocity, promises kept</p>
-        </div>
-        <div className="relative" style={{ width: 80, height: 80 }}>
-          <svg viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="32" stroke="#e5e7eb" strokeWidth="6" fill="none" className="dark:stroke-white/10" />
-            <circle
-              cx="40" cy="40" r="32"
-              stroke={health.color}
-              strokeWidth="6" fill="none"
-              strokeDasharray={201}
-              strokeDashoffset={201 - (201 * scorePercent) / 100}
-              strokeLinecap="round"
-              className="transform -rotate-90 transition-all duration-1000 ease-out"
-              style={{ transformOrigin: "40px 40px" }}
-            />
-            <text x="40" y="44" textAnchor="middle" dominantBaseline="middle" fontSize="16" fontWeight="700" fill="currentColor">
-              {scorePercent}%
-            </text>
-          </svg>
-        </div>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        {health.metrics.map((m) => (
-          <div key={m.label} className="p-3 bg-muted/50 rounded-lg">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{m.label}</p>
-            <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">{m.value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Today's Priorities ──────────────────────────────────────────────────────
-
-const PRIORITY_ICONS: Record<PrioritiesItem['actionType'], React.ElementType> = {
-  call: Phone,
-  reminder: MessageCircle,
-}
-
-function TodayPrioritiesCard({ title, items, urgentCount }: { title: string; items: PrioritiesItem[]; urgentCount: number }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overdue-soft text-overdue">
-            <Target size={15} />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          {urgentCount > 0 && (
-            <span className="text-[10px] font-bold text-white bg-overdue px-2 py-0.5 rounded-full">{urgentCount} urgent</span>
-          )}
-        </div>
-        <Link href="/recovery/queue" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-          View all <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-      <div className="space-y-2">
-        {items.length > 0 ? (
-          items.map((p, i) => {
-            const Icon = PRIORITY_ICONS[p.actionType]
-            const severityColor = p.severity === 'critical' ? 'border-l-overdue' : p.severity === 'high' ? 'border-l-outstanding' : 'border-l-recovery'
-            const label = p.severity === 'critical' ? 'Overdue' : p.severity === 'high' ? 'Follow-up' : 'Active'
-            return (
-              <Link key={p.customerId} href={`/recovery/customer/${encodeURIComponent(p.customerId)}`}
-                className={cn("flex items-center gap-3 p-3 bg-card border border-border border-l-4 rounded-lg hover:bg-muted/40 transition-colors", severityColor)}>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                  <Icon size={15} className="text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground truncate">{p.customerName}</p>
-                    <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full",
-                      p.severity === 'critical' ? 'bg-overdue text-white' : 'bg-muted text-muted-foreground')}>
-                      {label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{p.status}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-foreground tabular-nums">{formatINR(p.amount)}</p>
-                  <p className="text-[10px] text-muted-foreground">{p.actionType === 'call' ? 'Call' : 'Reminder'}</p>
-                </div>
-              </Link>
-            )
-          })
-        ) : (
-          <div className="text-center py-6">
-            <CheckCircle2 className="h-9 w-9 text-muted-foreground/50 mx-auto mb-2" />
-            <p className="text-sm font-medium text-muted-foreground">No follow-ups needed right now.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function MinimumStatusCard({ outstanding, customers, attention }: { outstanding: number; customers: number; attention: AttentionCustomer[] }) {
-  const overdueCount = attention.filter(a => a.ageDays > 0).length
-  const promiseDue = attention.filter(a => a.status.toLowerCase().includes('promise')).length
-  return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
-      <h3 className="text-sm font-semibold text-foreground mb-4">Quick Summary</h3>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Outstanding</span>
-          <span className="text-sm font-bold text-foreground tabular-nums">{formatINR(outstanding)}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Customers</span>
-          <span className="text-sm font-bold text-foreground">{customers}</span>
-        </div>
-        {overdueCount > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-overdue">Overdue</span>
-            <span className="text-sm font-bold text-overdue">{overdueCount}</span>
-          </div>
-        )}
-        {promiseDue > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-outstanding">Promises due</span>
-            <span className="text-sm font-bold text-outstanding">{promiseDue}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Hero Card ───────────────────────────────────────────────────────────────
-
-function HeroCard({
-  outstanding,
-  customers,
-  invoiceCount,
-  successRate,
-  recoveredByBillzo,
-  oneLiner,
-  isEmpty,
-  nextAction,
-}: {
-  outstanding: number
-  customers: number
-  invoiceCount: number
-  successRate: number | null
-  recoveredByBillzo: number
-  oneLiner: string
-  isEmpty: boolean
-  nextAction?: { stage: string; recommendation: string }
-}) {
-  return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl p-5 lg:p-7 shadow-xl text-white">
-      <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
-      <div className="absolute top-4 right-4 opacity-10">
-        <Shield className="h-16 w-16" />
-      </div>
-
-      <div className="relative z-10">
-        <div className="flex items-center gap-2 text-recovery-soft/90 text-xs font-semibold uppercase tracking-wider mb-3">
-          <Zap className="h-4 w-4" />
-          <span>Recovery Engine Active</span>
-        </div>
-
-        {isEmpty ? (
-          <div className="mb-4">
-            <p className="text-2xl lg:text-3xl font-bold tracking-tight">No outstanding invoices.</p>
-            <p className="text-recovery-soft/85 text-sm mt-1.5 max-w-xl">
-              BillZo will continue monitoring future invoices automatically.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Awaiting Collection</p>
-              <p className="text-4xl lg:text-5xl font-bold tracking-tight tabular-nums leading-tight">
-                {formatINR(outstanding)}
-              </p>
-              <p className="text-recovery-soft/70 text-xs mt-0.5">{customers} customers · {invoiceCount} invoices</p>
-            </div>
-            <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Next Priority</p>
-              {nextAction ? (
-                <>
-                  <p className="text-lg font-bold tracking-tight">{nextAction.stage}</p>
-                  <p className="text-recovery-soft/70 text-xs mt-0.5">{nextAction.recommendation}</p>
-                </>
-              ) : customers > 0 ? (
-                <>
-                  <p className="text-lg font-bold tracking-tight">Call</p>
-                  <p className="text-recovery-soft/70 text-xs mt-0.5">Check on customers</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-lg font-bold tracking-tight">Auto</p>
-                  <p className="text-recovery-soft/70 text-xs mt-0.5">Recovery active</p>
-                </>
-              )}
-            </div>
-            <div>
-              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Recovered This Month</p>
-              <p className="text-2xl lg:text-3xl font-bold tracking-tight tabular-nums">{formatINR(recoveredByBillzo)}</p>
-              <p className="text-recovery-soft/70 text-xs mt-0.5">Since recovery started</p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-white/10">
-          <p className="text-sm text-white/95 font-medium flex-1 min-w-[220px]">{oneLiner}</p>
-          <Link href="/recovery/queue" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-recovery font-bold text-sm hover:bg-white/90 transition-colors">
-            {outstanding > 0 ? `Recover ${formatINR(outstanding)} →` : 'Open Recovery Center'} <ArrowUpRight size={14} className="rotate-45" />
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── States ──────────────────────────────────────────────────────────────────
+/* ─── Loading ───────────────────────────────────────────────────────── */
 
 function LoadingSkeleton() {
   return (
     <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5 animate-pulse">
-        <div className="h-32 bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl" />
+        <div className="h-44 bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl" />
         <div className="h-48 bg-muted rounded-xl" />
         <div className="grid gap-4 sm:grid-cols-2"><div className="h-32 bg-muted rounded-xl" /><div className="h-32 bg-muted rounded-xl" /></div>
-        <div className="h-64 bg-muted rounded-xl" />
       </div>
     </PageShell>
   )
@@ -717,287 +133,275 @@ function ErrorState() {
   )
 }
 
-function EmptyRecoveryState() {
+function EmptyState() {
   return (
     <PageShell title="Overview" subtitle="Welcome back">
       <div className="space-y-5">
-        <HeroCard outstanding={0} customers={0} invoiceCount={0} successRate={null} recoveredByBillzo={0} isEmpty oneLiner="No customers require manual follow-up." />
-        <CustomersAttentionCard title="Customers Requiring Attention" customers={[]} />
-        <TodayQueueCard title="Today's Queue" queue={{ scheduled: 0, waiting: 0, overdue: 0 }} />
-        <AutomationStatusCard title="Automation Status" />
+        <div className="relative overflow-hidden bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl p-5 lg:p-7 shadow-xl text-white">
+          <div className="relative z-10">
+            <p className="text-2xl lg:text-3xl font-bold tracking-tight">No outstanding invoices.</p>
+            <p className="text-recovery-soft/85 text-sm mt-1.5 max-w-xl">BillZo will continue monitoring future invoices automatically.</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+          <div className="flex items-center gap-2">
+            <RefreshCw size={15} className="text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Automation Status</h3>
+          </div>
+          <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-recovery" /> Scheduler</span>
+            <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-recovery" /> WhatsApp</span>
+            <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-recovery" /> Last sync 2m ago</span>
+          </div>
+        </div>
       </div>
     </PageShell>
   )
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+/* ─── Main ──────────────────────────────────────────────────────────── */
 
 export default function DashboardPage() {
-  const [data, setData] = useState<{
-    sections: AnyDashboardSection[]
-    recovery?: {
-      outstanding: number
-      customers: number
-      invoiceCount: number
-      successRate: number | null
-      recoveredByBillzo: number
-      oneLiner: string
-      isEmpty: boolean
-      attention: AttentionCustomer[]
-      queue: QueueSummary
-      activity: RecoveryEvent[]
-      upcoming: UpcomingAction[]
-    }
-  } | null>(null)
+  const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    workStore.getDashboard()
-      .then(result => {
-        const sections = result.sections
-        const recovery = extractRecoveryData(sections)
-        setData({ sections, recovery })
-      })
-      .catch(err => {
-        console.error('[Dashboard] workStore.getDashboard() failed:', err)
-        setError(true)
-      })
+    fetch('/api/recovery/workspace', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(setData)
+      .catch(() => setError(true))
   }, [])
 
   if (error) return <ErrorState />
   if (!data) return <LoadingSkeleton />
-  if (!data.recovery) return <EmptyRecoveryState />
+  if (data.hero.outstanding === 0 && data.todayPlan.length === 0) return <EmptyState />
 
-  const { recovery } = data
-
-  // Worst-case CollectionRisk across customers requiring attention drives the
-  // hero's recommended next action.
-  const nextAction = recovery.attention?.length
-    ? recovery.attention
-        .map(a => getCollectionRisk({ overdueDays: a.ageDays, outstanding: true }))
-        .sort((x, y) => y.rank - x.rank)[0]
-    : undefined
-
-  const priorities: PrioritiesItem[] = recovery.attention.slice(0, 4).map(c => ({
-    customerId: c.id,
-    customerName: c.name,
-    amount: c.amount,
-    status: c.status,
-    severity: c.severity,
-    actionType: c.callHref ? 'call' as const : 'reminder' as const,
-  }))
-  const urgentCount = recovery.attention.filter(a => a.severity === 'critical').length
+  const { hero, todayPlan, attention, upcoming, health } = data
 
   return (
     <PageShell title="Overview" subtitle="Welcome back">
-      <HeroCard
-        outstanding={recovery.outstanding}
-        customers={recovery.customers}
-        invoiceCount={recovery.invoiceCount}
-        successRate={recovery.successRate}
-        recoveredByBillzo={recovery.recoveredByBillzo}
-        oneLiner={recovery.oneLiner}
-        isEmpty={recovery.isEmpty}
-        nextAction={nextAction ? { stage: nextAction.label, recommendation: nextAction.recommendation } : undefined}
-      />
+      {/* ── Hero ── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-recovery/95 via-recovery/90 to-recovery/85 rounded-2xl p-5 lg:p-7 shadow-xl text-white">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
+        <div className="relative z-10 space-y-4">
+          <div>
+            <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider">Awaiting Collection</p>
+            <p className="text-4xl lg:text-5xl font-bold tracking-tight tabular-nums leading-tight">{fmt(hero.outstanding)}</p>
+            <p className="text-recovery-soft/70 text-xs mt-0.5">{hero.customerCount} customers · {hero.invoiceCount} invoices</p>
+          </div>
 
-      {/* Today's Priorities — action-first */}
-      <TodayPrioritiesCard title="Today's Recovery Plan" items={priorities} urgentCount={urgentCount} />
+          {hero.bestOpportunity ? (
+            <div className="bg-white/10 rounded-xl p-4">
+              <p className="text-recovery-soft/80 text-xs font-semibold uppercase tracking-wider mb-2">Best Opportunity Today</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                  {hero.bestOpportunity.actionType === 'call' ? <Phone size={18} /> : <MessageSquare size={18} />}
+                </div>
+                <div className="flex-1">
+                  <p className="text-lg font-bold">{hero.bestOpportunity.customerName}</p>
+                  <p className="text-recovery-soft/85 text-sm">{actionLabel(hero.bestOpportunity.actionType)} · {fmt(hero.bestOpportunity.amount)}</p>
+                </div>
+                <Link
+                  href={`/recovery/case/${hero.bestOpportunity.caseId}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-recovery font-bold text-sm hover:bg-white/90 transition-colors"
+                >
+                  Start Recovery <ArrowUpRight size={14} />
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
+          <div className="flex items-center gap-3 pt-1 border-t border-white/10">
+            <p className="text-sm text-white/95 font-medium">
+              {todayPlan.length > 0
+                ? `Start with ${todayPlan[0].customerName} — highest recovery opportunity today.`
+                : `${fmt(hero.outstanding)} pending. Automated recovery active.`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Today's Plan ── */}
+      <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overdue-soft text-overdue">
+            <Target size={15} />
+          </span>
+          <h3 className="text-sm font-semibold text-foreground">Today&apos;s Recovery Plan</h3>
+          {todayPlan.length > 0 && (
+            <span className="text-[10px] font-bold text-white bg-overdue px-2 py-0.5 rounded-full">{todayPlan.length}</span>
+          )}
+        </div>
+        <div className="space-y-2">
+          {todayPlan.length > 0 ? (
+            todayPlan.slice(0, 5).map((item, i) => (
+              <Link
+                key={item.caseId}
+                href={`/recovery/case/${item.caseId}`}
+                className="flex items-center gap-3 p-3 bg-card border border-border border-l-4 rounded-lg hover:bg-muted/40 transition-colors"
+                style={{ borderLeftColor: item.actionType === 'call' ? 'hsl(var(--destructive))' : item.actionType === 'record_payment' ? 'hsl(var(--success))' : 'hsl(var(--warning))' }}
+              >
+                <div className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                  {i + 1}
+                </div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  {item.actionType === 'call' ? <Phone size={15} className="text-muted-foreground" /> : <MessageCircle size={15} className="text-muted-foreground" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground truncate">{item.customerName}</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      {actionLabel(item.actionType)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {item.overdue > 0 ? `${item.overdue} days overdue` : 'Due soon'}
+                    {item.reasons.length > 0 ? ` · ${item.reasons.map(r => r.type.replace(/_/g, ' ')).join(', ')}` : ''}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground tabular-nums">{fmt(item.recoverableAmount)}</p>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="text-center py-6">
+              <CheckCircle2 className="h-9 w-9 text-muted-foreground/50 mx-auto mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">No follow-ups needed right now.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Lower Grid: Attention + Upcoming + Health ── */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
-          <CustomersAttentionCard title="Customers Requiring Attention" customers={recovery.attention} />
-          <UpcomingActionsCard title="Upcoming Schedule" actions={recovery.upcoming} />
+          {/* Customers Requiring Attention */}
+          <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-overdue-soft text-overdue">
+                  <AlertTriangle size={15} />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground">Needs Attention</h3>
+                {attention.length > 0 && (
+                  <span className="text-xs font-bold text-overdue bg-overdue-soft px-2 py-0.5 rounded-full">{attention.length}</span>
+                )}
+              </div>
+              <Link href="/recovery" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+                View all <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {attention.length > 0 ? (
+                attention.slice(0, 4).map(c => (
+                  <Link key={c.caseId} href={`/recovery/case/${c.caseId}`}
+                    className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:bg-muted/40 transition-colors">
+                    <span className={cn("flex-shrink-0 h-2.5 w-2.5 rounded-full", SEVERITY_DOT[c.severity])} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{c.customerName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-semibold text-foreground tabular-nums">{fmt(c.amount)}</span>
+                        {c.invoiceCount > 1 && <span> · {c.invoiceCount} invoices</span>}
+                        {c.overdue > 0 && <span> · {c.overdue}d overdue</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {c.phone ? (
+                        <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-muted text-foreground text-xs font-semibold hover:bg-muted/70" onClick={e => e.stopPropagation()}>
+                          <Phone size={13} /> Call
+                        </a>
+                      ) : null}
+                      <span className="text-xs font-semibold text-primary">Open →</span>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="h-10 w-10 text-recovery mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground">No customers need attention right now.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Recovery is on track.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Upcoming Schedule */}
+          <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <CalendarClock size={15} />
+              </span>
+              <h3 className="text-sm font-semibold text-foreground">Upcoming Schedule</h3>
+            </div>
+            <div className="space-y-2">
+              {upcoming.length > 0 ? (
+                upcoming.map(a => (
+                  <div key={a.id} className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg">
+                    <div className="flex-shrink-0 text-right w-28">
+                      <p className="text-[11px] font-semibold text-foreground tabular-nums">{formatScheduledSlot(a.scheduledAt)}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{actionLabel(a.actionType)}</p>
+                      <p className="text-xs text-muted-foreground truncate">{a.customerName}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6">
+                  <CircleDashed className="h-9 w-9 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-foreground">No upcoming actions.</p>
+                  <p className="text-xs text-muted-foreground mt-1">BillZo will schedule follow-ups automatically.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Sidebar */}
         <div className="space-y-4">
-          <MinimumStatusCard outstanding={recovery.outstanding} customers={recovery.customers} attention={recovery.attention} />
-          <AutomationStatusCard title="Automation Status" />
+          {/* Recovery Health */}
+          <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-3">Recovery Health</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <span className={cn("text-2xl font-bold tabular-nums", healthColor(health.score))}>{health.score}</span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all", healthBg(health.score))}
+                  style={{ width: `${Math.min(100, Math.max(0, health.score))}%` }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              {health.drivers.map((d, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs">
+                  <span className="mt-0.5">{statusIcon(d.status)}</span>
+                  <span className="text-muted-foreground">{d.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Automation */}
+          <div className="bg-card border border-border rounded-2xl shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-3">Automation</h3>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={12} className="text-recovery" />
+                <span>Scheduler running</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={12} className="text-recovery" />
+                <span>WhatsApp connected</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={12} className="text-recovery" />
+                <span>Last sync 2 min ago</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </PageShell>
   )
-}
-
-// ─── Data extraction ─────────────────────────────────────────────────────────
-
-function extractRecoveryData(sections: AnyDashboardSection[]) {
-  const todaySection = sections.find(s => s.type === 'today') as AnyDashboardSection & {
-    type: 'today'
-    payload: {
-      items: {
-        id: string
-        customerId: string
-        customerName: string
-        headline: string
-        reason: string
-        severity: 'critical' | 'high' | 'normal' | 'low'
-        primaryAction?: { type: string; target?: { id: string } }
-        moneyImpact: number
-        dueAt?: string
-      }[]
-      empty?: any
-    }
-  }
-  const cashSection = sections.find(s => s.type === 'cash') as AnyDashboardSection & {
-    type: 'cash'
-    payload: { metrics: { label: string; value: string }[] }
-  }
-  const activitySection = sections.find(s => s.type === 'activity') as AnyDashboardSection & {
-    type: 'activity'
-    payload: { events: { occurredAt: string; label: string; detail: string }[] }
-  }
-
-  const outstanding = cashSection?.payload?.metrics?.find(m => m.label === 'Money to Collect')?.value
-    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Money to Collect')?.value?.replace(/[₹,]/g, '') || '0')
-    : 0
-
-  const recoveredByBillzo = cashSection?.payload?.metrics?.find(m => m.label === 'Collected Today')?.value
-    ? parseFloat(cashSection.payload.metrics.find(m => m.label === 'Collected Today')?.value?.replace(/[₹,]/g, '') || '0')
-    : 0
-
-  const totalMonitored = outstanding + recoveredByBillzo
-  const successRate = totalMonitored > 0 ? Math.round((recoveredByBillzo / totalMonitored) * 100) : null
-
-  const workItems = todaySection?.payload?.items || []
-  const isEmpty = outstanding === 0 && workItems.length === 0
-
-  // Group workItems by customerId — one card per customer with aggregated info
-  const byCustomer = new Map<string, typeof workItems[0][]>()
-  for (const item of workItems) {
-    const arr = byCustomer.get(item.customerId) || []
-    arr.push(item)
-    byCustomer.set(item.customerId, arr)
-  }
-
-  function statusLabel(items: typeof workItems): string {
-    const reasons = items.map(i => (i.reason || '').toLowerCase()).filter(Boolean)
-    if (reasons.some(r => r.includes('promise'))) return 'Promise due'
-    if (reasons.some(r => r.includes('wrong') || r.includes('number'))) return 'Wrong number — update contact'
-    if (reasons.some(r => r.includes('delivered'))) return 'Reminder delivered — awaiting response'
-    if (reasons.some(r => r.includes('viewed') || r.includes('open'))) return 'Customer viewed invoice'
-    if (reasons.some(r => r.includes('sent'))) return 'Invoice sent'
-    const maxDays = Math.max(...items.map(i => i.dueAt ? Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86400000) : 0))
-    if (maxDays > 30) return `${maxDays} days overdue`
-    if (maxDays > 0) return `Overdue by ${maxDays} days`
-    return 'Due soon'
-  }
-
-  function computeSeverity(items: typeof workItems): 'critical' | 'high' | 'normal' {
-    const sevs = items.map(i => i.severity)
-    if (sevs.some(s => s === 'critical')) return 'critical'
-    if (sevs.some(s => s === 'high')) return 'high'
-    return 'normal'
-  }
-
-  // Urgency ordering: promise broken > high amount > long overdue > newly due
-  const attention: AttentionCustomer[] = [...byCustomer.entries()]
-    .map(([customerId, items]) => {
-      const totalAmount = items.reduce((s, i) => s + (i.moneyImpact || 0), 0)
-      const maxDays = Math.max(...items.map(i => i.dueAt ? Math.floor((Date.now() - new Date(i.dueAt).getTime()) / 86400000) : 0))
-      const first = items[0]
-      const severity = computeSeverity(items)
-      const badges: string[] = severity === 'critical' ? ['VIP'] : []
-      return {
-        id: customerId,
-        name: first.customerName,
-        amount: totalAmount,
-        invoiceCount: items.length,
-        ageDays: maxDays,
-        status: statusLabel(items),
-        severity,
-        badges,
-        callHref: items.some(i => i.primaryAction?.type === 'call') ? `tel:` : undefined,
-        openHref: `/recovery/customer/${encodeURIComponent(customerId)}`,
-        // Sort key: 0 = promise broken, 1 = highest amount, 2 = longest overdue, 3 = newly due
-        _urgency: (reasons => {
-          if (reasons.some(r => r.includes('promise'))) return 0
-          if (reasons.some(r => r.includes('wrong') || r.includes('number'))) return 1
-          if (maxDays > 15) return 2
-          if (maxDays > 0) return 3
-          return 4
-        })(items.map(i => (i.reason || '').toLowerCase())),
-      }
-    })
-    .sort((a, b) => a._urgency - b._urgency || b.amount - a.amount)
-    .slice(0, 10)
-    // Remove sort key
-    .map(({ _urgency, ...rest }) => rest)
-
-  // Today's Queue counts (scheduler-aligned)
-  const queue: QueueSummary = {
-    scheduled: workItems.filter(i => ['send_reminder', 'reminder', 'review'].includes(i.primaryAction?.type || '')).length,
-    waiting: workItems.filter(i => i.primaryAction?.type === 'wait').length,
-    overdue: workItems.filter(i => i.severity === 'critical' || i.severity === 'high').length,
-  }
-
-  // Live Recovery Activity (real events only; empty array shows clean empty state when no events exist)
-  const rawEvents = activitySection?.payload?.events || []
-  const activity: RecoveryEvent[] = rawEvents.slice(0, 8).map(e => {
-    const label = (e.label || '').toLowerCase()
-    let type: RecoveryEvent['type'] = 'reminder'
-    if (label.includes('promise')) type = 'promise'
-    else if (label.includes('payment') || label.includes('collected')) type = 'payment'
-    else if (label.includes('delivered')) type = 'delivered'
-    else if (label.includes('read')) type = 'read'
-    else if (label.includes('scheduled')) type = 'scheduled'
-    else type = 'sent'
-    const [customer, amount] = e.detail?.includes('—') ? e.detail.split('—').map(s => s.trim()) : [e.detail, undefined]
-    return {
-      time: e.occurredAt,
-      type,
-      customer: customer || 'BillZo',
-      message: e.label,
-      amount,
-      status: type === 'payment' || type === 'delivered' || type === 'promise' ? 'completed' : 'pending',
-    }
-  })
-
-  // Upcoming scheduled actions derived dynamically from actual workItems
-  const upcoming: UpcomingAction[] = workItems
-    .filter(item => item.dueAt || item.primaryAction)
-    .slice(0, 5)
-    .map((item, i) => {
-      const actionType = item.primaryAction?.type || 'reminder'
-      const labels: Record<string, string> = {
-        call: 'Call',
-        send_reminder: 'Reminder',
-        reminder: 'Reminder',
-        record_payment: 'Record Payment',
-        review: 'Review',
-        wait: 'Wait',
-        promise_followup: 'Promise Follow-up',
-      }
-      return {
-        id: item.id || `u-${i}`,
-        dueAt: item.dueAt || new Date().toISOString(),
-        type: `${labels[actionType] || 'Action'}`,
-        customer: item.customerName,
-        amount: item.moneyImpact ? formatINR(item.moneyImpact) : undefined,
-      }
-    })
-
-  // Hero one-liner (true status)
-  const invoiceCount = workItems.reduce((s, i) => s + 1, 0)
-  const oneLiner = isEmpty
-    ? "No customers require manual follow-up."
-    : `${formatINR(outstanding)} pending across ${byCustomer.size} customer${byCustomer.size === 1 ? '' : 's'}. Ready to recover.`
-
-  return {
-    outstanding,
-    customers: byCustomer.size,
-    invoiceCount,
-    successRate,
-    recoveredByBillzo,
-    oneLiner,
-    isEmpty,
-    attention,
-    queue,
-    activity,
-    upcoming,
-  }
-}
-
-
-function customersFromItems(items: { customerId: string }[]): number {
-  return new Set(items.map(i => i.customerId)).size
 }

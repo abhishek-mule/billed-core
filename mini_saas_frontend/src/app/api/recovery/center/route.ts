@@ -1,20 +1,15 @@
+// @deprecated Use GET /api/recovery/workspace instead.
+// This endpoint is kept for backward compatibility.
+// It internally delegates to the RecoveryWorkspaceModel.
+// Remove after all consumers (queue, reports) have migrated.
+
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { ensureWalkinCustomer } from '@/lib/billzo/recovery-workspace-model'
 
-/**
- * Recovery Center — operational command center for the merchant's morning.
- * Four blocks only: Needs Action, Scheduled Today, Recently Recovered, Activity
- * Timeline. Derived entirely from recovery_cases + invoices + collection_actions.
- * No analytics, no KPIs.
- *
- * Single source of truth: outstanding / overdue amounts are ALWAYS derived from
- * invoices (total − paid_amount). recovery_cases is used only for *state*
- * (promise date, recovery state, next action). This guarantees the Center never
- * disagrees with the Customers / Ledger view.
- */
 export async function GET(request: NextRequest) {
   const auth = await verifyRequest(request)
   if (auth.response) return auth.response
@@ -26,8 +21,7 @@ export async function GET(request: NextRequest) {
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
 
-    // ── 1. Needs Action ──
-    // Cases that are past due / promised / disputed and still owe money.
+    // Needs Action
     let { data: cases } = await supabaseAdmin
       .from('recovery_cases')
       .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type, broken_promises, reminder_count')
@@ -37,8 +31,7 @@ export async function GET(request: NextRequest) {
       .order('total_overdue', { ascending: false })
       .limit(50)
 
-    // Detect & repair: never let a null customer_id silently break navigation
-    const nullCustCases = (cases || []).filter(c => !c.customer_id)
+    const nullCustCases = (cases || []).filter((c: any) => !c.customer_id)
     for (const nc of nullCustCases) {
       console.warn('[RecoveryCenter] repair: null customer_id on case', nc.id)
       const walkinId = await ensureWalkinCustomer(tenantId)
@@ -48,7 +41,6 @@ export async function GET(request: NextRequest) {
 
     const customerIds = [...new Set((cases || []).map((c: any) => c.customer_id))]
 
-    // Invoices (open) for those customers — single source of truth for amounts.
     const { data: invoices } = customerIds.length
       ? await supabaseAdmin
           .from('invoices')
@@ -71,86 +63,42 @@ export async function GET(request: NextRequest) {
     const invoiceAmounts = (custId: string) => {
       const invs = invByCust.get(custId) || []
       const out = invs.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
-      const overdueInvs = invs.filter(
-        (i: any) => i.due_date && new Date(i.due_date) < now,
-      )
+      const overdueInvs = invs.filter((i: any) => i.due_date && new Date(i.due_date) < now)
       const ovd = overdueInvs.length > 0
-        ? Math.max(...overdueInvs.map((i: any) =>
-            Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000),
-          ))
+        ? Math.max(...overdueInvs.map((i: any) => Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000)))
         : 0
       return { out, ovd }
     }
 
     const { data: customers } = customerIds.length
-      ? await supabaseAdmin
-          .from('customers')
-          .select('id, customer_name, phone, customer_tier')
-          .in('id', customerIds)
+      ? await supabaseAdmin.from('customers').select('id, customer_name, phone, customer_tier').in('id', customerIds)
       : { data: [] as any[] }
 
     const custMap = new Map((customers || []).map((c: any) => [c.id, c]))
 
-    const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
-      let confidence = 0.65 // baseline
-
-      // Tier adjustment
-      const tier = (cust.customer_tier || 'standard').toLowerCase()
-      if (tier === 'vip') confidence += 0.20
-      else if (tier === 'regular') confidence += 0.05
-      else if (tier === 'risky') confidence -= 0.20
-
-      // Broken promises penalty (each -15%)
-      const broken = c.broken_promises || 0
-      confidence -= broken * 0.15
-
-      // Reminder fatigue (each unsucceeded reminder -8%, max -40%)
-      const reminders = c.reminder_count || 0
-      confidence -= Math.min(reminders * 0.08, 0.40)
-
-      // Overdue age
-      const state = c.recovery_state_v2 || 'active'
-      if (state === 'promised' || state === 'partial_payment') confidence += 0.10
-      else if (state === 'disputed') confidence -= 0.40
-
-      // Clamp 0.05–0.95
-      confidence = Math.max(0.05, Math.min(0.95, confidence))
-
+    const needsAction = (cases || []).map((c: any) => {
+      const cust = custMap.get(c.customer_id) || {}
+      const { out, ovd } = invoiceAmounts(c.customer_id)
+      const daysOverdue = c.promise_to_pay_date
+        ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
+        : null
       return {
-        recoverableAmount: Math.round(outstanding * confidence),
-        recoveryConfidence: Math.round(confidence * 100),
+        caseId: c.id,
+        customerId: c.customer_id,
+        customerName: cust.customer_name || 'Customer',
+        phone: cust.phone || '',
+        tier: cust.customer_tier || 'standard',
+        outstanding: out,
+        overdue: ovd,
+        state: c.recovery_state_v2,
+        promiseDate: c.promise_to_pay_date,
+        promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
+        recommendedAction: c.next_action_type || 'send_reminder',
+        reminderCount: c.reminder_count || 0,
+        brokenPromises: c.broken_promises || 0,
       }
-    }
+    }).filter((c: any) => c.outstanding > 0)
 
-    const needsAction = (cases || [])
-      .map((c: any) => {
-        const cust = custMap.get(c.customer_id) || {}
-        const { out, ovd } = invoiceAmounts(c.customer_id)
-        const daysOverdue = c.promise_to_pay_date
-          ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
-          : null
-        const { recoverableAmount, recoveryConfidence } = estimateRecoverable(out, c, cust)
-        return {
-          caseId: c.id,
-          customerId: c.customer_id,
-          customerName: cust.customer_name || 'Customer',
-          phone: cust.phone || '',
-          tier: cust.customer_tier || 'standard',
-          outstanding: out,
-          recoverableAmount,
-          recoveryConfidence,
-          overdue: ovd,
-          state: c.recovery_state_v2,
-          promiseDate: c.promise_to_pay_date,
-          promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
-          recommendedAction: c.next_action_type || 'send_reminder',
-          reminderCount: c.reminder_count || 0,
-          brokenPromises: c.broken_promises || 0,
-        }
-      })
-      .filter((c: any) => c.outstanding > 0)
-
-    // ── 2. Scheduled Today ──
     const { data: scheduled } = await supabaseAdmin
       .from('collection_actions')
       .select('id, customer_id, action_type, channel, template_name, scheduled_at, invoice_ids')
@@ -184,10 +132,8 @@ export async function GET(request: NextRequest) {
       calls: scheduledToday.filter((s) => s.actionType === 'call' || s.channel === 'phone').length,
     }
 
-    // Total under follow-up = sum of invoice-derived outstanding across needs-action cases.
     const underFollowUp = needsAction.reduce((s: number, c: any) => s + (c.outstanding || 0), 0)
 
-    // ── 3. Recently Recovered ──
     let { data: recovered } = await supabaseAdmin
       .from('recovery_cases')
       .select('id, customer_id, total_outstanding, recovery_state_v2, updated_at')
@@ -197,7 +143,7 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
       .limit(20)
 
-    const nullRecCases = (recovered || []).filter(c => !c.customer_id)
+    const nullRecCases = (recovered || []).filter((c: any) => !c.customer_id)
     for (const nc of nullRecCases) {
       console.warn('[RecoveryCenter] repair: null customer_id on recovered case', nc.id)
       const walkinId = await ensureWalkinCustomer(tenantId)
@@ -218,7 +164,6 @@ export async function GET(request: NextRequest) {
       recoveredAt: c.updated_at,
     }))
 
-    // ── 4. Activity Timeline (last 24h) ──
     const { data: events } = await supabaseAdmin
       .from('collection_action_events')
       .select('action_id, event_type, to_status, created_at, payload')
@@ -247,48 +192,4 @@ export async function GET(request: NextRequest) {
     console.error('[RecoveryCenter] failed', err)
     return NextResponse.json({ error: 'Failed to load recovery center' }, { status: 500 })
   }
-}
-
-/**
- * Find or create the walk-in customer for a tenant.
- * This is a self-healing mechanism: if data somehow has null customer_ids
- * (migration gap, race condition, manual SQL), this ensures we never
- * silently drop recovery work.
- */
-async function ensureWalkinCustomer(tenantId: string): Promise<string> {
-  const walkinId = 'cust_walkin_' + tenantId
-
-  // Check if it already exists
-  const { data: existing } = await supabaseAdmin
-    .from('customers')
-    .select('id')
-    .eq('id', walkinId)
-    .maybeSingle()
-
-  if (existing) return walkinId
-
-  // Create it
-  await supabaseAdmin.from('customers').insert({
-    id: walkinId,
-    tenant_id: tenantId,
-    customer_name: 'Walk-in Customer',
-    phone: null,
-    customer_tier: 'regular',
-    is_active: true,
-    automation_mode: 'full_auto',
-    phone_verification: 'unknown',
-    reputation_score: 50,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-
-  // Also link any orphan invoices with null customer_id
-  await supabaseAdmin
-    .from('invoices')
-    .update({ customer_id: walkinId })
-    .eq('tenant_id', tenantId)
-    .is('customer_id', null)
-    .gt('outstanding_amount', 0)
-
-  return walkinId
 }
