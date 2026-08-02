@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // ── Cases (for needs-call / reason derivation) ──
     const { data: cases } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, broken_promises, last_payment_at, next_action_type, open_invoice_count')
+      .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type, open_invoice_count')
       .eq('tenant_id', tenantId)
       .gt('total_outstanding', 0)
       .in('recovery_state_v2', ['active', 'overdue', 'partial_payment', 'promised', 'disputed'])
@@ -187,8 +187,7 @@ export async function GET(request: NextRequest) {
       const c = caseByCustomer.get(a.customer_id)
       const overdueDays = c ? Number(c.total_overdue || 0) : 0
       const isCallCase =
-        !!c && (c.broken_promises > 0 ||
-          (c?.promise_to_pay_date && (days(c.promise_to_pay_date as any) ?? 0) > 0) ||
+        !!c && ((c?.promise_to_pay_date && (days(c.promise_to_pay_date as any) ?? 0) > 0) ||
           c.next_action_type === 'call' ||
           overdueDays > 30)
 

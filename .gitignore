@@ -102,5 +102,8 @@ frappe_docker/sites/
 # Claude Code
 .claude/
 
+# Kilo coding-agent local state
+.kilo/
+
 # TypeScript build info
 tsconfig.tsbuildinfo

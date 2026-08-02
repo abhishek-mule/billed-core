@@ -8,6 +8,7 @@ import {
 import type { TenantWhatsAppConfig } from "@/lib/billzo/types"
 import { getCookie } from "@/lib/cookies"
 import { fetchWithAuth } from "@/lib/fetch-with-auth"
+import { getErrorMessage } from "@/lib/billzo/ui-errors"
 
 import { PageShell } from "@/components/billzo/PageShell"
 
@@ -39,8 +40,8 @@ export default function PaymentRemindersSettingsPage() {
         const data = await res.json()
         setConfig({ ...DEFAULT_CONFIG, ...data.config })
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load WhatsApp settings'))
     } finally {
       setLoading(false)
     }
@@ -57,8 +58,8 @@ export default function PaymentRemindersSettingsPage() {
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to save settings'))
     } finally {
       setSaving(false)
     }

@@ -1,5 +1,10 @@
 export const dynamic = 'force-dynamic'
 
+// @deprecated Legacy scheduler — superseded by the recovery scheduler
+// (`/api/cron/recovery` + worker enqueueOverdueReminders) which drives
+// `collection_actions` via the worker. Removed from vercel.json; kept only
+// for manual/hotfix invocations until the pilot completes, then deleted.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db, uuid } from '@/lib/billzo/db'
 import type { Invoice } from '@/lib/billzo/types'

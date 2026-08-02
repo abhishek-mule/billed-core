@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { setSession, findSessionsByUserId, checkRateLimit, incrementRateLimit } from '@/lib/billzo/auth-store'
+import { resolveTenantForUser } from '@/lib/billzo/tenant-context'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export async function POST(request: NextRequest) {
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest) {
 
     const userId: string = uid || `phone_${phone}`
 
+    // Resolve tenant from tenant_memberships (authoritative) first,
+    // fall back to prior sessions (Redis) for users without a membership yet.
+    const resolved = await resolveTenantForUser(userId)
+    const tenantId = resolved.tenantId
+
     // Redis operations (non-critical — tokens are in cookies)
     let existingTenantId: string | undefined
     let existingIsPaid = false
@@ -70,7 +76,7 @@ export async function POST(request: NextRequest) {
       await setSession(sessionId, {
         userId,
         sessionId,
-        tenantId: existingTenantId || null,
+        tenantId: tenantId || existingTenantId || null,
         isPaid: existingIsPaid,
         phone: phone || existingPhone,
         email: email || undefined,
@@ -80,20 +86,19 @@ export async function POST(request: NextRequest) {
       console.warn('[Login] Redis unavailable, proceeding with cookie-only auth')
     }
 
-    const accessToken = createAccessToken({ sessionId, userId, tenantId: existingTenantId ?? undefined, phone: phone || existingPhone || undefined, email })
+    const effectiveTenantId = tenantId || existingTenantId
+    const accessToken = createAccessToken({ sessionId, userId, tenantId: effectiveTenantId ?? undefined, phone: phone || existingPhone || undefined, email })
     const refreshToken = createRefreshToken({ sessionId, userId })
 
     const response = NextResponse.json({
       success: true,
       userId,
-      tenantId: existingTenantId,
+      tenantId: effectiveTenantId,
       isPaid: existingIsPaid,
-      accessToken,
-      refreshToken,
       expiresIn: 14 * 24 * 3600,
     })
 
-    setAuthCookies(response, accessToken, refreshToken, existingTenantId || undefined)
+    setAuthCookies(response, accessToken, refreshToken, effectiveTenantId || undefined)
     response.cookies.set('bz_user_id', userId, {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',

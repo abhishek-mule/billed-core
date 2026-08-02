@@ -9,6 +9,7 @@ import {
 import { MerchantLanguage } from "@billzo/shared"
 import { formatINR } from "@/lib/utils"
 import { EmptyState } from "@/components/billzo/EmptyState"
+import { BackLink } from "@/components/billzo/PageShell"
 import { ErrorState } from "@/components/billzo/ErrorState"
 import { Skeleton } from "@/components/billzo/Skeleton"
 import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES, type CollectionRiskStage } from "@/lib/billzo/recovery-risk"
@@ -232,6 +233,7 @@ export default function RecoveryHistoryPage() {
   return (
     <div className="page-shell max-w-5xl">
       <div className="space-y-5">
+        <BackLink href="/recovery" label="Recovery" />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.history}</h1>

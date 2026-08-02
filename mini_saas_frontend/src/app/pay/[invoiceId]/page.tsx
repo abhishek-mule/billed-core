@@ -201,77 +201,103 @@ export default function PayInvoicePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-lg mx-auto px-4 py-8">
+    <div className="min-h-screen bg-[#f8fafc]">
+      <div className="max-w-2xl mx-auto px-4 py-10">
         {/* Merchant Header */}
-        <div className="text-center mb-6">
-          {invoice?.merchantLogo && (
-            <img
-              src={invoice.merchantLogo}
-              alt={invoice.merchantName}
-              className="w-16 h-16 rounded-xl object-contain mx-auto mb-3 bg-card border border-border p-1"
-            />
-          )}
-          <h1 className="text-xl font-bold text-foreground">{invoice?.merchantName}</h1>
-          {invoice?.merchantAddress && (
-            <p className="text-xs text-muted-foreground mt-0.5">{invoice.merchantAddress}</p>
-          )}
-          {invoice?.merchantGstin && invoice.documentType === 'tax_invoice' && (
-            <p className="text-xs text-muted-foreground">GSTIN: {invoice.merchantGstin}</p>
-          )}
+        <div className="grid grid-cols-12 gap-4 mb-8">
+          <div className="col-span-12 flex items-center gap-4">
+            {invoice?.merchantLogo && (
+              <img
+                src={invoice.merchantLogo}
+                alt={invoice.merchantName}
+                className="w-12 h-12 rounded-xl object-contain bg-white border border-[#e2e8f0] p-1"
+              />
+            )}
+            <div>
+              <h1 className="text-lg font-bold text-[#1e293b]">{invoice?.merchantName}</h1>
+              {invoice?.merchantAddress && (
+                <p className="text-xs text-[#94a3b8] mt-0.5">{invoice.merchantAddress}</p>
+              )}
+              {invoice?.merchantGstin && invoice.documentType === 'tax_invoice' && (
+                <p className="text-xs text-[#94a3b8]">GSTIN: {invoice.merchantGstin}</p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Invoice Card */}
-        <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
-          {/* Amount & Status */}
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">{invoice?.documentType === 'bill' ? 'BILL' : 'TAX INVOICE'}</p>
-            <p className="text-3xl font-bold text-foreground mt-1">
-              {formatINR(outstanding)}
+        <div className="bg-white rounded-2xl border border-[#e2e8f0] p-8 space-y-6 shadow-sm">
+          {/* Document Type & Grand Total */}
+          <div className="text-center border-b border-[#f1f5f9] pb-6">
+            <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-[0.12em]">
+              {invoice?.documentType === 'bill' ? 'BILL' : 'TAX INVOICE'}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {invoice?.invoiceNumber} • {invoice?.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+            <div className="mt-3">
+              <p className="text-[40px] font-bold text-[#16802d] leading-none tracking-tight tabular-nums">
+                {formatINR(outstanding)}
+              </p>
+              {invoice && invoice.paidAmount > 0 && (
+                <p className="text-xs text-[#94a3b8] mt-1 line-through">{formatINR(invoice.total)}</p>
+              )}
+            </div>
+            <p className="text-xs text-[#94a3b8] mt-2">
+              {invoice?.invoiceNumber}
+              {invoice?.dueDate && <span>  ·  {new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
             </p>
           </div>
 
           {/* Items */}
           {invoice?.items && invoice.items.length > 0 && (
-            <div className="border-t border-border pt-4 space-y-2">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Items</p>
+            <div>
+              <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wider pb-2 border-b border-[#f1f5f9]">
+                <div className="col-span-7">Item</div>
+                <div className="col-span-2 text-center">Qty</div>
+                <div className="col-span-3 text-right">Amount</div>
+              </div>
               {invoice.items.map((item, i) => (
-                <div key={i} className="flex justify-between text-sm">
-                  <span className="text-foreground">{item.name} x{item.qty}</span>
-                  <span className="text-muted-foreground">{formatINR(item.price * item.qty)}</span>
+                <div key={i} className="grid grid-cols-12 gap-2 py-2.5 text-sm border-b border-[#f8fafc] last:border-0">
+                  <div className="col-span-7 text-[#1e293b] font-medium">{item.name}</div>
+                  <div className="col-span-2 text-center text-[#94a3b8]">{item.qty}</div>
+                  <div className="col-span-3 text-right text-[#1e293b] font-medium tabular-nums">{formatINR(item.price * item.qty)}</div>
                 </div>
               ))}
-              {invoice.paidAmount > 0 && (
-                <div className="flex justify-between text-sm border-t border-border pt-2 mt-2">
-                  <span className="text-muted-foreground">Paid</span>
-                  <span className="text-success font-medium">{formatINR(invoice.paidAmount)}</span>
+              {(invoice?.paidAmount ?? 0) > 0 && invoice && (
+                <div className="grid grid-cols-12 gap-2 pt-3 mt-2 border-t border-[#e2e8f0]">
+                  <div className="col-span-9 text-sm text-[#16802d] font-medium">Paid</div>
+                  <div className="col-span-3 text-right text-sm text-[#16802d] font-bold tabular-nums">{formatINR(invoice.paidAmount)}</div>
                 </div>
               )}
             </div>
           )}
 
-          {/* UPI Payment */}
+          {/* QR Section */}
           {invoice?.upiId && !isPaid && (
-            <div className="border-t border-border pt-4">
-              <div className="text-center">
-                {upiQr && (
-                  <div className="mb-3">
-                    <img src={upiQr} alt="UPI QR" className="w-40 h-40 mx-auto" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Scan to Pay via UPI</p>
+            <div className="rounded-xl bg-[#f8fafc] border border-[#e2e8f0] p-6">
+              <div className="grid grid-cols-12 gap-6 items-center">
+                <div className="col-span-5 flex flex-col items-center">
+                  {upiQr && (
+                    <>
+                      <img src={upiQr} alt="UPI QR" className="w-36 h-36" />
+                      <p className="text-[10px] text-[#94a3b8] mt-1.5 font-medium tracking-wider uppercase">Scan to Pay</p>
+                    </>
+                  )}
+                </div>
+                <div className="col-span-7 space-y-3">
+                  <p className="text-[11px] font-semibold text-[#1e293b] uppercase tracking-wider">UPI Payment</p>
+                  <div>
+                    <p className="text-[11px] text-[#94a3b8]">UPI ID</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm font-mono font-bold text-[#1e293b]">{invoice.upiId}</span>
+                      <button
+                        onClick={() => handleCopy(invoice.upiId!)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1e293b] text-white text-[10px] font-semibold hover:bg-[#334155] transition-colors"
+                      >
+                        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {copied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-muted-foreground">UPI ID:</span>
-                  <span className="text-sm font-mono font-medium text-foreground">{invoice.upiId}</span>
-                  <button
-                    onClick={() => handleCopy(invoice.upiId!)}
-                    className="p-1 rounded hover:bg-muted transition-colors"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-                  </button>
+                  <p className="text-[10px] text-[#94a3b8]">Scan with any UPI app such as Google Pay, PhonePe, Paytm</p>
                 </div>
               </div>
             </div>
@@ -279,31 +305,31 @@ export default function PayInvoicePage() {
 
           {/* Bank Details */}
           {invoice?.bankDetails && !isPaid && (
-            <div className="border-t border-border pt-4">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Bank Transfer</p>
-              <div className="space-y-1 text-sm">
+            <div className="rounded-xl border border-[#e2e8f0] p-5">
+              <p className="text-[11px] font-semibold text-[#1e293b] uppercase tracking-wider mb-3">Bank Transfer</p>
+              <div className="grid grid-cols-1 gap-2 text-sm">
                 {invoice.bankDetails.accountHolder && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Account Holder</span>
-                    <span className="text-foreground font-medium">{invoice.bankDetails.accountHolder}</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    <span className="text-[#94a3b8] text-[12px]">A/c Holder</span>
+                    <span className="col-span-3 text-[#1e293b] font-medium text-[13px]">{invoice.bankDetails.accountHolder}</span>
                   </div>
                 )}
                 {invoice.bankDetails.bankName && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Bank</span>
-                    <span className="text-foreground font-medium">{invoice.bankDetails.bankName}</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    <span className="text-[#94a3b8] text-[12px]">Bank</span>
+                    <span className="col-span-3 text-[#1e293b] font-medium text-[13px]">{invoice.bankDetails.bankName}</span>
                   </div>
                 )}
                 {invoice.bankDetails.accountNumber && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Account</span>
-                    <span className="text-foreground font-mono font-medium">{invoice.bankDetails.accountNumber}</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    <span className="text-[#94a3b8] text-[12px]">Account</span>
+                    <span className="col-span-3 text-[#1e293b] font-mono font-medium text-[13px]">{invoice.bankDetails.accountNumber}</span>
                   </div>
                 )}
                 {invoice.bankDetails.ifsc && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">IFSC</span>
-                    <span className="text-foreground font-mono font-medium">{invoice.bankDetails.ifsc}</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    <span className="text-[#94a3b8] text-[12px]">IFSC</span>
+                    <span className="col-span-3 text-[#1e293b] font-mono font-medium text-[13px]">{invoice.bankDetails.ifsc}</span>
                   </div>
                 )}
               </div>
@@ -312,11 +338,11 @@ export default function PayInvoicePage() {
 
           {/* Actions */}
           {!isPaid && (
-            <div className="border-t border-border pt-4 space-y-2">
+            <div className="space-y-3 pt-2">
               <button
                 onClick={handleMarkPaid}
                 disabled={submitting}
-                className="w-full py-3 rounded-xl bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all disabled:opacity-50 shadow-sm"
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "I've Paid — Notify Merchant"}
               </button>
@@ -324,19 +350,19 @@ export default function PayInvoicePage() {
               {!showPromiseForm ? (
                 <button
                   onClick={() => setShowPromiseForm(true)}
-                  className="w-full py-3 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+                  className="w-full py-3 rounded-xl border border-[#e2e8f0] text-sm font-medium text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
                 >
                   <CalendarClock className="w-4 h-4 inline mr-1.5" />
                   Need More Time?
                 </button>
               ) : (
-                <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/20">
-                  <p className="text-xs font-medium text-foreground">When can you pay?</p>
+                <div className="rounded-xl border border-[#e2e8f0] p-5 space-y-3 bg-[#f8fafc]">
+                  <p className="text-xs font-semibold text-[#1e293b]">When can you pay?</p>
                   <input
                     type="date"
                     value={promiseDate}
                     onChange={e => setPromiseDate(e.target.value)}
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-[#e2e8f0] bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e293b] text-[#1e293b]"
                     min={new Date().toISOString().slice(0, 10)}
                   />
                   <input
@@ -344,26 +370,26 @@ export default function PayInvoicePage() {
                     value={promiseAmount}
                     onChange={e => setPromiseAmount(e.target.value)}
                     placeholder={`Amount (default: ${formatINR(outstanding)})`}
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-[#e2e8f0] bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e293b] text-[#1e293b]"
                   />
                   <input
                     type="text"
                     value={promiseNote}
                     onChange={e => setPromiseNote(e.target.value)}
                     placeholder="Optional note..."
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    className="w-full rounded-lg border border-[#e2e8f0] bg-white px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e293b] text-[#1e293b]"
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pt-1">
                     <button
                       onClick={() => setShowPromiseForm(false)}
-                      className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      className="flex-1 py-2.5 rounded-lg border border-[#e2e8f0] text-sm font-medium text-[#64748b] hover:text-[#1e293b] transition-colors bg-white"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handlePromise}
                       disabled={promiseSubmitting || !promiseDate}
-                      className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-50"
+                      className="flex-1 py-2.5 rounded-lg bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all disabled:opacity-50"
                     >
                       {promiseSubmitting ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Confirm"}
                     </button>
@@ -374,22 +400,20 @@ export default function PayInvoicePage() {
           )}
 
           {isPaid && (
-            <div className="border-t border-border pt-4">
-              <div className="rounded-xl border border-success bg-success-soft p-4 text-center">
-                <CheckCircle className="w-8 h-8 text-success mx-auto mb-2" />
-                <p className="text-sm font-semibold text-success">Invoice Paid</p>
-                <p className="text-xs text-success mt-1">This invoice has been paid.</p>
-              </div>
+            <div className="rounded-xl bg-[#f0fdf4] border border-[#bbf7d0] p-6 text-center">
+              <CheckCircle className="w-10 h-10 text-[#16802d] mx-auto mb-3" />
+              <p className="text-lg font-bold text-[#16802d]">Invoice Paid</p>
+              <p className="text-sm text-[#16802d] mt-1">This invoice has been paid. Thank you!</p>
             </div>
           )}
         </div>
 
         {/* Contact Merchant */}
         {invoice?.merchantPhone && (
-          <div className="mt-4 text-center">
+          <div className="mt-6 text-center">
             <a
               href={`tel:${invoice.merchantPhone}`}
-              className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+              className="inline-flex items-center gap-2 text-sm text-[#64748b] hover:text-[#1e293b] transition-colors"
             >
               <Phone className="w-4 h-4" />
               Contact {invoice.merchantName}
@@ -398,8 +422,12 @@ export default function PayInvoicePage() {
         )}
 
         {error && (
-          <div className="mt-4 rounded-xl bg-warning-soft p-3 text-sm text-warning text-center">{error}</div>
+          <div className="mt-4 rounded-xl bg-[#fef2f2] border border-[#fecaca] p-3 text-sm text-[#dc2626] text-center">{error}</div>
         )}
+
+        <div className="mt-8 text-center">
+          <p className="text-[10px] text-[#cbd5e1]">Powered by BillZo</p>
+        </div>
       </div>
     </div>
   )

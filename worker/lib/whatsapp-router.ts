@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
 import { isBaileysConnected, isBaileysPaired, startBaileysSocket } from './baileys-socket'
 import { getRedis } from './redis'
-import { TransportRegistry } from '../src/lib/transport/registry'
+import { TransportRegistry } from '../src/lib/transport'
 import { getMetaAdapter } from '../bootstrap/meta'
 import {
   generateBillzoMessageId,

@@ -4,9 +4,32 @@ import { getEntitlement } from '@/lib/billzo/feature-flags'
 
 export interface FeatureGateResult {
   allowed: boolean
+  /**
+   * Machine-readable, unique per rejection. Every gate denial returns a
+   * distinct code so clients can branch without string-matching prose.
+   */
+  code?: 'TENANT_NOT_FOUND' | 'FEATURE_LOCKED' | 'TRIAL_EXPIRED' | 'TRIAL_ALREADY_USED' | 'TRIAL_IN_PROGRESS'
+  /** Human-readable explanation for the merchant. */
+  message?: string
+  /** @deprecated use `code` */
   error?: 'FEATURE_LOCKED' | 'TRIAL_EXPIRED' | 'TRIAL_ALREADY_USED' | 'TRIAL_IN_PROGRESS' | 'TENANT_NOT_FOUND'
   upgradeTo?: PlanType
   isTrial?: boolean
+}
+
+const GATE_MESSAGES: Record<NonNullable<FeatureGateResult['code']>, string> = {
+  TENANT_NOT_FOUND: 'Tenant not found or session expired. Please sign in again.',
+  FEATURE_LOCKED: 'This feature is not available on your current plan.',
+  TRIAL_EXPIRED: 'Your free trial has expired. Upgrade to continue.',
+  TRIAL_ALREADY_USED: 'You have already used your free trial.',
+  TRIAL_IN_PROGRESS: 'Your free trial is already running. Please wait for it to complete.',
+}
+
+function deny(
+  code: NonNullable<FeatureGateResult['code']>,
+  extra?: Pick<FeatureGateResult, 'upgradeTo' | 'isTrial'>,
+): FeatureGateResult {
+  return { allowed: false, code, message: GATE_MESSAGES[code], error: code, ...extra }
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
@@ -33,7 +56,7 @@ export async function requireFeature(
 ): Promise<FeatureGateResult> {
   const ent = await getEntitlement(tenantId)
   if (!ent) {
-    return { allowed: false, error: 'TENANT_NOT_FOUND' }
+    return deny('TENANT_NOT_FOUND')
   }
 
   const plan = ent.planCode
@@ -44,16 +67,12 @@ export async function requireFeature(
   } else if (ent.features.includes(feature as Feature)) {
     return { allowed: true }
   } else {
-    return {
-      allowed: false,
-      error: 'FEATURE_LOCKED',
-      upgradeTo: plan === 'starter' ? 'pro' : 'business',
-    }
+    return deny('FEATURE_LOCKED', { upgradeTo: plan === 'starter' ? 'pro' : 'business' })
   }
 
   // 2. Promotions — only checked on mutating requests
   if (!TRIAL_FEATURES.includes(feature)) {
-    return { allowed: false, error: 'FEATURE_LOCKED', upgradeTo: plan === 'starter' ? 'pro' : 'business' }
+    return deny('FEATURE_LOCKED', { upgradeTo: plan === 'starter' ? 'pro' : 'business' })
   }
 
   if (method === 'GET') {
@@ -86,7 +105,7 @@ async function checkTrialEligibility(
   // 14-day window from tenant creation
   const daysSinceSignup = differenceInDays(new Date(), new Date(tenant.created_at))
   if (daysSinceSignup > 14) {
-    return { allowed: false, error: 'TRIAL_EXPIRED' }
+    return deny('TRIAL_EXPIRED')
   }
 
   // Check the feature_trials table
@@ -102,13 +121,13 @@ async function checkTrialEligibility(
   }
 
   if (trial.status === 'completed') {
-    return { allowed: false, error: 'TRIAL_ALREADY_USED' }
+    return deny('TRIAL_ALREADY_USED')
   }
 
   // running — allow retry only if > 1 hour elapsed (worker likely crashed)
   const elapsed = Date.now() - new Date(trial.started_at).getTime()
   if (elapsed < 60 * 60 * 1000) {
-    return { allowed: false, error: 'TRIAL_IN_PROGRESS' }
+    return deny('TRIAL_IN_PROGRESS')
   }
 
   // Worker appears to have crashed — allow retry

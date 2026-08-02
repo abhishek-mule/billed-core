@@ -2,6 +2,7 @@
 
 import { FileText, Loader2, PackagePlus } from 'lucide-react'
 import { Button } from '@/components/billzo/Button'
+import { BackLink } from '@/components/billzo/PageShell'
 import { EmptyState } from '@/components/billzo/EmptyState'
 import { useBillzo } from '@/components/billzo/useBillzo'
 import { formatINR } from '@/lib/utils'
@@ -11,6 +12,7 @@ export default function PurchasesPage() {
 
   return (
     <div className="space-y-8">
+      <BackLink href="/" label="Home" />
       <section>
         <p className="text-sm text-muted-foreground">Scan supplier invoices, review OCR output, and update stock in one flow.</p>
       </section>

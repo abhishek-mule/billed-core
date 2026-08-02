@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Load the recovery case first
     const { data: rc } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, customer_id, total_outstanding, recovery_state_v2, promise_to_pay_date, broken_promises, last_payment_at, next_action_type, updated_at')
+      .select('id, customer_id, total_outstanding, recovery_state_v2, promise_to_pay_date, next_action_type, last_activity_at, updated_at')
       .eq('tenant_id', tenantId)
       .eq('id', caseId)
       .maybeSingle()
@@ -206,8 +206,8 @@ export async function GET(request: NextRequest) {
         overdue: oldestOverdue,
         state: rc.recovery_state_v2,
         promiseDate,
-        brokenPromises: rc.broken_promises || 0,
-        lastPaymentAt: rc.last_payment_at,
+        brokenPromises: 0,
+        lastPaymentAt: rc.last_activity_at,
         nextAction: rc.next_action_type,
       },
       invoices: openInvoices.map((i: any) => ({

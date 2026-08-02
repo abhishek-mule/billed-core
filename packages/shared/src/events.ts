@@ -42,7 +42,6 @@ export const EventType = {
   WHATSAPP_SENT: 'whatsapp.sent',
   WHATSAPP_DELIVERED: 'whatsapp.delivered',
   WHATSAPP_FAILED: 'whatsapp.failed',
-  WHATSAPP_INBOUND: 'whatsapp.inbound',
   SEND_MESSAGE_INTENDED: 'send_message.intended',
   SEND_MESSAGE_EXECUTED: 'send_message.executed',
   MESSAGE_EVENT: 'message.event',

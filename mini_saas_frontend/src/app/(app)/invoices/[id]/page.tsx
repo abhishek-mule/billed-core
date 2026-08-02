@@ -302,14 +302,14 @@ export default function InvoiceDetailPage() {
         <ArrowLeft className="h-4 w-4" /> All invoices
       </Link>
 
-      <div className="rounded-2xl border border-border bg-card p-5 lg:p-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-              <Receipt className="h-3.5 w-3.5" /> {invoice.invoiceNumber || invoice.id?.slice(0, 8)}
+            <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-[0.1em]">
+              <Receipt className="h-3.5 w-3.5 inline mr-1" /> {invoice.invoiceNumber || invoice.id?.slice(0, 8)}
             </div>
-            <div className="mt-1 text-3xl lg:text-4xl font-bold">{formatINR(total)}</div>
-            <div className="mt-2 inline-flex items-center gap-2 flex-wrap">
+            <div className="mt-2 text-[40px] font-bold text-[#16802d] leading-none tracking-tight tabular-nums">{formatINR(total)}</div>
+            <div className="mt-3 inline-flex items-center gap-2 flex-wrap">
               <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${statusStyle[invoice.syncStatus] || statusStyle.pending}`}>
                 {invoice.syncStatus || "pending"}
               </span>
@@ -499,29 +499,45 @@ export default function InvoiceDetailPage() {
 
       {items.length > 0 && (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="px-5 py-3 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="px-6 py-4 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/30">
             Items
           </div>
-          <ul className="divide-y divide-border">
-            {items.map((it, i) => (
-              <li key={i} className="px-5 py-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">{it.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {it.qty} × {formatINR(it.price)} · GST {it.gstRate}%
-                    {it.hsn && <> · HSN {it.hsn}</>}
-                  </div>
+          <div className="px-6 py-3 grid grid-cols-12 gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border bg-secondary/20">
+            <div className="col-span-1 text-center">#</div>
+            <div className="col-span-5">Item</div>
+            <div className="col-span-2 text-center">Qty</div>
+            <div className="col-span-2 text-right">Rate</div>
+            <div className="col-span-2 text-right">Amount</div>
+          </div>
+          {items.map((it, i) => (
+            <div key={i} className="px-6 py-3 grid grid-cols-12 gap-2 text-sm items-center border-b border-border/50 last:border-0 hover:bg-secondary/20 transition-colors">
+              <div className="col-span-1 text-center text-muted-foreground text-xs">{i + 1}</div>
+              <div className="col-span-5">
+                <div className="font-medium text-foreground">{it.name}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {it.hsn && <>HSN {it.hsn}</>}
+                  {it.hsn && it.gstRate ? ' · ' : ''}
+                  {it.gstRate ? `GST ${it.gstRate}%` : ''}
                 </div>
-                <div className="text-sm font-bold whitespace-nowrap">
-                  {formatINR(it.qty * it.price)}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="border-t border-border p-5 space-y-1.5 bg-secondary/30 text-sm">
-            <Row label="Subtotal" value={formatINR(subtotal)} />
-            <Row label="GST" value={formatINR(tax)} />
-            <Row label="Total" value={formatINR(total)} bold />
+              </div>
+              <div className="col-span-2 text-center text-muted-foreground">{it.qty}</div>
+              <div className="col-span-2 text-right text-muted-foreground tabular-nums">{formatINR(it.price)}</div>
+              <div className="col-span-2 text-right font-medium text-foreground tabular-nums">{formatINR(it.qty * it.price)}</div>
+            </div>
+          ))}
+          <div className="border-t border-border px-6 py-4 bg-secondary/30 space-y-1">
+            <div className="grid grid-cols-12 gap-2 text-sm">
+              <div className="col-span-10 text-right text-muted-foreground">Subtotal</div>
+              <div className="col-span-2 text-right text-foreground tabular-nums">{formatINR(subtotal)}</div>
+            </div>
+            <div className="grid grid-cols-12 gap-2 text-sm">
+              <div className="col-span-10 text-right text-muted-foreground">GST</div>
+              <div className="col-span-2 text-right text-foreground tabular-nums">{formatINR(tax)}</div>
+            </div>
+            <div className="grid grid-cols-12 gap-2 text-base font-bold pt-2 border-t border-border mt-2">
+              <div className="col-span-10 text-right text-foreground">Grand Total</div>
+              <div className="col-span-2 text-right text-[#16802d] tabular-nums">{formatINR(total)}</div>
+            </div>
           </div>
         </div>
       )}
@@ -712,18 +728,10 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      <div className="text-center text-[11px] text-muted-foreground pt-4">
-        Invoice from BillZo
+      <div className="text-center text-[10px] text-[#cbd5e1] pt-4">
+        Powered by BillZo
       </div>
     </div>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className={`flex justify-between ${bold ? "text-base font-bold pt-1.5 border-t border-border" : "text-muted-foreground"}`}>
-      <span>{label}</span>
-      <span className="text-foreground">{value}</span>
-    </div>
-  );
-}

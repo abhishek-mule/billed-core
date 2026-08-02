@@ -42,6 +42,8 @@ export interface InvoiceData {
   whiteLabel?: boolean
   placeOfSupply?: string
   documentType?: 'tax_invoice' | 'bill'
+  invoiceFooter?: string
+  paymentTerms?: string
 }
 
 const NUMBER_WORDS: Record<number, string> = {
@@ -95,369 +97,345 @@ export function generateInvoiceNumber(tenantName: string, counter: number): stri
 export async function generateInvoicePDF(data: InvoiceData): Promise<jsPDF> {
   const doc = new jsPDF()
   const pw = doc.internal.pageSize.getWidth()
-  const margin = 16
+  const margin = 18
   const contentW = pw - margin * 2
   let y = margin
 
-  const green = [22, 128, 45] as const
-  const gray = [100, 116, 139] as const
-  const lightGray = [241, 245, 249] as const
-  const dark = [51, 51, 51] as const
+  const dark = [30, 41, 59] as const
+  const gray = [148, 163, 184] as const
+  const midGray = [100, 116, 139] as const
+  const lightBg = [248, 250, 252] as const
+  const accent = [22, 128, 45] as const
 
   const isBill = data.documentType === 'bill'
   const showGst = !isBill && data.items.some(i => i.gstRate && i.gstRate > 0)
 
-  function drawSeparator(extra = 0) {
-    doc.setDrawColor(...lightGray)
-    doc.setLineWidth(0.5)
-    doc.line(margin, y, pw - margin, y)
-    y += 4 + extra
+  // Compute everything from items — never trust passed subtotal/tax/total
+  const derivedItems = data.items.map(item => {
+    const lineTotal = Math.round(item.price * item.qty)
+    const taxable = item.gstRate ? Math.round(lineTotal * 100 / (100 + item.gstRate)) : lineTotal
+    const gstAmt = lineTotal - taxable
+    const cgst = Math.round(gstAmt / 2)
+    const sgst = gstAmt - cgst
+    return { ...item, lineTotal, taxable, gstAmt, cgst, sgst }
+  })
+  const derivedSubtotal = derivedItems.reduce((s, i) => s + i.taxable, 0)
+  const derivedTax = derivedItems.reduce((s, i) => s + i.gstAmt, 0)
+  const derivedTotal = derivedSubtotal + derivedTax
+
+  function num(n: number): string {
+    return n.toLocaleString('en-IN')
   }
 
-  async function drawMerchantBlock() {
-    // Logo (left) + BillZo badge (right)
-    let logoHeight = 0
-    if (data.logo) {
-      try {
-        const imgWidth = 22
-        const imgHeight = 22
-        doc.addImage(data.logo, 'PNG', margin, y - 2, imgWidth, imgHeight)
-        logoHeight = imgHeight + 2
-      } catch { }
-    }
+  function rs(n: number): string {
+    return `Rs. ${num(n)}`
+  }
 
-    const nameX = data.logo ? margin + 26 : margin
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...green)
-    doc.text(data.businessName, nameX, y + (logoHeight > 0 ? 4 : 0))
+  // ── Supplier Block ──
+  let logoRight = margin
+  if (data.logo) {
+    try {
+      doc.addImage(data.logo, 'PNG', margin, y - 2, 20, 20)
+      logoRight = margin + 24
+    } catch { }
+  }
 
-    if (!data.whiteLabel) {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      doc.setTextColor(...gray)
-      doc.text('★ Powered by BillZo', pw - margin, y, { align: 'right' })
-    }
+  // Business name — large, bold, dominant
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...dark)
+  doc.text(data.businessName, logoRight, y + 5)
 
-    y += logoHeight > 0 ? logoHeight + 2 : 8
+  // Supplier details — structured, line by line
+  y += 16
+  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...midGray)
+  const supplierLines: string[] = []
+  if (data.businessAddress) supplierLines.push(data.businessAddress)
+  if (data.businessPhone) supplierLines.push(`Phone: ${data.businessPhone}`)
+  if (data.businessEmail) supplierLines.push(data.businessEmail)
+  for (const line of supplierLines) {
+    doc.text(line, logoRight, y)
+    y += 4.5
+  }
+  if (!isBill) {
+    if (data.businessGstin) { doc.text(`GSTIN: ${data.businessGstin}`, logoRight, y); y += 4.5 }
+    if (data.businessPan) { doc.text(`PAN: ${data.businessPan}`, logoRight, y); y += 4.5 }
+  }
+  y += 4
 
-    let detailY = y
-    const details: string[] = []
-    if (data.businessAddress) details.push(data.businessAddress)
-    if (data.businessPhone) details.push(`Ph: ${data.businessPhone}`)
-    if (data.businessEmail) details.push(data.businessEmail)
+  // ── Separator + Title ──
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.4)
+  doc.line(margin, y, pw - margin, y); y += 8
+  const title = isBill ? 'BILL' : 'TAX INVOICE'
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...midGray)
+  doc.text(title, pw / 2, y, { align: 'center' })
+  y += 8
 
-    if (details.length) {
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...gray)
-      doc.text(details.join(' | '), margin, detailY, { maxWidth: contentW })
-      detailY += 4
-    }
+  // ── Invoice Meta ──
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...midGray)
+  const today = new Date()
+  const dueDate = new Date(today)
+  dueDate.setDate(dueDate.getDate() + (isBill ? 0 : 15))
+  const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  doc.text(`Invoice No: ${data.invoiceNumber}`, margin, y)
+  doc.text(`Invoice Date: ${data.date}`, pw / 2 + 10, y)
+  if (!isBill) {
+    doc.text(`Due Date: ${fmtDate(dueDate)}`, pw - margin, y, { align: 'right' })
+  }
+  y += 5
+  if (!isBill) {
+    doc.setFontSize(7.5)
+    if (data.placeOfSupply) doc.text(`Place of Supply: ${data.placeOfSupply}`, margin, y)
+    doc.text(`Payment Terms: ${data.paymentTerms || 'Due on receipt'}`, pw - margin, y, { align: 'right' })
+    y += 5
+  }
+  y += 3
 
-    if (!isBill) {
+  // ── Customer Block ──
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(7.5)
+  doc.setTextColor(...midGray)
+  doc.text('Bill To', margin, y)
+  y += 5
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...dark)
+  doc.text(data.customerName, margin, y)
+  y += 6
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(...midGray)
+  const cinfo: string[] = []
+  if (data.customerPhone) cinfo.push(`Phone: ${data.customerPhone}`)
+  if (!isBill && data.customerGstin) cinfo.push(`GSTIN: ${data.customerGstin}`)
+  if (data.customerAddress) cinfo.push(data.customerAddress)
+  if (cinfo.length) {
+    doc.text(cinfo.join('  ·  '), margin, y, { maxWidth: contentW })
+    y += 5
+  }
+  y += 4
+
+  // ── Items Table ──
+  const si = (s: number) => ({ cellWidth: s, halign: 'right' as const })
+  const ci = (s: number) => ({ cellWidth: s, halign: 'center' as const })
+  const li = (s: number) => ({ cellWidth: s, halign: 'left' as const })
+
+  if (showGst) {
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']],
+      body: derivedItems.map((item, i) => [
+        String(i + 1),
+        item.name.substring(0, 22),
+        item.hsn || '—',
+        String(item.qty),
+        rs(item.price),
+        rs(item.taxable),
+        `${item.gstRate}%\n${rs(item.gstAmt)}`,
+        rs(item.lineTotal),
+      ]),
+      theme: 'plain',
+      headStyles: {
+        fillColor: dark as any,
+        textColor: [255, 255, 255],
+        fontSize: 7,
+        fontStyle: 'bold',
+      },
+      bodyStyles: { fontSize: 7, textColor: dark as any },
+      alternateRowStyles: { fillColor: lightBg as any },
+      tableLineColor: [226, 232, 240],
+      tableLineWidth: 0.3,
+      columnStyles: {
+        0: ci(8), 1: li(42), 2: ci(14),
+        3: ci(10), 4: si(18), 5: si(18),
+        6: si(20), 7: si(20),
+      },
+      margin: { left: margin, right: margin },
+    })
+  } else {
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'Item', 'Qty', 'Rate', 'Amount']],
+      body: derivedItems.map((item, i) => [
+        String(i + 1),
+        item.name.substring(0, 28),
+        String(item.qty),
+        rs(item.price),
+        rs(item.lineTotal),
+      ]),
+      theme: 'plain',
+      headStyles: {
+        fillColor: dark as any,
+        textColor: [255, 255, 255],
+        fontSize: 7,
+        fontStyle: 'bold',
+      },
+      bodyStyles: { fontSize: 7, textColor: dark as any },
+      alternateRowStyles: { fillColor: lightBg as any },
+      tableLineColor: [226, 232, 240],
+      tableLineWidth: 0.3,
+      columnStyles: {
+        0: ci(8), 1: li(68), 2: ci(12),
+        3: si(24), 4: si(30),
+      },
+      margin: { left: margin, right: margin },
+    })
+  }
+
+  // @ts-ignore
+  y = doc.lastAutoTable.finalY + 10
+
+  // ── Totals ──
+  const rx = pw - margin
+  const lx = rx - 55
+
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...midGray)
+  doc.text('Subtotal', lx, y)
+  doc.text(rs(derivedSubtotal), rx, y, { align: 'right' })
+  y += 5.5
+
+  if (showGst) {
+    const gstRate = derivedItems[0]?.gstRate
+    const label = gstRate ? `GST (${gstRate}%)` : 'GST'
+    doc.text(label, lx, y)
+    doc.text(rs(derivedTax), rx, y, { align: 'right' })
+    y += 5.5
+  } else if (derivedTax > 0) {
+    doc.text('Tax', lx, y)
+    doc.text(rs(derivedTax), rx, y, { align: 'right' })
+    y += 5.5
+  }
+
+  // Separator
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.5)
+  doc.line(lx, y, rx, y)
+  y += 7
+
+  // Grand Total
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...accent)
+  doc.text('Grand Total', lx, y)
+  doc.text(rs(derivedTotal), rx, y, { align: 'right' })
+  y += 20
+
+  // ── Amount in Words ──
+  doc.setFillColor(...lightBg)
+  doc.roundedRect(margin, y - 2, contentW, 12, 2, 2, 'F')
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'italic')
+  doc.setTextColor(...midGray)
+  doc.text(`Amount in Words: Rupees ${numberToWords(Math.round(derivedTotal))} Only`, margin + 4, y + 4)
+  y += 16
+
+  // ── Payment ──
+  if (data.upiId) {
+    // QR dominates
+    try {
+      const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${data.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(data.invoiceNumber)}`
+      const qrDataUrl = await QRCode.toDataURL(upiQrStr, {
+        width: 160, margin: 1, color: { dark: '#1e293b', light: '#ffffff' },
+      })
+      const qrSize = 34
+      const qrX = pw / 2 - qrSize / 2
+      doc.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize)
+      y += qrSize + 4
       doc.setFontSize(8)
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...gray)
-      if (data.businessGstin) {
-        doc.text(`GSTIN: ${data.businessGstin}`, margin, detailY)
-        if (data.businessPan) {
-          doc.text(`PAN: ${data.businessPan}`, margin + 70, detailY)
-        }
-      } else if (data.businessPan) {
-        doc.text(`PAN: ${data.businessPan}`, margin, detailY)
-      }
-      detailY += 5
-    }
+      doc.setTextColor(...dark)
+      doc.text('Scan to Pay', pw / 2, y, { align: 'center' })
+      y += 6
+    } catch { }
 
-    y = detailY
-  }
-
-  function drawDocumentTitle() {
-    const title = isBill ? 'BILL' : 'TAX INVOICE'
-    doc.setFontSize(14)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...green)
-    doc.text(title, pw / 2, y, { align: 'center' })
-    y += 8
-  }
-
-  function drawInvoiceMeta() {
-    const metaLeft = [
-      `${isBill ? 'Bill' : 'Invoice'} #: ${data.invoiceNumber}`,
-      `Date: ${data.date}`,
-    ]
-    const metaRight: string[] = []
-    if (!isBill && data.placeOfSupply) metaRight.push(`Place of Supply: ${data.placeOfSupply}`)
-
-    doc.setFontSize(9)
+    doc.setFontSize(7.5)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...dark)
-    doc.text(metaLeft.join(' | '), margin, y)
-    if (metaRight.length) {
-      doc.text(metaRight.join(' | '), pw - margin, y, { align: 'right' })
-    }
+    doc.setTextColor(...midGray)
+    doc.text(`UPI ID: ${data.upiId}`, margin, y)
     y += 6
   }
 
-  function drawCustomerBlock() {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(...gray)
-    doc.text('Bill To:', margin, y)
-    y += 5
-    doc.setTextColor(...dark)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.text(data.customerName, margin, y)
-    y += 5
+  if (data.bankDetails) {
+    if (data.upiId) {
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(...gray)
+      doc.text('or Bank Transfer', pw / 2, y, { align: 'center' })
+      y += 6
+    }
+    doc.setFontSize(7.5)
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    const lines: string[] = []
-    if (data.customerPhone) lines.push(`Phone: ${data.customerPhone}`)
-    if (!isBill && data.customerGstin) lines.push(`GSTIN: ${data.customerGstin}`)
-    if (data.customerAddress) lines.push(data.customerAddress)
-    if (lines.length) {
-      doc.text(lines.join(' · '), margin, y)
+    doc.setTextColor(...midGray)
+    const bLines: { l: string; v: string }[] = []
+    if (data.bankDetails.accountHolder) bLines.push({ l: 'A/c Holder', v: data.bankDetails.accountHolder })
+    if (data.bankDetails.bankName) bLines.push({ l: 'Bank', v: data.bankDetails.bankName })
+    if (data.bankDetails.accountNumber) bLines.push({ l: 'A/c No.', v: data.bankDetails.accountNumber })
+    if (data.bankDetails.ifsc) bLines.push({ l: 'IFSC', v: data.bankDetails.ifsc })
+    for (const bl of bLines) {
+      doc.text(`${bl.l}: ${bl.v}`, margin, y)
       y += 4
     }
     y += 4
   }
 
-  async function drawItemsTable() {
-    const tableColumns = showGst
-      ? ['#', 'HSN', 'Item', 'Qty', 'Rate', 'Taxable', 'CGST', 'SGST', 'Total']
-      : ['#', 'Item', 'Qty', 'Rate', 'Amount']
+  // ── Authorized Signatory ──
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...midGray)
+  doc.text('Authorized Signatory', pw - margin, y, { align: 'right' })
+  y += 3
+  doc.setDrawColor(148, 163, 184)
+  doc.setLineWidth(0.3)
+  doc.line(pw - margin - 40, y, pw - margin, y)
+  y += 12
 
-    const tableBody = data.items.map((item, i) => {
-      const lineTotal = item.price * item.qty
-      const taxable = item.gstRate ? Math.round(lineTotal * 100 / (100 + item.gstRate)) : lineTotal
-      const gstAmt = item.gstRate ? Math.round(taxable * item.gstRate / 100) : 0
-      const cgst = Math.round(gstAmt / 2)
-      const sgst = gstAmt - cgst
-      if (showGst) {
-        return [
-          String(i + 1),
-          item.hsn || '-',
-          item.name.substring(0, 20),
-          String(item.qty),
-          `₹${item.price}`,
-          `₹${taxable}`,
-          item.gstRate ? `${item.gstRate / 2}%\n₹${cgst}` : '-',
-          item.gstRate ? `${item.gstRate / 2}%\n₹${sgst}` : '-',
-          `₹${lineTotal}`,
-        ]
-      }
-      return [String(i + 1), item.name.substring(0, 28), String(item.qty), `₹${item.price}`, `₹${lineTotal}`]
-    })
+  // ── Footer ──
+  const footerY = 272
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.4)
+  doc.line(margin + 8, footerY, pw - margin - 8, footerY)
 
-    autoTable(doc, {
-      startY: y,
-      head: [tableColumns],
-      body: tableBody,
-      theme: 'grid',
-      headStyles: {
-        fillColor: green as any,
-        textColor: [255, 255, 255],
-        fontSize: 7,
-        fontStyle: 'bold',
-        halign: 'center',
-      },
-      bodyStyles: { fontSize: 7, halign: 'center' },
-      columnStyles: showGst
-        ? {
-            0: { cellWidth: 8 },
-            1: { cellWidth: 14 },
-            2: { cellWidth: 40 },
-            3: { cellWidth: 10 },
-            4: { cellWidth: 14 },
-            5: { cellWidth: 16 },
-            6: { cellWidth: 18 },
-            7: { cellWidth: 18 },
-            8: { cellWidth: 18 },
-          }
-        : {
-            0: { cellWidth: 8 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 12 },
-            3: { cellWidth: 20 },
-            4: { cellWidth: 25 },
-          },
-      margin: { left: margin, right: margin },
-    })
+  let fy = footerY + 5
 
-    // @ts-ignore
-    y = doc.lastAutoTable.finalY + 6
-  }
-
-  function drawTotals() {
-    const totalX = pw - margin - 60
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...gray)
-    doc.text('Subtotal:', totalX, y)
-    doc.text(`₹${data.subtotal.toFixed(0)}`, pw - margin, y, { align: 'right' })
-    y += 5
-
-    if (showGst) {
-      const totalCgst = Math.round(data.tax / 2)
-      const totalSgst = data.tax - totalCgst
-      doc.text('CGST:', totalX, y)
-      doc.text(`₹${totalCgst.toFixed(0)}`, pw - margin, y, { align: 'right' })
-      y += 5
-      doc.text('SGST:', totalX, y)
-      doc.text(`₹${totalSgst.toFixed(0)}`, pw - margin, y, { align: 'right' })
-      y += 5
-    } else {
-      doc.text('Tax:', totalX, y)
-      doc.text(`₹${data.tax.toFixed(0)}`, pw - margin, y, { align: 'right' })
-      y += 5
-    }
-
-    doc.setDrawColor(...lightGray)
-    doc.line(totalX, y, pw - margin, y)
-    y += 5
-
-    doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...green)
-    doc.text('Total:', totalX, y)
-    doc.text(`₹${data.total.toFixed(0)}`, pw - margin, y, { align: 'right' })
-    y += 7
-
-    doc.setFontSize(8)
+  if (data.invoiceFooter) {
     doc.setFont('helvetica', 'italic')
-    doc.setTextColor(...gray)
-    doc.text(`Rupees ${numberToWords(Math.round(data.total))} Only`, margin, y)
-    y += 8
+    doc.setFontSize(7)
+    doc.setTextColor(...midGray)
+    doc.text(data.invoiceFooter, pw / 2, fy, { align: 'center' })
+    fy += 6
   }
 
-  async function drawPaymentBlock() {
-    const hasAnyPayment = data.upiId || data.bankDetails
-    if (!hasAnyPayment) return
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.setTextColor(...dark)
-    doc.text('Payment', margin, y)
-    y += 7
-
-    const qrSize = 32
-    let qrY = y
-    if (data.upiId) {
-      try {
-        const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${data.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(data.invoiceNumber)}`
-        const qrDataUrl = await QRCode.toDataURL(upiQrStr, {
-          width: 120,
-          margin: 1,
-          color: { dark: '#1e293b', light: '#ffffff' },
-        })
-        qrY = y
-        const qrX = pw / 2 - qrSize / 2
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(7)
-        doc.setTextColor(...dark)
-        doc.text('Scan to Pay', pw / 2, y, { align: 'center' })
-        y += 4
-        qrY += 4
-        doc.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize)
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(6)
-        doc.setTextColor(...gray)
-        doc.text('UPI', pw / 2, y + qrSize + 3, { align: 'center' })
-        y += qrSize + 8
-      } catch { }
-    }
-
-    if (data.upiId) {
-      if (y > qrY + qrSize + 2) {
-        doc.setFont('helvetica', 'italic')
-        doc.setFontSize(7)
-        doc.setTextColor(...gray)
-        doc.text('— OR —', pw / 2, y, { align: 'center' })
-        y += 5
-      }
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      doc.setTextColor(...dark)
-      doc.text('UPI ID:', margin, y)
-      doc.setFont('helvetica', 'bold')
-      doc.text(data.upiId, margin + 18, y)
-      y += 5
-    }
-
-    if (data.bankDetails) {
-      if (data.upiId && y > qrY + qrSize + 2) {
-        doc.setFont('helvetica', 'italic')
-        doc.setFontSize(7)
-        doc.setTextColor(...gray)
-        doc.text('— OR —', pw / 2, y, { align: 'center' })
-        y += 5
-      }
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(8)
-      doc.setTextColor(...dark)
-      doc.text('Bank Transfer', margin, y)
-      y += 5
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      doc.setTextColor(...gray)
-      const bankLines: string[] = []
-      if (data.bankDetails.accountHolder) bankLines.push(`A/c Holder: ${data.bankDetails.accountHolder}`)
-      if (data.bankDetails.bankName) bankLines.push(`Bank: ${data.bankDetails.bankName}`)
-      if (data.bankDetails.accountNumber) bankLines.push(`A/c: ${data.bankDetails.accountNumber}`)
-      if (data.bankDetails.ifsc) bankLines.push(`IFSC: ${data.bankDetails.ifsc}`)
-      for (const line of bankLines) {
-        doc.text(line, margin, y)
-        y += 4
-      }
-    }
-
-    y += 4
-  }
-
-  function drawFooter() {
-    if (isBill) {
-      doc.setFont('helvetica', 'italic')
-      doc.setFontSize(7)
-      doc.setTextColor(...gray)
-      doc.text('This document is generated for business records and payment collection. It is not a GST Tax Invoice.', pw / 2, y, { align: 'center' })
-      y += 5
-    }
-
-    drawSeparator(0)
-
-    doc.setFont('helvetica', 'italic')
-    doc.setFontSize(6)
-    doc.setTextColor(...gray)
-    doc.text('Thank you for your business. We appreciate your trust.', margin, y)
-    y += 3
-
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(6.5)
+  doc.setTextColor(...gray)
+  doc.text(
+    isBill
+      ? 'This is a computer-generated bill for business records.'
+      : 'This is a computer-generated tax invoice.',
+    pw / 2, fy, { align: 'center' }
+  )
+  fy += 5
+  if (!data.whiteLabel) {
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6)
+    doc.setFontSize(5.5)
     doc.setTextColor(...gray)
-    if (!data.whiteLabel) {
-      doc.text(`This is a computer-generated ${isBill ? 'bill' : 'tax invoice'} from ★ BillZo  •  ${data.invoiceNumber}`, pw / 2, 285, { align: 'center' })
-    } else {
-      doc.text(`${isBill ? 'Bill' : 'Invoice'} #${data.invoiceNumber}  •  Generated on ${data.date}`, pw / 2, 285, { align: 'center' })
-    }
+    doc.text('Powered by BillZo', pw / 2, fy, { align: 'center' })
   }
-
-  // ── Assemble Document ──
-  await drawMerchantBlock()
-  drawSeparator(2)
-  drawDocumentTitle()
-  drawInvoiceMeta()
-  drawSeparator(2)
-  drawCustomerBlock()
-  await drawItemsTable()
-  drawTotals()
-  drawSeparator(4)
-  await drawPaymentBlock()
-  drawSeparator(4)
-  drawFooter()
 
   return doc
+}
+
+function formatIndianMoney(n: number): string {
+  return `Rs. ${n.toLocaleString('en-IN')}`
 }
 
 export async function printInvoicePDF(data: InvoiceData): Promise<void> {

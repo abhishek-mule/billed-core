@@ -146,7 +146,10 @@ describe('createAuthorityGateway', () => {
     const nonce = crypto.randomUUID()
     const payload: Record<string, unknown> = { ...body, timestamp, nonce }
     const rawBody = JSON.stringify(payload)
-    const signature = crypto.createHmac('sha256', secret).update('POST/api/v1/authority/evaluate' + timestamp + nonce + rawBody).digest('hex')
+    const signature = crypto
+      .createHmac('sha256', secret)
+      .update(['POST', '/api/v1/authority/evaluate', timestamp, nonce, rawBody].join('\n'))
+      .digest('hex')
     payload.signature = signature
     return { body: JSON.stringify(payload), signature }
   }

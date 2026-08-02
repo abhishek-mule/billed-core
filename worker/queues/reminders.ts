@@ -972,7 +972,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
     }).format(new Date()),
     10,
   )
-  const outsideBusinessHours = hour < 9 || hour >= 20
+  const outsideBusinessHours = hour < 9 || hour >= 22
   if (outsideBusinessHours) {
     logger.info({ hour, tz, pendingActions: dueActions.length }, 'Outside business hours — deferring scheduled actions')
     return 0

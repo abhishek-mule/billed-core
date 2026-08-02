@@ -14,6 +14,7 @@ import {
   PartyPopper,
 } from "lucide-react"
 import { trackEvent, events } from "@/lib/billzo/analytics"
+import { BackLink } from "@/components/billzo/PageShell"
 
 type ReadinessAction = {
   kind: "add_customer" | "create_invoice" | "connect_whatsapp" | "send_reminder" | "healthy"
@@ -122,6 +123,7 @@ export default function RecoveryReadinessPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-10">
+      <div className="mb-4"><BackLink href="/recovery" label="Recovery" /></div>
       <div className="text-center mb-8">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
           <PartyPopper className="h-6 w-6" />

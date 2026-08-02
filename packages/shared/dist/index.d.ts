@@ -1,5 +1,6 @@
 export * from './types';
-export type { MetaConfig } from './services/meta/types';
+export type { MetaConfig, SendMessageRequest, SendMessageResponse } from './services/meta/types';
+export { createMetaClient } from './services/meta/client';
 export * from './spine';
 export * from './recovery-case';
 export * from './events';
@@ -17,6 +18,7 @@ export * from './work-engine/index';
 export * from './repositories/index';
 export * from './work-store/index';
 export * from './transports/index';
+export * from './transport/index';
 export * from './system/index';
 export * from './scenarios/index';
 export * from './recovery/index';

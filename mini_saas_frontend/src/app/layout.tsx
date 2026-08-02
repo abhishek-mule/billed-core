@@ -14,21 +14,30 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Billzo | Money Recovery Console',
   description: 'Automate your daily cash recovery.',
-  manifest: '/manifest.json?v=3',
+  manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/icon0.svg', type: 'image/svg+xml' },
+      { url: '/icon1.png', type: 'image/png' },
+    ],
+    apple: '/apple-icon.png',
+  },
+  other: {
+    'apple-mobile-web-app-title': 'BillZo',
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: '#0d9488',
   width: 'device-width',
   initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="apple-touch-icon" href="/icon.svg" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

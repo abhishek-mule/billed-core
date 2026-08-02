@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
   Bell, Search, Home, Plus, Receipt, TrendingUp, Activity,
@@ -10,9 +10,11 @@ import {
 } from 'lucide-react'
 import { ProfileMenu } from './ProfileMenu'
 import { Button } from './Button'
+import { BrandAvatar } from './Avatar'
+import { db } from '@/lib/billzo/db'
 import { cn } from '@/lib/utils'
-import { getDiceBearAvatarUrl } from './Avatar'
 import '@/styles/app-shell.css'
+import { resolveQuickNav } from '@/lib/billzo/app-shell-search'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
 
@@ -54,16 +56,8 @@ function doLogout() {
   ;['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id'].forEach(
     k => (document.cookie = `${k}=; Max-Age=0; path=/`)
   )
-  ;['accessToken', 'refreshToken', 'tokenExpiry'].forEach(k => localStorage.removeItem(k))
+  ;['accessToken', 'refreshToken', 'tokenExpiry', 'tenantLogo'].forEach(k => localStorage.removeItem(k))
   window.location.href = '/auth'
-}
-
-function initials(name?: string) {
-  if (!name) return 'BZ'
-  const parts = name.trim().split(/\s+/)
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : name.slice(0, 2).toUpperCase()
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
@@ -99,14 +93,13 @@ function NavSection({
 }
 
 function Sidebar({
-  pathname, onLogout, userName,
+  pathname, onLogout, userName, logo,
 }: {
   pathname: string
   onLogout: () => void
   userName?: string
+  logo?: string | null
 }) {
-  const ini = initials(userName)
-
   return (
     <aside className="bz-sidebar">
       <div className="bz-sidebar-header">
@@ -124,7 +117,7 @@ function Sidebar({
 
       <div className="bz-sidebar-footer">
         <button className="bz-user-row" onClick={onLogout} title="Sign out">
-          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
+          <BrandAvatar name={userName || 'My Shop'} logo={logo} className="w-8 h-8" size={32} />
           <div className="bz-user-info">
             <span className="bz-user-name">{userName || 'My Shop'}</span>
           </div>
@@ -138,13 +131,37 @@ function Sidebar({
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function TopBar({
-  title, onMobileMenu, onLogout, userName,
+  title, onMobileMenu, onLogout, userName, logo,
 }: {
   title?: string
   onMobileMenu: () => void
   onLogout: () => void
   userName?: string
+  logo?: string | null
 }) {
+  const [query, setQuery] = useState('')
+  const [hint, setHint] = useState<string | null>(null)
+  const router = useRouter()
+
+  const handleSearch = (value: string) => {
+    setQuery(value)
+    const target = resolveQuickNav(value)
+    if (!target) {
+      setHint(value.trim() ? 'Try terms like invoice, customer, recovery, or settings' : null)
+      return
+    }
+    setHint(`Jump to ${target}`)
+  }
+
+  const goToSearch = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    const target = resolveQuickNav(query)
+    if (target) {
+      router.push(target)
+      setHint(null)
+    }
+  }
+
   return (
     <header className="bz-topbar">
       <div className="bz-topbar-left">
@@ -155,19 +172,27 @@ function TopBar({
       </div>
 
       <div className="bz-topbar-right">
-        <label className="bz-search" aria-label="Search">
+        <div className="bz-search" aria-label="Quick navigation">
           <Search size={13} className="bz-search-icon" aria-hidden="true" />
-          <input className="bz-search-input" placeholder="Search…" aria-label="Search invoices, parties, products" />
-          <kbd className="bz-search-kbd" aria-hidden="true">⌘K</kbd>
-        </label>
+          <input
+            className="bz-search-input"
+            placeholder="Search…"
+            aria-label="Search invoices, parties, products"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            onKeyDown={goToSearch}
+          />
+          <kbd className="bz-search-kbd" aria-hidden="true">↵</kbd>
+          {hint && <span className="bz-search-hint">{hint}</span>}
+        </div>
 
         <Link href="/pulse" className="bz-icon-btn" aria-label="Notifications">
           <Bell size={16} />
         </Link>
 
         <button className="bz-org-btn" onClick={onLogout} aria-label="Sign out">
-          <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-7 h-7 rounded-full shrink-0 bg-muted/20" />
-          <span className="bz-org-name hidden sm:block">{userName || 'BillZo'}</span>
+          <BrandAvatar name={userName || 'My Shop'} logo={logo} className="w-7 h-7" size={28} />
+          <span className="bz-org-name hidden sm:block">{userName || 'My Shop'}</span>
           <ChevronDown size={12} className="bz-chevron hidden sm:block" aria-hidden="true" />
         </button>
       </div>
@@ -178,13 +203,14 @@ function TopBar({
 // ─── Mobile drawer ────────────────────────────────────────────────────────────
 
 function MobileDrawer({
-  open, onClose, onLogout, pathname, userName,
+  open, onClose, onLogout, pathname, userName, logo,
 }: {
   open: boolean
   onClose: () => void
   onLogout: () => void
   pathname: string
   userName?: string
+  logo?: string | null
 }) {
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
@@ -192,7 +218,6 @@ function MobileDrawer({
   }, [open])
 
   const allNav = [...NAV_WORKSPACE, ...NAV_MANAGE, ...NAV_SYSTEM]
-  const ini = initials(userName)
 
   return (
     <>
@@ -230,7 +255,7 @@ function MobileDrawer({
 
         <div className="bz-drawer-footer">
           <button className="bz-user-row" onClick={onLogout} style={{ width: '100%', textAlign: 'left' }}>
-            <img src={getDiceBearAvatarUrl(userName || 'BillZo')} alt="" className="w-8 h-8 rounded-full shrink-0 bg-muted/20" />
+            <BrandAvatar name={userName || 'My Shop'} logo={logo} className="w-8 h-8" size={32} />
             <div className="bz-user-info">
               <span className="bz-user-name">{userName || 'My Shop'}</span>
             </div>
@@ -286,6 +311,7 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
   const [isOnline, setIsOnline]       = useState(true)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [userName, setUserName]       = useState<string>()
+  const [tenantLogo, setTenantLogo]   = useState<string | null>(null)
 
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
@@ -299,6 +325,18 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
 
     const name = getCookie('bz_tenant_name')
     setUserName(name ? decodeURIComponent(name) : undefined)
+
+    const tid = getCookie('bz_tenant')
+    if (tid) {
+      const cached = typeof window !== 'undefined' ? window.localStorage.getItem('tenantLogo') : null
+      if (cached) setTenantLogo(cached)
+      db().tenants.get(tid).then(t => {
+        if (t?.logo) {
+          setTenantLogo(t.logo)
+          window.localStorage.setItem('tenantLogo', t.logo)
+        }
+      }).catch(() => {})
+    }
 
     return () => {
       window.removeEventListener('online', goOnline)
@@ -336,11 +374,11 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
   return (
     <>
       <div className="bz-shell">
-        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} userName={userName} />
-        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} />
+        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} />
+        <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} logo={tenantLogo} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">

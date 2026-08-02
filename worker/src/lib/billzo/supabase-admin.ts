@@ -8,12 +8,14 @@ function getSupabaseAdmin(): SupabaseClient {
   if (_supabaseAdmin) return _supabaseAdmin
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[supabase-admin] SUPABASE_SERVICE_ROLE_KEY is required')
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required')
+  }
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!supabaseUrl || !supabaseKey) {
-    console.warn('[supabase-admin] SUPABASE_URL or SERVICE_ROLE_KEY not set — supabase client unavailable')
+  if (!supabaseUrl) {
+    console.error('[supabase-admin] NEXT_PUBLIC_SUPABASE_URL is required')
     throw new Error('Supabase client not configured')
   }
 

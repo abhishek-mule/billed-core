@@ -43,7 +43,7 @@ export default function TodaysPriority({
         </div>
         <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
           <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-3" />
-          <p className="font-semibold text-green-700 text-lg tracking-tight">🎉 You're all caught up</p>
+          <p className="font-semibold text-green-700 text-lg tracking-tight">You're all caught up</p>
           <p className="text-xs text-green-600 mt-1">
             No customers need follow-up today. Keep sending invoices and BillZo will monitor payments automatically.
           </p>

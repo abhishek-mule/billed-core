@@ -7,19 +7,21 @@ export async function logRecoveryActivity({
   type,
   actor,
   customerId,
+  caseId,
   metadata,
 }: {
   invoiceId: string
   type: RecoveryActivityType
   actor: 'merchant' | 'customer' | 'system'
   customerId?: string
+  caseId?: string
   metadata?: Record<string, unknown>
 }) {
   try {
     const res = await fetch('/api/recovery/activities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId, type, actor, customerId, metadata }),
+      body: JSON.stringify({ invoiceId, type, actor, customerId, caseId, metadata }),
     })
     if (!res.ok) {
       console.error('[RecoveryActivity] Failed:', type, invoiceId, res.status, await res.text())

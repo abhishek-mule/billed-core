@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
   }
 
   return new Response(
-    `Verification failed. mode=${mode} token=${token} challenge=${challenge} expected_token=${VERIFY_TOKEN}`,
+    `Verification failed. mode=${mode} token=${token}`,
     { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
   )
 }
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
     }
 
     return new Response(
-      `Verification failed (POST form). mode=${mode} token=${token} challenge=${challenge} expected_token=${VERIFY_TOKEN}`,
+      `Verification failed (POST form). mode=${mode}`,
       { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
     )
   }

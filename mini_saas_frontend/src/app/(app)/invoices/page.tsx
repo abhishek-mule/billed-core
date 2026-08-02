@@ -15,6 +15,7 @@ import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
 import type { Invoice } from "@/lib/billzo/types"
 import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/recovery-risk"
+import { getErrorMessage } from "@/lib/billzo/ui-errors"
 
 // ── helpers ──
 function daysSince(s: string): number {
@@ -75,9 +76,10 @@ export default function InvoicesPage() {
   // ── server-side sales data for fallback ──
   const [serverTodaySales, setServerTodaySales] = useState(0)
   useEffect(() => {
-    fetch("/api/recovery/queue")
-      .then(r => r.json())
-      .then(data => {
+    fetch("/api/recovery/queue", { credentials: "include" })
+      .then(async r => {
+        if (!r.ok) return
+        const data = await r.json()
         if (data?.summary?.todaySales !== undefined) {
           setServerTodaySales(data.summary.todaySales)
         }
@@ -94,7 +96,7 @@ export default function InvoicesPage() {
       const data = await db().invoices.where("tenantId").equals(tenantId).reverse().sortBy("createdAt")
       setInvoices(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load invoices")
+      setError(getErrorMessage(err, "Failed to load invoices"))
       setInvoices([])
     } finally {
       setLoading(false)
@@ -146,8 +148,9 @@ export default function InvoicesPage() {
   )
 
   // ── export (moved to secondary actions) ──
-  const exportExcel = () => {
-    import("xlsx").then(XLSX => {
+  const exportExcel = async () => {
+    try {
+      const XLSX = await import("xlsx")
       const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
         ID: i.invoiceNumber || i.id.slice(0, 8),
         Date: new Date(i.createdAt).toLocaleDateString(),
@@ -159,29 +162,33 @@ export default function InvoicesPage() {
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "Invoices")
       XLSX.writeFile(wb, "Invoices_Export.xlsx")
-    })
+    } catch (err) {
+      setError(getErrorMessage(err, "Export failed"))
+    }
     setActionsOpen(false)
   }
 
-  const exportPDF = () => {
-    import("jspdf").then(({ default: JSPDF }) => {
-      import("jspdf-autotable").then(({ default: autoTable }) => {
-        const doc = new JSPDF()
-        doc.text("Invoices Report", 14, 15)
-        autoTable(doc, {
-          startY: 20,
-          head: [["ID", "Date", "Customer", "Amount", "Status"]],
-          body: filtered.map(i => [
-            i.invoiceNumber || i.id.slice(0, 8),
-            new Date(i.createdAt).toLocaleDateString(),
-            i.customerName,
-            formatINR(i.total),
-            i.status,
-          ]),
-        })
-        doc.save("Invoices_Export.pdf")
+  const exportPDF = async () => {
+    try {
+      const { default: JSPDF } = await import("jspdf")
+      const { default: autoTable } = await import("jspdf-autotable")
+      const doc = new JSPDF()
+      doc.text("Invoices Report", 14, 15)
+      autoTable(doc, {
+        startY: 20,
+        head: [["ID", "Date", "Customer", "Amount", "Status"]],
+        body: filtered.map(i => [
+          i.invoiceNumber || i.id.slice(0, 8),
+          new Date(i.createdAt).toLocaleDateString(),
+          i.customerName,
+          formatINR(i.total),
+          i.status,
+        ]),
       })
-    })
+      doc.save("Invoices_Export.pdf")
+    } catch (err) {
+      setError(getErrorMessage(err, "Export failed"))
+    }
     setActionsOpen(false)
   }
 
@@ -456,7 +463,7 @@ export default function InvoicesPage() {
            ═══════════════════════════ */}
         <Link
           href="/pos"
-          className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          className="fixed bottom-24 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Create invoice"
         >
           <Plus className="h-6 w-6" />

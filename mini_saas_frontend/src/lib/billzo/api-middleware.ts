@@ -10,10 +10,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getAuthPayloadFromRequest } from './auth-jwt'
+import { buildTenantContext, resolveTenantForUser, type TenantContext } from './tenant-context'
 
 export interface VerifiedRequest extends NextRequest {
   tenantId: string
   userId: string
+}
+
+export interface VerifyResult {
+  tenantId?: string
+  userId?: string
+  context?: TenantContext
+  response?: NextResponse
 }
 
 export interface FieldRule {
@@ -30,14 +38,17 @@ export interface ValidationSchema {
 }
 
 /**
- * Verify that the request has valid auth tokens and tenant
- * Returns the verified tenant/user IDs or a 401 response
+ * Verify that the request has valid auth tokens and tenant.
+ * Returns the verified tenant/user IDs — and, when `resolveContext` is set,
+ * a fully-resolved TenantContext (membership + entitlement).
+ *
+ * JWT verification is the fast path and never touches the DB; the context
+ * lookup (2 queries) is opt-in so only routes that need plan/features pay for it.
  */
-export async function verifyRequest(request: NextRequest): Promise<{
-  tenantId?: string
-  userId?: string
-  response?: NextResponse
-}> {
+export async function verifyRequest(
+  request: NextRequest,
+  options?: { resolveContext?: boolean },
+): Promise<VerifyResult> {
   try {
     // Verify JWT from the httpOnly access token cookie
     const payload = getAuthPayloadFromRequest(request)
@@ -61,7 +72,18 @@ export async function verifyRequest(request: NextRequest): Promise<{
       }
     }
 
-    return { tenantId: payload.tenantId || cookieTenantId || undefined, userId: payload.userId }
+    const tenantId = payload.tenantId || cookieTenantId || undefined
+    const userId = payload.userId
+
+    // Resolve full TenantContext only when the route asks for it.
+    if (options?.resolveContext && tenantId && userId) {
+      const membership = await resolveTenantForUser(userId)
+      const effectiveTenantId = membership.tenantId || tenantId
+      const context = await buildTenantContext(userId, effectiveTenantId, membership)
+      return { tenantId: context.tenantId, userId, context }
+    }
+
+    return { tenantId, userId }
   } catch (error) {
     return {
       response: NextResponse.json(

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2, Package, Phone } from "lucide-react";
+import { Search, Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, User, Printer, Loader2, Package, Phone, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import { getTenantId } from "@/lib/billzo/tenant";
@@ -121,7 +121,7 @@ export default function POSPage() {
     });
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(20);
     toast.success(`${p.name} added to cart`, {
-      icon: "🛒",
+      icon: <ShoppingCart size={16} />,
       duration: 1500,
     });
   };
@@ -244,7 +244,7 @@ export default function POSPage() {
           </Button>
         </div>
       )}
-      <div className="grid lg:grid-cols-[1fr_400px] gap-6">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] gap-6">
         <div>
           <div className="relative flex gap-2">
             <div className="relative flex-1">
@@ -327,7 +327,7 @@ export default function POSPage() {
       </div>
 
       {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-20 left-0 right-0 z-30 px-4 animate-in slide-in-from-bottom">
+        <div className="lg:hidden fixed bottom-[88px] left-0 right-0 z-40 px-4 animate-in slide-in-from-bottom">
           <button
             onClick={() => setShowCart(true)}
             className="w-full rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground p-4 shadow-lg flex items-center justify-between"
@@ -460,7 +460,7 @@ export default function POSPage() {
               >
                 <div>
                   <div className="font-medium text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">{p.whatsapp_number || p.phone || "No phone"}{p.whatsapp_number ? " 📱" : ""}</div>
+                  <div className="text-xs text-muted-foreground">{p.whatsapp_number || p.phone || "No phone"}</div>
                 </div>
                 {p.pending > 0 && (
                   <span className="text-xs font-semibold text-warning">{formatINR(p.pending)} due</span>

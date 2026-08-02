@@ -1,5 +1,5 @@
 import type { MetaConfig } from '@billzo/shared'
-import { MetaAdapter } from '../src/lib/transport/adapters/meta-adapter'
+import { MetaAdapter } from '@billzo/shared'
 
 // ── Pilot bootstrap (Scenario A) ──
 // BillZo owns a single Meta WABA used for every merchant's reminders. Meta is

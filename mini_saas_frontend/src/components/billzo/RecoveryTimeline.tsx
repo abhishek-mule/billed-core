@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Send, Eye, Bell, Phone, HeartHandshake, CheckCircle2, XCircle, FileText, Plus, CreditCard, ExternalLink, Clock } from "lucide-react"
+import { Loader2, Send, Eye, Bell, Phone, HeartHandshake, CheckCircle2, XCircle, FileText, Plus, CreditCard, ExternalLink, Clock, AlertTriangle } from "lucide-react"
 import type { RecoveryActivity, RecoveryActivityType } from "@/lib/billzo/types"
 
 interface TimelineProps {
@@ -13,7 +13,11 @@ const ACTIVITY_ICONS: Record<RecoveryActivityType, any> = {
   invoice_sent: Send,
   customer_viewed: Eye,
   payment_link_opened: ExternalLink,
+  reminder_scheduled: Clock,
   reminder_sent: Bell,
+  reminder_delivered: CheckCircle2,
+  reminder_read: Eye,
+  reminder_failed: XCircle,
   merchant_called: Phone,
   call_outcome: Phone,
   promise_received: HeartHandshake,
@@ -22,7 +26,12 @@ const ACTIVITY_ICONS: Record<RecoveryActivityType, any> = {
   payment_received: CreditCard,
   customer_payment_reported: CreditCard,
   payment_confirmed: CheckCircle2,
+  payment_failed: XCircle,
   note_added: Plus,
+  case_opened: FileText,
+  case_closed: CheckCircle2,
+  escalated: AlertTriangle,
+  disputed: AlertTriangle,
 }
 
 function storyLine(activity: RecoveryActivity): string {

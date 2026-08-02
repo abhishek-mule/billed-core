@@ -2,6 +2,8 @@
 
 import { cn } from '@/lib/utils'
 import { ReactNode } from 'react'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
 interface PageShellProps {
   children: ReactNode
@@ -49,20 +51,31 @@ export function PageShellHeader({
   title,
   subtitle,
   action,
+  back,
   className,
 }: {
   title: string
   subtitle?: string
   action?: ReactNode
+  back?: ReactNode
   className?: string
 }) {
   return (
     <header className={cn('mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3', className)}>
       <div>
+        {back && <div className="mb-2">{back}</div>}
         <h1 className="text-xl font-bold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       {action && <div className="mt-3 sm:mt-0">{action}</div>}
     </header>
+  )
+}
+
+export function BackLink({ href, label }: { href: string; label?: string }) {
+  return (
+    <Link href={href} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="w-4 h-4" /> {label}
+    </Link>
   )
 }

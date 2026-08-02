@@ -125,8 +125,6 @@ function planColor(action: string) {
   }
 }
 
-import { loadQueueCases } from '@/lib/billzo/repositories/recovery'
-
 export default function RecoveryCenterPage() {
   const [data, setData] = useState<CenterData | null>(null)
   const [name, setName] = useState<string | null>(null)
@@ -137,54 +135,15 @@ export default function RecoveryCenterPage() {
     let active = true
     ;(async () => {
       try {
-        const [center, me] = await Promise.all([
-          fetch('/api/recovery/center', { credentials: 'include' }),
+        const [queueRes, me] = await Promise.all([
+          fetch('/api/recovery/queue-projection', { credentials: 'include' }),
           fetch('/api/me', { credentials: 'include' }),
         ])
-        let json: CenterData | null = null
-        if (center.ok) {
-          json = await center.json()
-        }
-        if (!json || json.needsAction?.length === 0) {
-          const localCases = await loadQueueCases()
-          if (localCases.length > 0) {
-            const fallbackActions = localCases.map((c: any) => {
-              const out = c.totalOverdue || 0
-              const confidence = 50
-              return {
-                caseId: c.caseId,
-                customerId: c.customerId,
-                customerName: c.customerName,
-                phone: c.phone || '',
-                tier: 'standard',
-                outstanding: out,
-                recoverableAmount: Math.round(out * confidence / 100),
-                recoveryConfidence: confidence,
-                overdue: c.oldestOverdueDays,
-                state: c.oldestOverdueDays > 0 ? 'overdue' : 'active',
-                promiseDate: c.promiseToPayDate,
-                promiseBrokenDays: null,
-                recommendedAction: c.nextActionType || 'send_reminder',
-                reminderCount: c.ignoredReminders || 0,
-                brokenPromises: c.brokenPromises || 0,
-              }
-            })
-            const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
-            json = {
-              generatedAt: new Date().toISOString(),
-              needsAction: fallbackActions,
-              scheduledToday: json?.scheduledToday || [],
-              counts: json?.counts || { reminders: 0, promiseFollowups: 0, calls: 0 },
-              underFollowUp: totalFollowUp,
-              recentlyRecovered: json?.recentlyRecovered || [],
-              timeline: json?.timeline || [],
-            }
-          }
-        }
-        if (json && active) {
-          setData(json)
-        } else if (!json && active) {
-          setError('Could not load Recovery Center')
+        if (queueRes.ok) {
+          const json = await queueRes.json()
+          if (active) setData(json)
+        } else if (active) {
+          setError('Could not load queue')
         }
         if (me.ok) {
           const m = await me.json()
@@ -204,42 +163,11 @@ export default function RecoveryCenterPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/recovery/center', { credentials: 'include' })
-      let json = res.ok ? await res.json() : null
-      if (!json || json.needsAction?.length === 0) {
-        const localCases = await loadQueueCases()
-        if (localCases.length > 0) {
-          const fallbackActions = localCases.map((c: any) => ({
-            caseId: c.caseId,
-            customerId: c.customerId,
-            customerName: c.customerName,
-            phone: c.phone || '',
-            tier: 'standard',
-            outstanding: c.totalOverdue,
-            overdue: c.oldestOverdueDays,
-            state: c.oldestOverdueDays > 0 ? 'overdue' : 'active',
-            promiseDate: c.promiseToPayDate,
-            promiseBrokenDays: null,
-            recommendedAction: c.nextActionType || 'send_reminder',
-            reminderCount: c.ignoredReminders || 0,
-            brokenPromises: c.brokenPromises || 0,
-          }))
-          const totalFollowUp = fallbackActions.reduce((s, i) => s + i.outstanding, 0)
-          json = {
-            generatedAt: new Date().toISOString(),
-            needsAction: fallbackActions,
-            scheduledToday: json?.scheduledToday || [],
-            counts: json?.counts || { reminders: 0, promiseFollowups: 0, calls: 0 },
-            underFollowUp: totalFollowUp,
-            recentlyRecovered: json?.recentlyRecovered || [],
-            timeline: json?.timeline || [],
-          }
-        }
-      }
-      if (json) {
-        setData(json)
+      const res = await fetch('/api/recovery/queue-projection', { credentials: 'include' })
+      if (res.ok) {
+        setData(await res.json())
       } else {
-        setError('Could not load Recovery Center')
+        setError('Could not load queue')
       }
     } catch {
       setError('Network error')

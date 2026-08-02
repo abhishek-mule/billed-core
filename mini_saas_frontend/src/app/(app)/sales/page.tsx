@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { BackLink } from "@/components/billzo/PageShell"
 import {
   CreditCard,
   FileText,
@@ -42,6 +43,7 @@ const SALES_ACTIONS = [
 export default function SalesPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-5 pb-24">
+      <BackLink href="/" label="Home" />
       <header>
         <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
         <p className="text-sm text-muted-foreground mt-1">What have you sold?</p>

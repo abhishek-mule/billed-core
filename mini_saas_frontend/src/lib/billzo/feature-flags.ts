@@ -32,7 +32,7 @@ const PAID_STATES: SubscriptionState[] = ['trialing', 'active', 'past_due']
 export async function getEntitlement(tenantId: string): Promise<TenantEntitlement | null> {
   const { data: tenant } = await supabaseAdmin
     .from('tenants')
-    .select('plan, plan_version, subscription_state, subscription_status')
+    .select('plan, plan_version, subscription_state')
     .eq('id', tenantId)
     .single()
 

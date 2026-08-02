@@ -104,6 +104,18 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
       .update(updates)
       .eq('id', action.id)
 
+    // 6b. The collection_action is now complete — clear the derived
+    //     next_recovery_at convenience field so it can't disagree with the
+    //     completed action. The scheduler only reads collection_actions.
+    await supabaseAdmin
+      .from('invoices')
+      .update({
+        next_recovery_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', action.invoice_ids)
+      .eq('tenant_id', action.tenant_id)
+
     // 7. EMIT REMINDER SENT EVENT
     await writeOutboxEvent({
       type: 'recovery.reminder.sent',
@@ -189,8 +201,8 @@ async function loadAction(actionId: string): Promise<ActionRow | null> {
 }
 
 async function validateAction(action: ActionRow): Promise<string | 'ok'> {
-  // Already completed or cancelled
-  if (action.status !== 'scheduled') {
+  // Already completed, cancelled, or failed
+  if (action.status !== 'scheduled' && action.status !== 'processing' && action.status !== 'in_progress') {
     return `action_status_${action.status}`
   }
 

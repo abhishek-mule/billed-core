@@ -164,14 +164,14 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       supabase
         .from('recovery_cases')
-        .select(`*, customers(id, customer_name, phone, customer_tier)`)
+        .select(`*, customers(id, customer_name, phone, customer_tier, last_whatsapp_status, last_whatsapp_activity)`)
         .eq('tenant_id', tenantId)
         .gt('total_outstanding', 0)
         .order('attention_score', { ascending: false })
         .limit(500),
       supabase
         .from('invoices')
-        .select('*, customers(id, customer_name, phone, customer_tier)')
+        .select('*, customers(id, customer_name, phone, customer_tier, last_whatsapp_status, last_whatsapp_activity)')
         .eq('tenant_id', tenantId)
         .gt('outstanding_amount', 0)
         .order('created_at', { ascending: false }),
@@ -391,6 +391,18 @@ export async function GET(request: NextRequest) {
       pc.totalOverdue = out
     }
 
+    // Delivery status per customer (from the joined customers.row), used
+    // to render a WhatsApp delivery chip on each queue card.
+    const deliveryMap = new Map<string, { status: string | null; activity: string | null }>()
+    for (const c of allCases) {
+      const cust = c.customers as any
+      if (!cust?.id) continue
+      deliveryMap.set(cust.id, {
+        status: cust.last_whatsapp_status || null,
+        activity: cust.last_whatsapp_activity || null,
+      })
+    }
+
     // ── Summary ──
     const outstanding = allCases.reduce(
       (s: number, c: any) => s + (parseFloat(c.total_outstanding) || 0), 0
@@ -502,6 +514,8 @@ export async function GET(request: NextRequest) {
           brokenPromises: pc.brokenPromises,
           openInvoiceCount: pc.openInvoiceCount,
           automationMode: pc.automationMode,
+          lastDeliveryStatus: deliveryMap.get(pc.customerId)?.status ?? null,
+          lastDeliveryActivity: deliveryMap.get(pc.customerId)?.activity ?? null,
         })),
       },
     })

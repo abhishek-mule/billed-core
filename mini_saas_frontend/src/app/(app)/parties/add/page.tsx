@@ -9,6 +9,7 @@ import { normalizePhone, isValidPhone } from '@/lib/billzo/useContactImport'
 import { db, notifyChanged } from '@/lib/billzo/db'
 import { scheduleBackgroundSync } from '@/lib/billzo/sync'
 import { getCookie } from '@/lib/cookies'
+import { getErrorMessage } from '@/lib/billzo/ui-errors'
 
 interface FormData {
   name: string
@@ -128,8 +129,8 @@ export default function AddCustomerPage() {
       setSuccess(true)
       toast.success('Customer created')
       router.push('/parties')
-    } catch (err: any) {
-      setApiError(err.message)
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Failed to create customer'))
     } finally {
       setSubmitting(false)
     }

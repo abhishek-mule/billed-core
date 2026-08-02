@@ -41,6 +41,13 @@ export type BankDetails = {
   accountHolder?: string
 }
 
+export type BusinessHours = {
+  enabled: boolean
+  days: string[]
+  start: string
+  end: string
+}
+
 // ── New identity model (053) ──────────────────────────────────────────
 export type User = {
   id: string
@@ -98,6 +105,12 @@ export type Tenant = {
   whiteLabel: boolean
   autoMode: boolean
   plan: 'starter' | 'growth' | 'pro'
+  invoicePrefix?: string
+  invoiceFooter?: string
+  paymentTerms?: string
+  whatsappBusinessNumber?: string
+  brandColor?: string
+  businessHours?: BusinessHours
   paywallUnlocked: boolean
   invoiceCount: number
   reminderCount: number
@@ -195,7 +208,11 @@ export type RecoveryActivityType =
   | 'invoice_sent'
   | 'customer_viewed'
   | 'payment_link_opened'
+  | 'reminder_scheduled'
   | 'reminder_sent'
+  | 'reminder_delivered'
+  | 'reminder_read'
+  | 'reminder_failed'
   | 'merchant_called'
   | 'call_outcome'
   | 'promise_received'
@@ -204,15 +221,22 @@ export type RecoveryActivityType =
   | 'payment_received'
   | 'customer_payment_reported'
   | 'payment_confirmed'
+  | 'payment_failed'
   | 'note_added'
+  | 'case_opened'
+  | 'case_closed'
+  | 'escalated'
+  | 'disputed'
 
 export type RecoveryActivity = {
   id: string
   tenantId: string
+  caseId?: string
   invoiceId: string
   customerId?: string
   type: RecoveryActivityType
   actor: 'merchant' | 'customer' | 'system'
+  actorId?: string
   metadata?: Record<string, unknown>
   createdAt: string
 }

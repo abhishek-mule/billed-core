@@ -22,6 +22,7 @@ __exportStar(require("./providers/interface"), exports);
 __exportStar(require("./timeline-types"), exports);
 __exportStar(require("./timeline-builder"), exports);
 __exportStar(require("./normalized-event"), exports);
+__exportStar(require("./case-projection"), exports);
 __exportStar(require("./histograms"), exports);
 __exportStar(require("./confidence"), exports);
 __exportStar(require("./behavior-profile"), exports);

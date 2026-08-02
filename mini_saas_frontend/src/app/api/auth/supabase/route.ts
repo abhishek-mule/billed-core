@@ -7,6 +7,7 @@ import {
   setAuthCookies,
 } from '@/lib/billzo/auth-jwt'
 import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
+import { resolveTenantForUser } from '@/lib/billzo/tenant-context'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAuthKey =
@@ -55,6 +56,9 @@ export async function POST(request: NextRequest) {
       const userId = data.user.id
       const userEmail = data.user.email || undefined
 
+      // Resolve tenant from tenant_memberships (authoritative) first.
+      const resolved = await resolveTenantForUser(userId)
+
       // Redis lookup (non-critical)
       let existingTenantId: string | undefined
       let isPaid = false
@@ -67,12 +71,14 @@ export async function POST(request: NextRequest) {
         console.warn('[Auth/Supabase] Redis lookup failed, proceeding without cached session')
       }
 
+      const effectiveTenantId = resolved.tenantId || existingTenantId
+
       // Redis session storage (non-critical)
       let sessionId: string
       try {
         sessionId = await upsertSession(userId, {
           email: userEmail,
-          tenantId: existingTenantId,
+          tenantId: effectiveTenantId,
           isPaid,
         })
       } catch {
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
         billzoAccessToken = createAccessToken({
           sessionId,
           userId,
-          tenantId: existingTenantId,
+          tenantId: effectiveTenantId,
           email: userEmail,
         })
         billzoRefreshToken = createRefreshToken({ sessionId, userId })
@@ -98,12 +104,12 @@ export async function POST(request: NextRequest) {
       const response = NextResponse.json({
         success: true,
         userId,
-        tenantId: existingTenantId,
+        tenantId: effectiveTenantId,
         email: userEmail,
-        redirectTo: '/auth/resolve',
+        redirectTo: effectiveTenantId ? '/dashboard' : '/auth/resolve',
       })
 
-      setAuthCookies(response, billzoAccessToken, billzoRefreshToken, existingTenantId)
+      setAuthCookies(response, billzoAccessToken, billzoRefreshToken, effectiveTenantId)
       response.cookies.set('bz_user_id', userId, {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
@@ -129,6 +135,9 @@ export async function POST(request: NextRequest) {
 
     const userId = sbSession.user.id
 
+    // Resolve tenant from tenant_memberships (authoritative) first.
+    const resolved = await resolveTenantForUser(userId)
+
     // Redis lookup (non-critical)
     let existingTenantId: string | undefined
     let isPaid = false
@@ -141,12 +150,14 @@ export async function POST(request: NextRequest) {
       console.warn('[Auth/Supabase] Redis lookup failed, proceeding without cached session')
     }
 
+    const effectiveTenantId = resolved.tenantId || existingTenantId
+
     // Redis session storage (non-critical)
     let sessionId: string
     try {
       sessionId = await upsertSession(userId, {
         email,
-        tenantId: existingTenantId,
+        tenantId: effectiveTenantId,
         isPaid,
       })
     } catch {
@@ -160,7 +171,7 @@ export async function POST(request: NextRequest) {
       accessToken = createAccessToken({
         sessionId,
         userId,
-        tenantId: existingTenantId ?? undefined,
+        tenantId: effectiveTenantId ?? undefined,
         email,
       })
       refreshToken = createRefreshToken({ sessionId, userId })
@@ -172,11 +183,11 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       userId,
-      tenantId: existingTenantId,
+      tenantId: effectiveTenantId,
       email,
     })
 
-    setAuthCookies(response, accessToken, refreshToken, existingTenantId ?? undefined)
+    setAuthCookies(response, accessToken, refreshToken, effectiveTenantId ?? undefined)
     response.cookies.set('bz_user_id', userId, {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',

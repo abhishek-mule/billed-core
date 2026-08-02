@@ -7,7 +7,7 @@ import {
   Loader2, Send, Hand, RefreshCw,
   AlertTriangle, CheckCircle2, History, Banknote,
   Clock, Users, ChevronRight, Zap, Shield, AlertCircle,
-  CreditCard, CalendarDays,
+  CreditCard, CalendarDays, CheckSquare, X,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
@@ -15,7 +15,7 @@ import { trackQueueEvent, events as E } from "@/lib/billzo/analytics"
 import { PromiseModal } from "@/components/billzo/PromiseModal"
 import { PaymentModal } from "@/components/billzo/PaymentModal"
 import { HistoryDrawer, prefetchCustomerTimeline } from "@/components/billzo/HistoryDrawer"
-import { PageShell } from "@/components/billzo/PageShell"
+import { PageShell, BackLink } from "@/components/billzo/PageShell"
 import { ErrorState } from "@/components/billzo/ErrorState"
 import { Skeleton, SkeletonCard } from "@/components/billzo/Skeleton"
 
@@ -38,6 +38,8 @@ interface PriorityCase {
   lastPaymentMethod?: string
   lastPaymentAt?: string | null
   nextReminderAt?: string | null
+  lastDeliveryStatus?: string | null
+  lastDeliveryActivity?: string | null
 }
 
 interface SampleRow {
@@ -113,6 +115,27 @@ function formatDate(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
 }
 
+type DeliveryMeta = { label: string; color: string; icon: any; title: string }
+
+function deliveryStatus(c: PriorityCase): DeliveryMeta | null {
+  const s = c.lastDeliveryStatus
+  if (!s) return null
+  switch (s) {
+    case "delivered":
+      return { label: "Delivered", color: "bg-recovery-soft text-recovery", icon: CheckCircle2, title: `Delivered ${formatLastContact(c.lastDeliveryActivity)}` }
+    case "read":
+      return { label: "Read", color: "bg-info-soft text-info", icon: CheckCircle2, title: `Read ${formatLastContact(c.lastDeliveryActivity)}` }
+    case "sent":
+      return { label: "Sent", color: "bg-outstanding-soft text-outstanding", icon: Send, title: `Sent ${formatLastContact(c.lastDeliveryActivity)}` }
+    case "queued":
+      return { label: "Queued", color: "bg-muted text-muted-foreground", icon: Clock, title: "Queued for delivery" }
+    case "failed":
+      return { label: "Failed", color: "bg-danger-soft text-danger", icon: AlertTriangle, title: "Delivery failed" }
+    default:
+      return null
+  }
+}
+
 function formatActionTime(c: PriorityCase): string {
   if (c.promiseToPayDate) {
     const due = new Date(c.promiseToPayDate)
@@ -161,6 +184,9 @@ export default function RecoveryQueuePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState<string | null>(null)
+  const [bulkSending, setBulkSending] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [promiseFor, setPromiseFor] = useState<PriorityCase | null>(null)
   const [paymentFor, setPaymentFor] = useState<PriorityCase | null>(null)
   const [historyFor, setHistoryFor] = useState<PriorityCase | null>(null)
@@ -191,6 +217,17 @@ export default function RecoveryQueuePage() {
     window.addEventListener("billzo:changed", load)
     return () => window.removeEventListener("billzo:changed", load)
   }, [load])
+  useEffect(() => {
+    if (!selectMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectMode(false)
+        clearSelection()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [selectMode])
 
   const prevCompletion = useRef<number>(-1)
   const priorityCases: PriorityCase[] = raw?.access === "full" ? (raw?.summary?.priorityCases || []) : []
@@ -242,16 +279,79 @@ export default function RecoveryQueuePage() {
         load()
       } else {
         const data = await res.json().catch(() => ({}))
-        if (data.error === "FEATURE_LOCKED") {
+        if (data.error === "FEATURE_LOCKED" || data.code === "FEATURE_LOCKED") {
           toast.error("Upgrade to Pro to send reminders from the queue")
+        } else if (data.error === "TENANT_NOT_FOUND" || data.code === "TENANT_NOT_FOUND") {
+          toast.error("Session expired — please sign in again")
         } else {
-          toast.error(data.error || "Failed to send reminder")
+          toast.error(data.error || data.message || "Failed to send reminder")
         }
       }
     } catch {
       toast.error("Network error — could not send reminder")
     } finally {
       setSending(null)
+    }
+  }
+
+  const toggleSelect = (caseId: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(caseId)) next.delete(caseId)
+      else next.add(caseId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelected(prev => {
+      if (prev.size === priorityCases.length) return new Set<string>()
+      return new Set(priorityCases.map(c => c.caseId))
+    })
+  }
+
+  const clearSelection = () => setSelected(new Set<string>())
+
+  const handleBulkSend = async () => {
+    const ids = priorityCases.filter(c => selected.has(c.caseId)).map(c => c.caseId)
+    if (ids.length === 0) return
+    setBulkSending(true)
+    trackQueueEvent("BULK_SEND" as any, undefined, { count: ids.length })
+    try {
+      const res = await fetch("/api/recovery/queue/actions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send_reminder",
+          caseIds: ids,
+          payload: { origin: "recovery_queue_bulk" },
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const n = data.succeeded ?? ids.length
+        toast.success(`Reminder${n === 1 ? "" : "s"} sent to ${n} customer${n === 1 ? "" : "s"}`)
+        ids.forEach(id => {
+          const c = priorityCases.find(x => x.caseId === id)
+          if (c) markActioned(c.customerId)
+        })
+        clearSelection()
+        load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        if (data.error === "QUOTA_EXCEEDED" || data.code === "QUOTA_EXCEEDED") {
+          toast.error("You've reached your reminder limit — upgrade to Pro")
+        } else if (data.error === "FEATURE_LOCKED") {
+          toast.error("Upgrade to Pro to send reminders")
+        } else {
+          toast.error(data.error || data.message || "Some reminders failed to send")
+        }
+      }
+    } catch {
+      toast.error("Network error — could not send reminders")
+    } finally {
+      setBulkSending(false)
     }
   }
 
@@ -269,18 +369,34 @@ return (
       <div className="space-y-5">
 
         {/* Header */}
+        <BackLink href="/recovery" label="Recovery" />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.queue}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Today's collection</p>
           </div>
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            {MerchantLanguage.common.refresh}
-          </button>
+          <div className="flex items-center gap-2">
+            {!isPreview && priorityCases.length > 0 && (
+              <button
+                onClick={() => {
+                  const next = !selectMode
+                  setSelectMode(next)
+                  if (!next) clearSelection()
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium bg-card hover:bg-muted"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                {selectMode ? "Done" : "Multi-select"}
+              </button>
+            )}
+            <button
+              onClick={load}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              {MerchantLanguage.common.refresh}
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -432,12 +548,23 @@ return (
                       <span className="text-[10px] text-muted-foreground font-medium">
                         {section.items.length}
                       </span>
+                      {selectMode && (
+                        <button
+                          onClick={toggleSelectAll}
+                          className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          {selected.size === priorityCases.length ? "Clear all" : "Select all"}
+                        </button>
+                      )}
                     </div>
                     {section.items.map(c => (
                       <CustomerCard
                         key={c.caseId}
                         customer={c}
                         sending={sending}
+                        selectMode={selectMode}
+                        selected={selected.has(c.caseId)}
+                        onToggleSelect={() => toggleSelect(c.caseId)}
                         onSend={handleSend}
                         onPromise={(c) => { setPromiseFor(c) }}
                         onPayment={(c) => { setPaymentFor(c) }}
@@ -515,7 +642,37 @@ return (
         open={!!historyFor}
         onClose={() => setHistoryFor(null)}
       />
-    </PageShell>
+
+      {/* Bulk action bar */}
+      {selectMode && selected.size > 0 && (
+        <div className="fixed inset-x-0 bottom-20 z-40 px-4">
+          <div className="mx-auto max-w-md flex items-center gap-3 bg-foreground text-background rounded-2xl px-4 py-3 shadow-xl">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold">{selected.size} selected</p>
+              <p className="text-xs text-muted-foreground">
+                {formatINR(priorityCases.filter(c => selected.has(c.caseId)).reduce((s, c) => s + c.totalOverdue, 0))} outstanding
+              </p>
+            </div>
+            <button
+              onClick={handleBulkSend}
+              disabled={bulkSending}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 disabled:opacity-50 active:scale-[0.97] transition-all"
+            >
+              {bulkSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              Send Reminder
+            </button>
+            <button
+              onClick={() => { clearSelection(); setSelectMode(false) }}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+              title="Exit multi-select"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      </PageShell>
   )
 }
 
@@ -524,6 +681,9 @@ return (
 function CustomerCard({
   customer: c,
   sending,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
   onSend,
   onPromise,
   onPayment,
@@ -533,6 +693,9 @@ function CustomerCard({
 }: {
   customer: PriorityCase
   sending: string | null
+  selectMode?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
   onSend: (c: PriorityCase) => void
   onPromise: (c: PriorityCase) => void
   onPayment: (c: PriorityCase) => void
@@ -554,7 +717,7 @@ function CustomerCard({
         : 'bg-outstanding-soft text-outstanding'
 
   return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm p-4 transition-shadow">
+    <div className={`bg-card border rounded-2xl shadow-sm p-4 transition-shadow ${selected ? 'border-primary ring-1 ring-primary/40' : 'border-border'}`}>
       {/* Header: name + amount */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -574,6 +737,17 @@ function CustomerCard({
         {c.phone && (
           <span className="hidden sm:block text-xs text-muted-foreground font-mono">{c.phone}</span>
         )}
+        {selectMode && (
+          <button
+            onClick={() => onToggleSelect?.()}
+            className={`flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md border transition-colors ${
+              selected ? "bg-primary border-primary text-primary-foreground" : "border-border text-transparent hover:text-muted-foreground"
+            }`}
+            aria-pressed={selected}
+          >
+            <CheckSquare size={14} />
+          </button>
+        )}
       </div>
 
       {/* Status chip */}
@@ -584,6 +758,17 @@ function CustomerCard({
           {c.lastPaymentAt && <CheckCircle2 size={11} />}
           {formatSignal}
         </span>
+        {(() => {
+          const d = deliveryStatus(c)
+          if (!d) return null
+          const Icon = d.icon
+          return (
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${d.color}`} title={d.title}>
+              <Icon size={11} />
+              {d.label}
+            </span>
+          )
+        })()}
       </div>
 
       {/* Journey steps */}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyRequest, errorResponse } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { uuid } from '@/lib/billzo/db'
 
@@ -6,11 +7,16 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const { tenantId } = auth
+    if (!tenantId) return errorResponse('Unauthorized', 401)
+
     const body = await request.json()
     const { invoiceId, customerId, amount, dueDate, note } = body
 
     if (!invoiceId || !dueDate) {
-      return NextResponse.json({ error: 'invoiceId and dueDate required' }, { status: 400 })
+      return errorResponse('invoiceId and dueDate required', 400)
     }
 
     const { data: invoice } = await supabaseAdmin
@@ -19,7 +25,9 @@ export async function POST(request: NextRequest) {
       .eq('id', invoiceId)
       .single()
 
-    if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    if (!invoice) return errorResponse('Invoice not found', 404)
+
+    if (invoice.tenant_id !== tenantId) return errorResponse('Unauthorized', 401)
 
     const promise = {
       id: uuid(),
@@ -38,7 +46,7 @@ export async function POST(request: NextRequest) {
       .from('payment_promises')
       .insert(promise)
 
-    if (promiseError) return NextResponse.json({ error: promiseError.message }, { status: 500 })
+    if (promiseError) return errorResponse(promiseError.message, 500)
 
     const activity = {
       id: uuid(),
@@ -57,6 +65,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, promise })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return errorResponse(err.message, 500)
   }
 }

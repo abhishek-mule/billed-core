@@ -31,8 +31,8 @@ function MetricRow({ label, value, trend, tag }: {
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-3 lg:p-4">
-      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-lg lg:text-xl font-semibold text-foreground tabular-nums">{value}</p>
+      <p className="text-[13px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-[28px] lg:text-[32px] font-semibold text-foreground tabular-nums leading-none">{value}</p>
       <div className="flex items-center gap-2 mt-1">
         {trend && (
           <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${
@@ -46,7 +46,7 @@ function MetricRow({ label, value, trend, tag }: {
           </span>
         )}
         {tag && (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${tag.color}`}>{tag.label}</span>
+          <span className={`text-[13px] px-1.5 py-0.5 rounded font-medium ${tag.color}`}>{tag.label}</span>
         )}
       </div>
     </div>
@@ -74,7 +74,7 @@ function SimpleBar({ items, maxHeight = 48 }: {
               opacity: 0.7,
             }}
           />
-          <span className="text-[9px] text-muted-foreground font-medium whitespace-nowrap">{item.label}</span>
+          <span className="text-[13px] text-muted-foreground font-medium whitespace-nowrap">{item.label}</span>
         </div>
       ))}
     </div>
@@ -255,7 +255,7 @@ function ExpectedRecovery({ aging }: { aging: AgingBucket[] }) {
       <div className="grid grid-cols-4 gap-2 mt-3">
         {bands.map((b, i) => (
           <div key={i} className="text-center">
-            <p className="text-[9px] text-muted-foreground font-medium">{b.label}</p>
+            <p className="text-[13px] text-muted-foreground font-medium">{b.label}</p>
             <p className="text-xs font-semibold text-foreground tabular-nums">{formatINR(b.amount)}</p>
           </div>
         ))}
@@ -286,7 +286,7 @@ function AgingBucketsBar({ buckets }: { buckets: AgingBucket[] }) {
                 />
               </div>
               <span className="text-xs text-foreground w-20 text-right tabular-nums font-medium">{formatINR(b.amount)}</span>
-              <span className="text-[10px] text-muted-foreground w-8 text-right">{b.count}</span>
+              <span className="text-[13px] text-muted-foreground w-8 text-right">{b.count}</span>
             </div>
           )
         })}
@@ -340,7 +340,7 @@ function SalesTrend({ weekly }: { weekly: { week: string; sales: number }[] }) {
               style={{ height: `${(w.sales / max) * 80}%` }}
               title={`${w.week}: ${formatINR(w.sales)}`}
             />
-            <span className="text-[8px] text-muted-foreground whitespace-nowrap">{w.week.slice(0, 3)}</span>
+            <span className="text-[13px] text-muted-foreground whitespace-nowrap">{w.week.slice(0, 3)}</span>
           </div>
         ))}
       </div>

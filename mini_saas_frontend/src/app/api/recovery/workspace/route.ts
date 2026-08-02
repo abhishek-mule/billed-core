@@ -2,13 +2,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
-import { getDashboardProjection } from '@/lib/billzo/recovery-workspace-model'
+import { getDashboardProjection } from '@/lib/billzo/recovery-read-model'
 
 /**
- * Thin API wrapper around the RecoveryWorkspaceModel.
+ * Thin API wrapper around RecoveryReadModel.
  *
  * No business logic — only auth + projection. All recovery logic lives
- * in lib/billzo/recovery-workspace-model.ts, which is the single source
+ * in lib/billzo/recovery-read-model.ts, which is the single source
  * of truth for every recovery surface (Dashboard, Queue, Case, Reports).
  */
 export async function GET(request: NextRequest) {

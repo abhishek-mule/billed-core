@@ -26,7 +26,8 @@ import { recoveryCapabilities } from './src/lib/authority/recovery-capabilities'
 import { gstrCapabilities } from './src/lib/authority/gstr-capabilities'
 import { MutationGate } from './src/lib/mutation-gate'
 import { OutboxListener } from './src/lib/spine/outbox-listener'
-import { TransportRegistry, BaileysAdapter, GupshupAdapter, MetaAdapter, SimulationAdapter } from './src/lib/transport'
+import { TransportRegistry, MetaAdapter, SimulationAdapter } from './src/lib/transport'
+import { createWorkerGupshupAdapter, createWorkerBaileysAdapter } from './src/lib/transport/worker-adapters'
 import { setTransportRegistry } from './lib/whatsapp-router'
 import { initializeMeta } from './bootstrap/meta'
 import { applyOverride } from './src/lib/recovery/override-handler'
@@ -265,8 +266,8 @@ async function main() {
 
   // ---- TransportRegistry: normalized channel abstraction ----
   const transportRegistry = new TransportRegistry()
-  transportRegistry.register(new BaileysAdapter())
-  transportRegistry.register(new GupshupAdapter())
+  transportRegistry.register(createWorkerBaileysAdapter())
+  transportRegistry.register(createWorkerGupshupAdapter())
   transportRegistry.register(new SimulationAdapter())
   transportRegistry.register(new MetaAdapter())
   setTransportRegistry(transportRegistry)

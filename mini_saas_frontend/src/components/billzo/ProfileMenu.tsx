@@ -7,7 +7,7 @@ import {
   HelpCircle, MessageSquare, LogOut, Wifi, CheckCircle2,
   XCircle, IndianRupee, ArrowRight, BarChart3,
 } from 'lucide-react'
-import { getDiceBearAvatarUrl } from './Avatar'
+import { BrandAvatar } from './Avatar'
 import { getCookie } from '@/lib/cookies'
 import { getTenantId } from '@/lib/billzo/tenant'
 import { db } from '@/lib/billzo/db'
@@ -33,6 +33,7 @@ interface ConnectionStatus {
 
 export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
   const [userName, setUserName] = useState('')
+  const [logo, setLogo] = useState<string | null>(null)
   const [outstanding, setOutstanding] = useState<number | null>(null)
   const [plan, setPlan] = useState<string>('starter')
   const [usageCount, setUsageCount] = useState<number>(0)
@@ -44,14 +45,15 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
     const tid = getTenantId()
     if (tid) {
       db().tenants.get(tid).then(t => {
+        if (t?.logo) setLogo(t.logo)
         if (t?.plan) setPlan(t.plan)
       })
     }
 
-    fetch('/api/recovery/center')
+    fetch('/api/recovery/workspace')
       .then(r => r.json())
       .then(d => {
-        const total = d?.underFollowUp ?? d?.needsAction?.reduce?.((s: number, c: any) => s + (c.outstanding || 0), 0) ?? null
+        const total = d?.hero?.outstanding ?? null
         setOutstanding(total)
       })
       .catch(() => {})
@@ -88,7 +90,7 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
       >
         {/* Merchant header */}
         <div className="p-4 flex items-center gap-3 border-b border-border">
-          <img src={getDiceBearAvatarUrl(userName, 'glyphs')} alt="" className="w-10 h-10 rounded-full shrink-0 bg-muted/20" />
+          <BrandAvatar name={userName || 'My Shop'} logo={logo} className="w-10 h-10" size={40} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-foreground truncate">{userName}</p>
           </div>

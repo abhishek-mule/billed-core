@@ -423,7 +423,7 @@ export default function PulsePage() {
          ══════════════════════════════════════ */}
       <button
         onClick={() => { setShowRecord(true); resetRecord() }}
-        className="fixed bottom-6 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-foreground text-background shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-foreground/90 active:scale-95 transition-all"
+        className="fixed bottom-24 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-foreground text-background shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-foreground/90 active:scale-95 transition-all"
         aria-label="Record payment"
       >
         <Plus className="h-6 w-6" />

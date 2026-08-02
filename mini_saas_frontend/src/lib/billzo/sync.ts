@@ -129,6 +129,7 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         total: payload.total,
         grand_total: payload.total,
         paid_amount: payload.paidAmount ?? 0,
+        outstanding_amount: (payload.total ?? 0) - (payload.paidAmount ?? 0),
         status: payload.status?.toLowerCase() === 'paid' || (payload.paidAmount ?? 0) >= (payload.total ?? 0) ? 'paid' : payload.status?.toLowerCase() === 'partial' ? 'partial' : payload.status?.toLowerCase() === 'draft' ? 'draft' : 'issued',
         document_type: payload.documentType || 'tax_invoice',
         invoice_number: payload.invoiceNumber || payload.id,

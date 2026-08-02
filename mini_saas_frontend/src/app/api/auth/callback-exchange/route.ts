@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { createAccessToken, createRefreshToken, setAuthCookies } from '@/lib/billzo/auth-jwt'
 import { setSession, findSessionsByUserId } from '@/lib/billzo/auth-store'
+import { resolveTenantForUser } from '@/lib/billzo/tenant-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,21 +66,16 @@ export async function POST(request: NextRequest) {
       )
     } catch { /* users table may not exist yet; non-critical */ }
 
-    // ── Check if user has an existing membership (tenant_memberships is the live table) ──
+    // ── Resolve tenant from tenant_memberships (authoritative) ──
     let resolvedMerchantId: string | undefined = undefined
     let merchantName = ''
+    let membershipRole: string | undefined
 
-    const { data: membership } = await supabase
-      .from('tenant_memberships')
-      .select('tenant_id, tenants(id, name)')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-
-    if (membership) {
-      resolvedMerchantId = membership.tenant_id
-      merchantName = (membership as any).tenants?.name || ''
+    const membershipInfo = await resolveTenantForUser(userId)
+    if (membershipInfo.tenantId) {
+      resolvedMerchantId = membershipInfo.tenantId
+      merchantName = membershipInfo.merchantName || ''
+      membershipRole = membershipInfo.membershipRole
     }
 
     // ── Also check Redis sessions as final fallback (non-critical) ──
@@ -141,6 +137,7 @@ export async function POST(request: NextRequest) {
       userId,
       merchantId: resolvedMerchantId,
       merchantName,
+      membershipRole,
       redirectTo,
     })
 

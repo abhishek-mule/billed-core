@@ -109,6 +109,21 @@ const RULES_V1: readonly SovereigntyRule[] = [
     rateLimit: { perMinute: 10 },
   },
   {
+    intent: 'tenant.update_business_identity',
+    allowedSources: ['worker', 'app', 'admin'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
+    intent: 'tenant.update_profile',
+    allowedSources: ['worker', 'app', 'admin'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
+    intent: 'tenant.update_logo',
+    allowedSources: ['worker', 'app', 'admin'],
+    rateLimit: { perMinute: 10 },
+  },
+  {
     intent: 'recovery.upsert_case',
     allowedSources: ['worker', 'internal_worker'],
     rateLimit: { perMinute: 30 },

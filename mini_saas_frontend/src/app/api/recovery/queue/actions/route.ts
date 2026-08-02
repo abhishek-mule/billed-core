@@ -92,6 +92,189 @@ function normalizePaymentSource(value: unknown): PaymentSource {
   return 'cash'
 }
 
+/**
+ * Send a WhatsApp reminder for a single recovery case. Used for both the
+ * single-card action and bulk (loop) sends. Resolves its own case so callers
+ * only need a caseId (+ optional customerId fallback).
+ */
+async function sendReminderForCase(ctx: {
+  supabase: any
+  tid: string
+  caseId: string
+  customerId?: string | null
+  payload?: Record<string, any>
+}): Promise<{
+  ok?: boolean
+  status?: number
+  body?: any
+}> {
+  const { supabase, tid, caseId, customerId, payload = {} } = ctx
+
+  // Resolve the recovery case (with synthetic fallback to a bare customer).
+  let recoveryCase: any = null
+  const { data: rc, error: caseErr } = await supabase
+    .from('recovery_cases')
+    .select('*, customers(customer_name, phone)')
+    .eq('id', caseId)
+    .eq('tenant_id', tid)
+    .single()
+  if (caseErr || !rc) {
+    if (customerId) {
+      const { data: cust } = await supabase
+        .from('customers')
+        .select('id, customer_name, phone')
+        .eq('id', customerId)
+        .eq('tenant_id', tid)
+        .maybeSingle()
+      if (cust) {
+        recoveryCase = {
+          id: caseId || null,
+          customer_id: cust.id,
+          customers: { customer_name: cust.customer_name, phone: cust.phone },
+        }
+      }
+    }
+    if (!recoveryCase) {
+      return { status: 404, body: { error: 'Case not found' } }
+    }
+  } else {
+    recoveryCase = rc
+  }
+
+  // Quota gate with SOFT LIMITS (warn at 90/95%, hard-disable past 110%).
+  const { PLAN_LIMITS } = await import('@/lib/billzo/plan-limits')
+  const { checkQuota, emitUsageEvent } = await import('@/lib/billzo/feature-flags')
+  const ent = await getEntitlement(tid)
+  const limit = ent ? PLAN_LIMITS[ent.planCode].reminders : 3
+  const quota = await checkQuota(tid, 'reminders_sent', limit)
+  if (limit > 0 && (quota.used / limit) * 100 >= 110) {
+    return {
+      status: 402,
+      body: { error: 'QUOTA_EXCEEDED', feature: 'reminders', limit, used: quota.used, upgradeTo: 'pro' },
+    }
+  }
+
+  // All unpaid invoices for this customer.
+  const unpaidInvoices = await getUnpaidInvoices(supabase, tid, recoveryCase.customer_id)
+  if (!unpaidInvoices || unpaidInvoices.length === 0) {
+    return { status: 404, body: { error: 'No open invoices found for this customer' } }
+  }
+
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('company_name, upi_id')
+    .eq('id', tid)
+    .single()
+
+  const oldestInvoice = unpaidInvoices[0]
+  const reminderStage = oldestInvoice.recovery_stage || 't0_soft'
+  const totalOverdue = unpaidInvoices.reduce(
+    (sum, inv) => sum + (Number(inv.outstanding_amount ?? inv.total ?? 0)),
+    0
+  )
+  const upiId = tenant?.upi_id
+  const paymentUrl = upiId
+    ? `${appUrl}/pay/r/${signUpiToken({
+        invoiceId: oldestInvoice.id,
+        tenantId: tid,
+        amount: totalOverdue,
+        upiId,
+        exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      })}`
+    : `${appUrl}/pay/${oldestInvoice.id}`
+
+  const customerName = recoveryCase.customers?.customer_name || 'Customer'
+  const businessName = tenant?.company_name || 'BillZo'
+  const message = buildConsolidatedMessage({
+    customerName,
+    totalOverdue,
+    invoices: unpaidInvoices.map((inv: any) => ({
+      invoiceNumber: inv.invoice_number || inv.id.slice(-8),
+      amount: Number(inv.outstanding_amount ?? inv.total ?? 0)
+    })),
+    paymentUrl,
+    businessName,
+    personalNote: payload.personalNote || payload.notes || null,
+  })
+
+  const directResult = await sendDirectWhatsApp(tid, recoveryCase.customer_id, message, {
+    invoiceId: oldestInvoice.id,
+    origin: payload.origin || 'manual_recovery_queue',
+  })
+
+  const commonRefresh = ['recovery_queue', 'dashboard', 'invoice', 'customer']
+  const ok = {
+    action: 'send_reminder',
+    invoiceId: oldestInvoice.id,
+    paymentUrl,
+    totalOverdue,
+    customerId: recoveryCase.customer_id,
+    invoiceCount: unpaidInvoices.length,
+    refresh: commonRefresh,
+    quotaWarning: 'none' as const,
+  }
+
+  if (directResult.sentVia === 'baileys') {
+    const eventId = await writeOutboxEvent({
+      type: EventType.SEND_MESSAGE_INTENDED,
+      tenantId: tid,
+      entityId: oldestInvoice.id,
+      payload: {
+        customerId: recoveryCase.customer_id,
+        invoiceId: oldestInvoice.id,
+        caseId,
+        message,
+        paymentUrl,
+        amount: totalOverdue,
+        stage: reminderStage,
+        origin: payload.origin || 'manual_recovery_queue',
+        consolidated: true,
+        invoiceCount: unpaidInvoices.length,
+        messageType: 'reminder',
+        trigger: 'manual',
+        override: true,
+      },
+      correlationId: `recovery:${caseId}`,
+      idempotencyKey: payload.clientCorrelationId || `recovery:send:${caseId}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`,
+    })
+    await writeOutboxEvent({
+      type: EventType.RECOVERY_REMINDER_SENT,
+      tenantId: tid,
+      entityId: oldestInvoice.id,
+      payload: {
+        caseId,
+        customerId: recoveryCase.customer_id,
+        amount: totalOverdue,
+        paymentUrl,
+        queuedMessageEventId: eventId,
+        channel: 'whatsapp',
+        consolidated: true,
+        invoiceCount: unpaidInvoices.length,
+      },
+      causationId: eventId,
+      correlationId: `recovery:${caseId}`,
+    })
+    await markCaseActivity(supabase, caseId)
+    await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+    return { status: 200, body: { success: true, ...ok, eventId, message: 'Reminder queued for delivery via WhatsApp' } }
+  }
+
+  if (directResult.sentVia === 'gupshup' || directResult.sentVia === 'meta') {
+    await markCaseActivity(supabase, caseId)
+    if (directResult.success) {
+      await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+      return { status: 200, body: { success: true, ...ok } }
+    }
+    return { status: 500, body: { success: false, error: directResult.error || 'WhatsApp send failed', ...ok } }
+  }
+
+  if (directResult.success === false) {
+    return { status: 500, body: { success: false, error: directResult.error || 'WhatsApp send failed', ...ok } }
+  }
+
+  return { status: 400, body: { success: false, error: 'No WhatsApp channel configured' } }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyRequest(request)
@@ -103,11 +286,14 @@ export async function POST(request: NextRequest) {
     // Sending manual reminders is a starter+ feature; other actions (record_payment etc.) fall under manual_reminders too
     const gate = await requireFeature(tid, 'manual_reminders', 'POST')
     if (!gate.allowed) {
+      const status = gate.code === 'TENANT_NOT_FOUND' ? 404 : 403
       return NextResponse.json({
-        error: 'FEATURE_LOCKED',
+        error: gate.error,
+        code: gate.code,
+        message: gate.message || gate.error,
         feature: 'manual_reminders',
-        upgradeTo: 'pro',
-      }, { status: 403 })
+        upgradeTo: gate.upgradeTo || 'pro',
+      }, { status })
     }
 
     const bodyResult = await validateJsonBody(request)
@@ -158,9 +344,16 @@ export async function POST(request: NextRequest) {
         recoveryCase = existingCase
       }
     } else {
+      // Bulk send paths resolve each case inside sendReminderForCase, so a bare
+      // caseId is not required here.
+      const isBulkSend = action === 'send_reminder' &&
+        Array.isArray(body.caseIds) && body.caseIds.length > 0
       if (!caseId) {
-        return errorResponse('caseId required for this action', 400)
-      }
+        if (!isBulkSend) {
+          return errorResponse('caseId required for this action', 400)
+        }
+        recoveryCase = null
+      } else {
       const { data: rc, error: caseErr } = await supabase
         .from('recovery_cases')
         .select('*, customers(customer_name, phone)')
@@ -191,6 +384,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         recoveryCase = rc
+      }
       }
     }
 
@@ -235,184 +429,89 @@ export async function POST(request: NextRequest) {
     }
 
     // ── send_reminder: executable transport intent with consolidated customer message ──
+// ── send_reminder: executable transport intent with consolidated customer message ──
+    // Supports a single caseId (card action) OR a caseIds[] array (bulk select).
     if (action === 'send_reminder') {
-      // Quota gate with SOFT LIMITS: warn at 90%/95% (orange/red), hard-disable
-      // only past 110%. Usage is incremented via the billing worker (outbox).
-      const { PLAN_LIMITS } = await import('@/lib/billzo/plan-limits')
-      const { checkQuota, emitUsageEvent } = await import('@/lib/billzo/feature-flags')
-      const ent = await getEntitlement(tid)
-      const limit = ent ? PLAN_LIMITS[ent.planCode].reminders : 3
-      const quota = await checkQuota(tid, 'reminders_sent', limit)
-      let quotaWarning: 'none' | 'warn' | 'critical' | 'exceeded' = 'none'
-      if (limit > 0) {
-        const pct = (quota.used / limit) * 100
-        if (pct >= 110) quotaWarning = 'exceeded'
-        else if (pct >= 95) quotaWarning = 'critical'
-        else if (pct >= 90) quotaWarning = 'warn'
-      }
-      if (quotaWarning === 'exceeded') {
-        return NextResponse.json({
-          error: 'QUOTA_EXCEEDED',
-          feature: 'reminders',
-          limit,
-          used: quota.used,
-          upgradeTo: 'pro',
-        }, { status: 402 })
+      const rawCaseIds = body.caseIds as string[] | undefined
+      const ids = rawCaseIds && rawCaseIds.length > 0
+        ? rawCaseIds
+        : (caseId ? [caseId] : [])
+
+      if (ids.length === 0) {
+        return errorResponse('caseId or caseIds required for send_reminder', 400)
       }
 
-      // Get all unpaid invoices for this customer
-      const { data: unpaidInvoices } = await supabase
-        .from('invoices')
-        .select('id, total, outstanding_amount, invoice_number, recovery_stage')
-        .eq('tenant_id', tid)
-        .eq('customer_id', recoveryCase.customer_id)
-        .gt('outstanding_amount', 0)
-        .order('due_date', { ascending: true })
+      // Aggregate results so the UI can tell the merchant how many went out.
+      const results: Array<{ caseId: string; status?: number; success?: boolean; body?: any }> = []
+      let anyFailed = false
+      let quotaExceeded = false
 
-      if (!unpaidInvoices || unpaidInvoices.length === 0) {
-        return NextResponse.json({ error: 'No open invoices found for this customer' }, { status: 404 })
-      }
-
-      const [{ data: tenant }] = await Promise.all([
-        supabase
-          .from('tenants')
-          .select('company_name, upi_id')
-          .eq('id', tid)
-          .single(),
-      ])
-
-      // Use oldest invoice for payment link tracking
-      const oldestInvoice = unpaidInvoices[0]
-      const reminderStage = oldestInvoice.recovery_stage || 't0_soft'
-      const totalOverdue = unpaidInvoices.reduce(
-        (sum, inv) => sum + (Number(inv.outstanding_amount ?? inv.total ?? 0)), 
-        0
-      )
-
-      const upiId = tenant?.upi_id
-      const paymentUrl = upiId
-        ? `${appUrl}/pay/r/${signUpiToken({
-            invoiceId: oldestInvoice.id,
-            tenantId: tid,
-            amount: totalOverdue,
-            upiId,
-            exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
-          })}`
-        : `${appUrl}/pay/${oldestInvoice.id}`
-      
-      const customerName = recoveryCase.customers?.customer_name || 'Customer'
-      const businessName = tenant?.company_name || 'BillZo'
-      const message = buildConsolidatedMessage({
-        customerName,
-        totalOverdue,
-        invoices: unpaidInvoices.map(inv => ({
-          invoiceNumber: inv.invoice_number || inv.id.slice(-8),
-          amount: Number(inv.outstanding_amount ?? inv.total ?? 0)
-        })),
-        paymentUrl,
-        businessName,
-        personalNote: payload?.personalNote || payload?.notes || null,
-      })
-
-      // Immediate send for Gupshup; Baileys → queue via outbox for worker
-      const directResult = await sendDirectWhatsApp(tid, recoveryCase.customer_id, message, {
-        invoiceId: oldestInvoice.id,
-        origin: 'manual_recovery_queue',
-      })
-
-      // Write outbox events for Baileys queuing / audit trail
-      if (directResult.sentVia === 'baileys') {
-        const eventId = await writeOutboxEvent({
-          type: EventType.SEND_MESSAGE_INTENDED,
-          tenantId: tid,
-          entityId: oldestInvoice.id,
-          payload: {
-            customerId: recoveryCase.customer_id,
-            invoiceId: oldestInvoice.id,
-            caseId,
-            message,
-            paymentUrl,
-            amount: totalOverdue,
-            stage: reminderStage,
-            origin: payload?.origin || 'manual_recovery_queue',
-            consolidated: true,
-            invoiceCount: unpaidInvoices.length,
-            messageType: 'reminder',
-            trigger: 'manual',
-            override: true,
-          },
-          correlationId: `recovery:${caseId}`,
-          idempotencyKey: payload?.clientCorrelationId || `recovery:send:${caseId}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`,
+      for (const cid of ids) {
+        const res = await sendReminderForCase({
+          supabase,
+          tid,
+          caseId: cid,
+          customerId: customerId || body.customerIds?.[0],
+          payload: { ...payload, origin: payload?.origin || 'recovery_queue' },
         })
+        const isSuccess = res.body?.success === true
+        if (!isSuccess && res.status === 402) quotaExceeded = true
+        if (res.status && res.status >= 400) anyFailed = true
 
-        await writeOutboxEvent({
-          type: EventType.RECOVERY_REMINDER_SENT,
-          tenantId: tid,
-          entityId: oldestInvoice.id,
-          payload: {
-            caseId,
-            customerId: recoveryCase.customer_id,
-            amount: totalOverdue,
-            paymentUrl,
-            queuedMessageEventId: eventId,
-            channel: 'whatsapp',
-            consolidated: true,
-            invoiceCount: unpaidInvoices.length,
-          },
-          causationId: eventId,
-          correlationId: `recovery:${caseId}`,
-        })
-
-        await markCaseActivity(supabase, caseId)
-
-        // Usage increment is event-driven (billing worker applies it).
-        await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
-
-        return NextResponse.json({
-          success: true,
-          action,
-          invoiceId: oldestInvoice.id,
-          eventId,
-          paymentUrl,
-          totalOverdue,
-          invoiceCount: unpaidInvoices.length,
-          message: 'Reminder queued for delivery via WhatsApp',
-          refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
-          quotaWarning,
-        })
+        results.push({ caseId: cid, status: res.status || 200, success: isSuccess, body: res.body || {} })
       }
 
-      if (directResult.sentVia === 'gupshup') {
-        await markCaseActivity(supabase, caseId)
-        if (directResult.success) {
-          await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+      const succeeded = results.filter(r => r.success).length
+      const singleMode = ids.length === 1
+      const first = results[0]
+
+      if (singleMode) {
+        if (quotaExceeded) {
           return NextResponse.json({
-            success: true,
-            action,
-            invoiceId: oldestInvoice.id,
-            paymentUrl,
-            totalOverdue,
-            invoiceCount: unpaidInvoices.length,
-            refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
-            quotaWarning,
-          })
+            error: 'QUOTA_EXCEEDED',
+            feature: 'reminders',
+            limit: first?.body?.limit,
+            used: first?.body?.used,
+            upgradeTo: 'pro',
+          }, { status: 402 })
+        }
+        if (first?.body?.success) {
+          return NextResponse.json({ success: true, action, ...first.body })
         }
         return NextResponse.json({
           success: false,
-          error: directResult.error || 'Gupshup send failed',
+          error: first?.body?.error || 'Reminder failed',
           action,
           refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
-        }, { status: 500 })
+        }, { status: first?.status || 500 })
       }
 
+      // Bulk mode → aggregate response.
+      if (quotaExceeded && succeeded === 0) {
+        return NextResponse.json({
+          error: 'QUOTA_EXCEEDED',
+          success: false,
+          succeeded,
+          failed: results.length,
+          upgradeTo: 'pro',
+        }, { status: 402 })
+      }
       return NextResponse.json({
-        success: false,
-        error: directResult.error || 'No WhatsApp channel configured',
+        success: true,
         action,
-      }, { status: 400 })
+        bulk: true,
+        total: results.length,
+        succeeded,
+        failed: results.length - succeeded,
+        anyFailed,
+        refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
+      })
     }
 
-    // ── schedule_reminder: set next_recovery_at on invoice for worker to pick up ──
+    // ── schedule_reminder: collection_action is the canonical write model ──
+    // The action (status='scheduled') is what the worker scheduler scans and
+    // executes. invoice.next_recovery_at is convenience metadata for UI/reporting,
+    // updated AFTER the action is created and cleared when the action completes.
     if (action === 'schedule_reminder') {
       let dueDate = payload?.dueDate
       if (!dueDate && payload?.delayDays) {
@@ -429,7 +528,68 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'invoiceId required in payload or on recovery case' }, { status: 400 })
       }
 
-      // Update next_recovery_at on the invoice
+      const effectiveCustomerId = recoveryCase?.customer_id || customerId || null
+
+      // Idempotency guard: prevent duplicate reminders from double-clicks,
+      // browser retries, refresh/resubmit, or API retries. Key on tenant +
+      // invoice + action_type + active status.
+      const { data: existingAction } = await supabase
+        .from('collection_actions')
+        .select('id, scheduled_at')
+        .eq('tenant_id', tid)
+        .eq('action_type', 'reminder')
+        .in('status', ['scheduled', 'processing', 'in_progress'])
+        .contains('invoice_ids', [invoiceId])
+        .limit(1)
+        .maybeSingle()
+
+      if (existingAction) {
+        return NextResponse.json({
+          success: true,
+          action,
+          invoiceId,
+          alreadyScheduled: true,
+          actionId: existingAction.id,
+          dueDate,
+          repeat: payload?.repeat || 'once',
+          refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
+        })
+      }
+
+      // 1. Insert the collection_action (source of truth for the scheduler).
+      const actionId = `CA_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+      const { error: insertErr } = await supabase
+        .from('collection_actions')
+        .insert({
+          id: actionId,
+          tenant_id: tid,
+          customer_id: effectiveCustomerId,
+          invoice_ids: [invoiceId],
+          action_type: 'reminder',
+          status: 'scheduled',
+          source: 'merchant',
+          trigger_type: 'MANUAL',
+          template_name: payload?.templateName || 'payment_reminder',
+          provider: 'whatsapp',
+          scheduled_at: dueDate,
+          max_attempts: 3,
+          reason: 'Manually scheduled reminder',
+          metadata: {
+            origin: 'manual_schedule',
+            repeat: payload?.repeat || 'once',
+            notes: payload?.notes || null,
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+
+      if (insertErr) {
+        console.error('[QueueAction] schedule_reminder collection_action insert failed:', insertErr)
+        return NextResponse.json({ error: 'Failed to schedule reminder' }, { status: 500 })
+      }
+
+      // 2. Convenience metadata on the invoice — derived from, not authoritative
+      //    over, the collection_action.
       const { error: updateErr } = await supabase
         .from('invoices')
         .update({
@@ -489,6 +649,7 @@ export async function POST(request: NextRequest) {
           repeat: payload?.repeat || 'once',
           notes: payload?.notes || null,
           origin: 'manual_schedule',
+          actionId,
         },
         correlationId: `recovery:${recoveryCase?.id || invoiceId}`,
       })
@@ -497,6 +658,7 @@ export async function POST(request: NextRequest) {
         success: true,
         action,
         invoiceId,
+        actionId,
         dueDate,
         repeat: payload?.repeat || 'once',
         refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
@@ -567,6 +729,18 @@ async function resolveInvoiceIdForCase(supabase: any, tenantId: string, recovery
     .maybeSingle()
 
   return data?.id || null
+}
+
+async function getUnpaidInvoices(supabase: any, tenantId: string, customerId: string): Promise<any[]> {
+  const { data: allInvoices } = await supabase
+    .from('invoices')
+    .select('id, total, paid_amount, outstanding_amount, invoice_number, recovery_stage')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', customerId)
+    .order('due_date', { ascending: true })
+
+  return (allInvoices || []).filter((inv: any) =>
+    Number(inv.outstanding_amount ?? (inv.total ?? 0) - (inv.paid_amount ?? 0)) > 0)
 }
 
 async function markCaseActivity(supabase: any, caseId: string | undefined): Promise<void> {

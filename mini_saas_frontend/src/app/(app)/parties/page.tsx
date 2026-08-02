@@ -103,7 +103,7 @@ function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
-      <div className="grid grid-cols-3 gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
         <div>
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.totalReceivables}</p>
           <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
@@ -249,7 +249,7 @@ function PartyDetail({ party, onBack }: {
       </div>
 
       {/* Financial Summary */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-3">
           <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Outstanding</p>
           <p className="text-base font-semibold text-danger tabular-nums">{formatINR(party.outstanding)}</p>
@@ -460,7 +460,7 @@ export default function PartiesPage() {
   // ── Loading state ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
+      <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
           <div className="h-24 bg-card border border-border rounded-lg animate-pulse" />
           <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
@@ -481,7 +481,7 @@ export default function PartiesPage() {
   // ── Error state ──
   if (error) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
+      <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
           <div className="bg-card border border-danger-soft rounded-lg p-6 text-center">
             <AlertTriangle className="w-8 h-8 text-danger mx-auto mb-3" />
@@ -498,7 +498,7 @@ export default function PartiesPage() {
   // ── Empty state ──
   if (customers.length === 0) {
     return (
-      <div className="min-h-screen bg-muted/50 pb-8">
+      <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
           <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center">
             <div className="w-14 h-14 rounded-full bg-muted border border-border flex items-center justify-center mx-auto mb-4">
@@ -523,7 +523,7 @@ export default function PartiesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 pb-24">
+    <div className="bg-muted/50 pb-24">
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
         {/* Financial Hero */}
@@ -594,7 +594,7 @@ export default function PartiesPage() {
                 title="No customers match your search"
               />
             ) : (
-              <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+              <div className="space-y-1.5 lg:max-h-[calc(100vh-320px)] lg:overflow-y-auto pr-1">
                 {filtered.map(party => (
                   <PartyCard
                     key={party.id}

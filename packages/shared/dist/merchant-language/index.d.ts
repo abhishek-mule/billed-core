@@ -62,7 +62,7 @@ export declare const MerchantLanguage: {
         readonly allCustomers: "All customers";
         readonly backToCustomers: "Back to customers";
         readonly selectACustomer: "Select a customer to view details";
-        readonly activeCustomers: "Active Customers";
+        readonly activeCustomers: "Registered Customers";
         readonly noCustomersYet: "No customers yet";
         readonly addCustomer: "Add Customer";
         readonly noMatch: "No customers match your search";
@@ -84,7 +84,7 @@ export declare const MerchantLanguage: {
         readonly payments: "Payments";
         readonly noInvoicesYet: "No invoices yet";
         readonly noPaymentsYet: "No payments yet";
-        readonly totalReceivables: "Total Receivables";
+        readonly totalReceivables: "Customer Receivables";
         readonly totalPayables: "Total Payables";
         readonly pendingInvoices: "Pending Invoices";
         readonly oldestDue: "Oldest Due";

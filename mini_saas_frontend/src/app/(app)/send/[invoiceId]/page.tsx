@@ -8,8 +8,8 @@ import {
   Loader2, AlertTriangle, Send, IndianRupee,
   Clock, ExternalLink, FileText, CreditCard,
   Bell, MessageSquare, Hand, Printer,
-  CalendarClock, Copy, Check,
-  Download, Repeat, Sun, Sunrise, Sunset, Moon,
+  CalendarClock, Copy, Check, ChevronDown,
+  Download, Repeat, Sun, Sunrise, Sunset, Moon, Smartphone,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { toast } from "sonner"
@@ -17,9 +17,6 @@ import { db } from "@/lib/billzo/db"
 import { getCookie } from "@/lib/cookies"
 import { getTenantId } from "@/lib/billzo/tenant"
 import { downloadInvoicePDF, generateInvoicePDF, printInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
-import { RecoveryTimeline } from "@/components/billzo/RecoveryTimeline"
-import { NextBestAction } from "@/components/billzo/NextBestAction"
-import { CallCustomer } from "@/components/billzo/CallCustomer"
 import { logRecoveryActivity } from "@/lib/billzo/recovery/activity"
 import type { Tenant } from "@/lib/billzo/types"
 import type { PaymentConfig } from "@/lib/billzo/payment-renderer"
@@ -96,7 +93,9 @@ export default function InvoiceSendPage() {
   const [paymentLinkLoading, setPaymentLinkLoading] = useState(false)
   const [paymentLinkError, setPaymentLinkError] = useState(false)
 
-  const [showCallFlow, setShowCallFlow] = useState(false)
+  const [detailsExpanded, setDetailsExpanded] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showPaymentCollect, setShowPaymentCollect] = useState(false)
 
   // Promise fields
   const [promiseAmount, setPromiseAmount] = useState(0)
@@ -461,10 +460,6 @@ export default function InvoiceSendPage() {
     }
   }
 
-  const handleMarkPaid = () => {
-    router.push(`/invoices/${invoiceId}`)
-  }
-
   const copyPaymentLink = () => {
     if (paymentLinkUrl) {
       navigator.clipboard.writeText(paymentLinkUrl)
@@ -523,305 +518,419 @@ export default function InvoiceSendPage() {
 
   // ──────────────────── MAIN VIEW ────────────────────
 
+  function RecoveryTimelinePreview({ alreadyPaid }: { alreadyPaid: boolean }) {
+    const steps = [
+      { label: 'Invoice created', done: true },
+      { label: 'Shared with customer', done: !!sent },
+      { label: 'Reminder scheduled', done: !!reminderScheduled },
+      { label: 'Promise recorded', done: !!promiseRecorded },
+      { label: 'Payment received', done: alreadyPaid },
+    ]
+    return (
+      <div className="space-y-2.5">
+        {steps.map((step, i) => (
+          <div key={i} className="flex items-center gap-2.5">
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+              step.done ? 'bg-[#16802d]' : 'bg-[#e2e8f0]'
+            }`}>
+              {step.done && <Check className="w-3 h-3 text-white" />}
+              {!step.done && <span className="text-[10px] text-[#94a3b8] font-medium">{i + 1}</span>}
+            </div>
+            <span className={`text-xs ${step.done ? 'text-[#1e293b] font-medium' : 'text-[#94a3b8]'}`}>
+              {step.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   function renderMainView() {
     const i = invoice
     if (!i) return null
+    const alreadyPaid = i.status === "paid" || i.paidAmount >= i.total
     const phoneVerified = !!customerPhone
 
-    return (
-      <div className="space-y-4">
-        {/* Success header with amount */}
-        <div className="rounded-xl bg-success/10 border border-success/20 p-6 text-center">
-          <CheckCircle2 className="h-8 w-8 text-success mx-auto mb-2" />
-          <h1 className="text-lg font-bold">Invoice Created</h1>
-          <p className="text-xl font-bold mt-1 text-foreground">{formatINR(i.total)}</p>
-          <p className="text-xs text-muted-foreground">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+    // ── State 1: Already Paid ──
+    if (alreadyPaid) {
+      return (
+        <div className="space-y-5 text-center max-w-sm mx-auto pt-8">
+          <div className="w-14 h-14 rounded-full bg-[#f0fdf4] flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-7 h-7 text-[#16802d]" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-[#1e293b]">Payment received</h1>
+            <p className="text-[36px] font-bold text-[#16802d] mt-2 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
+            <p className="text-xs text-[#94a3b8] mt-2">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <button
+              onClick={() => router.push('/pos')}
+              className="flex-1 py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all"
+            >
+              New Sale
+            </button>
+            <Link
+              href={`/invoices/${invoiceId}`}
+              className="flex-1 py-3 rounded-xl border border-[#e2e8f0] text-sm font-semibold text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] text-center transition-all"
+            >
+              View Invoice
+            </Link>
+          </div>
         </div>
+      )
+    }
 
-        {/* Customer & Phone */}
-        <section className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-              {i.customerName.charAt(0)}
+    // Determine the single recommended action
+    const recommendedAction = (() => {
+      if (!phoneVerified) {
+        return {
+          id: 'add_phone' as const,
+          label: 'Add phone number',
+          why: 'Customer needs a phone number to receive the invoice and payment link.',
+        }
+      }
+      if (!sent) {
+        return {
+          id: 'share' as const,
+          label: 'Share on WhatsApp',
+          why: 'Customer has not received this invoice yet. Most customers pay after receiving it.',
+        }
+      }
+      if (!reminderScheduled) {
+        return {
+          id: 'reminder' as const,
+          label: 'Schedule Reminder',
+          why: 'Invoice was sent but not paid yet. A gentle reminder keeps it top of mind.',
+        }
+      }
+      return {
+        id: 'waiting' as const,
+        label: 'Waiting for customer',
+        why: 'Invoice sent. Reminder scheduled. BillZo will notify you when there is activity.',
+      }
+    })()
+
+    // ── State 2 & 3: Unpaid ──
+    return (
+      <div className="lg:grid lg:grid-cols-2 lg:gap-8">
+        {/* ── LEFT COLUMN: Invoice Info ── */}
+        <div className="space-y-4">
+          {/* 1. Invoice Header */}
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider">Invoice Created</p>
+                <p className="text-[32px] font-bold text-[#16802d] mt-1 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
+              </div>
+              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#fef3c7] text-[#d97706]">
+                UDHARI
+              </span>
             </div>
-            <div className="flex-1">
-              <p className="font-semibold">{i.customerName}</p>
-              {customerOutstanding > 0 && (
-                <p className="text-xs text-warning">{formatINR(customerOutstanding)} previous outstanding</p>
-              )}
+            <p className="text-xs text-[#94a3b8] mt-2">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+          </div>
+
+          {/* 2. Customer Card */}
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#f1f5f9] flex items-center justify-center text-[#1e293b] font-bold text-lg shrink-0">
+                {i.customerName.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[#1e293b] text-sm">{i.customerName}</p>
+                <p className="text-[11px] text-[#94a3b8]">{customerPhone || 'No phone'}</p>
+              </div>
             </div>
+            <div className="mt-3 space-y-1.5 border-t border-[#f1f5f9] pt-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-[#64748b]">Outstanding</span>
+                <span className="font-semibold text-[#1e293b] tabular-nums">{formatINR(customerOutstanding)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#64748b]">Current Invoice</span>
+                <span className="font-semibold text-[#16802d] tabular-nums">{formatINR(i.total)}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-[#f1f5f9] pt-1.5 mt-1.5">
+                <span className="text-[#64748b] font-medium">Total Exposure</span>
+                <span className={`font-bold tabular-nums ${totalExposure > 50000 ? 'text-[#d97706]' : 'text-[#1e293b]'}`}>
+                  {formatINR(totalExposure)}
+                </span>
+              </div>
+            </div>
+            {!phoneVerified && (
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#f1f5f9]">
+                <Phone size={13} className="text-[#94a3b8] shrink-0" />
+                <input
+                  value={customerPhone}
+                  onChange={e => updatePhone(e.target.value)}
+                  placeholder="Add phone for WhatsApp"
+                  type="tel"
+                  className="flex-1 text-sm bg-transparent border-b border-[#e2e8f0] focus:outline-none focus:border-[#1e293b] py-1 placeholder:text-[#94a3b8]/60 text-[#1e293b]"
+                />
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Phone size={14} className="text-muted-foreground shrink-0" />
-            <input
-              value={customerPhone}
-              onChange={e => updatePhone(e.target.value)}
-              placeholder="Add phone for WhatsApp"
-              type="tel"
-              className="flex-1 text-sm bg-transparent border-b border-border focus:outline-none focus:border-primary py-1 placeholder:text-muted-foreground/60"
-            />
-          </div>
-          {/* Communication status */}
-          <div className={`flex items-center gap-2 text-xs ${customerPhone ? 'text-success' : 'text-muted-foreground'}`}>
-            <span className={`w-2 h-2 rounded-full ${customerPhone ? 'bg-success' : 'bg-muted-foreground/40'}`} />
-            {customerPhone
-              ? `WhatsApp · ${customerPhone.replace(/\d(?=\d{4})/g, 'x')}`
-              : 'No WhatsApp number — share manually'}
-          </div>
-        </section>
 
-        {/* Invoice summary — compact sidebar */}
-        <section className="bg-card border border-border rounded-xl p-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-muted-foreground text-xs">Items</span><p className="font-medium">{i.items.length} products</p></div>
-            <div className="text-right"><span className="text-muted-foreground text-xs">Total</span><p className="font-bold text-lg">{formatINR(i.total)}</p></div>
-          </div>
-          <div className={`mt-2 text-xs font-medium px-2 py-1 rounded-full inline-flex items-center gap-1 ${
-            isUdhar ? "bg-warning-soft text-warning" : "bg-success-soft text-success"
-          }`}>
-            {isUdhar ? "UDHARI" : "PAID"}
-          </div>
-        </section>
-
-        {/* ────── Recommended Action ────── */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Recommended Action</p>
-          {isUdhar && !paymentReady ? (
-            <div className="rounded-xl bg-warning-soft dark:bg-amber-950/30 border border-warning p-5 space-y-3">
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={18} className="text-warning shrink-0 mt-0.5" />
+          {/* 3. Items */}
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
+            <p className="text-[11px] text-[#94a3b8] font-medium uppercase tracking-wider mb-3">Items</p>
+            {i.items.length === 1 ? (
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold text-warning">Configure Payments First</p>
-                  <p className="text-xs text-warning mt-1">
-                    Customers won't be able to pay this invoice online. Set up a payment method before sharing.
-                  </p>
+                  <p className="text-sm font-medium text-[#1e293b]">{i.items[0].name}</p>
+                  <p className="text-xs text-[#94a3b8] mt-0.5">{i.items[0].qty} × {formatINR(i.items[0].price)}</p>
+                </div>
+                <p className="text-sm font-bold text-[#1e293b] tabular-nums">{formatINR(i.items[0].price * i.items[0].qty)}</p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wider pb-2 border-b border-[#f1f5f9] mb-1">
+                  <div className="col-span-7">Item</div>
+                  <div className="col-span-2 text-center">Qty</div>
+                  <div className="col-span-3 text-right">Amount</div>
+                </div>
+                {i.items.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 py-2 text-sm border-b border-[#f8fafc] last:border-0">
+                    <div className="col-span-7 text-[#1e293b]">{item.name}</div>
+                    <div className="col-span-2 text-center text-[#94a3b8]">{item.qty}</div>
+                    <div className="col-span-3 text-right text-[#1e293b] font-medium tabular-nums">{formatINR(item.price * item.qty)}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* 4. Invoice Information (collapsible) */}
+          <div>
+            <button
+              onClick={() => setDetailsExpanded(!detailsExpanded)}
+              className="w-full flex items-center justify-between text-xs text-[#94a3b8] hover:text-[#64748b] py-2 transition-colors"
+            >
+              <span className="font-medium uppercase tracking-wider">Invoice Information</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${detailsExpanded ? 'rotate-180' : ''}`} />
+            </button>
+            {detailsExpanded && (
+              <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-sm space-y-3 mt-1">
+                <div className="space-y-2 text-sm">
+                  {i.items[0]?.hsn && (
+                    <div className="flex justify-between">
+                      <span className="text-[#94a3b8]">HSN</span>
+                      <span className="text-[#1e293b] font-medium">{i.items[0].hsn}</span>
+                    </div>
+                  )}
+                  {i.items[0]?.gstRate ? (
+                    <div className="flex justify-between">
+                      <span className="text-[#94a3b8]">GST</span>
+                      <span className="text-[#1e293b] font-medium">{i.items[0].gstRate}%</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between">
+                    <span className="text-[#94a3b8]">Payment Status</span>
+                    <span className="text-[#d97706] font-medium">Pending</span>
+                  </div>
+                </div>
+                <div className="border-t border-[#f1f5f9] pt-3">
+                  <p className="text-[11px] text-[#94a3b8] font-medium uppercase tracking-wider mb-2">Documents</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={async () => {
+                        const pdfData = buildPdfData()
+                        await downloadInvoicePDF(pdfData)
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-[#e2e8f0] px-3 py-2 text-xs text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download PDF
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const pdfData = buildPdfData()
+                        await printInvoicePDF(pdfData)
+                      }}
+                      className="flex items-center gap-2 rounded-lg border border-[#e2e8f0] px-3 py-2 text-xs text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print
+                    </button>
+                  </div>
                 </div>
               </div>
-              <Link
-                href="/settings/payments"
-                className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-warning text-white text-sm font-semibold hover:bg-warning/90 transition-colors"
-              >
-                Configure Payments
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <NextBestAction
-                invoiceId={invoiceId as string}
-                outstanding={i ? i.total - i.paidAmount : undefined}
-                promiseDate={promiseDate}
-                customerPhone={customerPhone}
-                onCall={() => {
-                  if (customerPhone) {
-                    window.location.href = `tel:${customerPhone}`
-                  }
-                }}
-              />
-              <button
-                onClick={() => {
-                  if (!customerPhone) {
-                    setShowNoPhoneSheet(true)
-                  } else {
-                    setShowMessagePreview(true)
-                    setActionView('send_now')
-                  }
-                }}
-                className="w-full py-3.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
-              >
-                <Send size={16} />
-                {customerPhone ? 'Send WhatsApp' : 'Share Invoice'}
-              </button>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* 5. Recovery Timeline */}
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
+            <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider mb-3">Recovery Timeline</p>
+            <RecoveryTimelinePreview alreadyPaid={alreadyPaid} />
+          </div>
         </div>
 
-        {/* ────── Communication ────── */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Communication</p>
-          <div className="grid grid-cols-2 gap-2">
-            {customerPhone && (
-              <div className={showCallFlow ? "col-span-2" : ""}>
-                {showCallFlow ? (
-                  <CallCustomer
-                    invoiceId={invoiceId as string}
-                    customerPhone={customerPhone}
-                    customerName={invoice?.customerName || 'Customer'}
-                    onLogged={() => setShowCallFlow(false)}
+        {/* ── RIGHT COLUMN: Single Recommended Action ── */}
+        <div className="space-y-4 mt-6 lg:mt-0">
+          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
+            <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider mb-1">Next Step</p>
+            <p className="text-[13px] text-[#64748b] mb-4 leading-relaxed">{recommendedAction.why}</p>
+
+            {recommendedAction.id === 'add_phone' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] px-4 py-3 bg-[#f8fafc]">
+                  <Phone size={14} className="text-[#94a3b8] shrink-0" />
+                  <input
+                    value={customerPhone}
+                    onChange={e => updatePhone(e.target.value)}
+                    placeholder="Enter phone number"
+                    type="tel"
+                    className="flex-1 text-sm bg-transparent focus:outline-none text-[#1e293b] placeholder:text-[#94a3b8]/60"
+                    autoFocus
                   />
-                ) : (
-                  <button
-                    onClick={() => setShowCallFlow(true)}
-                    className="w-full rounded-xl border-2 border-border p-4 flex items-center gap-3 hover:border-primary hover:bg-secondary/40 transition-all text-left"
-                  >
-                    <Phone className="w-5 h-5 text-muted-foreground" />
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">Call Customer</div>
-                      <div className="text-[10px] text-muted-foreground">{customerPhone.replace(/\d(?=\d{4})/g, 'x')}</div>
-                    </div>
-                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!customerPhone) return
+                    setShowMessagePreview(true)
+                    setActionView('send_now')
+                  }}
+                  disabled={!customerPhone}
+                  className="w-full py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4 inline mr-1.5" />
+                  Share Invoice
+                </button>
+              </div>
+            )}
+
+            {recommendedAction.id === 'share' && (
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowMessagePreview(true)
+                    setActionView('send_now')
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all shadow-sm"
+                >
+                  <Send className="w-4 h-4 inline mr-1.5" />
+                  Share on WhatsApp
+                </button>
+                <button
+                  onClick={() => {
+                    if (paymentLinkUrl) {
+                      copyPaymentLink()
+                    } else {
+                      generatePaymentLink()
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl border border-[#e2e8f0] text-xs font-medium text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5 inline mr-1" />
+                  {paymentLinkUrl ? 'Copy payment link' : paymentLinkLoading ? 'Generating...' : 'Copy payment link'}
+                </button>
+                {paymentLinkUrl && copied && (
+                  <p className="text-xs text-[#16802d] font-medium text-center">Copied!</p>
+                )}
+                {paymentLinkError && (
+                  <p className="text-xs text-[#d97706] text-center">Payment link failed. <button onClick={generatePaymentLink} className="underline font-medium">Retry</button></p>
                 )}
               </div>
             )}
-            <SecondaryAction
-              icon={CalendarClock}
-              label="Schedule Reminder"
-              onClick={() => {
-                setScheduleDate(getTomorrow())
-                setScheduleTime("18:30")
-                setActionView('schedule_reminder')
-              }}
-            />
-            <SecondaryAction
-              icon={Hand}
-              label="Record Promise"
-              onClick={() => setActionView('schedule_promise')}
-            />
-          </div>
-        </div>
 
-        {/* ────── Payments ────── */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Payments</p>
-          <div className="grid grid-cols-2 gap-2">
-            <SecondaryAction
-              icon={CheckCircle2}
-              label="Receive Payment"
-              onClick={handleMarkPaid}
-            />
-            <SecondaryAction
-              icon={paymentLinkLoading ? Loader2 : (paymentLinkUrl ? Copy : ExternalLink)}
-              label={paymentLinkLoading ? "Generating..." : (paymentLinkUrl ? "Copy Payment Link" : "Payment Link")}
-              description={paymentLinkLoading ? "Please wait..." : (paymentLinkUrl ? "Tap to copy" : "Generating...")}
-              onClick={() => { if (paymentLinkUrl) copyPaymentLink() }}
-              loading={paymentLinkLoading}
-            />
-          </div>
-          {paymentLinkUrl && copied && (
-            <p className="text-xs text-success font-medium text-center">Copied!</p>
-          )}
-          {paymentLinkError && (
-            <p className="text-xs text-warning font-medium flex items-center gap-1 justify-center">
-              <AlertTriangle size={12} />
-              Payment link couldn't be generated
-              <button onClick={generatePaymentLink} className="underline font-semibold">Retry</button>
-            </p>
-          )}
-          {paymentLinkUrl && (
-            <SecondaryAction
-              icon={ExternalLink}
-              label="QR Code"
-              description="Scan to pay"
-              onClick={() => window.open(paymentLinkUrl, '_blank')}
-            />
-          )}
-        </div>
+            {recommendedAction.id === 'reminder' && (
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setScheduleDate(getTomorrow())
+                    setScheduleTime("18:30")
+                    setActionView('schedule_reminder')
+                  }}
+                  className="w-full py-3.5 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all shadow-sm"
+                >
+                  <CalendarClock className="w-4 h-4 inline mr-1.5" />
+                  Schedule Reminder
+                </button>
+                <p className="text-xs text-[#94a3b8] text-center">
+                  Sent tomorrow at 6:30 PM. Customer will receive a WhatsApp reminder.
+                </p>
+              </div>
+            )}
 
-        {/* ────── Documents ────── */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Documents</p>
-          <div className="grid grid-cols-2 gap-2">
-            <SecondaryAction
-              icon={Download}
-              label="Download PDF"
-              onClick={async () => {
-                const pdfData = buildPdfData()
-                await downloadInvoicePDF(pdfData)
-              }}
-            />
-            <SecondaryAction
-              icon={Printer}
-              label="Print PDF"
-              onClick={async () => {
-                const pdfData = buildPdfData()
-                await printInvoicePDF(pdfData)
-              }}
-            />
-            <SecondaryAction
-              icon={MessageSquare}
-              label="Share WhatsApp"
-              onClick={() => {
-                if (!customerPhone) {
-                  setShowNoPhoneSheet(true)
-                } else {
-                  setShowMessagePreview(true)
-                  setActionView('send_now')
-                }
-              }}
-            />
-            <SecondaryAction
-              icon={paymentLinkUrl ? Copy : ExternalLink}
-              label={paymentLinkUrl ? "Copy Payment Link" : "Payment Link"}
-              description={paymentLinkUrl ? "Tap to copy" : "Generating..."}
-              onClick={() => { if (paymentLinkUrl) copyPaymentLink() }}
-            />
+            {recommendedAction.id === 'waiting' && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-[#f8fafc] border border-[#e2e8f0] p-4 text-center">
+                  <Clock className="w-6 h-6 text-[#94a3b8] mx-auto mb-2" />
+                  <p className="text-sm font-medium text-[#1e293b]">All set for now</p>
+                  <p className="text-xs text-[#94a3b8] mt-1">BillZo will notify you when the customer responds.</p>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* ────── Current Status ────── */}
-        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Current Status</p>
-          <div className="space-y-1.5 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">WhatsApp Send</span>
-              <span className={`text-xs font-medium ${phoneVerified ? 'text-success' : 'text-warning'}`}>
-                {phoneVerified ? 'Ready' : 'Add phone'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Reminder Scheduled</span>
-              <span className={`text-xs font-medium ${reminderScheduled ? 'text-success' : 'text-muted-foreground'}`}>
-                {reminderScheduled ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Promise Recorded</span>
-              <span className={`text-xs font-medium ${promiseRecorded ? 'text-success' : 'text-muted-foreground'}`}>
-                {promiseRecorded ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Payment Link</span>
-              <span className={`text-xs font-medium ${paymentLinkUrl ? 'text-success' : 'text-muted-foreground'}`}>
-                {paymentLinkUrl ? 'Ready' : 'Not created'}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* ────── Activity Timeline ────── */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Activity</p>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <RecoveryTimeline invoiceId={invoiceId} />
-          </div>
-        </div>
-
-        {/* Bottom nav */}
-        <div className="flex gap-3 pt-1">
-          <Link
-            href="/dashboard"
-            className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-center hover:bg-secondary transition-colors"
+          {/* Receive Payment — always available as secondary */}
+          <button
+            onClick={() => {
+              if (!paymentReady && !paymentLinkUrl) {
+                generatePaymentLink()
+              }
+              setShowPaymentCollect(!showPaymentCollect)
+            }}
+            className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#e2e8f0] text-xs font-medium text-[#64748b] hover:text-[#1e293b] hover:border-[#1e293b] hover:bg-[#f8fafc] transition-all"
           >
-            Dashboard
-          </Link>
-          <Link
-            href={`/invoices/${invoiceId}`}
-            className="flex-1 py-3 rounded-xl bg-foreground text-background text-sm font-semibold text-center hover:opacity-90 transition-all"
-          >
-            View Invoice
-          </Link>
-        </div>
+            <IndianRupee className="w-3.5 h-3.5 inline mr-1" />
+            {showPaymentCollect ? 'Close Payment' : 'Receive Payment'}
+          </button>
 
-        {/* Credit exposure warning */}
-        {totalExposure > 50000 && isUdhar && (
-          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning flex items-start gap-2">
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Credit Exposure: {formatINR(totalExposure)}</p>
-              <p className="mt-0.5">Customer has {formatINR(customerOutstanding)} outstanding. New invoice adds {formatINR(i.total)}.</p>
+          {showPaymentCollect && (
+            <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-sm space-y-2">
+              <p className="text-xs font-medium text-[#1e293b]">Collect Payment</p>
+              <button
+                onClick={() => router.push(`/invoices/${invoiceId}`)}
+                className="w-full flex items-center gap-3 rounded-lg border border-[#e2e8f0] p-3 hover:bg-[#f8fafc] transition-all text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
+                  <IndianRupee className="w-4 h-4 text-[#1e293b]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[#1e293b]">Cash</p>
+                  <p className="text-[10px] text-[#94a3b8]">Record cash payment</p>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  if (paymentLinkUrl) {
+                    window.open(paymentLinkUrl, '_blank')
+                  } else {
+                    generatePaymentLink().then(() => {
+                      setTimeout(() => {
+                        if (paymentLinkUrl) window.open(paymentLinkUrl, '_blank')
+                      }, 500)
+                    })
+                  }
+                }}
+                className="w-full flex items-center gap-3 rounded-lg border border-[#e2e8f0] p-3 hover:bg-[#f8fafc] transition-all text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
+                  <Smartphone className="w-4 h-4 text-[#1e293b]" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-[#1e293b]">UPI</p>
+                  <p className="text-[10px] text-[#94a3b8]">QR code or payment link</p>
+                </div>
+              </button>
             </div>
+          )}
+
+          {/* Bottom actions */}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => router.push('/pos')}
+              className="flex-1 py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all"
+            >
+              New Sale
+            </button>
+            <Link
+              href={`/invoices/${invoiceId}`}
+              className="flex-1 py-3 rounded-xl border border-[#e2e8f0] text-sm font-semibold text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] text-center transition-all"
+            >
+              View Invoice
+            </Link>
           </div>
-        )}
+        </div>
       </div>
     )
   }
@@ -1318,36 +1427,4 @@ export default function InvoiceSendPage() {
   )
 }
 
-// ──────────────────── SECONDARY ACTION BUTTON ────────────────────
 
-function SecondaryAction({
-  icon: Icon,
-  label,
-  description,
-  onClick,
-  loading,
-}: {
-  icon: any
-  label: string
-  description?: string
-  onClick: () => void
-  loading?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className={`flex items-center gap-2 rounded-xl border border-border p-3 text-left transition-all hover:bg-muted active:scale-[0.98] ${loading ? 'opacity-50' : ''}`}
-    >
-      {loading ? (
-        <Loader2 size={18} className="animate-spin text-muted-foreground shrink-0" />
-      ) : (
-        <Icon size={18} className="text-muted-foreground shrink-0" />
-      )}
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        {description && <p className="text-[10px] text-muted-foreground truncate">{description}</p>}
-      </div>
-    </button>
-  )
-}

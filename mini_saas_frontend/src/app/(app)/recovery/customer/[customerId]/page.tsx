@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   Phone, MessageSquare, CheckCircle2, ArrowLeft,
   HeartHandshake, Bell, FileText,
-  Loader2, CircleDashed,
+  Loader2, CircleDashed, Pin, PenLine, X,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
 
@@ -365,10 +365,10 @@ export default function CustomerWorkspacePage() {
             {notes.map((n) => (
               <div key={n.id} className="cw-mem">
                 <button className="cw-mem-pin" onClick={() => togglePin(n.id, n.is_pinned)} title={n.is_pinned ? 'Unpin' : 'Pin'}>
-                  {n.is_pinned ? '📌' : '📝'}
+                  {n.is_pinned ? <Pin size={14} /> : <PenLine size={14} />}
                 </button>
                 <span className="cw-mem-text">{n.note}</span>
-                <button className="cw-mem-del" onClick={() => deleteNote(n.id)} title="Delete">✕</button>
+                <button className="cw-mem-del" onClick={() => deleteNote(n.id)} title="Delete"><X size={14} /></button>
               </div>
             ))}
           </div>
@@ -392,7 +392,7 @@ export default function CustomerWorkspacePage() {
         <div className="cw-first-action">
           <div className="cfa-head">
             <span className="cfa-label">Today&apos;s First Action</span>
-            <button className="cfa-close" onClick={() => setHideFirstAction(true)}>✕</button>
+            <button className="cfa-close" onClick={() => setHideFirstAction(true)}><X size={16} /></button>
           </div>
           <div className={`cfa-card cfa--${actionColor}`}>
             <div className="cfa-icon">{nextAction.icon}</div>

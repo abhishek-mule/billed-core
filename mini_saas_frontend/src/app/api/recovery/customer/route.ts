@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     // Recovery case — state only (amounts come from invoices below)
     const { data: rc } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, recovery_state_v2, promise_to_pay_date, broken_promises, last_payment_at, next_action_type, updated_at')
+      .select('id, recovery_state_v2, promise_to_pay_date, next_action_type, last_activity_at, updated_at')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('updated_at', { ascending: false })
@@ -185,8 +185,8 @@ export async function GET(request: NextRequest) {
         overdue,
         state: rc.recovery_state_v2,
         promiseDate,
-        brokenPromises: rc.broken_promises || 0,
-        lastPaymentAt: rc.last_payment_at,
+        brokenPromises: 0,
+        lastPaymentAt: rc.last_activity_at,
         nextAction: rc.next_action_type,
       } : (outstanding > 0 ? {
         id: 'virtual',

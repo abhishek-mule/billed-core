@@ -82,8 +82,8 @@ export default function SettingsPage() {
       id: 'business',
       href: '/settings/business',
       icon: <Store className={ICON_CLASS} />,
-      title: 'Business Profile',
-      description: 'Logo, shop name, GST, PAN, address',
+      title: 'Business Identity',
+      description: 'Company name, logo, GST, UPI, invoice branding, WhatsApp number — the single source of truth',
     },
     {
       id: 'payments',
@@ -114,6 +114,13 @@ export default function SettingsPage() {
       icon: <Clock className={ICON_CLASS} />,
       title: 'Recovery',
       description: 'Reminder timing, tone, business hours',
+    },
+    {
+      id: 'automation',
+      href: '/settings/recovery',
+      icon: <Zap className={ICON_CLASS} />,
+      title: 'Automation',
+      description: 'Auto-reminders, scheduling, quiet hours, per-customer settings',
     },
     {
       id: 'help',

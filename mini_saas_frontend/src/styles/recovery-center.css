@@ -294,8 +294,11 @@
 /* ─── Summary strip ──────────────────────────────────────────────────────── */
 .rc-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
+}
+@media (min-width: 1024px) {
+  .rc-summary { grid-template-columns: repeat(4, 1fr); }
 }
 .rc-summary-item {
   background: var(--surface);
@@ -309,8 +312,12 @@
 }
 .rc-summary-num { font-size: 17px; font-weight: 700; }
 .rc-summary-lbl { font-size: 10.5px; color: hsl(var(--muted-foreground)); line-height: 1.2; }
-.rc-summary-item--amt { grid-column: span 4; }
-.rc-summary-item--amt .rc-summary-num { color: hsl(var(--recovery)); font-size: 19px; }
+.rc-summary-item--amt { grid-column: span 2; }
+@media (min-width: 1024px) {
+  .rc-summary-item--amt { grid-column: span 4; }
+  .rc-summary-item--amt .rc-summary-num { font-size: 19px; }
+}
+.rc-summary-item--amt .rc-summary-num { color: hsl(var(--recovery)); }
 
 /* ─── Rows (scheduled / recovered) ───────────────────────────────────────── */
 .rc-row {

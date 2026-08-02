@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     // Load the recovery case to get customer info
     const { data: rc } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, customer_id, total_outstanding')
+      .select('id, customer_id, total_outstanding, reminder_count')
       .eq('tenant_id', tenantId)
       .eq('id', caseId)
       .maybeSingle()
@@ -64,9 +64,11 @@ export async function POST(request: NextRequest) {
       .insert({
         id: activityId,
         tenant_id: tenantId,
+        case_id: caseId,
         customer_id: finalCustomerId,
-        type: `outcome_${outcome}`,
+        type: `call_outcome`,
         actor: userId || 'merchant',
+        actor_id: userId || null,
         metadata: {
           caseId,
           outcome,
@@ -96,8 +98,7 @@ export async function POST(request: NextRequest) {
         break
       case 'wrong_number':
       case 'no_answer':
-        // Bump reminder count so next recommendation knows reminders were ignored
-        updates.reminder_count = supabaseAdmin.rpc('increment', { x: 1 }) as any
+        updates.reminder_count = (rc.reminder_count || 0) + 1
         break
       case 'dispute':
         updates.recovery_state_v2 = 'disputed'
@@ -107,18 +108,12 @@ export async function POST(request: NextRequest) {
         break
     }
 
-    // Simple update without RPC for reminder_count
-    if (outcome === 'wrong_number' || outcome === 'no_answer') {
-      await supabaseAdmin
-        .from('recovery_cases')
-        .update({ updated_at: now })
-        .eq('id', caseId)
-    } else {
-      await supabaseAdmin
-        .from('recovery_cases')
-        .update(updates)
-        .eq('id', caseId)
-    }
+    await supabaseAdmin
+      .from('recovery_cases')
+      .update(updates)
+      .eq('id', caseId)
+
+
 
     return NextResponse.json({ success: true, activityId })
   } catch (err: any) {

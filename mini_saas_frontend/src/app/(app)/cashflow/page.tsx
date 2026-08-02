@@ -14,6 +14,7 @@ import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
 import type { QueueApiSummary, QueueApiResponse, RecentEvent } from "@/lib/billzo/api-types"
 import { ErrorState } from "@/components/billzo/ErrorState"
+import { getErrorMessage } from "@/lib/billzo/ui-errors"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -167,7 +168,7 @@ export default function CashflowPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data")
+      setError(getErrorMessage(err, "Failed to load data"))
     } finally {
       setLoading(false)
     }

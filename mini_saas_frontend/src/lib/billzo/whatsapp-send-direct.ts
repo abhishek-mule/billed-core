@@ -1,14 +1,16 @@
 import { supabaseAdmin } from './supabase-admin'
 import { randomUUID } from 'crypto'
 import { createRedisClient } from './redis'
+import { TransportRegistry, MetaAdapter, GupshupAdapter, SimulationAdapter } from '@billzo/shared'
+import type { OutboundMessage } from '@billzo/shared'
 
 function interpolate(text: string, vars: Record<string, string | number>): string {
   return text.replace(/\{\{(\d+)\}\}/g, (_, n) => String(vars[n] ?? ''))
 }
 
 export type SendResult =
-  | { success: true; sentVia: 'gupshup'; messageId: string }
-  | { success: false; sentVia: 'baileys' | 'gupshup' | 'none'; messageId?: string; error: string }
+  | { success: true; sentVia: 'gupshup' | 'meta'; messageId: string }
+  | { success: false; sentVia: 'baileys' | 'gupshup' | 'meta' | 'none'; messageId?: string; error: string }
 
 export async function sendDirectWhatsApp(
   tenantId: string,
@@ -85,20 +87,17 @@ export async function sendDirectWhatsApp(
   }
 
   if (!provider) {
+    // Pilot fallback: Meta is infrastructure, configured once from the environment.
+    if (process.env.META_ACCESS_TOKEN && process.env.META_PHONE_NUMBER_ID) {
+      provider = 'meta'
+    }
+  }
+
+  if (!provider) {
     return { success: false, sentVia: 'none', error: 'No active messaging channel configured. Go to Settings > WhatsApp to set up.' }
   }
 
-  // 3. Route by provider
-  if (provider === 'baileys') {
-    // Worker handles send via Baileys; caller writes outbox events
-    return { success: false, sentVia: 'baileys', error: 'Baileys requires worker' }
-  }
-
-  if (provider !== 'gupshup') {
-    return { success: false, sentVia: 'none', error: `Unsupported provider: ${provider}` }
-  }
-
-  // 4. Resolve final message (template or raw text)
+  // 3. Resolve final message (template or raw text) before routing
   let finalMessage = message
   if (!finalMessage) {
     const { data: tenant } = await supabaseAdmin
@@ -130,49 +129,78 @@ export async function sendDirectWhatsApp(
     finalMessage += `\n\n${options.personalNote.trim()}`
   }
 
-  // 5. Send via Gupshup REST API
-  const gKey = channelConfig?.gupshupApiKey
-  const gApp = channelConfig?.gupshupAppName
-  const gSrc = channelConfig?.sourceNumber
-
-  if (!gKey || !gApp || !gSrc) {
-    return { success: false, sentVia: 'gupshup', error: 'Gupshup channel missing API key, app name, or source number' }
-  }
-
-  const cleanDest = cleanPhone.replace(/^91/, '')
-  const body = new URLSearchParams({
-    api_key: gKey,
-    app_name: gApp,
-    channel: 'whatsapp',
-    source: gSrc,
-    destination: cleanDest,
-    message: finalMessage,
-    'message[0][type]': 'text',
-    'message[0][text]': finalMessage,
-  })
-
-  let sendOk = false
-  let providerMsgId: string | undefined
-  const sentVia: 'gupshup' = 'gupshup'
-
-  try {
-    const res = await fetch('https://api.gupshup.io/sm/api/v1/msg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
-    const data = (await res.json().catch(() => ({}))) as Record<string, any>
-    sendOk = res.ok && (data.status === 'queued' || data.status === 'sent' || !data.error)
-    providerMsgId = data.messageId || data.id || undefined
-  } catch (err: any) {
-    console.error('[sendDirectWhatsApp] Gupshup API error:', err)
-  }
-
-  // 6. Record in whatsapp_events
   const messageId = options?.invoiceId
     ? `manual_${options.invoiceId.slice(0, 12)}`
     : `manual_${randomUUID().slice(0, 12)}`
 
+  // 4. Route by provider via the shared TransportRegistry
+  if (provider === 'baileys') {
+    // Worker handles send via Baileys; caller writes outbox events
+    return { success: false, sentVia: 'baileys', error: 'Baileys requires worker' }
+  }
+
+  if (provider !== 'meta' && provider !== 'gupshup' && provider !== 'simulation') {
+    return { success: false, sentVia: 'none', error: `Unsupported provider: ${provider}` }
+  }
+
+  const registry = buildRegistry(provider, channelConfig)
+  const outbound: OutboundMessage = { to: cleanPhone, text: finalMessage }
+  const result = await registry.send('manual', outbound, { provider })
+
+  // 6. Record in whatsapp_events
+  await recordEvent(
+    tenantId,
+    customerId,
+    cleanPhone,
+    options,
+    messageId,
+    provider,
+    result.success,
+    result.providerMessageId,
+  )
+
+  if (!result.success) {
+    return { success: false, sentVia: provider as any, messageId, error: result.error || `Failed to send via ${provider}` }
+  }
+
+  return { success: true, sentVia: provider as any, messageId: messageId || result.providerMessageId || `manual_${randomUUID().slice(0, 12)}` }
+}
+
+function buildRegistry(provider: string, channelConfig: Record<string, any> | null): TransportRegistry {
+  const registry = new TransportRegistry()
+  registry.register(new SimulationAdapter())
+
+  if (provider === 'meta') {
+    registry.register(new MetaAdapter())
+  }
+
+  if (provider === 'gupshup' && channelConfig) {
+    registry.register(
+      new GupshupAdapter({
+        configResolver: async () => {
+          const gKey = channelConfig?.gupshupApiKey
+          const gApp = channelConfig?.gupshupAppName
+          const gSrc = channelConfig?.sourceNumber
+          if (!gKey || !gApp || !gSrc) return null
+          return { apiKey: gKey as string, appName: gApp as string, sourceNumber: gSrc as string }
+        },
+      }),
+    )
+  }
+
+  return registry
+}
+
+async function recordEvent(
+  tenantId: string,
+  customerId: string,
+  cleanPhone: string,
+  options: { invoiceId?: string | null; templateKey?: string | null; origin?: string } | undefined,
+  messageId: string | undefined,
+  provider: string,
+  sendOk: boolean,
+  providerMsgId: string | null,
+): Promise<void> {
   try {
     await supabaseAdmin.from('whatsapp_events').insert({
       id: messageId,
@@ -189,17 +217,11 @@ export async function sendDirectWhatsApp(
       occurred_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       sync_status: sendOk ? 'synced' : 'failed',
-      provider: sentVia,
+      provider,
       provider_message_id: providerMsgId || null,
       error: sendOk ? null : 'Send failed',
     })
   } catch (err) {
     console.error('[sendDirectWhatsApp] Failed to record event:', err)
   }
-
-  if (!sendOk) {
-    return { success: false, sentVia, messageId, error: 'Failed to send via Gupshup' }
-  }
-
-  return { success: true, sentVia, messageId }
 }
