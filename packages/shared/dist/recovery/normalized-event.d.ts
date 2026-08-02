@@ -14,4 +14,22 @@ export interface RecoveryEvent {
     metadata: Record<string, unknown>;
     createdAt: string;
 }
+/**
+ * Legacy normalized event shape consumed by the Learning Engine and its
+ * feature extractors. Kept alongside RecoveryEvent (the canonical model)
+ * because those modules were written against the earlier event vocabulary
+ * (timestamp + types like payment_link_clicked / snooze_requested).
+ */
+export declare const LEGACY_RECOVERY_EVENT_TYPES: readonly ["invoice_created", "reminder_sent", "reminder_delivered", "reminder_read", "payment_link_clicked", "payment_received", "partial_payment", "promise_created", "promise_kept", "promise_broken", "call", "visit", "manual_note", "snooze_requested"];
+export type LegacyRecoveryEventType = (typeof LEGACY_RECOVERY_EVENT_TYPES)[number];
+export interface NormalizedRecoveryEvent {
+    id: string;
+    customerId: string;
+    tenantId: string;
+    timestamp: string;
+    type: LegacyRecoveryEventType;
+    eventVersion: number;
+    amount?: number;
+    metadata?: Record<string, unknown>;
+}
 //# sourceMappingURL=normalized-event.d.ts.map
