@@ -21,7 +21,7 @@ function chain(opts: { method: string; body?: any; queryId?: string } = { method
     builder.then = (resolve: any) => {
       const sorted = store
         .filter((s) => !s.archived_at)
-        .sort((a, b) => (Number(b.is_pinned) - Number(a.is_pinned)) || (+new Date(b.created_at) - +new Date(a.created_at)))
+        .sort((a, b) => (Number(!!b.is_pinned) - Number(!!a.is_pinned)) || (+new Date(b.created_at) - +new Date(a.created_at)))
       return Promise.resolve({ data: sorted, error: null }).then(resolve)
     }
     return builder
