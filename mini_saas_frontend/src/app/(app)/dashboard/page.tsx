@@ -172,6 +172,13 @@ export default function DashboardPage() {
           outstanding={hero.outstanding}
           expectedToday={expectedToday}
           customerCount={hero.customerCount}
+          breakdown={todayPlan.map((i) => ({
+            customerId: i.customerId,
+            customerName: i.customerName,
+            amount: i.amount,
+            recoverableAmount: i.recoverableAmount,
+            overdue: i.overdue,
+          }))}
         />
 
         {priorityItem && <PriorityAlert item={priorityItem} />}

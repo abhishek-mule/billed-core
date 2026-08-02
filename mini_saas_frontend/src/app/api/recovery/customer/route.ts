@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { estimateRecoverable } from '@/lib/billzo/recovery-read-model'
 
 /**
  * Customer Workspace — the place a merchant actually works a single customer.
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     // Recovery case — state only (amounts come from invoices below)
     const { data: rc } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, recovery_state_v2, promise_to_pay_date, next_action_type, last_activity_at, updated_at')
+      .select('id, recovery_state_v2, promise_to_pay_date, next_action_type, last_activity_at, updated_at, broken_promises, reminder_count')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('updated_at', { ascending: false })
@@ -160,6 +161,14 @@ export async function GET(request: NextRequest) {
       : 0
     const promiseDate = rc?.promise_to_pay_date ?? null
 
+    // Same estimate the dashboard uses — keeps per-customer "Expected today"
+    // reconcilable with the aggregate "Today's Recovery Target".
+    const { recoverableAmount, recoveryConfidence } = estimateRecoverable(
+      outstanding,
+      rc ?? {},
+      cust ?? {},
+    )
+
     // Fallback customer name from invoices when customers table has no matching row
     const invoiceCustomerName = (invoices || [])[0]?.customer_name || null
 
@@ -185,9 +194,11 @@ export async function GET(request: NextRequest) {
         overdue,
         state: rc.recovery_state_v2,
         promiseDate,
-        brokenPromises: 0,
+        brokenPromises: Number(rc.broken_promises || 0),
         lastPaymentAt: rc.last_activity_at,
         nextAction: rc.next_action_type,
+        recoverableAmount,
+        recoveryConfidence,
       } : (outstanding > 0 ? {
         id: 'virtual',
         outstanding,
@@ -197,6 +208,8 @@ export async function GET(request: NextRequest) {
         brokenPromises: 0,
         lastPaymentAt: null,
         nextAction: null,
+        recoverableAmount,
+        recoveryConfidence,
       } : null),
       invoices: (invoices || []).map((i: any) => ({
         id: i.id,

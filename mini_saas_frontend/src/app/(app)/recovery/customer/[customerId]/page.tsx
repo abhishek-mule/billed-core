@@ -16,6 +16,7 @@ type Customer = {
 type CaseInfo = {
   id: string; outstanding: number; overdue: number; state: string
   promiseDate: string | null; brokenPromises: number; lastPaymentAt: string | null; nextAction: string | null
+  recoverableAmount?: number; recoveryConfidence?: number
 }
 type Invoice = { id: string; number: string | null; total: number; status: string; dueDate: string | null; createdAt: string }
 type ActionRow = {
@@ -91,6 +92,26 @@ function recoveryScore(rc: CaseInfo | null): { score: number; label: string; col
   const label = score >= 75 ? 'Likely to recover' : score >= 45 ? 'Needs attention' : 'At risk'
   const color = score >= 75 ? 'green' : score >= 45 ? 'orange' : 'red'
   return { score, label, color }
+}
+
+function expectationReasons(rc: CaseInfo, tier: string | null): string[] {
+  const r: string[] = []
+  const tierLabel: Record<string, string> = { vip: 'VIP customer', regular: 'Regular customer', standard: 'Standard tier', risky: 'Risky tier' }
+  if (tier) r.push(tierLabel[tier] ?? `${tier} tier`)
+  if (rc.brokenPromises > 0) r.push(`${rc.brokenPromises} broken promise${rc.brokenPromises !== 1 ? 's' : ''}`)
+  if (rc.overdue > 0) {
+    if (rc.overdue > 60) r.push('very overdue')
+    else if (rc.overdue > 30) r.push('over 30 days overdue')
+    else r.push(`${rc.overdue} days overdue`)
+  }
+  if (rc.promiseDate) {
+    const daysPast = Math.floor((Date.now() - new Date(rc.promiseDate).getTime()) / 86400000)
+    r.push(daysPast > 0 ? 'promise date passed' : 'promise coming up')
+  }
+  if (rc.state === 'promised' || rc.state === 'partial_payment') r.push('recently paid / promised')
+  if (rc.state === 'disputed') r.push('disputed')
+  if (r.length === 0) r.push('standard recovery confidence')
+  return r
 }
 
 export default function CustomerWorkspacePage() {
@@ -212,6 +233,25 @@ export default function CustomerWorkspacePage() {
           </div>
         ) : null}
       </section>
+
+      {/* Expected today breakdown — traceable to the dashboard target */}
+      {rc && rc.outstanding > 0 ? (
+        <section className="cw-expect">
+          <div className="cw-expect-row">
+            <span className="cw-expect-lbl">Expected today</span>
+            <span className="cw-expect-num">{fmt(rc.recoverableAmount ?? 0)}</span>
+          </div>
+          <div className="cw-expect-row">
+            <span className="cw-expect-lbl">Remaining later</span>
+            <span className="cw-expect-num cw-expect-num--dim">{fmt(Math.max(0, rc.outstanding - (rc.recoverableAmount ?? 0)))}</span>
+          </div>
+          {rc.recoveryConfidence != null ? (
+            <p className="cw-expect-why">
+              Why {rc.recoveryConfidence}%? {expectationReasons(rc, c?.tier ?? null).join(' · ')}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Recovery Score */}
       {rc && rc.outstanding > 0 ? (

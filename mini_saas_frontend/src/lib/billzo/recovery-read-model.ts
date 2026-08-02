@@ -121,7 +121,7 @@ const invoiceOutstanding = (i: any) =>
     ? Number(i.outstanding_amount)
     : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
 
-const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
+export const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
   let confidence = 0.65
   const tier = (cust.customer_tier || 'standard').toLowerCase()
   if (tier === 'vip') confidence += 0.20

@@ -57,7 +57,7 @@ export function MorningBrief({
           Recover {customerCount} customer{customerCount !== 1 ? "s" : ""} today
         </p>
         <p className="text-sm text-white/80">
-          Expected collections: <span className="font-bold text-white">{formatINR(expectedToday)}</span>
+          Today&apos;s Recovery Target: <span className="font-bold text-white">{formatINR(expectedToday)}</span>
         </p>
 
         {bestFirstAction && (
