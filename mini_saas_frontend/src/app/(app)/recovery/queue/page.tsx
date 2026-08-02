@@ -7,7 +7,7 @@ import {
   Loader2, Send, Hand, RefreshCw,
   AlertTriangle, CheckCircle2, History, Banknote,
   Clock, Users, ChevronRight, Zap, Shield, AlertCircle,
-  CreditCard, CalendarDays, CheckSquare, X,
+  CreditCard, CalendarDays, CheckSquare, X, PhoneOff,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
@@ -731,7 +731,7 @@ function CustomerCard({
             <span className="text-2xl font-bold text-foreground tabular-nums">
               {formatINR(c.totalOverdue)}
             </span>
-            <span className="text-xs text-muted-foreground font-medium">Outstanding</span>
+            <span className="text-xs text-muted-foreground font-medium">Customer Balance</span>
           </div>
         </div>
         {c.phone && (
@@ -823,6 +823,14 @@ function CustomerCard({
         <p className="text-[10px] text-muted-foreground mt-1.5">
           {c.ignoredReminders} reminder{c.ignoredReminders > 1 ? "s" : ""} ignored
         </p>
+      )}
+
+      {/* Phone missing — blocking */}
+      {!c.phone && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 py-1.5 text-[11px] font-semibold text-danger">
+          <PhoneOff size={12} />
+          Phone number missing — can&apos;t send reminders
+        </div>
       )}
 
       {/* Actions */}

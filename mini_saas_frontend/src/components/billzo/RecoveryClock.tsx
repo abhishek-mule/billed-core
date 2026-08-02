@@ -20,7 +20,7 @@ export function RecoveryClock({ overdueDays }: RecoveryClockProps) {
     <div className="space-y-1">
       <div className="flex items-center gap-2">
         <Clock size={14} className={color} />
-        <span className="text-xs text-muted-foreground font-medium">Outstanding</span>
+        <span className="text-xs text-muted-foreground font-medium">Overdue</span>
       </div>
       <div className="flex items-baseline gap-2">
         <span className={cn("text-lg font-bold tabular-nums", color)}>

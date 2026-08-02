@@ -96,7 +96,7 @@ function QueueComplete() {
     <div className="bg-card border border-border rounded-2xl p-6 text-center space-y-2">
       <div className="text-2xl"><CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" /></div>
       <p className="text-sm font-semibold text-foreground">Today&apos;s queue complete</p>
-      <p className="text-xs text-muted-foreground">Expected collection achieved</p>
+      <p className="text-xs text-muted-foreground">Today&apos;s target achieved</p>
     </div>
   )
 }

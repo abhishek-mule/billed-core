@@ -222,7 +222,7 @@ export default function CaseWorkspacePage() {
   }
 
   const recommendationIcon = rec?.nextBestAction === 'call' ? <Phone size={15} /> : rec?.nextBestAction === 'visit' ? <Phone size={15} /> : <Bell size={15} />
-  const recommendationLabel = rec?.nextBestAction === 'call' ? 'Call Today' : rec?.nextBestAction === 'visit' ? 'Visit Customer' : rec?.nextBestAction === 'follow_up' ? 'Follow Up' : rec?.nextBestAction === 'send_reminder' ? 'Send Reminder' : rec?.nextBestAction === 'update_contact' ? 'Update Contact' : 'Send Reminder'
+  const recommendationLabel = rec?.nextBestAction === 'call' ? 'Call Today' : rec?.nextBestAction === 'visit' ? 'Visit Customer' : rec?.nextBestAction === 'follow_up' ? 'Follow Up' : rec?.nextBestAction === 'send_reminder' ? 'Send Reminder' : rec?.nextBestAction === 'update_contact' ? (c?.phone ? 'Update Contact' : 'Add Number') : 'Send Reminder'
 
   return (
     <div className="rc-page">
@@ -245,8 +245,8 @@ export default function CaseWorkspacePage() {
 
       <section className="rc-block">
         <div className="rc-block-head">
-          <h2>Recovery Timeline</h2>
-          <Link href={`/recovery/timeline?caseId=${encodeURIComponent(caseId)}`} className="cw-link">Full timeline →</Link>
+          <h2>Activity</h2>
+          <Link href={`/recovery/timeline?caseId=${encodeURIComponent(caseId)}`} className="cw-link">Full activity →</Link>
         </div>
         <RecoveryEventTimeline
           key={timelineRefreshKey}

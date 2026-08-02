@@ -36,7 +36,7 @@ export function MissionHeader({
           <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-recovery-soft text-recovery">
             <Banknote size={14} />
           </span>
-          <span className="text-sm font-semibold text-foreground">Outstanding</span>
+          <span className="text-sm font-semibold text-foreground">Business Credit</span>
         </div>
         <span className="text-2xl font-bold text-foreground tabular-nums">
           {formatINR(outstanding)}
@@ -65,7 +65,7 @@ export function MissionHeader({
         ) : null}
       </button>
       <p className="text-[11px] text-muted-foreground -mt-1 px-1">
-        Estimated from today&apos;s queue — {formatINR(expectedToday)} of {formatINR(outstanding)} outstanding is expected today
+        Estimated from today&apos;s queue — {formatINR(expectedToday)} of {formatINR(outstanding)} business credit is expected today
       </p>
 
       {showBreakdown && breakdown && breakdown.length > 0 && (
@@ -82,7 +82,7 @@ export function MissionHeader({
               <div className="flex-1 min-w-0">
                 <span className="block text-xs font-medium text-foreground truncate">{b.customerName}</span>
                 <span className="block text-[10px] text-muted-foreground">
-                  {b.overdue > 0 ? `${b.overdue} day${b.overdue !== 1 ? "s" : ""} overdue` : "due now"} · {formatINR(b.amount)} outstanding
+                  {b.overdue > 0 ? `${b.overdue} day${b.overdue !== 1 ? "s" : ""} overdue` : "due now"} · {formatINR(b.amount)} balance
                 </span>
               </div>
               <span className="text-sm font-semibold text-recovery tabular-nums">

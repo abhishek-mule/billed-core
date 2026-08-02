@@ -195,7 +195,7 @@ export default function CustomerWorkspacePage() {
     if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid', action: 'record_payment' }
     if (overdueDaysValue && overdueDaysValue > 7) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue, ${rc?.brokenPromises ? 'promises broken, ' : ''}ignored previous reminders`, action: 'send_reminder' }
     if (overdueDaysValue && overdueDaysValue > 0) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue`, action: 'send_reminder' }
-    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Outstanding balance', action: 'send_reminder' }
+    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Customer balance', action: 'send_reminder' }
   })()
 
   const actionColor = nextAction.action === 'call' ? 'red' : nextAction.action === 'visit' ? 'orange' : 'blue'
@@ -216,7 +216,7 @@ export default function CustomerWorkspacePage() {
       {/* Outstanding summary */}
       <section className="cw-hero">
         <div className="cw-hero-item">
-          <span className="cw-hero-lbl">Outstanding</span>
+          <span className="cw-hero-lbl">Customer Balance</span>
           <span className="cw-hero-num">{rc ? fmt(rc.outstanding) : fmt(0)}</span>
           {data.invoices.length > 1 ? (
             <span className="cw-hero-sub">Across {data.invoices.length} invoices</span>
@@ -320,11 +320,11 @@ export default function CustomerWorkspacePage() {
         )}
       </section>
 
-      {/* Recovery Timeline */}
+      {/* Activity */}
       <section className="rc-block">
         <div className="rc-block-head">
-          <h2>Recovery Timeline</h2>
-          <Link href={`/recovery/timeline?customerId=${encodeURIComponent(customerId)}`} className="cw-link">Full timeline →</Link>
+          <h2>Activity</h2>
+          <Link href={`/recovery/timeline?customerId=${encodeURIComponent(customerId)}`} className="cw-link">Full activity →</Link>
         </div>
         {data.communication.length === 0 ? (
           <div className="rc-empty"><MessageSquare size={18} /><span>No recovery activity yet.</span></div>

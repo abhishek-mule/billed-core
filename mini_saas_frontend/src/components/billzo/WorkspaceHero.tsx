@@ -52,19 +52,19 @@ function computeJourneySteps(timeline?: TimelineEntry[]) {
 
 function priorityBadge(priority: string) {
   if (priority === "high")
-    return { label: "HIGH", className: "bg-danger-soft text-danger" }
+    return { label: "High Priority", className: "bg-danger-soft text-danger" }
   if (priority === "medium")
-    return { label: "MEDIUM", className: "bg-warning-soft text-warning" }
-  return { label: "LOW", className: "bg-muted text-muted-foreground" }
+    return { label: "Medium Priority", className: "bg-warning-soft text-warning" }
+  return { label: "Low Priority", className: "bg-muted text-muted-foreground" }
 }
 
-function recommendationActionLabel(action: string): string {
+function recommendationActionLabel(action: string, hasPhone: boolean): string {
+  if (action === "update_contact") return hasPhone ? "Update Contact" : "Add Number"
   const labels: Record<string, string> = {
     call: "Call Today",
     visit: "Visit Customer",
     follow_up: "Follow Up",
     send_reminder: "Send Reminder",
-    update_contact: "Update Contact",
   }
   return labels[action] || action.replace(/_/g, " ")
 }
@@ -112,7 +112,7 @@ export function WorkspaceHero({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Outstanding</p>
+              <p className="text-xs text-muted-foreground font-medium">Customer Balance</p>
               <p className="text-2xl font-bold text-foreground tabular-nums mt-0.5">
                 {formatINR(outstanding)}
               </p>
@@ -122,16 +122,26 @@ export function WorkspaceHero({
 
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Recoverability</p>
+              <p className="text-xs text-muted-foreground font-medium">Payment Chance</p>
               {recommendation && (
                 <div className="mt-1 space-y-1">
                   <Link
                     href={hasPhone ? `tel:${customerPhone}` : "#"}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-recovery text-white text-xs font-bold hover:bg-recovery/90 transition-colors"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
+                      recommendation.nextBestAction === "update_contact" && !hasPhone
+                        ? "bg-danger-soft text-danger"
+                        : "bg-recovery text-white hover:bg-recovery/90",
+                    )}
                   >
-                    {recommendationActionLabel(recommendation.nextBestAction)}
+                    {recommendationActionLabel(recommendation.nextBestAction, hasPhone)}
                     <ArrowUpRight size={12} />
                   </Link>
+                  {recommendation.nextBestAction === "update_contact" && !hasPhone && (
+                    <p className="text-[11px] text-danger leading-relaxed">
+                      No phone number — can&apos;t send reminders until added
+                    </p>
+                  )}
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     {recommendation.reason}
                   </p>

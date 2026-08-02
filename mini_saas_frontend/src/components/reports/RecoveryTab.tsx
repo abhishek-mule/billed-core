@@ -90,7 +90,7 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                   className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-colors hover:opacity-90"
                 >
                   <Send className="h-3 w-3" />
-                  Recover Now
+                  Take Action
                 </button>
               </div>
 

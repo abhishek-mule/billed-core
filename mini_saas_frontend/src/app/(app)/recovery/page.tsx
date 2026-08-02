@@ -95,7 +95,7 @@ function whyReasons(item: NeedsActionItem): string[] {
   if (item.overdue > 0) reasons.push(`${item.overdue} days overdue`)
   if (item.tier === 'vip') reasons.push('High value customer — usually pays after calls')
   if (item.tier === 'risky') reasons.push('At-risk customer — needs personal attention')
-  if (reasons.length === 0) reasons.push('Outstanding balance needs attention')
+  if (reasons.length === 0) reasons.push('Customer balance needs attention')
   return reasons
 }
 
@@ -344,7 +344,7 @@ export default function RecoveryCenterPage() {
             {needsAction.length > 0 ? (
               <div className="rp-expected">
                 <div className="rp-expected-main">
-                  <span className="rp-expected-lbl">Expected Recovery Today</span>
+                  <span className="rp-expected-lbl">Likely Recovery Today</span>
                   <span className="rp-expected-amt">{fmt(totalExpected)}</span>
                   <span className="rp-expected-sub">of {fmt(totalOutstanding)} total outstanding</span>
                 </div>
@@ -469,7 +469,7 @@ export default function RecoveryCenterPage() {
       <section className="rc-block">
         <div className="rc-block-head">
           <span className="rc-dot rc-dot--blue" />
-          <h2>Activity Timeline</h2>
+          <h2>Activity</h2>
           <span className="rc-count rc-count--muted">24h</span>
         </div>
 

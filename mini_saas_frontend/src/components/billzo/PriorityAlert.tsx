@@ -56,7 +56,7 @@ export function PriorityAlert({ item }: PriorityAlertProps) {
           href={`/recovery/case/${item.caseId}`}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-warning text-warning-foreground text-xs font-bold hover:bg-warning/90 transition-colors flex-shrink-0 self-center"
         >
-          Recover <ArrowRight size={12} />
+          Take Action <ArrowRight size={12} />
         </Link>
       </div>
     </div>

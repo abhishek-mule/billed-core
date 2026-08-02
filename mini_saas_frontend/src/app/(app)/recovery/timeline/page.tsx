@@ -33,7 +33,7 @@ export default function TimelinePage() {
       <header className="cw-header">
         <button className="rc-refresh" onClick={() => router.back()} aria-label="Back"><ArrowLeft size={16} /></button>
         <div className="cw-head-main">
-          <h1 className="cw-name">Timeline</h1>
+          <h1 className="cw-name">Activity</h1>
           {caseId ? (
             <Link className="cw-phone" href={`/recovery/case/${encodeURIComponent(caseId)}`}>Back to workspace</Link>
           ) : customerId ? (
