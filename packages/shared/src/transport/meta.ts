@@ -99,7 +99,9 @@ export class MetaAdapter implements TransportAdapter {
   }
 
   private async apiPost(config: { accessToken: string; phoneNumberId: string }, path: string, body: unknown): Promise<any> {
-    const res = await fetch(this.graphUrl(config.phoneNumberId, path), {
+    const url = this.graphUrl(config.phoneNumberId, path)
+    console.log(`[MetaAdapter] POST ${url} body=${JSON.stringify(body)}`)
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${config.accessToken}`,
@@ -107,7 +109,14 @@ export class MetaAdapter implements TransportAdapter {
       },
       body: JSON.stringify(body),
     })
-    const data: any = await res.json()
+    const rawText = await res.text()
+    console.log(`[MetaAdapter] RESPONSE status=${res.status} body=${rawText}`)
+    let data: any
+    try {
+      data = JSON.parse(rawText)
+    } catch {
+      data = { raw: rawText }
+    }
     if (!res.ok) {
       const err = data?.error || data
       throw new Error(err?.message || err?.error_user_title || `Meta API error (${res.status})`)

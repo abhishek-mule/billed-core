@@ -81,7 +81,9 @@ class MetaAdapter {
         return `https://graph.facebook.com/${DEFAULT_API_VERSION}/${phoneNumberId}${path}`;
     }
     async apiPost(config, path, body) {
-        const res = await fetch(this.graphUrl(config.phoneNumberId, path), {
+        const url = this.graphUrl(config.phoneNumberId, path);
+        console.log(`[MetaAdapter] POST ${url} body=${JSON.stringify(body)}`);
+        const res = await fetch(url, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${config.accessToken}`,
@@ -89,7 +91,15 @@ class MetaAdapter {
             },
             body: JSON.stringify(body),
         });
-        const data = await res.json();
+        const rawText = await res.text();
+        console.log(`[MetaAdapter] RESPONSE status=${res.status} body=${rawText}`);
+        let data;
+        try {
+            data = JSON.parse(rawText);
+        }
+        catch {
+            data = { raw: rawText };
+        }
         if (!res.ok) {
             const err = data?.error || data;
             throw new Error(err?.message || err?.error_user_title || `Meta API error (${res.status})`);

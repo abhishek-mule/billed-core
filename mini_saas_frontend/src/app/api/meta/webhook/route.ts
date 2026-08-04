@@ -1,7 +1,19 @@
 import crypto from 'crypto'
+import fs from 'fs'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
+
+const WEBHOOK_LOG_FILE = process.env.META_WEBHOOK_LOG_FILE || '/tmp/opencode/meta-webhook.log'
+
+function appendWebhookLog(line: string) {
+  try {
+    const ts = new Date().toISOString()
+    fs.appendFileSync(WEBHOOK_LOG_FILE, `${ts} ${line}\n`)
+  } catch {
+    // noop
+  }
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qdnmuoyqpqdewepzuezp.supabase.co'
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -77,7 +89,10 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('hub.verify_token')
   const challenge = request.nextUrl.searchParams.get('hub.challenge')
 
+  appendWebhookLog(`GET verification mode=${mode} token=${token} challenge=${challenge}`)
+
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    appendWebhookLog('GET verification SUCCESS - echoing challenge')
     return new Response(challenge, {
       status: 200,
       headers: { 'Content-Type': 'text/plain' },
@@ -119,8 +134,11 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json()
   } catch (parseErr: any) {
+    appendWebhookLog('POST invalid JSON body')
     return NextResponse.json({ status: 'ok', error: 'invalid json' })
   }
+
+  appendWebhookLog(`POST received object=${body?.object} entry_count=${Array.isArray(body?.entry) ? body.entry.length : '?'}`)
 
   // JSON-based verification
   if (body?.hub?.mode === 'subscribe' && body?.hub?.verify_token === VERIFY_TOKEN) {
@@ -149,11 +167,13 @@ export async function POST(request: NextRequest) {
 
         const statuses = value.statuses || []
         for (const status of statuses) {
+          appendWebhookLog(`POST status id=${status.id} status=${status.status} recipient=${status.recipient_id}`)
           await handleStatusUpdate(webhookId, phoneNumberId, value, status)
         }
 
         const messages = value.messages || []
         for (const msg of messages) {
+          appendWebhookLog(`POST message id=${msg.id} from=${msg.from} type=${msg.type}`)
           await handleInboundMessage(webhookId, phoneNumberId, value, msg)
         }
       }
@@ -161,6 +181,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ status: 'ok', result: 'processed' })
   } catch (err: any) {
+    appendWebhookLog(`POST processing ERROR: ${err.message}`)
     console.error('[MetaWebhook] Processing failed:', err.message)
     await writeDeadLetter(err.message.slice(0, 500), { error: err.message, webhookId }, body)
     return NextResponse.json({ status: 'ok', error: err.message })
