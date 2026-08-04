@@ -12,7 +12,7 @@ export default function PurchasesPage() {
 
   return (
     <div className="space-y-8">
-      <BackLink href="/" label="Home" />
+      <BackLink href="/dashboard" label="Home" />
       <section>
         <p className="text-sm text-muted-foreground">Scan supplier invoices, review OCR output, and update stock in one flow.</p>
       </section>

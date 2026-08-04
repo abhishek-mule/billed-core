@@ -245,7 +245,7 @@ export default function UdharPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-24">
-      <BackLink href="/" label="Home" />
+      <BackLink href="/dashboard" label="Home" />
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{MerchantLanguage.udhar.heading}</h1>

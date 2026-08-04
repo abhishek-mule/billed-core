@@ -14,7 +14,7 @@ export default function SendPage() {
 
   return (
     <PageShell>
-      <BackLink href="/" label="Home" />
+      <BackLink href="/dashboard" label="Home" />
       <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
         <Construction className="mx-auto h-8 w-8 text-muted-foreground/50" />
         <h2 className="mt-3 text-sm font-bold text-muted-foreground">Send</h2>

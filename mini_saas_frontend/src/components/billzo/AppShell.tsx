@@ -20,7 +20,7 @@ import { resolveQuickNav } from '@/lib/billzo/app-shell-search'
 
 const NAV_WORKSPACE = [
   { href: '/recovery', label: 'Recovery',  icon: Zap         },
-  { href: '/dashboard',      label: 'Dashboard', icon: Home        },
+  { href: '/dashboard',      label: 'Home',      icon: Home        },
   { href: '/invoices',       label: 'Invoices',  icon: Receipt     },
   { href: '/parties',        label: 'Customers', icon: Users       },
   { href: '/pulse',          label: 'Payments',  icon: Activity    },

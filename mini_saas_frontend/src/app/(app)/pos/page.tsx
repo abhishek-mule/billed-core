@@ -48,8 +48,6 @@ export default function POSPage() {
   const [showCart, setShowCart] = useState(false);
   const [success, setSuccess] = useState<POSSuccessResult | null>(null);
   const [documentType, setDocumentType] = useState<'tax_invoice' | 'bill'>('tax_invoice');
-  const [showScanner, setShowScanner] = useState(false);
-  const [lookingUpBarcode, setLookingUpBarcode] = useState(false);
   const [tenantData, setTenantData] = useState<Tenant | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -246,26 +244,15 @@ export default function POSPage() {
       )}
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] gap-6">
         <div>
-          <div className="relative flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search products… (instant)"
-                className="w-full h-14 rounded-xl border-2 border-input bg-card pl-11 pr-4 text-base font-medium focus:border-primary focus:outline-none transition-colors"
-              />
-            </div>
-            <button 
-              onClick={() => setShowScanner(true)}
-              className="h-14 px-5 rounded-xl bg-secondary text-secondary-foreground border-2 border-input hover:border-primary transition-colors flex items-center gap-2 font-medium"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-              Scan
-            </button>
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search products… (instant)"
+              className="w-full h-14 rounded-xl border-2 border-input bg-card pl-11 pr-4 text-base font-medium focus:border-primary focus:outline-none transition-colors"
+            />
           </div>
 
           {products.length === 0 ? (

@@ -526,7 +526,7 @@ body {
   color: var(--afg);
   display: grid;
   place-items: center;
-  margin-top: -28px;
+  margin-top: -36px;
   flex-shrink: 0;
   transition: transform 0.22s var(--ease);
 }
