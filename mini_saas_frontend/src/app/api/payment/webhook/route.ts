@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { supabaseAdmin, getDeviceTokens } from '@/lib/billzo/supabase-admin'
+import { getFirebaseMessaging } from '@/lib/billzo/firebase-admin'
 import { type PlanType } from '@/lib/billzo/plan-limits'
 import { processRazorpayPaymentWebhook } from '@/lib/billzo/reconciliation'
 import { submitIntent } from '@/lib/authority/transport'
@@ -82,6 +83,29 @@ export async function POST(request: NextRequest) {
               phone: payment.contact,
               providerPaymentId: payment.id,
             })
+          }
+
+          // Fire real-time FCM Push Notification to merchant devices
+          try {
+            const tokens = await getDeviceTokens(tenantId)
+            const messaging = getFirebaseMessaging()
+            if (tokens.length > 0 && messaging) {
+              const amountRs = Number(payment.amount || 0) / 100
+              await messaging.sendEachForMulticast({
+                tokens,
+                notification: {
+                  title: '💰 Payment Received',
+                  body: `Payment of ₹${amountRs.toLocaleString('en-IN')} received via Razorpay`,
+                },
+                data: {
+                  type: 'payment_received',
+                  tenantId,
+                  url: result.invoiceId ? `/invoices/${result.invoiceId}` : '/invoices',
+                },
+              })
+            }
+          } catch (pushErr) {
+            console.error('[Webhook] Failed to dispatch FCM push notification:', pushErr)
           }
         } catch (err: any) {
           console.error('[Webhook] Reconciliation failed:', err)
