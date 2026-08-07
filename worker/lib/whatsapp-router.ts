@@ -372,9 +372,40 @@ export async function sendWhatsAppMessage(
     // this facade, without changing the adapter.
     const meta = getMetaAdapterSafe()
     if (meta) {
+      let templatePayload = undefined
+      if (options?.reminderStage) {
+        let customerName = 'Customer'
+        if (options.customerId) {
+          const { data: cust } = await supabaseAdmin
+            .from('customers')
+            .select('customer_name')
+            .eq('id', options.customerId)
+            .maybeSingle()
+          if (cust?.customer_name) customerName = cust.customer_name
+        }
+
+        let businessName = 'BillZo'
+        const { data: tenant } = await supabaseAdmin
+          .from('tenants')
+          .select('name')
+          .eq('id', tenantId)
+          .maybeSingle()
+        if (tenant?.name) businessName = tenant.name
+
+        const amountVal = options.amount || 0
+        const amountText = `₹${Number(amountVal).toLocaleString('en-IN')}`
+
+        templatePayload = {
+          name: options.reminderStage,
+          languageCode: 'en',
+          bodyVariables: [customerName, amountText, businessName],
+        }
+      }
+
       const sendResult = await meta.send('meta', {
         to: cleanPhone,
         text: message,
+        ...(templatePayload ? { template: templatePayload } : {}),
         ...(options?.type === 'document' && options?.documentUrl
           ? { document: { url: options.documentUrl, fileName: options.documentName || 'document.pdf', caption: message } }
           : {}),

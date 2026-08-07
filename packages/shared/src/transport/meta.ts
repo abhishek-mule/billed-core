@@ -138,7 +138,24 @@ export class MetaAdapter implements TransportAdapter {
         to: message.to.replace(/\D/g, ''),
       }
 
-      if (message.document) {
+      if (message.template) {
+        payload.type = 'template'
+        payload.template = {
+          name: message.template.name,
+          language: { code: message.template.languageCode || 'en' },
+          components: message.template.bodyVariables && message.template.bodyVariables.length > 0
+            ? [
+                {
+                  type: 'body',
+                  parameters: message.template.bodyVariables.map((val) => ({
+                    type: 'text',
+                    text: String(val),
+                  })),
+                },
+              ]
+            : [],
+        }
+      } else if (message.document) {
         payload.type = 'document'
         payload.document = {
           link: message.document.url,

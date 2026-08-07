@@ -15,6 +15,11 @@ export interface OutboundMessage {
   document?: { url: string; fileName: string; caption?: string }
   image?: { url: string; caption?: string }
   providerMessageId?: string
+  template?: {
+    name: string
+    languageCode?: string
+    bodyVariables?: string[]
+  }
 }
 
 export interface SendResult {

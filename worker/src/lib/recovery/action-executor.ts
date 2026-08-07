@@ -66,7 +66,6 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
 
   const messageText = buildMessageText(action, invoice, customer)
 
-  // 4. SEND
   try {
     const sendResult = await sendWhatsAppMessage(
       action.tenant_id,
@@ -76,6 +75,8 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
         invoiceId,
         customerId: action.customer_id,
         attemptNumber: action.attempt_count + 1,
+        reminderStage: action.template_name,
+        amount: Number(invoice.total || 0),
       },
     )
 

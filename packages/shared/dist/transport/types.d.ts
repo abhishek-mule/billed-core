@@ -12,6 +12,11 @@ export interface OutboundMessage {
         caption?: string;
     };
     providerMessageId?: string;
+    template?: {
+        name: string;
+        languageCode?: string;
+        bodyVariables?: string[];
+    };
 }
 export interface SendResult {
     success: boolean;
