@@ -67,17 +67,7 @@ export async function initNotifications(): Promise<string | null> {
       const body = payload.notification?.body || payload.data?.body || "Rajesh Traders paid ₹2,450 via UPI";
       const icon = payload.notification?.icon || "/logo.svg";
 
-      if (registration && 'showNotification' in registration) {
-        registration.showNotification(title, {
-          body,
-          icon,
-          badge: "/logo.svg",
-          tag: payload.data?.type || "billzo-alert",
-          data: payload.data,
-        });
-      } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        new Notification(title, { body, icon });
-      }
+      showLocalNotification(title, body, icon);
     });
 
     return fcmToken;
@@ -147,24 +137,44 @@ export type NotificationEvent =
   | { type: "high_value_recovered"; data: { totalToday: number; milestoneName: string } };
 
 export async function sendNotification(event: NotificationEvent): Promise<void> {
-  // This would be called from the server-side in production
-  // For now, we just log it
   console.log("Notification event:", event);
-  
-  // In production, this would call the FCM API to send to the tenant's devices
-  // const tokens = await db().deviceTokens.where('tenantId').equals(tenantId).toArray();
-  // await sendToFCM(tokens.map(t => t.fcmToken), payload);
 }
 
-// Local notification (for testing without Firebase)
-export function showLocalNotification(title: string, body: string, icon?: string): void {
+/**
+ * Robust notification display compatible with Mobile Android PWA, iOS, and Desktop.
+ * Uses ServiceWorkerRegistration.showNotification() to avoid 'Illegal constructor' errors on Android.
+ */
+export async function showLocalNotification(title: string, body: string, icon?: string): Promise<void> {
   if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
 
-  if (Notification.permission === "granted") {
-    new Notification(title, {
-      body,
-      icon: icon || "/logo.svg",
-      badge: "/logo.svg",
-    });
+  const options = {
+    body,
+    icon: icon || "/logo.svg",
+    badge: "/logo.svg",
+    tag: "billzo-alert",
+  };
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && 'showNotification' in reg) {
+        await reg.showNotification(title, options);
+        return;
+      }
+    }
+    new Notification(title, options);
+  } catch (err) {
+    console.warn("[Notification] Direct constructor failed, falling back to serviceWorker:", err);
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && 'showNotification' in reg) {
+          await reg.showNotification(title, options);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
 }
