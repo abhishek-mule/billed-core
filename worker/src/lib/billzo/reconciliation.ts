@@ -82,14 +82,18 @@ async function finalizeReconciliation(
   authority?: InternalAuthorityClient,
 ): Promise<PaymentReconciliationResult> {
   const { invoiceId, invoice } = match
-  const invoiceTotal = invoice.total || signal.amount
+  const currentPaid = Number(invoice.paid_amount || 0)
+  const incomingAmount = Number(signal.amount)
+  const newPaidAmount = currentPaid + incomingAmount
+  const invoiceTotal = Number(invoice.total || invoice.grand_total || incomingAmount)
+  const newStatus = newPaidAmount >= invoiceTotal ? 'paid' : 'partial'
 
   if (authority) {
     const markPaidResult = await authority.submit({
       intentType: 'invoice.mark_paid',
       tenantId,
       actor: 'reconciliation-worker',
-      payload: { invoiceId, status: 'paid', paidAmount: invoiceTotal },
+      payload: { invoiceId, status: newStatus, paidAmount: newPaidAmount },
     }, 'trusted_sync')
 
     if (!markPaidResult.accepted) {
@@ -101,7 +105,7 @@ async function finalizeReconciliation(
     const now = new Date().toISOString()
     const { error: updateError } = await supabaseAdmin
       .from('invoices')
-      .update({ status: 'paid', paid_amount: invoiceTotal, updated_at: now, sync_status: 'pending' })
+      .update({ status: newStatus, paid_amount: newPaidAmount, updated_at: now, sync_status: 'pending' })
       .eq('id', invoiceId)
 
     if (updateError) {

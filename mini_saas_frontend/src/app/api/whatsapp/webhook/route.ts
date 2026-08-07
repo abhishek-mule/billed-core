@@ -19,7 +19,29 @@ function parseGupshupStatus(status: string): WhatsAppStatus {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const signature256 = request.headers.get('x-hub-signature-256')
+    const bodyText = await request.text()
+
+    const appSecret = process.env.META_APP_SECRET
+    if (appSecret && signature256) {
+      let signature = signature256
+      if (signature.startsWith('sha256=')) {
+        signature = signature.substring(7)
+      }
+      const { validateWebhookSignature } = await import('@/lib/billzo/api-middleware')
+      if (!validateWebhookSignature(bodyText, signature, appSecret)) {
+        console.error('[WhatsAppWebhook] Invalid signature')
+        return new Response('Invalid signature', { status: 401 })
+      }
+    }
+
+    let body: any
+    try {
+      body = JSON.parse(bodyText)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+
     const { phone, status: rawStatus, messageId, error, id } = body
     const providerMessageId = messageId || id
 

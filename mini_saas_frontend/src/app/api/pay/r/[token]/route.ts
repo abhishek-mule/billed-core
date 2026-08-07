@@ -91,8 +91,7 @@ export async function GET(
       metadata: { billzoMessageId, whatsappEventId: eventId },
     }).maybeSingle()
 
-    const upiUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent('BillZo')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Invoice ' + invoiceId)}`
-    return NextResponse.redirect(upiUrl, 302)
+    return NextResponse.redirect(new URL(`/pay/checkout?token=${token}`, _request.url), 302)
   } catch (err) {
     console.error('[PayToken] Error processing payment link:', err)
     return NextResponse.json(

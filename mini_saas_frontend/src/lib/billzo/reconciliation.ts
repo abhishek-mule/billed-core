@@ -169,6 +169,12 @@ async function finalizeReconciliation(
 
   // authority:governed invoice.mark_paid
   const now = new Date().toISOString()
+  const currentPaid = Number(invoice.paid_amount || 0)
+  const incomingAmount = Number(signal.amount)
+  const newPaidAmount = currentPaid + incomingAmount
+  const invoiceTotal = Number(invoice.total || invoice.grand_total || incomingAmount)
+  const newStatus = newPaidAmount >= invoiceTotal ? 'paid' : 'partial'
+
   const intentResult = await submitIntent({
     intentId: crypto.randomUUID(),
     intentType: 'invoice.mark_paid',
@@ -179,7 +185,7 @@ async function finalizeReconciliation(
     timestamp: now,
     causationId: null,
     correlationId: null,
-    payload: { invoiceId, status: 'paid', paidAmount: invoice.total || signal.amount },
+    payload: { invoiceId, status: newStatus, paidAmount: newPaidAmount },
     nonce: crypto.randomUUID(),
   }, 'app')
 

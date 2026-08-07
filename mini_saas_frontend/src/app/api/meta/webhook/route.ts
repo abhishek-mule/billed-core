@@ -108,13 +108,28 @@ export async function GET(request: NextRequest) {
 // POST — Incoming messages and status updates
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get('content-type') || ''
+  const signature256 = request.headers.get('x-hub-signature-256')
+  const bodyText = await request.text()
+
+  const appSecret = process.env.META_APP_SECRET
+  if (appSecret) {
+    let signature = signature256
+    if (signature?.startsWith('sha256=')) {
+      signature = signature.substring(7)
+    }
+    const { validateWebhookSignature } = await import('@/lib/billzo/api-middleware')
+    if (!signature || !validateWebhookSignature(bodyText, signature, appSecret)) {
+      appendWebhookLog('POST signature verification failed')
+      return new Response('Invalid signature', { status: 401 })
+    }
+  }
 
   // Form-encoded verification (some Meta flows use this)
-  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-    const formData = await request.formData()
-    const mode = formData.get('hub.mode')
-    const token = formData.get('hub.verify_token')
-    const challenge = formData.get('hub.challenge')
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const params = new URLSearchParams(bodyText)
+    const mode = params.get('hub.mode')
+    const token = params.get('hub.verify_token')
+    const challenge = params.get('hub.challenge')
 
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
       return new Response(challenge as string, {
@@ -132,7 +147,7 @@ export async function POST(request: NextRequest) {
   // JSON body
   let body: any
   try {
-    body = await request.json()
+    body = JSON.parse(bodyText)
   } catch (parseErr: any) {
     appendWebhookLog('POST invalid JSON body')
     return NextResponse.json({ status: 'ok', error: 'invalid json' })
@@ -323,11 +338,75 @@ async function handleStatusUpdate(webhookId: string, phoneNumberId: string, valu
   }
 }
 
+/**
+ * Normalise an inbound WhatsApp sender number to the same format used in
+ * `customers.phone`. Meta sends numbers with country code, no '+' or spaces
+ * (e.g. "919876543210"). We want to match against however the merchant saved
+ * the number — with or without 91, with or without leading zero.
+ */
+function normalisePhone(raw: string): string[] {
+  const digits = raw.replace(/\D/g, '')
+  const candidates: string[] = [digits]
+
+  // Strip leading 91 (India) → local 10-digit
+  if (digits.startsWith('91') && digits.length === 12) {
+    candidates.push(digits.slice(2))
+  }
+  // Prepend 91 to 10-digit local number
+  if (digits.length === 10) {
+    candidates.push('91' + digits)
+    // Some merchants save with a leading 0
+    candidates.push('0' + digits)
+  }
+  // Handle numbers saved with + prefix
+  candidates.push('+' + digits)
+  return [...new Set(candidates)]
+}
+
 async function handleInboundMessage(webhookId: string, phoneNumberId: string, value: any, msg: any) {
   const now = new Date().toISOString()
   const eventId = crypto.randomUUID()
   const occurredAt = new Date(Number(msg.timestamp) * 1000).toISOString()
+  const senderRaw: string = msg.from || ''
 
+  // ── 1. Resolve tenant + customer from sender phone ────────────────────
+  let resolvedTenantId: string | null = null
+  let resolvedCustomerId: string | null = null
+  let resolvedInvoiceId: string | null = null
+
+  if (senderRaw) {
+    const phoneCandidates = normalisePhone(senderRaw)
+
+    // Try to match against any of the candidate formats in customers table
+    for (const candidate of phoneCandidates) {
+      const res = await supabaseFetch(
+        `customers?phone=eq.${encodeURIComponent(candidate)}&select=id,tenant_id&limit=1`,
+        { method: 'GET' },
+      )
+      if (res.ok) {
+        const rows: any[] = await res.json().catch(() => [])
+        if (rows.length > 0) {
+          resolvedCustomerId = rows[0].id
+          resolvedTenantId = rows[0].tenant_id
+          break
+        }
+      }
+    }
+
+    // If we resolved a customer, find the most-recent open invoice (for correlation)
+    if (resolvedTenantId && resolvedCustomerId) {
+      const invRes = await supabaseFetch(
+        `invoices?customer_id=eq.${resolvedCustomerId}&tenant_id=eq.${resolvedTenantId}&status=neq.paid&order=created_at.desc&limit=1&select=id`,
+        { method: 'GET' },
+      )
+      if (invRes.ok) {
+        const invRows: any[] = await invRes.json().catch(() => [])
+        if (invRows.length > 0) resolvedInvoiceId = invRows[0].id
+      }
+    }
+  }
+
+  // ── 2. Build metadata ─────────────────────────────────────────────────
   const metadata = buildMetadata({
     webhookId,
     billzoMessageId: null,
@@ -339,16 +418,21 @@ async function handleInboundMessage(webhookId: string, phoneNumberId: string, va
     conversation: null,
     pricing: null,
     rawPayload: { messages: [msg], metadata: value.metadata },
-    processing: {},
+    processing: {
+      resolved_tenant_id: resolvedTenantId,
+      resolved_customer_id: resolvedCustomerId,
+      resolved_invoice_id: resolvedInvoiceId,
+    },
   })
 
+  // ── 3. Insert whatsapp_events with real tenant_id ─────────────────────
   const row = {
     id: eventId,
-    tenant_id: 'meta_webhook',
+    tenant_id: resolvedTenantId || 'meta_webhook', // sentinel for unresolved
     provider_message_id: msg.id,
-    phone: msg.from,
+    phone: senderRaw,
     message_type: msg.type || 'unknown',
-    message_preview: msg.text?.body || null,
+    message_preview: msg.text?.body?.slice(0, 500) || null,
     direction: 'inbound',
     status: 'received',
     occurred_at: occurredAt,
@@ -369,6 +453,40 @@ async function handleInboundMessage(webhookId: string, phoneNumberId: string, va
       `whatsapp_events inbound insert failed: ${insertRes.status}`,
       { row, error: text, webhookId },
     )
+    return
+  }
+
+  // ── 4. Emit outbox event for matched senders only ─────────────────────
+  if (resolvedTenantId && resolvedCustomerId) {
+    try {
+      const { writeOutboxEvent } = await import('@/lib/billzo/outbox')
+      await writeOutboxEvent({
+        type: 'customer.reply',
+        tenantId: resolvedTenantId,
+        entityId: resolvedInvoiceId || resolvedCustomerId,
+        payload: {
+          whatsappEventId: eventId,
+          customerId: resolvedCustomerId,
+          invoiceId: resolvedInvoiceId,
+          phone: senderRaw,
+          messagePreview: msg.text?.body?.slice(0, 200) || null,
+          messageType: msg.type || 'text',
+          channel: 'whatsapp',
+          provider: 'meta',
+          occurredAt,
+        },
+        correlationId: webhookId,
+      })
+    } catch (err: any) {
+      console.error('[MetaWebhook] Failed to emit customer.reply outbox event:', err.message)
+    }
+  } else {
+    // Unmatched phone — write to dead-letter for ops visibility
+    await writeDeadLetter(
+      `inbound_unmatched_phone: no customer found for ${senderRaw}`,
+      { senderRaw, phoneCandidates: normalisePhone(senderRaw), webhookId, eventId },
+    )
+    appendWebhookLog(`Inbound from unmatched phone ${senderRaw} — dead-lettered`)
   }
 }
 
