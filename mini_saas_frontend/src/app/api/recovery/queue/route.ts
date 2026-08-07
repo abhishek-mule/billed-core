@@ -161,6 +161,7 @@ export async function GET(request: NextRequest) {
       blockedRes,
       eventsRes,
       todayEventsRes,
+      recentPaymentsRes,
     ] = await Promise.all([
       supabase
         .from('recovery_cases')
@@ -224,11 +225,26 @@ export async function GET(request: NextRequest) {
         .eq('recovery_cases.tenant_id', tenantId)
         .gte('occurred_at', fmt(todayStart))
         .limit(200),
+      // Recent merchant-relevant updates (last 24h): payments, promises, read status
+      supabase
+        .from('payments')
+        .select('amount, created_at, customer_id, customers!inner(customer_name)')
+        .eq('tenant_id', tenantId)
+        .eq('status', 'paid')
+        .gte('created_at', fmt(new Date(now.getTime() - 24 * 60 * 60 * 1000)))
+        .order('created_at', { ascending: false })
+        .limit(5),
     ])
 
     // ── Process results ──
     const activeCases = activeCasesRes.data || []
     const rawInvoices = unpaidInvoicesRes.data || []
+    const recentPayments = (recentPaymentsRes.data || []).map((p: any) => ({
+      type: 'payment' as const,
+      customerName: (p.customers as any)?.customer_name ?? 'Customer',
+      amount: parseFloat(p.amount) || 0,
+      at: p.created_at,
+    }))
     
     // Synthesize cases for customers who have unpaid invoices but NO active recovery_case
     const existingCustIds = new Set(activeCases.map(c => c.customer_id))
@@ -474,6 +490,7 @@ export async function GET(request: NextRequest) {
       items: queue.items,
       recoveredToday: attributedAmounts.today,
       recentEvents,
+      recentActivity: recentPayments,
       summary: {
         collectibleToday: queue.summary.collectibleToday,
         outstanding,

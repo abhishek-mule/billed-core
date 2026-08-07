@@ -1,9 +1,10 @@
 "use client"
 
-import Link from "next/link"
-import { ArrowRight, PhoneOff } from "lucide-react"
-import type { ReactNode } from "react"
+import { PhoneOff, User } from "lucide-react"
 import { formatINR, cn } from "@/lib/utils"
+import { ReminderStateBadge } from "./ReminderStateBadge"
+import { CustomerActionSheet, type CustomerActionSheetProps } from "./CustomerActionSheet"
+import { deriveWhyLines, dominantAction, type DominantActionInput } from "@/lib/billzo/reminder-state"
 
 export type CustomerCardItem = {
   caseId: string
@@ -18,13 +19,17 @@ export type CustomerCardItem = {
   actionType: string
   state: string
   reasons: { type: string; impact: string }[]
+  promiseToPayDate?: string | null
+  maxDeliveryStatus?: "sent" | "delivered" | "read" | null
+  ignoredReminders?: number
+  brokenPromises?: number
 }
 
 interface CustomerCardProps {
   item: CustomerCardItem
   rank: number
-  tierIcon?: ReactNode
-  whyNow?: string
+  tierIcon?: React.ReactNode
+  sheet?: Omit<CustomerActionSheetProps, "dominant" | "canWhatsApp">
 }
 
 function overdueTone(overdue: number): { label: string; color: string; chip: string } {
@@ -34,16 +39,34 @@ function overdueTone(overdue: number): { label: string; color: string; chip: str
   return { label: "Due now", color: "text-success", chip: "bg-success-soft text-success" }
 }
 
-export function CustomerCard({ item, rank, tierIcon }: CustomerCardProps) {
+function stateInput(item: CustomerCardItem): DominantActionInput {
+  const hasPhone = !!item.phone
+  const hasActivePromise = !!item.promiseToPayDate
+  const promiseDueDays = hasActivePromise
+    ? Math.ceil((new Date(item.promiseToPayDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : undefined
+  return {
+    hasPhone,
+    hasActivePromise,
+    maxDeliveryStatus: item.maxDeliveryStatus ?? null,
+    ignoredReminders: item.ignoredReminders || 0,
+    brokenPromises: item.brokenPromises || 0,
+    overdueDays: item.overdue,
+    promiseDueDays,
+    expectedToday: item.recoverableAmount,
+  }
+}
+
+export function CustomerCard({ item, rank, tierIcon, sheet }: CustomerCardProps) {
+  const input = stateInput(item)
   const tone = overdueTone(item.overdue)
   const missingPhone = !item.phone
-  const expectedToday = item.recoverableAmount
+  const whyLines = deriveWhyLines(input)
+  const dominant = dominantAction(input)
 
   return (
-    <Link
-      href={`/recovery/case/${item.caseId}`}
-      className="block bg-card border border-border rounded-xl p-3.5 hover:shadow-sm hover:border-recovery/30 transition-all active:scale-[0.99]"
-    >
+    <div className="bg-card border border-border rounded-xl p-3.5 hover:shadow-sm transition-all">
+      {/* Header: amount + badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className="flex-shrink-0 w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground">
@@ -53,11 +76,10 @@ export function CustomerCard({ item, rank, tierIcon }: CustomerCardProps) {
             {formatINR(item.amount)}
           </span>
         </div>
-        <span className={cn("flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold", tone.chip)}>
-          {tone.label}
-        </span>
+        <ReminderStateBadge input={input} className="flex-shrink-0" />
       </div>
 
+      {/* Name + tier */}
       <div className="flex items-center gap-1.5 mt-2">
         <span className="text-sm font-semibold text-foreground truncate">
           {item.customerName}
@@ -69,21 +91,44 @@ export function CustomerCard({ item, rank, tierIcon }: CustomerCardProps) {
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border">
-        <span className="text-xs text-muted-foreground">
-          Expected today <span className="font-bold text-foreground tabular-nums">{formatINR(expectedToday)}</span>
-        </span>
-        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-recovery text-white text-xs font-bold hover:bg-recovery/90 transition-colors">
-          Take Action <ArrowRight size={12} />
+      {/* Why line */}
+      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+        {whyLines.map((w) => (
+          <span key={w} className={cn("text-[11px] font-semibold", tone.color)}>
+            {w}
+          </span>
+        ))}
+        <span className="text-[11px] text-muted-foreground">
+          Expected today <span className="font-bold tabular-nums">{formatINR(item.recoverableAmount)}</span>
         </span>
       </div>
 
+      {/* Phone missing — red, impossible to miss */}
       {missingPhone && (
-        <div className="flex items-center gap-1.5 mt-2 rounded-lg bg-danger-soft px-2.5 py-1.5 text-[11px] font-semibold text-danger">
-          <PhoneOff size={12} />
-          Phone number missing — can&apos;t message
+        <div className="flex items-center gap-1.5 mt-2 rounded-lg bg-danger-soft px-2.5 py-2 text-[11px] font-semibold text-danger">
+          <PhoneOff size={13} className="flex-shrink-0" />
+          <span>Phone missing — cannot send WhatsApp</span>
+          {sheet?.onOpenCustomer ? (
+            <button
+              onClick={sheet.onOpenCustomer}
+              className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-danger text-white text-[10px] font-bold hover:opacity-90"
+            >
+              <User size={10} /> Add Number
+            </button>
+          ) : null}
         </div>
       )}
-    </Link>
+
+      {/* Fixed action sheet */}
+      <div className="mt-3 pt-3 border-t border-border">
+        <CustomerActionSheet
+          {...sheet}
+          dominant={dominant}
+          canWhatsApp={!missingPhone}
+        />
+      </div>
+    </div>
   )
 }
+
+export default CustomerCard

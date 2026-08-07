@@ -203,6 +203,18 @@ async function sendReminderForCase(ctx: {
   })
 
   const commonRefresh = ['recovery_queue', 'dashboard', 'invoice', 'customer']
+
+  // Look up next scheduled action for this invoice to populate "Next reminder" copy
+  const { data: nextAction } = await supabase
+    .from('collection_actions')
+    .select('scheduled_at, action_type, template_name')
+    .eq('tenant_id', tid)
+    .eq('status', 'scheduled')
+    .contains('invoice_ids', [oldestInvoice.id])
+    .order('scheduled_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
   const ok = {
     action: 'send_reminder',
     invoiceId: oldestInvoice.id,
@@ -212,6 +224,8 @@ async function sendReminderForCase(ctx: {
     invoiceCount: unpaidInvoices.length,
     refresh: commonRefresh,
     quotaWarning: 'none' as const,
+    nextReminderAt: nextAction?.scheduled_at || null,
+    nextReminderStage: nextAction?.template_name || nextAction?.action_type || null,
   }
 
   if (directResult.sentVia === 'baileys') {
@@ -418,12 +432,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: pmtResult.error }, { status: 500 })
       }
 
+      // Fetch fresh invoice state so the card can update immediately
+      const { data: freshInvoice } = await supabase
+        .from('invoices')
+        .select('outstanding_amount, status, paid_amount, total')
+        .eq('id', invoiceId)
+        .maybeSingle()
+
       await markCaseActivity(supabase, caseId)
       return NextResponse.json({
         success: true,
         action,
         invoiceId,
         paymentId: pmtResult.paymentId,
+        outstandingAmount: Number(freshInvoice?.outstanding_amount ?? 0),
+        invoiceStatus: freshInvoice?.status || null,
+        paidAmount: Number(freshInvoice?.paid_amount ?? amount),
         refresh: ['recovery_queue', 'dashboard', 'invoice', 'customer'],
       })
     }
@@ -708,7 +732,13 @@ export async function POST(request: NextRequest) {
       console.log(`[TTFA] tenant=${tid} case=${caseId} action=${action} ms=${ttfa}`)
     }
 
-    return NextResponse.json({ success: true, action, refresh: ['recovery_queue', 'dashboard'] })
+    // Enrich response with action-specific acknowledgment data for the UI
+    const ackData: Record<string, any> = { success: true, action, refresh: ['recovery_queue', 'dashboard'] }
+    if (action === 'mark_promise' && payload?.dueDate) {
+      ackData.promiseDueDate = payload.dueDate
+    }
+
+    return NextResponse.json(ackData)
   } catch (err: any) {
     console.error('[QueueAction] Action failed:', err)
     return NextResponse.json({ error: 'Action failed' }, { status: 500 })

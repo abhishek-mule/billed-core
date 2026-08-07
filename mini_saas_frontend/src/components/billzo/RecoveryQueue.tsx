@@ -3,10 +3,17 @@
 import { useMemo } from "react"
 import { AlertTriangle, Zap, Flame } from "lucide-react"
 import { CustomerCard, type CustomerCardItem } from "./CustomerCard"
-import { formatINR } from "@/lib/utils"
+import type { DominantAction } from "@/lib/billzo/reminder-state"
 
 interface RecoveryQueueProps {
   items: CustomerCardItem[]
+  sendingFor?: string | null
+  onSend?: (item: CustomerCardItem) => void
+  onCall?: (item: CustomerCardItem) => void
+  onPayment?: (item: CustomerCardItem) => void
+  onPromise?: (item: CustomerCardItem) => void
+  onOpenCustomer?: (item: CustomerCardItem) => void
+  dominantOverride?: DominantAction
 }
 
 function getTier(item: CustomerCardItem & { confidence: number }): {
@@ -26,30 +33,15 @@ function getTier(item: CustomerCardItem & { confidence: number }): {
   return { id: "recover-first", icon: <Flame size={12} className="text-orange-600" />, label: "Highest Impact" }
 }
 
-function formatWhyNow(
-  item: CustomerCardItem & { confidence: number },
-  tierId: string,
-): string {
-  if (tierId === "recover-first") {
-    const parts: string[] = []
-    if (item.recoverableAmount > 5000)
-      parts.push(`₹${(item.recoverableAmount / 1000).toFixed(0)}k expected today`)
-    if (item.overdue > 0) parts.push(`${item.overdue}d overdue`)
-    return parts.join(" · ") || "Best opportunity today"
-  }
-  if (tierId === "quick-win") {
-    return `${item.confidence}% confidence · ${item.recoverableAmount > 0 ? `₹${(item.recoverableAmount / 1000).toFixed(0)}k` : "quick"} recovery`
-  }
-  if (tierId === "follow-up") {
-    const parts: string[] = []
-    if (item.overdue > 30) parts.push(`${item.overdue}d overdue`)
-    if (item.reasons.some((r) => r.type === "promise_broken")) parts.push("Promise broken")
-    return parts.join(" · ") || "Needs attention"
-  }
-  return ""
-}
-
-export function RecoveryQueue({ items }: RecoveryQueueProps) {
+export function RecoveryQueue({
+  items,
+  sendingFor,
+  onSend,
+  onCall,
+  onPayment,
+  onPromise,
+  onOpenCustomer,
+}: RecoveryQueueProps) {
   const ranked = useMemo(() => {
     const withConfidence = items.map((item) => ({
       ...item,
@@ -75,7 +67,6 @@ export function RecoveryQueue({ items }: RecoveryQueueProps) {
     <div className="space-y-2">
       {ranked.map((item, i) => {
         const tier = getTier(item)
-        const whyNow = formatWhyNow(item, tier.id)
 
         return (
           <CustomerCard
@@ -83,7 +74,15 @@ export function RecoveryQueue({ items }: RecoveryQueueProps) {
             item={item}
             rank={i + 1}
             tierIcon={tier.icon}
-            whyNow={whyNow}
+            sheet={{
+              busy: sendingFor === item.caseId,
+              onWhatsApp: onSend ? () => onSend(item) : undefined,
+              onCall: onCall ? () => onCall(item) : undefined,
+              onRecordPayment: onPayment ? () => onPayment(item) : undefined,
+              onPromise: onPromise ? () => onPromise(item) : undefined,
+              openHref: onOpenCustomer ? undefined : `/parties/${item.customerId}`,
+              onOpenCustomer: onOpenCustomer ? () => onOpenCustomer(item) : undefined,
+            }}
           />
         )
       })}

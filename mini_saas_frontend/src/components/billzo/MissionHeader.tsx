@@ -36,7 +36,7 @@ export function MissionHeader({
           <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-recovery-soft text-recovery">
             <Banknote size={14} />
           </span>
-          <span className="text-sm font-semibold text-foreground">Business Credit</span>
+          <span className="text-sm font-semibold text-foreground">Total Outstanding</span>
         </div>
         <span className="text-2xl font-bold text-foreground tabular-nums">
           {formatINR(outstanding)}

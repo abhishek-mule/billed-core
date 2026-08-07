@@ -55,9 +55,51 @@ export function Settings() {
   return (
     <div className="space-y-8">
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Testing mode</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Business & System</p>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Settings</h1>
       </header>
+
+      {/* ROI & Subscription Card */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Subscription & Value Delivered</h2>
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Current Plan</p>
+              <p className="text-xl font-bold text-foreground mt-0.5 flex items-center gap-2">
+                <span>BillZo Pro</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  ACTIVE
+                </span>
+              </p>
+            </div>
+            <a
+              href="/pricing"
+              className="px-4 py-2 rounded-xl bg-foreground text-background text-xs font-bold hover:bg-foreground/90 transition-colors"
+            >
+              Manage Subscription
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-border">
+            <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
+              <p className="text-[11px] font-medium text-muted-foreground">Recovered with BillZo</p>
+              <p className="text-lg font-bold text-emerald-600 tabular-nums mt-0.5">₹18,420</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">This month</p>
+            </div>
+            <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
+              <p className="text-[11px] font-medium text-muted-foreground">Monthly Software Cost</p>
+              <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">₹299</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">₹299 / month</p>
+            </div>
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Return on Investment</p>
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">61x ROI</p>
+              <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">Value delivered</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="space-y-4">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80">Integrations & System</h2>

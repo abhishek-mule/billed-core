@@ -225,48 +225,20 @@ export function CustomerIntelligencePanel({ customerId }: CustomerIntelligencePa
         </div>
       </div>
 
-      <div className="border-t border-border pt-3 space-y-2">
-        {stateKey === 'promised' && data.case.promise_to_pay_date && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-700">
+      {stateKey === 'promised' && data.case.promise_to_pay_date && (
+        <div className="border-t border-border pt-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-700 dark:text-purple-300">
             <CheckCircle2 size={14} />
             <span>
               Promised payment by{" "}
               <strong>{new Date(data.case.promise_to_pay_date).toLocaleDateString("en-IN", { day: "numeric", month: "long" })}</strong>
               {new Date(data.case.promise_to_pay_date) < new Date() && (
-                <span className="text-rose-600"> (overdue)</span>
+                <span className="text-rose-600 font-semibold"> (overdue)</span>
               )}
             </span>
           </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setShowPromise(true)}
-            disabled={sending !== null}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 disabled:opacity-50 transition-colors"
-          >
-            <Hand size={14} />
-            Mark Promise
-          </button>
-          <button
-            onClick={() => setShowPause(true)}
-            disabled={sending !== null}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-colors"
-          >
-            <Pause size={14} />
-            Pause
-          </button>
         </div>
-
-        <button
-          onClick={() => sendAction('send_reminder')}
-          disabled={sending !== null}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 transition-colors"
-        >
-          {sending === 'send_reminder' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          Send Reminder
-        </button>
-      </div>
+      )}
     </div>
 
     {showPromise && (

@@ -9,6 +9,7 @@ import {
   Loader2, CircleDashed, Pin, PenLine, X,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
+import { ReminderStateBadge } from '@/components/billzo/ReminderStateBadge'
 
 type Customer = {
   id: string; name: string; phone: string; email: string | null; tier: string | null; gstin: string | null
@@ -47,14 +48,6 @@ function actionLabel(a: string) {
     { call: 'Call', send_reminder: 'Send Reminder', reminder: 'Reminder', promise_followup: 'Promise Follow-up',
       visit: 'Visit', escalate: 'Escalate', payment_request: 'Payment Request', wait: 'Wait', record_payment: 'Record Payment' } as any
   )[a] || a.replace(/_/g, ' ')
-}
-
-function statusColor(state: string): string {
-  if (state === 'recovered' || state === 'paid') return 'green'
-  if (state === 'promised' || state === 'partial_payment') return 'blue'
-  if (state === 'overdue' || state === 'active') return 'orange'
-  if (state === 'disputed') return 'red'
-  return 'gray'
 }
 
 function overdueDays(dueDate: string | null): number | null {
@@ -189,6 +182,21 @@ export default function CustomerWorkspacePage() {
   const rs = recoveryScore(rc)
   const overdueDaysValue = rc && rc.overdue > 0 ? rc.overdue : null
 
+  const maxDeliveryStatus = (() => {
+    const seen = data.communication.filter(x => x.kind === 'wa').map(x => x.text)
+    if (seen.includes('read')) return 'read'
+    if (seen.includes('delivered')) return 'delivered'
+    if (seen.some(x => /sent/i.test(x))) return 'sent'
+    return null
+  })() as 'read' | 'delivered' | 'sent' | null
+
+  const stateBadgeInput = {
+    hasPhone: !!c?.phone,
+    isPaid: rc ? rc.outstanding <= 0 : false,
+    hasActivePromise: !!(rc?.promiseDate && new Date(rc.promiseDate) >= new Date()),
+    maxDeliveryStatus,
+  }
+
   const nextAction = (() => {
     if (rc?.nextAction === 'call') return { icon: <Phone size={15} />, label: 'Call Today', reason: 'Needs direct conversation', action: 'call' }
     if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed', action: 'visit' }
@@ -209,7 +217,7 @@ export default function CustomerWorkspacePage() {
         <div className="cw-head-main">
           <h1 className="cw-name">{c?.name ?? 'Customer'}</h1>
           {c?.phone ? <a className="cw-phone" href={`tel:${c.phone}`}>{c.phone}</a> : null}
-          {rc ? <span className={`cw-state cw-state--${statusColor(rc.state)}`}>{rc.state.replace(/_/g, ' ')}</span> : null}
+          {rc ? <ReminderStateBadge input={stateBadgeInput} size="sm" showIcon className="mt-0.5" /> : null}
         </div>
       </header>
 
@@ -253,10 +261,10 @@ export default function CustomerWorkspacePage() {
         </section>
       ) : null}
 
-      {/* Recovery Score */}
+      {/* Chance of recovery */}
       {rc && rc.outstanding > 0 ? (
         <section className="rc-block">
-          <div className="rc-block-head"><h2>Recovery Score</h2></div>
+          <div className="rc-block-head"><h2>Chance of payment</h2></div>
           <div className={`rs-card rs--${rs.color}`}>
             <div className="rs-bar-wrap">
               <div className="rs-bar">

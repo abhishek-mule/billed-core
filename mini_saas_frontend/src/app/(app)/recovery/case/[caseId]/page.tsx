@@ -225,175 +225,307 @@ export default function CaseWorkspacePage() {
   const recommendationLabel = rec?.nextBestAction === 'call' ? 'Call Today' : rec?.nextBestAction === 'visit' ? 'Visit Customer' : rec?.nextBestAction === 'follow_up' ? 'Follow Up' : rec?.nextBestAction === 'send_reminder' ? 'Send Reminder' : rec?.nextBestAction === 'update_contact' ? (c?.phone ? 'Update Contact' : 'Add Number') : 'Send Reminder'
 
   return (
-    <div className="rc-page">
-      <header className="cw-header">
-        <button className="rc-refresh" onClick={() => router.back()} aria-label="Back">
-          <ArrowLeft size={16} />
-        </button>
-      </header>
-
-      <WorkspaceHero
-        customerName={c?.name ?? 'Walk-in Customer'}
-        customerPhone={c?.phone || undefined}
-        outstanding={proj.case.outstandingAmount}
-        overdueDays={proj.case.overdueDays}
-        priority={proj.case.priority}
-        recommendation={rec ? { nextBestAction: rec.nextBestAction, urgency: rec.urgency, reason: rec.reason } : null}
-        metrics={proj.metrics}
-        timeline={proj.timeline}
-      />
-
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <h2>Activity</h2>
-          <Link href={`/recovery/timeline?caseId=${encodeURIComponent(caseId)}`} className="cw-link">Full activity →</Link>
-        </div>
-        <RecoveryEventTimeline
-          key={timelineRefreshKey}
-          caseId={caseId}
-          emptyMessage="No recovery activity yet."
-        />
-      </section>
-
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Invoices</h2><span className="rc-count">{proj.invoices.length}</span></div>
-        {proj.invoices.length === 0 ? (
-          <div className="rc-empty"><FileText size={18} /><span>No invoices.</span></div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {proj.invoices.map((inv) => (
-              <Link key={inv.id} href={`/invoices/${inv.id}`} className="rc-row">
-                <div className="rc-row-icon"><FileText size={15} /></div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{inv.number ?? 'Invoice'}</span>
-                  <span className="rc-row-sub">
-                    {inv.overdueDays > 0
-                      ? <span className="rc-meta-warn">{inv.overdueDays}d overdue</span>
-                      : <span>Due {fmtDate(inv.dueDate)}</span>
-                    }
-                    {' · '}{inv.status}
-                  </span>
-                </div>
-                <div className="rc-row-time">{fmt(inv.amount)}</div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Promises</h2><span className="rc-count">{proj.promises.length}</span></div>
-        {proj.promises.length === 0 ? (
-          <div className="rc-empty"><HeartHandshake size={18} /><span>No promises made.</span></div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {proj.promises.map((p) => (
-              <div key={p.id} className="rc-row">
-                <div className="rc-row-icon"><HeartHandshake size={15} /></div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{fmtDate(p.date)}</span>
-                  <span className="rc-row-sub">{p.status}{p.note ? ` · ${p.note}` : ''}</span>
-                </div>
-                <div className="rc-row-time">{p.amount ? fmt(p.amount) : ''}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Customer Notes</h2><span className="rc-count rc-count--muted">{proj.notes.length}</span></div>
-        {customerId ? (
-          <>
-            {proj.notes.length === 0 ? (
-              <div className="rc-empty"><span>No notes yet. Add what you learn about this customer.</span></div>
-            ) : (
-              <div className="rc-list rc-list--tight">
-                {proj.notes.map((n) => (
-                  <div key={n.id} className="cw-mem">
-                    <button className="cw-mem-pin" onClick={() => togglePin(n.id, n.isPinned)} title={n.isPinned ? 'Unpin' : 'Pin'}>
-                      {n.isPinned ? <Pin size={14} /> : <PenLine size={14} />}
-                    </button>
-                    <span className="cw-mem-text">{n.note}</span>
-                    <button className="cw-mem-del" onClick={() => deleteNote(n.id)} title="Delete"><X size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="cw-mem-add">
-              <input
-                className="cw-mem-input"
-                placeholder="Only answers after 7PM, prefers WhatsApp, brother handles payments"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !savingNote) saveNote() }}
-              />
-              <button className="rc-btn cw-mem-save" onClick={saveNote} disabled={savingNote || !draft.trim()}>
-                {savingNote ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="rc-empty"><span>Create a customer profile to track notes and history.</span></div>
-        )}
-      </section>
-
-      {showOutcome ? (
-        <div className="oc-overlay" onClick={() => setShowOutcome(false)}>
-          <div className="oc-dialog" onClick={(e) => e.stopPropagation()}>
-            <h3 className="oc-title">What happened?</h3>
-            <div className="oc-grid">
-              <button className="oc-btn oc-btn--promised" onClick={() => recordOutcome('promised')} disabled={!!submittingOutcome}>
-                <HeartHandshake size={16} /> Promised Payment
-              </button>
-              <button className="oc-btn oc-btn--paid" onClick={() => recordOutcome('paid')} disabled={!!submittingOutcome}>
-                <CheckCircle2 size={16} /> Paid
-              </button>
-              <button className="oc-btn oc-btn--noans" onClick={() => recordOutcome('no_answer')} disabled={!!submittingOutcome}>
-                <Phone size={16} /> No Answer
-              </button>
-              <button className="oc-btn oc-btn--wrong" onClick={() => recordOutcome('wrong_number')} disabled={!!submittingOutcome}>
-                <Phone size={16} /> Wrong Number
-              </button>
-              <button className="oc-btn oc-btn--dispute" onClick={() => recordOutcome('dispute')} disabled={!!submittingOutcome}>
-                <AlertTriangle size={16} /> Dispute Raised
-              </button>
-              <button className="oc-btn oc-btn--nointerest" onClick={() => recordOutcome('not_interested')} disabled={!!submittingOutcome}>
-                <X size={16} /> Not Interested
-              </button>
-            </div>
-            <input className="oc-note" placeholder="Add note (optional)" value={outcomeNote} onChange={(e) => setOutcomeNote(e.target.value)} />
-            {outcomeNote ? (
-              <input className="oc-date" type="date" value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} placeholder="Promise date" />
-            ) : null}
-            <button className="oc-cancel" onClick={() => setShowOutcome(false)}>Cancel</button>
-          </div>
-        </div>
-      ) : null}
-
-      {proj.case.outstandingAmount > 0 ? (
-        <div className="cw-actions">
-          <button className="rc-btn rc-btn--ghost" onClick={() => setShowOutcome(true)}>
-            <CheckCircle2 size={14} /> Record Outcome
+    <div className="min-h-screen bg-muted/50 pb-36">
+      <div className="max-w-4xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-6">
+        {/* Header navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={16} /> Back
           </button>
-          {c?.phone ? (
-            <a href={`tel:${c.phone}`} className="rc-btn rc-btn--primary" onClick={handleCall}>
-              <Phone size={15} /> Call
-            </a>
+          <Link
+            href={`/recovery/timeline?caseId=${encodeURIComponent(caseId)}`}
+            className="text-xs font-semibold text-primary hover:underline"
+          >
+            Full Activity Log →
+          </Link>
+        </div>
+
+        {/* Hero Card */}
+        <WorkspaceHero
+          customerName={c?.name ?? 'Walk-in Customer'}
+          customerPhone={c?.phone || undefined}
+          outstanding={proj.case.outstandingAmount}
+          overdueDays={proj.case.overdueDays}
+          priority={proj.case.priority}
+          recommendation={rec ? { nextBestAction: rec.nextBestAction, urgency: rec.urgency, reason: rec.reason } : null}
+          metrics={proj.metrics}
+          timeline={proj.timeline}
+          onCall={handleCall}
+          onSendReminder={() => setShowOutcome(true)}
+          onRecordOutcome={() => setShowOutcome(true)}
+        />
+
+        {/* Activity Section */}
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Activity History</h2>
+          </div>
+          <RecoveryEventTimeline
+            key={timelineRefreshKey}
+            caseId={caseId}
+            emptyMessage="No recovery activity recorded yet."
+          />
+        </div>
+
+        {/* Invoices Section */}
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
+              Invoices <span className="ml-1 text-xs font-normal text-muted-foreground">({proj.invoices.length})</span>
+            </h2>
+          </div>
+          {proj.invoices.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <FileText size={16} /> No invoices found.
+            </div>
           ) : (
-            <button className="rc-btn rc-btn--primary" onClick={() => setShowOutcome(true)}>
-              <MessageSquare size={15} /> Record Outcome
-            </button>
+            <div className="divide-y divide-border/60">
+              {proj.invoices.map((inv) => (
+                <Link
+                  key={inv.id}
+                  href={`/invoices/${inv.id}`}
+                  className="py-3 flex items-center justify-between gap-3 hover:bg-muted/30 px-2 rounded-lg transition-colors group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 rounded-lg bg-muted text-muted-foreground group-hover:text-foreground shrink-0">
+                      <FileText size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{inv.number ?? 'Invoice'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {inv.overdueDays > 0 ? (
+                          <span className="text-overdue font-medium">{inv.overdueDays}d overdue</span>
+                        ) : (
+                          <span>Due {fmtDate(inv.dueDate)}</span>
+                        )}
+                        {' · '}
+                        <span className="capitalize">{inv.status}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold text-foreground tabular-nums shrink-0">{fmt(inv.amount)}</span>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
-      ) : null}
 
-      {showPostOutcomeCta ? (
-        <div className="cw-actions" style={{ marginTop: '1rem' }}>
-          <Link href="/recovery/queue" className="rc-btn rc-btn--primary"><ArrowLeft size={14} /> Back to Queue</Link>
-          <Link href={`/recovery/timeline?caseId=${caseId}`} className="rc-btn rc-btn--ghost"><Clock size={14} /> View Timeline</Link>
+        {/* Promises Section */}
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
+              Promises <span className="ml-1 text-xs font-normal text-muted-foreground">({proj.promises.length})</span>
+            </h2>
+          </div>
+          {proj.promises.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <HeartHandshake size={16} /> No promises recorded.
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {proj.promises.map((p) => (
+                <div key={p.id} className="py-3 flex items-center justify-between gap-3 px-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+                      <HeartHandshake size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{fmtDate(p.date)}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{p.status}{p.note ? ` · ${p.note}` : ''}</p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold text-foreground tabular-nums shrink-0">{p.amount ? fmt(p.amount) : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      ) : null}
+
+        {/* Customer Notes Section */}
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
+              Customer Notes <span className="ml-1 text-xs font-normal text-muted-foreground">({proj.notes.length})</span>
+            </h2>
+          </div>
+          {customerId ? (
+            <div className="space-y-3">
+              {proj.notes.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No notes yet. Add key details about this customer below.</p>
+              ) : (
+                <div className="space-y-2">
+                  {proj.notes.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between gap-2 p-3 rounded-xl bg-muted/40 border border-border/50 text-xs text-foreground">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <button
+                          onClick={() => togglePin(n.id, n.isPinned)}
+                          title={n.isPinned ? 'Unpin' : 'Pin'}
+                          className={`p-1 rounded hover:bg-muted ${n.isPinned ? 'text-primary' : 'text-muted-foreground'}`}
+                        >
+                          <Pin size={13} />
+                        </button>
+                        <span className="truncate">{n.note}</span>
+                      </div>
+                      <button
+                        onClick={() => deleteNote(n.id)}
+                        title="Delete"
+                        className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-muted transition-colors"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  className="flex-1 bg-card border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  placeholder="e.g. Only answers after 7PM, prefers WhatsApp..."
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !savingNote) saveNote() }}
+                />
+                <button
+                  onClick={saveNote}
+                  disabled={savingNote || !draft.trim()}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-40 transition-opacity active:scale-[0.97]"
+                >
+                  {savingNote ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Create a customer profile to track notes and history.</p>
+          )}
+        </div>
+
+        {/* Outcome Modal Dialog */}
+        {showOutcome && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-150" onClick={() => setShowOutcome(false)}>
+            <div className="w-full max-w-md bg-card border border-border rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <h3 className="text-base font-bold text-foreground">Record Collection Outcome</h3>
+                <button onClick={() => setShowOutcome(false)} className="p-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => recordOutcome('promised')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300 text-xs font-bold hover:bg-purple-500/20 transition-colors"
+                >
+                  <HeartHandshake size={15} /> Promised
+                </button>
+                <button
+                  onClick={() => recordOutcome('paid')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-success/30 bg-success-soft text-success text-xs font-bold hover:bg-success/20 transition-colors"
+                >
+                  <CheckCircle2 size={15} /> Paid
+                </button>
+                <button
+                  onClick={() => recordOutcome('no_answer')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-border bg-muted/40 text-foreground text-xs font-semibold hover:bg-muted transition-colors"
+                >
+                  <Phone size={15} /> No Answer
+                </button>
+                <button
+                  onClick={() => recordOutcome('wrong_number')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-border bg-muted/40 text-foreground text-xs font-semibold hover:bg-muted transition-colors"
+                >
+                  <Phone size={15} /> Wrong Number
+                </button>
+                <button
+                  onClick={() => recordOutcome('dispute')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-danger/30 bg-danger-soft text-danger text-xs font-bold hover:bg-danger/20 transition-colors"
+                >
+                  <AlertTriangle size={15} /> Dispute
+                </button>
+                <button
+                  onClick={() => recordOutcome('not_interested')}
+                  disabled={!!submittingOutcome}
+                  className="flex items-center justify-center gap-1.5 p-3 rounded-xl border border-border bg-muted/40 text-muted-foreground text-xs font-semibold hover:bg-muted transition-colors"
+                >
+                  <X size={15} /> Refused
+                </button>
+              </div>
+              <div className="space-y-2">
+                <input
+                  className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  placeholder="Add note (optional)"
+                  value={outcomeNote}
+                  onChange={(e) => setOutcomeNote(e.target.value)}
+                />
+                {outcomeNote ? (
+                  <input
+                    className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                    type="date"
+                    value={promiseDate}
+                    onChange={(e) => setPromiseDate(e.target.value)}
+                  />
+                ) : null}
+              </div>
+              <button
+                onClick={() => setShowOutcome(false)}
+                className="w-full py-2 bg-muted text-muted-foreground hover:text-foreground rounded-xl text-xs font-bold transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Fixed Bottom Action Bar */}
+        {proj.case.outstandingAmount > 0 && (
+          <div className="fixed inset-x-0 bottom-6 z-40 px-4 pointer-events-none">
+            <div className="mx-auto max-w-md bg-foreground text-background rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={() => setShowOutcome(true)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-background/10 hover:bg-background/20 text-background text-xs font-bold transition-colors"
+              >
+                <CheckCircle2 size={15} /> Record Outcome
+              </button>
+              {c?.phone && (
+                <a
+                  href={`tel:${c.phone}`}
+                  onClick={handleCall}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
+                >
+                  <Phone size={15} /> Call Customer
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Post Outcome Floating CTA */}
+        {showPostOutcomeCta && (
+          <div className="fixed inset-x-0 bottom-6 z-40 px-4 pointer-events-none">
+            <div className="mx-auto max-w-md bg-foreground text-background rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
+              <Link
+                href="/recovery/queue"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
+              >
+                <ArrowLeft size={15} /> Back to Queue
+              </Link>
+              <Link
+                href={`/recovery/timeline?caseId=${caseId}`}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-background/10 hover:bg-background/20 text-background text-xs font-bold transition-colors"
+              >
+                <Clock size={15} /> View Timeline
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
+
 }

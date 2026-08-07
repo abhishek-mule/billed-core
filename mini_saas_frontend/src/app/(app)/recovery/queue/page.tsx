@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
-  Loader2, Send, Hand, RefreshCw,
+  Loader2, Send, RefreshCw,
   AlertTriangle, CheckCircle2, History, Banknote,
   Clock, Users, ChevronRight, Zap, Shield, AlertCircle,
-  CreditCard, CalendarDays, CheckSquare, X, PhoneOff,
+  CalendarDays, CheckSquare, X, PhoneOff, Bot, Phone, IndianRupee, Target,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
@@ -18,6 +18,12 @@ import { HistoryDrawer, prefetchCustomerTimeline } from "@/components/billzo/His
 import { PageShell, BackLink } from "@/components/billzo/PageShell"
 import { ErrorState } from "@/components/billzo/ErrorState"
 import { Skeleton, SkeletonCard } from "@/components/billzo/Skeleton"
+import { ReminderStateBadge } from "@/components/billzo/ReminderStateBadge"
+import { CustomerActionSheet } from "@/components/billzo/CustomerActionSheet"
+import {
+  deriveWhyLines, dominantAction, type DominantActionInput,
+} from "@/lib/billzo/reminder-state"
+import { AutoRecoverySheet } from "@/components/billzo/AutoRecoverySheet"
 
 interface PriorityCase {
   caseId: string
@@ -48,16 +54,39 @@ interface SampleRow {
   daysOverdue: number
 }
 
-type SectionId = 'promise_due' | 'broken_promise' | 'overdue' | 'partial' | 'promise_made'
+type SectionId = 'broken_promise' | 'promise_due' | 'overdue' | 'partial' | 'promise_made'
 
-const SECTION_ORDER: SectionId[] = ['promise_due', 'broken_promise', 'overdue', 'partial', 'promise_made']
+// Deterministic priority order — merchants can predict this
+const SECTION_ORDER: SectionId[] = ['broken_promise', 'promise_due', 'overdue', 'partial', 'promise_made']
 
 const SECTION_CONFIG: Record<SectionId, { label: string; dot: string }> = {
-  promise_due: { label: 'Promise Due Today', dot: 'bg-warning' },
   broken_promise: { label: 'Broken Promise', dot: 'bg-danger' },
+  promise_due: { label: 'Promise Due Today', dot: 'bg-warning' },
   overdue: { label: 'Overdue', dot: 'bg-outstanding' },
   partial: { label: 'Partial Payment', dot: 'bg-info' },
   promise_made: { label: 'Promise Made', dot: 'bg-recovery' },
+}
+
+// Within-section sort rank: read+ignored > delivered > sent > not_sent
+function deliveryRank(c: PriorityCase): number {
+  if (c.lastDeliveryStatus === 'read' && c.ignoredReminders > 0) return 3
+  if (c.lastDeliveryStatus === 'read') return 2
+  if (c.lastDeliveryStatus === 'delivered') return 1
+  if (c.lastDeliveryStatus === 'sent') return 0
+  return -1
+}
+
+function sortWithinSection(items: PriorityCase[]): PriorityCase[] {
+  return [...items].sort((a, b) => {
+    // 1. Delivery engagement rank (higher = more urgent)
+    const dr = deliveryRank(b) - deliveryRank(a)
+    if (dr !== 0) return dr
+    // 2. Higher amount first
+    const amtDiff = b.totalOverdue - a.totalOverdue
+    if (Math.abs(amtDiff) > 100) return amtDiff
+    // 3. Older overdue date last-resort
+    return b.oldestOverdueDays - a.oldestOverdueDays
+  })
 }
 
 function getSection(c: PriorityCase): SectionId {
@@ -71,33 +100,6 @@ function getSection(c: PriorityCase): SectionId {
   }
   if (c.lastPaymentAmount && c.lastPaymentAmount < c.totalOverdue) return 'partial'
   return 'overdue'
-}
-
-function signalColor(c: PriorityCase): string {
-  if (c.brokenPromises > 0) return 'text-danger'
-  if (c.promiseToPayDate) {
-    const due = new Date(c.promiseToPayDate)
-    if (due <= new Date()) return 'text-warning'
-    return 'text-recovery'
-  }
-  if (c.ignoredReminders >= 3) return 'text-muted-foreground'
-  if (c.oldestOverdueDays > 0) return 'text-outstanding'
-  return 'text-muted-foreground'
-}
-
-function formatSignal(c: PriorityCase): string {
-  if (c.brokenPromises > 0) return 'Broken Promise'
-  if (c.promiseToPayDate) {
-    const due = new Date(c.promiseToPayDate)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (due <= today) return 'Promise Due Today'
-    const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    return `Promise in ${diff}d`
-  }
-  if (c.ignoredReminders >= 3) return 'Needs call'
-  if (c.oldestOverdueDays > 0) return `Overdue by ${c.oldestOverdueDays}d`
-  return 'Pending'
 }
 
 function formatLastContact(dateStr: string | null | undefined): string {
@@ -115,27 +117,6 @@ function formatDate(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
 }
 
-type DeliveryMeta = { label: string; color: string; icon: any; title: string }
-
-function deliveryStatus(c: PriorityCase): DeliveryMeta | null {
-  const s = c.lastDeliveryStatus
-  if (!s) return null
-  switch (s) {
-    case "delivered":
-      return { label: "Delivered", color: "bg-recovery-soft text-recovery", icon: CheckCircle2, title: `Delivered ${formatLastContact(c.lastDeliveryActivity)}` }
-    case "read":
-      return { label: "Read", color: "bg-info-soft text-info", icon: CheckCircle2, title: `Read ${formatLastContact(c.lastDeliveryActivity)}` }
-    case "sent":
-      return { label: "Sent", color: "bg-outstanding-soft text-outstanding", icon: Send, title: `Sent ${formatLastContact(c.lastDeliveryActivity)}` }
-    case "queued":
-      return { label: "Queued", color: "bg-muted text-muted-foreground", icon: Clock, title: "Queued for delivery" }
-    case "failed":
-      return { label: "Failed", color: "bg-danger-soft text-danger", icon: AlertTriangle, title: "Delivery failed" }
-    default:
-      return null
-  }
-}
-
 function formatActionTime(c: PriorityCase): string {
   if (c.promiseToPayDate) {
     const due = new Date(c.promiseToPayDate)
@@ -151,22 +132,6 @@ function formatActionTime(c: PriorityCase): string {
   return "Send reminder"
 }
 
-const JOURNEY_LABELS = ['Overdue', 'Promise', 'Due', 'Paid'] as const
-type JourneyLabel = typeof JOURNEY_LABELS[number]
-
-function getJourneyStages(c: PriorityCase): Array<{ label: JourneyLabel; active: boolean }> {
-  const hasPromise = !!c.promiseToPayDate
-  const isPromiseDue = hasPromise && new Date(c.promiseToPayDate!) <= new Date()
-  const hasPayment = !!c.lastPaymentAt
-
-  return [
-    { label: 'Overdue', active: true },
-    { label: 'Promise', active: hasPromise || c.brokenPromises > 0 },
-    { label: 'Due', active: isPromiseDue },
-    { label: 'Paid', active: hasPayment },
-  ]
-}
-
 function formatPaymentMethod(method: string | undefined): string {
   const labels: Record<string, string> = {
     cash: 'Cash',
@@ -175,6 +140,34 @@ function formatPaymentMethod(method: string | undefined): string {
     cheque: 'Cheque',
   }
   return labels[method || ''] || method || 'Payment'
+}
+
+function cardStateInput(c: PriorityCase): DominantActionInput {
+  const hasActivePromise = !!c.promiseToPayDate
+  const d = c.lastDeliveryStatus
+  return {
+    hasPhone: !!c.phone,
+    isPaid: false,
+    hasActivePromise,
+    maxDeliveryStatus: d === 'read' || d === 'delivered' || d === 'sent' ? d : null,
+    ignoredReminders: c.ignoredReminders,
+    brokenPromises: c.brokenPromises,
+    overdueDays: c.oldestOverdueDays,
+    promiseDueDays: hasActivePromise && c.promiseToPayDate
+      ? Math.ceil((new Date(c.promiseToPayDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : undefined,
+    expectedToday: c.totalOverdue,
+  }
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  return `${Math.floor(hr / 24)}d ago`
 }
 
 // ── Component ──
@@ -191,6 +184,12 @@ export default function RecoveryQueuePage() {
   const [paymentFor, setPaymentFor] = useState<PriorityCase | null>(null)
   const [historyFor, setHistoryFor] = useState<PriorityCase | null>(null)
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set())
+  // Optimistic local card overrides: after action, mutate the card data immediately
+  const [cardOverrides, setCardOverrides] = useState<Record<string, Partial<PriorityCase>>>({})
+  // Exit animation: cards slide out when fully resolved (payment recorded)
+  const [exitingIds, setExitingIds] = useState<Set<string>>(new Set())
+  const [autoRecoveryOpen, setAutoRecoveryOpen] = useState(false)
+  const [autoRecoveryEnabled, setAutoRecoveryEnabled] = useState(true)
   const completedFired = useRef(false)
   const queueStartTime = useRef(Date.now())
   const queueVersion = useRef(0)
@@ -253,14 +252,27 @@ export default function RecoveryQueuePage() {
     })
   }, [])
 
+  // Trigger card exit animation, then reload to remove from list
+  const exitCard = useCallback((caseId: string, customerId: string) => {
+    setExitingIds(prev => new Set(prev).add(caseId))
+    setTimeout(() => {
+      markActioned(customerId)
+      load()
+    }, 340)
+  }, [load, markActioned])
+
+
   const isPreview = raw?.access === "preview"
   const totalOverdue = isPreview ? (raw?.data?.totalOverdue || 0) : (raw?.summary?.stuckMoneyTotal || 0)
   const customersNeedingAction = isPreview ? (raw?.data?.overdueCount || 0) : (raw?.summary?.customersNeedingAction || 0)
   const samples: SampleRow[] = raw?.data?.samples || []
+  const recoveredToday = (raw?.recentActivity ?? []).reduce((sum: number, a: any) => sum + (a.amount || 0), 0)
 
   const handleSend = async (c: PriorityCase) => {
     trackQueueEvent(E.send_reminder, c.customerId, { caseId: c.caseId })
     setSending(c.caseId)
+    // Optimistic: immediately show card as "Sent" so merchant gets instant confidence
+    setCardOverrides(prev => ({ ...prev, [c.caseId]: { lastDeliveryStatus: 'sent', lastActivityAt: new Date().toISOString() } }))
     try {
       const res = await fetch("/api/recovery/queue/actions", {
         method: "POST",
@@ -278,6 +290,8 @@ export default function RecoveryQueuePage() {
         toast.success("Reminder sent")
         load()
       } else {
+        // Rollback optimistic on failure
+        setCardOverrides(prev => { const next = { ...prev }; delete next[c.caseId]; return next })
         const data = await res.json().catch(() => ({}))
         if (data.error === "FEATURE_LOCKED" || data.code === "FEATURE_LOCKED") {
           toast.error("Upgrade to Pro to send reminders from the queue")
@@ -288,6 +302,7 @@ export default function RecoveryQueuePage() {
         }
       }
     } catch {
+      setCardOverrides(prev => { const next = { ...prev }; delete next[c.caseId]; return next })
       toast.error("Network error — could not send reminder")
     } finally {
       setSending(null)
@@ -357,25 +372,38 @@ export default function RecoveryQueuePage() {
 
   const sections = priorityCases.length
     ? SECTION_ORDER.map(id => ({
-        id,
-        items: priorityCases
-          .filter(c => getSection(c) === id)
-          .sort((a, b) => b.totalOverdue - a.totalOverdue),
-      })).filter(s => s.items.length > 0)
+      id,
+      items: sortWithinSection(
+        priorityCases.filter(c => getSection(c) === id)
+      ),
+    })).filter(s => s.items.length > 0)
     : null
 
-return (
+  return (
     <PageShell title="Recovery Queue" subtitle="Today's collection">
       <div className="space-y-5">
 
         {/* Header */}
         <BackLink href="/recovery" label="Recovery" />
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-lg font-bold text-foreground">{MerchantLanguage.recovery.queue}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Today's collection</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {recoveredToday > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold shadow-sm">
+                <CheckCircle2 size={13} className="text-emerald-500" />
+                <span>Recovered Today: {formatINR(recoveredToday)}</span>
+              </div>
+            )}
+            <button
+              onClick={() => setAutoRecoveryOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold bg-card hover:bg-muted transition-colors"
+            >
+              <Bot size={13} className={autoRecoveryEnabled ? "text-primary" : "text-muted-foreground"} />
+              <span>{autoRecoveryEnabled ? "🟢 Auto" : "🔴 Manual"}</span>
+            </button>
             {!isPreview && priorityCases.length > 0 && (
               <button
                 onClick={() => {
@@ -418,7 +446,7 @@ return (
             <div className="bg-foreground text-background rounded-2xl p-5 lg:p-6 shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                 <Banknote size={14} />
-                <span className="uppercase tracking-wider font-semibold">To collect</span>
+                <span className="uppercase tracking-wider font-semibold">To collect today</span>
               </div>
               <p className="text-3xl lg:text-4xl font-bold tabular-nums tracking-tight">
                 {formatINR(totalOverdue)}
@@ -426,11 +454,11 @@ return (
               <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Users size={12} />
-                  {customersNeedingAction} customer{customersNeedingAction !== 1 ? "s" : ""}
+                  {customersNeedingAction} customer{customersNeedingAction !== 1 ? "s" : ""} in queue
                 </span>
                 {!isPreview && priorityCases.length > 0 && (
                   <span className="flex items-center gap-1.5">
-                     {allDone ? (
+                    {allDone ? (
                       <CheckCircle2 size={12} className="text-success" />
                     ) : (
                       <CheckCircle2 size={12} />
@@ -439,6 +467,20 @@ return (
                   </span>
                 )}
               </div>
+              {recoveredToday > 0 && (
+                <div className="mt-4 pt-3 border-t border-background/20 space-y-1.5">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="text-emerald-400 font-bold">{formatINR(recoveredToday)} recovered today</span>
+                    <span className="text-muted-foreground">Target: {formatINR(totalOverdue + recoveredToday)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-background/20 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, Math.round((recoveredToday / (totalOverdue + recoveredToday)) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Preview/Paywall */}
@@ -494,94 +536,178 @@ return (
 
             {/* Full Queue */}
             {!isPreview && sections === null && (
-                <div className="bg-card border border-border rounded-2xl shadow-sm p-8 text-center">
-                  <CheckCircle2 className="h-10 w-10 text-success mx-auto mb-3" />
-                  <p className="font-semibold text-foreground text-lg">All caught up</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    No customers need follow-up right now.
-                  </p>
-                  <Link
-                    href="/pos"
-                    className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors"
-                  >
-                    + Create Invoice
-                  </Link>
-                </div>
+              <div className="bg-card border border-border rounded-2xl shadow-sm p-8 text-center">
+                <CheckCircle2 className="h-10 w-10 text-success mx-auto mb-3" />
+                <p className="font-semibold text-foreground text-lg">All caught up</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  No customers need follow-up right now.
+                </p>
+                <Link
+                  href="/pos"
+                  className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-lg bg-success text-success-foreground text-sm font-medium hover:bg-success/90 transition-colors"
+                >
+                  + Create Invoice
+                </Link>
+              </div>
             )}
 
-            {/* What to do — actionable summary before the list */}
+            {/* Recovery Confidence Panel + Today's Mission */}
             {!isPreview && !allDone && (sections !== null || priorityCases.length > 0) && (() => {
-              const promisesDue = raw?.summary?.promiseSummary?.dueToday ?? 0
-              const broken = priorityCases.filter(c => c.brokenPromises > 0).length
-              const highPriority = priorityCases.filter(c => c.brokenPromises > 0 || (c.promiseToPayDate && new Date(c.promiseToPayDate) <= new Date())).length
+              const autoHandled = priorityCases.filter(c => {
+                const si = cardStateInput(c)
+                return dominantAction(si) === 'whatsapp' && !c.brokenPromises
+              }).length
+              const needsAttention = priorityCases.filter(c => {
+                const si = cardStateInput(c)
+                const da = dominantAction(si)
+                return da === 'call' || c.brokenPromises > 0
+              }).length
+              const awaitingPayment = priorityCases.filter(c =>
+                c.lastPaymentAmount && c.lastPaymentAmount < c.totalOverdue
+              ).length
+              const collectible = raw?.summary?.collectibleToday ?? totalOverdue
+              // Realistic time estimate: calls ≈ 4 min, reminders ≈ 1 min
+              const callCount = needsAttention
+              const remindCount = priorityCases.length - callCount
+              const estMins = Math.max(1, callCount * 4 + remindCount * 1)
+              const recentActivity = (raw?.recentActivity ?? []) as Array<{ type: string; customerName: string; amount: number; at: string }>
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="flex items-center gap-2 bg-recovery-soft rounded-xl px-4 py-3">
-                    <AlertTriangle size={16} className="text-recovery flex-shrink-0" />
-                    <span className="text-sm font-semibold text-foreground">{needCount} customer{needCount !== 1 ? "s" : ""} need attention</span>
+                <div className="space-y-3">
+                  {/* Confidence Panel — includes recent updates at bottom */}
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    {autoHandled > 0 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+                        <div className="flex items-center gap-2.5">
+                          <Bot size={15} className="text-primary flex-shrink-0" />
+                          <span className="text-sm font-medium text-foreground">Automatic today</span>
+                        </div>
+                        <span className="text-sm font-bold text-primary tabular-nums">{autoHandled} customers</span>
+                      </div>
+                    )}
+                    {needsAttention > 0 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+                        <div className="flex items-center gap-2.5">
+                          <Phone size={15} className="text-overdue flex-shrink-0" />
+                          <span className="text-sm font-medium text-foreground">Needs your attention</span>
+                        </div>
+                        <span className="text-sm font-bold text-overdue tabular-nums">{needsAttention} customers</span>
+                      </div>
+                    )}
+                    {awaitingPayment > 0 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+                        <div className="flex items-center gap-2.5">
+                          <IndianRupee size={15} className="text-success flex-shrink-0" />
+                          <span className="text-sm font-medium text-foreground">Awaiting confirmation</span>
+                        </div>
+                        <span className="text-sm font-bold text-success tabular-nums">{awaitingPayment} customers</span>
+                      </div>
+                    )}
+                    {/* Recent payments merged into panel */}
+                    {recentActivity.length > 0 && (
+                      <div className="px-4 py-3 space-y-1.5">
+                        {recentActivity.map((ev, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm">
+                            <CheckCircle2 size={13} className="text-success flex-shrink-0" />
+                            <span className="font-medium text-foreground">{ev.customerName}</span>
+                            <span className="text-muted-foreground">paid {formatINR(ev.amount)}</span>
+                            <span className="text-muted-foreground ml-auto text-xs">{timeAgo(ev.at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {highPriority > 0 && (
-                    <div className="flex items-center gap-2 bg-overdue-soft rounded-xl px-4 py-3">
-                      <AlertCircle size={16} className="text-overdue flex-shrink-0" />
-                      <span className="text-sm font-semibold text-foreground">{highPriority} high priority{highPriority !== 1 ? "" : ""}</span>
+                  {/* Today's Mission */}
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Target size={16} className="text-primary flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-foreground">{formatINR(collectible)} · {priorityCases.length} customers</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {callCount > 0 && `≈${callCount} call${callCount > 1 ? 's' : ''}`}
+                          {callCount > 0 && remindCount > 0 && ' · '}
+                          {remindCount > 0 && `≈${remindCount} reminder${remindCount > 1 ? 's' : ''}`}
+                          {' · ≈'}{estMins} min
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {promisesDue > 0 && (
-                    <div className="flex items-center gap-2 bg-outstanding-soft rounded-xl px-4 py-3">
-                      <Clock size={16} className="text-outstanding flex-shrink-0" />
-                      <span className="text-sm font-semibold text-foreground">{promisesDue} promise{promisesDue !== 1 ? "s" : ""} expire{promisesDue === 1 ? "s" : ""} today</span>
-                    </div>
-                  )}
+                    <button
+                      onClick={() => document.getElementById('queue-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity active:scale-[0.97]"
+                    >
+                      Start Recovery
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
                 </div>
               )
             })()}
 
             {!isPreview && sections !== null && !allDone && (
               <>
-                {sections.map(section => (
-                  <section key={section.id} className="space-y-3">
-                    <div className="flex items-center gap-2 px-1">
-                      <span className={`w-2 h-2 rounded-full ${SECTION_CONFIG[section.id].dot}`} />
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                        {SECTION_CONFIG[section.id].label}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground font-medium">
-                        {section.items.length}
-                      </span>
-                      {selectMode && (
-                        <button
-                          onClick={toggleSelectAll}
-                          className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                        >
-                          {selected.size === priorityCases.length ? "Clear all" : "Select all"}
-                        </button>
-                      )}
-                    </div>
-                    {section.items.map(c => (
-                      <CustomerCard
-                        key={c.caseId}
-                        customer={c}
-                        sending={sending}
-                        selectMode={selectMode}
-                        selected={selected.has(c.caseId)}
-                        onToggleSelect={() => toggleSelect(c.caseId)}
-                        onSend={handleSend}
-                        onPromise={(c) => { setPromiseFor(c) }}
-                        onPayment={(c) => { setPaymentFor(c) }}
-                        onHistory={(c) => { trackQueueEvent(E.open_history, c.customerId, { caseId: c.caseId }); setHistoryFor(c) }}
-                        signalColor={signalColor(c)}
-                        formatSignal={formatSignal(c)}
-                      />
-                    ))}
-                  </section>
-                ))}
+                {/* Progress counter — appears after first action, creates momentum */}
+                {doneCount > 0 && (
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <CheckCircle2 size={14} className="text-success" />
+                    <span className="text-sm font-semibold text-success">{doneCount} completed</span>
+                    <span className="text-sm text-muted-foreground">· {needCount - doneCount} remaining</span>
+                  </div>
+                )}
 
-                <div className="border-t border-border pt-3 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{needCount} customer{needCount !== 1 ? "s" : ""} need{needCount === 1 ? "s" : ""} attention</span>
-                  <Link href="/recovery/history" className="flex items-center gap-1 text-primary hover:underline font-medium">
-                    <History size={12} />
-                    View History
-                  </Link>
+                <div id="queue-list" className="space-y-4">
+                  {(() => {
+                    let globalItemCounter = 0
+                    return sections.map(section => (
+                      <section key={section.id} className="space-y-3">
+                        <div className="flex items-center gap-2 px-1">
+                          <span className={`w-2 h-2 rounded-full ${SECTION_CONFIG[section.id].dot}`} />
+                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                            {SECTION_CONFIG[section.id].label}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            {section.items.length}
+                          </span>
+                          {selectMode && (
+                            <button
+                              onClick={toggleSelectAll}
+                              className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                            >
+                              {selected.size === priorityCases.length ? "Clear all" : "Select all"}
+                            </button>
+                          )}
+                        </div>
+                        {section.items.map(c => {
+                          const isTopPriority = globalItemCounter === 0
+                          globalItemCounter++
+                          const merged = cardOverrides[c.caseId] ? { ...c, ...cardOverrides[c.caseId] } : c
+                          const isExiting = exitingIds.has(c.caseId)
+                          return (
+                            <CustomerCard
+                              key={c.caseId}
+                              customer={merged}
+                              sending={sending}
+                              selectMode={selectMode}
+                              selected={selected.has(c.caseId)}
+                              isExiting={isExiting}
+                              isTopPriority={isTopPriority}
+                              onToggleSelect={() => toggleSelect(c.caseId)}
+                              onSend={handleSend}
+                              onPromise={(c) => { setPromiseFor(c) }}
+                              onPayment={(c) => { setPaymentFor(c) }}
+                              onHistory={(c) => { trackQueueEvent(E.open_history, c.customerId, { caseId: c.caseId }); setHistoryFor(c) }}
+                            />
+                          )
+                        })}
+                      </section>
+                    ))
+                  })()}
+
+                  <div className="border-t border-border pt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{needCount} customer{needCount !== 1 ? "s" : ""} need{needCount === 1 ? "s" : ""} attention</span>
+                    <Link href="/recovery/history" className="flex items-center gap-1 text-primary hover:underline font-medium">
+                      <History size={12} />
+                      View History
+                    </Link>
+                  </div>
                 </div>
               </>
             )}
@@ -622,7 +748,15 @@ return (
           amount={promiseFor.totalOverdue}
           caseId={promiseFor.caseId}
           onClose={() => setPromiseFor(null)}
-          onSuccess={() => { setPromiseFor(null); load(); markActioned(promiseFor.customerId) }}
+          onSuccess={() => {
+            const c = promiseFor
+            setPromiseFor(null)
+            // Optimistic: show promise date (queue reload will bring real date)
+            const approxDate = new Date(Date.now() + 2 * 86400000).toISOString()
+            setCardOverrides(prev => ({ ...prev, [c.caseId]: { promiseToPayDate: approxDate } }))
+            markActioned(c.customerId)
+            load()
+          }}
         />
       )}
       {paymentFor && (
@@ -633,7 +767,12 @@ return (
           openInvoiceCount={paymentFor.openInvoiceCount}
           caseId={paymentFor.caseId}
           onClose={() => setPaymentFor(null)}
-          onSuccess={() => { setPaymentFor(null); load(); markActioned(paymentFor.customerId) }}
+          onSuccess={() => {
+            const c = paymentFor
+            setPaymentFor(null)
+            // Card exit: payment recorded = fully resolved, slide it out
+            exitCard(c.caseId, c.customerId)
+          }}
         />
       )}
       <HistoryDrawer
@@ -641,6 +780,11 @@ return (
         customerName={historyFor?.customerName ?? ""}
         open={!!historyFor}
         onClose={() => setHistoryFor(null)}
+      />
+      <AutoRecoverySheet
+        open={autoRecoveryOpen}
+        onClose={() => setAutoRecoveryOpen(false)}
+        onStatusChange={(enabled) => setAutoRecoveryEnabled(enabled)}
       />
 
       {/* Bulk action bar */}
@@ -672,61 +816,96 @@ return (
         </div>
       )}
 
-      </PageShell>
+    </PageShell>
   )
 }
 
 // ── Customer Card ──
+
+function getLikelihoodBadge(c: PriorityCase) {
+  if (c.brokenPromises > 0) {
+    return { label: "Low Chance (Broken)", cls: "bg-danger-soft text-danger border-danger/30" }
+  }
+  if (c.promiseToPayDate) {
+    return { label: "High Chance Today", cls: "bg-success-soft text-success border-success/30" }
+  }
+  if (c.attentionScore >= 70) {
+    return { label: "High Chance Today", cls: "bg-success-soft text-success border-success/30" }
+  }
+  if (c.attentionScore >= 40) {
+    return { label: "Medium Chance", cls: "bg-warning-soft text-warning border-warning/30" }
+  }
+  return { label: "Follow-up Needed", cls: "bg-muted text-muted-foreground border-border" }
+}
 
 function CustomerCard({
   customer: c,
   sending,
   selectMode = false,
   selected = false,
+  isExiting = false,
+  isTopPriority = false,
   onToggleSelect,
   onSend,
   onPromise,
   onPayment,
   onHistory,
-  signalColor,
-  formatSignal,
 }: {
   customer: PriorityCase
   sending: string | null
   selectMode?: boolean
   selected?: boolean
+  isExiting?: boolean
+  isTopPriority?: boolean
   onToggleSelect?: () => void
   onSend: (c: PriorityCase) => void
   onPromise: (c: PriorityCase) => void
   onPayment: (c: PriorityCase) => void
   onHistory: (c: PriorityCase) => void
-  signalColor: string
-  formatSignal: string
 }) {
   const isSending = sending === c.caseId
-  const stages = getJourneyStages(c)
+  const stateInput = cardStateInput(c)
+  const whyLines = deriveWhyLines(stateInput)
+  const dominant = dominantAction(stateInput)
+  const likelihood = getLikelihoodBadge(c)
 
   // Prefetch timeline data when card mounts so History drawer opens instantly
   useEffect(() => { prefetchCustomerTimeline(c.customerId) }, [c.customerId])
-  const statusColor = c.brokenPromises > 0
-    ? 'bg-danger-soft text-danger'
-    : c.promiseToPayDate
-      ? (new Date(c.promiseToPayDate) <= new Date() ? 'bg-warning-soft text-warning' : 'bg-recovery-soft text-recovery')
-      : c.ignoredReminders >= 3
-        ? 'bg-muted text-foreground'
-        : 'bg-outstanding-soft text-outstanding'
 
   return (
-    <div className={`bg-card border rounded-2xl shadow-sm p-4 transition-shadow ${selected ? 'border-primary ring-1 ring-primary/40' : 'border-border'}`}>
+    <div
+      className={[
+        'bg-card border rounded-2xl shadow-sm p-4 transition-all',
+        isTopPriority ? 'border-emerald-500/60 bg-emerald-500/[0.02] dark:bg-emerald-500/[0.04] ring-2 ring-emerald-500/20' : selected ? 'border-primary ring-1 ring-primary/40' : 'border-border',
+        isExiting ? 'opacity-0 -translate-y-2 scale-95 pointer-events-none' : 'opacity-100 translate-y-0 scale-100',
+      ].join(' ')}
+      style={{ transitionDuration: isExiting ? '300ms' : '150ms', transitionProperty: 'opacity, transform' }}
+    >
+      {/* Top Priority Highlight Banner */}
+      {isTopPriority && (
+        <div className="mb-3 flex items-center justify-between px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+          <span className="flex items-center gap-1.5">
+            <Zap size={14} className="fill-current text-emerald-500" />
+            Top Recommended Action
+          </span>
+          <span className="text-[11px] font-medium opacity-80">Start Here</span>
+        </div>
+      )}
+
       {/* Header: name + amount */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/parties/${c.customerId}`}
-            className="font-semibold text-foreground hover:text-primary transition-colors truncate"
-          >
-            {c.customerName}
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              href={`/parties/${c.customerId}`}
+              className="font-semibold text-foreground hover:text-primary transition-colors truncate"
+            >
+              {c.customerName}
+            </Link>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${likelihood.cls}`}>
+              {likelihood.label}
+            </span>
+          </div>
           <div className="flex items-baseline gap-3 mt-1">
             <span className="text-2xl font-bold text-foreground tabular-nums">
               {formatINR(c.totalOverdue)}
@@ -740,9 +919,8 @@ function CustomerCard({
         {selectMode && (
           <button
             onClick={() => onToggleSelect?.()}
-            className={`flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md border transition-colors ${
-              selected ? "bg-primary border-primary text-primary-foreground" : "border-border text-transparent hover:text-muted-foreground"
-            }`}
+            className={`flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-md border transition-colors ${selected ? "bg-primary border-primary text-primary-foreground" : "border-border text-transparent hover:text-muted-foreground"
+              }`}
             aria-pressed={selected}
           >
             <CheckSquare size={14} />
@@ -750,39 +928,15 @@ function CustomerCard({
         )}
       </div>
 
-      {/* Status chip */}
+      {/* Single recovery state — with icon badges */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${statusColor}`}>
-          {c.promiseToPayDate && new Date(c.promiseToPayDate) <= new Date() && <Clock size={11} />}
-          {c.brokenPromises > 0 && <AlertCircle size={11} />}
-          {c.lastPaymentAt && <CheckCircle2 size={11} />}
-          {formatSignal}
-        </span>
-        {(() => {
-          const d = deliveryStatus(c)
-          if (!d) return null
-          const Icon = d.icon
-          return (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${d.color}`} title={d.title}>
-              <Icon size={11} />
-              {d.label}
-            </span>
-          )
-        })()}
+        <ReminderStateBadge input={stateInput} showIcon={true} />
       </div>
 
-      {/* Journey steps */}
-      <div className="flex items-center gap-2 mt-2.5">
-        {stages.map((s, i) => (
-          <div key={s.label} className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${s.active ? 'bg-muted-foreground/20' : 'bg-muted'}`} />
-            <span className={`text-[10px] font-medium ${s.active ? 'text-muted-foreground' : 'text-muted-foreground/40'}`}>
-              {s.label}
-            </span>
-            {i < stages.length - 1 && (
-              <span className="text-muted-foreground/40 text-[10px]">—</span>
-            )}
-          </div>
+      {/* Why line */}
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-semibold text-muted-foreground">
+        {whyLines.map((w) => (
+          <span key={w} className={c.brokenPromises > 0 ? 'text-danger' : c.oldestOverdueDays > 0 ? 'text-warning' : undefined}>{w}</span>
         ))}
       </div>
 
@@ -794,14 +948,13 @@ function CustomerCard({
           </span>
         )}
         <span>
-          <span className="font-medium text-muted-foreground">Last Contact:</span> {formatLastContact(c.lastActivityAt)}
+          <span className="font-medium text-muted-foreground">Last Contact:</span> {c.lastActivityAt ? timeAgo(c.lastActivityAt) : 'No reminder sent yet'}
         </span>
-        {c.nextReminderAt && (
+        {c.nextReminderAt ? (
           <span>
             <span className="font-medium text-muted-foreground">Next Reminder:</span> {formatDate(c.nextReminderAt)} {new Date(c.nextReminderAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
           </span>
-        )}
-        {!c.nextReminderAt && (
+        ) : (
           <span>
             <span className="font-medium text-muted-foreground">Next Action:</span> {formatActionTime(c)}
           </span>
@@ -818,54 +971,29 @@ function CustomerCard({
         </div>
       )}
 
-      {/* Reminder count */}
-      {c.ignoredReminders > 0 && (
-        <p className="text-[10px] text-muted-foreground mt-1.5">
-          {c.ignoredReminders} reminder{c.ignoredReminders > 1 ? "s" : ""} ignored
-        </p>
-      )}
-
-      {/* Phone missing — blocking */}
+      {/* Phone missing — red, impossible to miss */}
       {!c.phone && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 py-1.5 text-[11px] font-semibold text-danger">
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 py-2 text-[11px] font-semibold text-danger">
           <PhoneOff size={12} />
-          Phone number missing — can&apos;t send reminders
+          <span>Phone missing — cannot send WhatsApp</span>
         </div>
       )}
 
-      {/* Actions */}
+      {/* Fixed action sheet + history */}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
-        <button
-          onClick={() => { trackQueueEvent(E.record_payment, c.customerId, { caseId: c.caseId }); onPayment(c) }}
-          disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-success text-success-foreground text-xs font-bold hover:bg-success/90 disabled:opacity-50 transition-all active:scale-[0.97]"
-        >
-          <CreditCard size={13} />
-          Record Payment
-        </button>
-        <button
-          onClick={() => onSend(c)}
-          disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.97]"
-        >
-          {isSending ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : (
-            <Send size={13} />
-          )}
-          Send Reminder
-        </button>
-        <button
-          onClick={() => { trackQueueEvent(E.mark_promise, c.customerId, { caseId: c.caseId }); onPromise(c) }}
-          disabled={isSending}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg border border-border bg-card text-foreground text-xs font-semibold hover:bg-muted transition-all active:scale-[0.97] disabled:opacity-50"
-        >
-          <Hand size={13} />
-          Promise
-        </button>
+        <CustomerActionSheet
+          dominant={dominant}
+          busy={isSending}
+          canWhatsApp={!!c.phone}
+          onWhatsApp={() => onSend(c)}
+          onCall={() => { if (c.phone) window.location.href = `tel:${c.phone}` }}
+          onRecordPayment={() => { trackQueueEvent(E.record_payment, c.customerId, { caseId: c.caseId }); onPayment(c) }}
+          onPromise={() => { trackQueueEvent(E.mark_promise, c.customerId, { caseId: c.caseId }); onPromise(c) }}
+          openHref={`/parties/${c.customerId}`}
+        />
         <button
           onClick={() => onHistory(c)}
-          className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
+          className="inline-flex items-center justify-center h-9 w-9 flex-none rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
           title="View history"
         >
           <History size={14} />

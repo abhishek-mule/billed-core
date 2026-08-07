@@ -15,7 +15,35 @@ export type ActionItem = {
   actionType: string
   state: string
   reasons: { type: string; impact: 'high' | 'medium' | 'low' }[]
+  // recovery-state-machine inputs (single truth for the status badge)
+  promiseToPayDate: string | null
+  maxDeliveryStatus: 'sent' | 'delivered' | 'read' | null
+  ignoredReminders: number
+  brokenPromises: number
 }
+
+/**
+ * Behavioral signals shared by every projection (Home, queue, customer).
+ * Computed once per case from canonical sources (invoices, recovery_case_events,
+ * customers) — never from recovery_cases, which does not own this data.
+ */
+export type RecoverySignals = {
+  ignoredReminders: number
+  brokenPromises: number
+  deliveryStatus: 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | null
+  phoneMissing: boolean
+  hasActivePromise: boolean
+  paymentProbability: number
+}
+
+export const emptySignals = (): RecoverySignals => ({
+  ignoredReminders: 0,
+  brokenPromises: 0,
+  deliveryStatus: null,
+  phoneMissing: false,
+  hasActivePromise: false,
+  paymentProbability: 0,
+})
 
 export type AttentionItem = ActionItem & {
   invoiceCount: number
@@ -122,13 +150,14 @@ const invoiceOutstanding = (i: any) =>
     : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
 
 export const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
+  const signals: RecoverySignals = c?.signals || emptySignals()
   let confidence = 0.65
   const tier = (cust.customer_tier || 'standard').toLowerCase()
   if (tier === 'vip') confidence += 0.20
   else if (tier === 'regular') confidence += 0.05
   else if (tier === 'risky') confidence -= 0.20
-  confidence -= (c.broken_promises || 0) * 0.15
-  confidence -= Math.min((c.reminder_count || 0) * 0.08, 0.40)
+  confidence -= signals.brokenPromises * 0.15
+  confidence -= Math.min(signals.ignoredReminders * 0.08, 0.40)
   const state = c.recovery_state_v2 || 'active'
   if (state === 'promised' || state === 'partial_payment') confidence += 0.10
   else if (state === 'disputed') confidence -= 0.40
@@ -140,9 +169,10 @@ export const estimateRecoverable = (outstanding: number, c: any, cust: any) => {
 }
 
 function buildReasons(c: any): { type: string; impact: 'high' | 'medium' | 'low' }[] {
+  const signals: RecoverySignals = c?.signals || emptySignals()
   const r: { type: string; impact: 'high' | 'medium' | 'low' }[] = []
-  if (c.broken_promises > 0) r.push({ type: 'promise_broken', impact: 'high' })
-  if (c.reminder_count > 0) r.push({ type: `${c.reminder_count}_reminders_ignored`, impact: 'medium' })
+  if (signals.brokenPromises > 0) r.push({ type: 'promise_broken', impact: 'high' })
+  if (signals.ignoredReminders > 0) r.push({ type: `${signals.ignoredReminders}_reminders_ignored`, impact: 'medium' })
   return r
 }
 
@@ -191,7 +221,7 @@ async function backfillCases(tenantId: string): Promise<void> {
     console.log('[backfillCases] found', invoices.length, 'invoices')
 
     const byCust = new Map<string, { outstanding: number; invCount: number }>()
-    for (const inv of invoices) {
+  for (const inv of invoices) {
       const cid = inv.customer_id
       if (!cid) { console.log('[backfillCases] skipping invoice with null customer_id'); continue }
       if (!byCust.has(cid)) byCust.set(cid, { outstanding: 0, invCount: 0 })
@@ -245,7 +275,7 @@ async function fetchRawData(tenantId: string) {
 
   let { data: cases, error: casesErr } = await supabaseAdmin
     .from('recovery_cases')
-    .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type')
+      .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type, engagement_state_v2')
     .eq('tenant_id', tenantId)
     .gt('total_outstanding', 0)
     .in('recovery_state_v2', ['active', 'overdue', 'partial_payment', 'promised', 'disputed'])
@@ -259,7 +289,7 @@ async function fetchRawData(tenantId: string) {
     await backfillCases(tenantId)
     const { data: refetched, error: refetchErr } = await supabaseAdmin
       .from('recovery_cases')
-      .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type')
+    .select('id, customer_id, total_outstanding, total_overdue, recovery_state_v2, promise_to_pay_date, next_action_type, engagement_state_v2')
       .eq('tenant_id', tenantId)
       .gt('total_outstanding', 0)
       .in('recovery_state_v2', ['active', 'overdue', 'partial_payment', 'promised', 'disputed'])
@@ -282,7 +312,7 @@ async function fetchRawData(tenantId: string) {
   const { data: invoices, error: invErr } = customerIds.length
     ? await supabaseAdmin
         .from('invoices')
-        .select('customer_id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date')
+        .select('customer_id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, reminder_count')
         .eq('tenant_id', tenantId)
         .in('customer_id', customerIds)
         .gt('outstanding_amount', 0)
@@ -292,7 +322,7 @@ async function fetchRawData(tenantId: string) {
   const { data: customers, error: custErr } = customerIds.length
     ? await supabaseAdmin
         .from('customers')
-        .select('id, customer_name, phone, customer_tier')
+        .select('id, customer_name, phone, customer_tier, last_whatsapp_status')
         .in('id', customerIds)
     : { data: [] as any[] }
   if (custErr) console.error('[fetchRawData] customers error:', custErr.message)
@@ -333,7 +363,56 @@ async function fetchRawData(tenantId: string) {
     ? await supabaseAdmin.from('customers').select('id, customer_name').in('id', recCustomerIds)
     : { data: [] as any[] }
 
-  return { now, cases: cases || [], invoices: invoices || [], customers: customers || [], scheduled: scheduled || [], schedCustomers: schedCustomers || [], recovered: recovered || [], recCustomers: recCustomers || [], startOfDay, endOfDay }
+  // Broken promises = history (promised → overdue transitions), owned by the
+  // decision log, never by recovery_cases. Same filter as get_priority_cases.
+  const { data: brokenEvents } = customerIds.length
+    ? await supabaseAdmin
+        .from('recovery_case_events')
+        .select('case_id')
+        .eq('event_type', 'transition')
+        .eq('payload->>from_recovery_state', 'promised')
+        .eq('payload->>to_recovery_state', 'overdue')
+    : { data: [] as any[] }
+
+  const brokenByCase = new Map<string, number>()
+  for (const e of brokenEvents || []) {
+    brokenByCase.set(e.case_id, (brokenByCase.get(e.case_id) || 0) + 1)
+  }
+
+  // ── Compute each case's behavioral signals once, from canonical sources ──
+  const custMap = new Map((customers || []).map((c: any) => [c.id, c]))
+  const invByCust = new Map<string, any[]>()
+  for (const inv of invoices || []) {
+    const arr = invByCust.get(inv.customer_id) || []
+    arr.push(inv)
+    invByCust.set(inv.customer_id, arr)
+  }
+
+  const signalsByCase = new Map<string, RecoverySignals>()
+  for (const c of cases) {
+    const cust = custMap.get(c.customer_id) || {}
+    const custInvs = invByCust.get(c.customer_id) || []
+    const ignoredReminders = custInvs.reduce((s: number, i: any) => s + (Number(i.reminder_count) || 0), 0)
+    const phoneMissing = !cust.phone
+    const rawDelivery = cust.last_whatsapp_status || null
+    const deliveryStatus: RecoverySignals['deliveryStatus'] =
+      rawDelivery === 'queued' || rawDelivery === 'sent' || rawDelivery === 'delivered' || rawDelivery === 'read' || rawDelivery === 'failed'
+        ? rawDelivery
+        : null
+    const hasActivePromise = !!(c.promise_to_pay_date && new Date(c.promise_to_pay_date) >= now)
+    const signals: RecoverySignals = {
+      ignoredReminders,
+      brokenPromises: brokenByCase.get(c.id) || 0,
+      deliveryStatus,
+      phoneMissing,
+      hasActivePromise,
+      paymentProbability: 0,
+    }
+    signalsByCase.set(c.id, signals)
+    ;(c as any).signals = signals
+  }
+
+  return { now, cases: cases || [], invoices: invoices || [], customers: customers || [], scheduled: scheduled || [], schedCustomers: schedCustomers || [], recovered: recovered || [], recCustomers: recCustomers || [], brokenByCase, signalsByCase, startOfDay, endOfDay }
 }
 
 /* ─── Full Read Model ───────────────────────────────────────────────── */
@@ -369,6 +448,7 @@ export async function getRecoveryReadModel(tenantId: string): Promise<RecoveryRe
       const { out, ovd, invoiceNumber } = invoiceAmounts(c.customer_id)
       const { recoverableAmount } = estimateRecoverable(out, c, cust)
       const custInvs = invByCust.get(c.customer_id) || []
+      const signals: RecoverySignals = c?.signals || emptySignals()
       return {
         caseId: c.id,
         customerId: c.customer_id,
@@ -382,6 +462,12 @@ export async function getRecoveryReadModel(tenantId: string): Promise<RecoveryRe
         actionType: c.next_action_type || 'send_reminder',
         state: c.recovery_state_v2 || 'active',
         reasons: buildReasons(c),
+        promiseToPayDate: c.promise_to_pay_date || null,
+        maxDeliveryStatus: signals.deliveryStatus === 'read' || signals.deliveryStatus === 'delivered' || signals.deliveryStatus === 'sent'
+          ? signals.deliveryStatus
+          : null,
+        ignoredReminders: signals.ignoredReminders,
+        brokenPromises: signals.brokenPromises,
       }
     })
     .filter((c: any) => c.amount > 0)
@@ -517,6 +603,7 @@ export async function getQueueProjection(tenantId: string): Promise<QueueProject
         ? Math.floor((now.getTime() - new Date(c.promise_to_pay_date).getTime()) / 86400000)
         : null
       const { recoverableAmount, recoveryConfidence } = estimateRecoverable(out, c, cust)
+      const signals: RecoverySignals = c?.signals || emptySignals()
       return {
         caseId: c.id,
         customerId: c.customer_id,
@@ -531,8 +618,8 @@ export async function getQueueProjection(tenantId: string): Promise<QueueProject
         promiseDate: c.promise_to_pay_date,
         promiseBrokenDays: daysOverdue && daysOverdue > 0 ? daysOverdue : null,
         recommendedAction: c.next_action_type || 'send_reminder',
-        reminderCount: c.reminder_count || 0,
-        brokenPromises: c.broken_promises || 0,
+        reminderCount: signals.ignoredReminders,
+        brokenPromises: signals.brokenPromises,
       }
     })
     .filter((c: any) => c.outstanding > 0)
@@ -564,20 +651,45 @@ export async function getQueueProjection(tenantId: string): Promise<QueueProject
   }))
 
   let timeline: QueueTimelineEvent[] = []
+  const since = new Date(now.getTime() - 24 * 86400000).toISOString()
+
+  // Outbound events from collection_action_events
   const { data: events } = await supabaseAdmin
     .from('collection_action_events')
     .select('action_id, event_type, to_status, created_at, payload')
     .eq('tenant_id', tenantId)
-    .gte('created_at', new Date(now.getTime() - 24 * 86400000).toISOString())
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(40)
 
-  timeline = (events || []).map((e: any) => ({
+  // Inbound replies from whatsapp_events (real tenant, direction=inbound)
+  const { data: inboundEvents } = await supabaseAdmin
+    .from('whatsapp_events')
+    .select('id, phone, message_preview, occurred_at, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('direction', 'inbound')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const actionTimeline: QueueTimelineEvent[] = (events || []).map((e: any) => ({
     eventType: e.event_type,
     toStatus: e.to_status,
     at: e.created_at,
     detail: e.payload?.reason || e.payload?.channel || '',
   }))
+
+  const inboundTimeline: QueueTimelineEvent[] = (inboundEvents || []).map((e: any) => ({
+    eventType: 'customer.reply',
+    toStatus: 'received',
+    at: e.created_at,
+    detail: e.message_preview ? `Customer replied: "${e.message_preview.slice(0, 60)}"` : `Customer reply from ${e.phone}`,
+  }))
+
+  // Merge and sort descending by time
+  timeline = [...actionTimeline, ...inboundTimeline].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  ).slice(0, 50)
 
   return {
     generatedAt: now.toISOString(),

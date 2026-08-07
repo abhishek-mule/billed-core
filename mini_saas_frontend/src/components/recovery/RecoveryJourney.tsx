@@ -159,8 +159,8 @@ export default function RecoveryJourney({ invoiceId }: RecoveryJourneyProps) {
                   </div>
                 )}
                 {stage.status === 'current' && !isPaid && (
-                  <div className="text-xs text-blue-600 mt-0.5 font-medium">
-                    In progress
+                  <div className="text-xs text-muted-foreground mt-0.5 font-medium">
+                    {stage.key === 'reminder_sent' ? 'Awaiting Dispatch' : 'In progress'}
                   </div>
                 )}
               </div>

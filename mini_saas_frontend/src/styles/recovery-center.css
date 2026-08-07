@@ -1065,4 +1065,110 @@
 /* ─── Page bottom padding for fixed first-action ────────────────────── */
 .rc-page { padding-bottom: max(100px, env(safe-area-inset-bottom)); }
 
+/* ─── Simplified home hero ───────────────────────────────────────────── */
+.rc-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 0 4px;
+}
+
+.rc-metrics {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 16px;
+  overflow: hidden;
+  background: hsl(var(--card));
+}
+
+.rc-metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+}
+
+.rc-metric-divider {
+  width: 1px;
+  background: hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.rc-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rc-metric-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: hsl(var(--foreground));
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+.rc-metric-value--accent {
+  color: hsl(var(--primary));
+}
+
+.rc-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 15px 24px;
+  border-radius: 14px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.25);
+}
+
+.rc-cta:hover { opacity: 0.92; }
+.rc-cta:active { opacity: 0.85; transform: scale(0.99); }
+
+.rc-yesterday {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  padding-bottom: 4px;
+}
+
+/* ─── Insights collapsible ───────────────────────────────────────────── */
+.rc-insights {
+  margin-top: 8px;
+}
+
+.rc-insights-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  padding: 10px 4px;
+  list-style: none;
+  user-select: none;
+}
+.rc-insights-toggle::-webkit-details-marker { display: none; }
+.rc-insights-toggle:hover { color: hsl(var(--foreground)); }
+
+.rc-insights-chevron {
+  transition: transform 0.2s ease;
+}
+.rc-insights[open] .rc-insights-chevron {
+  transform: rotate(90deg);
+}
+
 

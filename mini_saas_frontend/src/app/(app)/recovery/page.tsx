@@ -6,7 +6,7 @@ import '@/styles/recovery-center.css'
 import { formatScheduledSlot } from '@/lib/recovery/business-hours'
 import {
   Phone, MessageSquare, Clock, CheckCircle2, ArrowRight, TrendingUp,
-  AlertTriangle, HeartHandshake, RotateCcw, Bell, Loader2,
+  AlertTriangle, HeartHandshake, RotateCcw, Bell, Loader2, ChevronRight,
 } from 'lucide-react'
 
 type NeedsActionItem = {
@@ -271,228 +271,198 @@ export default function RecoveryCenterPage() {
     )
   }
 
+  const now = new Date()
+  const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  const yesterdayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterdayRecovered = data.recentlyRecovered
+    .filter(r => new Date(r.recoveredAt) >= yesterdayStart && new Date(r.recoveredAt) < yesterdayEnd)
+    .length
+
   return (
     <div className="rc-page">
-      {/* Header */}
-      <header className="rc-header">
-        <div>
-          <h1 className="rc-greeting">
-            {greeting()}{name ? ` ${name}!` : ''}
-          </h1>
-          <p className="rc-sub">
-            {needsAction.length > 0
-              ? `${needsAction.length} customer${needsAction.length > 1 ? 's' : ''} need your attention`
-              : data.underFollowUp > 0
-                ? 'Invoices are outstanding but none require recovery yet.'
-                : 'No outstanding invoices. Great — you\'re fully paid up.'}
-          </p>
+      {/* Above-fold hero */}
+      <div className="rc-hero">
+        {/* Greeting */}
+        <header className="rc-header">
+          <div>
+            <h1 className="rc-greeting">
+              {greeting()}{name ? ` ${name}!` : '!'}
+            </h1>
+          </div>
+          <button className="rc-refresh" onClick={refresh} aria-label="Refresh">
+            <RotateCcw size={16} />
+          </button>
+        </header>
+
+        {/* Two key numbers */}
+        <div className="rc-metrics">
+          <div className="rc-metric">
+            <span className="rc-metric-label">Outstanding</span>
+            <span className="rc-metric-value">{fmt(totalOutstanding)}</span>
+          </div>
+          <div className="rc-metric-divider" />
+          <div className="rc-metric">
+            <span className="rc-metric-label">Recover today</span>
+            <span className="rc-metric-value rc-metric-value--accent">{fmt(totalExpected)}</span>
+          </div>
         </div>
-        <button className="rc-refresh" onClick={refresh} aria-label="Refresh">
-          <RotateCcw size={16} />
-        </button>
-        <Link href="/recovery/work" className="rc-refresh" aria-label="Work Queue" style={{ textDecoration: 'none' }}>
+
+        {/* Single CTA */}
+        <Link href="/recovery/queue" className="rc-cta">
+          {needsAction.length > 0 ? 'Start Recovery' : 'Review Queue'}
           <ArrowRight size={16} />
         </Link>
-        <Link href="/recovery/insights" className="rc-refresh" aria-label="Insights" style={{ textDecoration: 'none' }}>
-          <TrendingUp size={16} />
-        </Link>
-      </header>
 
-      {/* Today's Recovery Plan */}
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <span className="rc-dot rc-dot--red" />
-          <h2>Today&apos;s Recovery Plan</h2>
-        </div>
+        {/* Yesterday line */}
+        {yesterdayRecovered > 0 && (
+          <p className="rc-yesterday">
+            Yesterday — recovered from {yesterdayRecovered} customer{yesterdayRecovered > 1 ? 's' : ''}
+          </p>
+        )}
+      </div>
 
-        {needsAction.length === 0 ? (
-          <div className="rc-empty">
-            <CheckCircle2 size={18} />
-            <span>No customers need action today. {data.underFollowUp ? 'Invoices exist but are not yet overdue.' : ''}</span>
+      {/* Insights (collapsed by default) */}
+      <details className="rc-insights">
+        <summary className="rc-insights-toggle">
+          View Insights <ChevronRight size={14} className="rc-insights-chevron" />
+        </summary>
+
+        {/* Today's Recovery Plan */}
+        <section className="rc-block">
+          <div className="rc-block-head">
+            <span className="rc-dot rc-dot--red" />
+            <h2>Today&apos;s Recovery Plan</h2>
           </div>
-        ) : (
-          <div className="rp-container">
-            <PlanSection
-              items={callItems}
-              icon={<Phone size={16} />}
-              label="Call Today"
-              color="rp--call"
-              emptyText="No calls needed"
-            />
-            <PlanSection
-              items={remindItems}
-              icon={<Bell size={16} />}
-              label="Send Reminder"
-              color="rp--remind"
-              emptyText="No reminders needed"
-            />
-            <PlanSection
-              items={paymentItems}
-              icon={<HeartHandshake size={16} />}
-              label="Record Payment"
-              color="rp--payment"
-              emptyText="No payments to record"
-            />
-            <PlanSection
-              items={otherItems}
-              icon={<Clock size={16} />}
-              label="Other Actions"
-              color="rp--other"
-              emptyText=""
-            />
 
-            {needsAction.length > 0 ? (
-              <div className="rp-expected">
-                <div className="rp-expected-main">
-                  <span className="rp-expected-lbl">Likely Recovery Today</span>
-                  <span className="rp-expected-amt">{fmt(totalExpected)}</span>
-                  <span className="rp-expected-sub">of {fmt(totalOutstanding)} total outstanding</span>
-                </div>
-                {highConfItems.length > 0 ? (
-                  <div className="rp-expected-items">
-                    {highConfItems.map(i => (
-                      <div key={i.caseId} className="rp-expected-item">
-                        <span className={`rp-conf rp-conf--${i.recoveryConfidence >= 80 ? 'high' : i.recoveryConfidence >= 50 ? 'med' : 'low'}`}>
-                          {i.recoveryConfidence}%
-                        </span>
-                        <span className="rp-expected-name">{i.customerName}</span>
-                        <span className="rp-expected-val">{fmt(i.recoverableAmount)}</span>
-                      </div>
-                    ))}
+          {needsAction.length === 0 ? (
+            <div className="rc-empty">
+              <CheckCircle2 size={18} />
+              <span>No customers need action today.</span>
+            </div>
+          ) : (
+            <div className="rp-container">
+              <PlanSection
+                items={callItems}
+                icon={<Phone size={16} />}
+                label="Call Today"
+                color="rp--call"
+                emptyText="No calls needed"
+              />
+              <PlanSection
+                items={remindItems}
+                icon={<Bell size={16} />}
+                label="Send Reminder"
+                color="rp--remind"
+                emptyText="No reminders needed"
+              />
+              <PlanSection
+                items={paymentItems}
+                icon={<HeartHandshake size={16} />}
+                label="Record Payment"
+                color="rp--payment"
+                emptyText="No payments to record"
+              />
+              <PlanSection
+                items={otherItems}
+                icon={<Clock size={16} />}
+                label="Other Actions"
+                color="rp--other"
+                emptyText=""
+              />
+            </div>
+          )}
+        </section>
+
+        {/* Scheduled Today */}
+        <section className="rc-block">
+          <div className="rc-block-head">
+            <span className="rc-dot rc-dot--orange" />
+            <h2>Scheduled Today</h2>
+            <span className="rc-count">{data.scheduledToday.length}</span>
+          </div>
+
+          {data.scheduledToday.length === 0 ? (
+            <div className="rc-empty">
+              <Clock size={18} />
+              <span>No follow-ups scheduled today.</span>
+            </div>
+          ) : (
+            <div className="rc-summary">
+              <div className="rc-summary-item">
+                <span className="rc-summary-num">{data.counts.reminders}</span>
+                <span className="rc-summary-lbl">Reminders</span>
+              </div>
+              <div className="rc-summary-item">
+                <span className="rc-summary-num">{data.counts.promiseFollowups}</span>
+                <span className="rc-summary-lbl">Promise Follow-ups</span>
+              </div>
+              <div className="rc-summary-item">
+                <span className="rc-summary-num">{data.counts.calls}</span>
+                <span className="rc-summary-lbl">Calls</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Recently Recovered */}
+        <section className="rc-block">
+          <div className="rc-block-head">
+            <span className="rc-dot rc-dot--green" />
+            <h2>Recently Recovered</h2>
+            <span className="rc-count">{data.recentlyRecovered.length}</span>
+          </div>
+
+          {data.recentlyRecovered.length === 0 ? (
+            <div className="rc-empty">
+              <CheckCircle2 size={18} />
+              <span>No recoveries recorded this week.</span>
+            </div>
+          ) : (
+            <div className="rc-list rc-list--tight">
+              {data.recentlyRecovered.map((r) => (
+                <div key={r.caseId} className="rc-row rc-row--green">
+                  <div className="rc-row-icon rc-row-icon--green">
+                    <CheckCircle2 size={15} />
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </section>
-
-      {/* Scheduled Today */}
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <span className="rc-dot rc-dot--orange" />
-          <h2>Scheduled Today</h2>
-          <span className="rc-count">{data.scheduledToday.length}</span>
-        </div>
-
-        {data.scheduledToday.length === 0 ? (
-          <div className="rc-empty">
-            <Clock size={18} />
-            <span>No follow-ups scheduled today. {data.underFollowUp > 0 ? `${fmt(data.underFollowUp)} under follow-up.` : 'Outstanding invoices will appear here automatically.'}</span>
-          </div>
-        ) : (
-          <div className="rc-summary">
-            <div className="rc-summary-item">
-              <span className="rc-summary-num">{data.counts.reminders}</span>
-              <span className="rc-summary-lbl">Reminders</span>
+                  <div className="rc-row-main">
+                    <span className="rc-row-title">{r.customerName}</span>
+                    <span className="rc-row-sub">{timeAgo(r.recoveredAt)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="rc-summary-item">
-              <span className="rc-summary-num">{data.counts.promiseFollowups}</span>
-              <span className="rc-summary-lbl">Promise Follow-ups</span>
+          )}
+        </section>
+
+        {/* Activity Timeline */}
+        <section className="rc-block">
+          <div className="rc-block-head">
+            <span className="rc-dot rc-dot--blue" />
+            <h2>Activity</h2>
+            <span className="rc-count rc-count--muted">24h</span>
+          </div>
+
+          {data.timeline.length === 0 ? (
+            <div className="rc-empty">
+              <Clock size={18} />
+              <span>No activity in the last 24 hours.</span>
             </div>
-            <div className="rc-summary-item">
-              <span className="rc-summary-num">{data.counts.calls}</span>
-              <span className="rc-summary-lbl">Calls</span>
+          ) : (
+            <div className="rc-timeline">
+              {data.timeline.map((e, i) => (
+                <div key={i} className="rc-tl-item">
+                  <div className="rc-tl-dot" />
+                  <div className="rc-tl-body">
+                    <span className="rc-tl-text">{timelineLabel(e)}</span>
+                    {e.detail ? <span className="rc-tl-detail">{e.detail}</span> : null}
+                  </div>
+                  <div className="rc-tl-time">{fmtTime(e.at)}</div>
+                </div>
+              ))}
             </div>
-            <div className="rc-summary-item rc-summary-item--amt">
-              <span className="rc-summary-num">{fmt(data.underFollowUp)}</span>
-              <span className="rc-summary-lbl">Under follow-up</span>
-            </div>
-          </div>
-        )}
-
-        {data.scheduledToday.length === 0 ? null : (
-          <div className="rc-list rc-list--tight">
-            {data.scheduledToday.map((s) => (
-              <div key={s.actionId} className="rc-row">
-                <div className="rc-row-icon">
-                  {s.actionType === 'call' || s.channel === 'phone' ? (
-                    <Phone size={15} />
-                  ) : s.actionType === 'promise_followup' ? (
-                    <HeartHandshake size={15} />
-                  ) : (
-                    <MessageSquare size={15} />
-                  )}
-                </div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{s.customerName}</span>
-                  <span className="rc-row-sub">
-                    {s.actionType === 'promise_followup'
-                      ? 'Promise Follow-up'
-                      : s.actionType === 'call'
-                      ? 'Phone Call'
-                      : s.channel === 'whatsapp'
-                      ? 'WhatsApp Reminder'
-                      : s.templateName || 'Reminder'}
-                  </span>
-                </div>
-                <div className="rc-row-time">{formatScheduledSlot(s.scheduledAt)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Recently Recovered */}
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <span className="rc-dot rc-dot--green" />
-          <h2>Recently Recovered</h2>
-          <span className="rc-count">{data.recentlyRecovered.length}</span>
-        </div>
-
-        {data.recentlyRecovered.length === 0 ? (
-          <div className="rc-empty">
-            <CheckCircle2 size={18} />
-            <span>No recoveries recorded this week.</span>
-          </div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {data.recentlyRecovered.map((r) => (
-              <div key={r.caseId} className="rc-row rc-row--green">
-                <div className="rc-row-icon rc-row-icon--green">
-                  <CheckCircle2 size={15} />
-                </div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{r.customerName}</span>
-                  <span className="rc-row-sub">
-                    {timeAgo(r.recoveredAt)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Activity Timeline */}
-      <section className="rc-block">
-        <div className="rc-block-head">
-          <span className="rc-dot rc-dot--blue" />
-          <h2>Activity</h2>
-          <span className="rc-count rc-count--muted">24h</span>
-        </div>
-
-        {data.timeline.length === 0 ? (
-          <div className="rc-empty">
-            <Clock size={18} />
-            <span>No activity recorded in the last 24 hours. Activity appears when reminders are sent or payments received.</span>
-          </div>
-        ) : (
-          <div className="rc-timeline">
-            {data.timeline.map((e, i) => (
-              <div key={i} className="rc-tl-item">
-                <div className="rc-tl-dot" />
-                <div className="rc-tl-body">
-                  <span className="rc-tl-text">{timelineLabel(e)}</span>
-                  {e.detail ? <span className="rc-tl-detail">{e.detail}</span> : null}
-                </div>
-                <div className="rc-tl-time">{fmtTime(e.at)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      </details>
     </div>
   )
 }

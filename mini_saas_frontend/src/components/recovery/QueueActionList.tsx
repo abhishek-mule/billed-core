@@ -1,11 +1,18 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, AlertTriangle, CheckCircle2, Phone, Send, Clock, ChevronDown, ChevronUp, IndianRupee, Banknote, Smartphone, CreditCard, AlertCircle, MoreHorizontal, ChevronRight } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 import { AttentionFeed } from '@/components/attention-feed/AttentionFeed'
 import type { QueueItem, QueueSummary } from '@/lib/recovery/queue-service'
+
+type ActionAck = {
+  action: string
+  message: string
+  sub?: string
+  at: number // epoch ms — used to auto-expire
+}
 
 type QueueResponse = {
   items: QueueItem[]
@@ -52,6 +59,9 @@ export function QueueActionList() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [actionError, setActionError] = useState<string | null>(null)
+  // Per-card acknowledgment state: shows persistent success copy until dismissed or 8s elapses
+  const [actionAcks, setActionAcks] = useState<Record<string, ActionAck>>({})
+  const ackTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const dashboardOpenedAt = useCallback(() => {
     if (typeof window !== 'undefined' && !sessionStorage.getItem('bz_ttfa_started')) {
@@ -80,9 +90,43 @@ export function QueueActionList() {
 
   useEffect(() => { fetchQueue() }, [fetchQueue])
 
+  /** Build a human-readable acknowledgment message from an API response */
+  const buildAck = useCallback((action: string, data: any): ActionAck => {
+    const now = Date.now()
+    if (action === 'send_reminder') {
+      const sub = data.nextReminderAt
+        ? `Next reminder: ${new Date(data.nextReminderAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+        : undefined
+      return { action, message: '✓ Reminder Sent', sub, at: now }
+    }
+    if (action === 'record_payment') {
+      const remaining = data.outstandingAmount
+      const sub = remaining > 0 ? `${formatINR(remaining)} still outstanding` : 'Fully settled'
+      return { action, message: '✓ Payment Recorded', sub, at: now }
+    }
+    if (action === 'mark_promise') {
+      const sub = data.promiseDueDate
+        ? `Due ${new Date(data.promiseDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+        : undefined
+      return { action, message: '✓ Promise Noted', sub, at: now }
+    }
+    return { action, message: '✓ Done', at: now }
+  }, [])
+
+  const setAck = useCallback((caseId: string, ack: ActionAck) => {
+    setActionAcks(prev => ({ ...prev, [caseId]: ack }))
+    // Auto-clear after 8 seconds
+    if (ackTimers.current[caseId]) clearTimeout(ackTimers.current[caseId])
+    ackTimers.current[caseId] = setTimeout(() => {
+      setActionAcks(prev => { const next = { ...prev }; delete next[caseId]; return next })
+    }, 8000)
+  }, [])
+
   const performAction = useCallback(async (caseId: string, action: string, actionPayload?: Record<string, any>, customerId?: string) => {
     setActingCase(caseId)
     setActionError(null)
+    // Clear any prior ack for this card when re-acting
+    setActionAcks(prev => { const next = { ...prev }; delete next[caseId]; return next })
 
     const ttfaStart = sessionStorage.getItem('bz_ttfa_started')
     const ttfa = ttfaStart ? Date.now() - parseInt(ttfaStart) : undefined
@@ -106,10 +150,14 @@ export function QueueActionList() {
         throw new Error(errData.error || 'Action failed')
       }
 
+      const data = await res.json()
       sessionStorage.removeItem('bz_ttfa_started')
       setShowMenu(null)
       setRecordingPayment(null)
-      await fetchQueue()
+
+      // Show persistent acknowledgment on the card; do a background refresh
+      setAck(caseId, buildAck(action, data))
+      fetchQueue().then(() => {}).catch(() => {})
       router.refresh()
       window.dispatchEvent(new Event('billzo:changed'))
     } catch (err: any) {
@@ -117,7 +165,7 @@ export function QueueActionList() {
     } finally {
       setActingCase(null)
     }
-  }, [fetchQueue])
+  }, [fetchQueue, buildAck, setAck, router])
 
   const handlePrimaryAction = useCallback((item: QueueItem) => {
     const action = item.recommendedAction.id
@@ -211,9 +259,25 @@ export function QueueActionList() {
           const isRecording = recordingPayment === item.caseId
           const isMenuOpen = showMenu === item.caseId
           const badgeClass = stateBadge[item.recoveryState] || 'bg-muted text-foreground'
+          const ack = actionAcks[item.caseId] || null
 
           return (
             <li key={item.caseId} className="bg-card border border-border rounded-xl overflow-hidden">
+              {/* Action acknowledgment banner — shows on successful action for 8s */}
+              {ack && (
+                <div className="flex items-center justify-between gap-2 px-4 py-2 bg-green-50 border-b border-green-200 animate-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-green-800">{ack.message}</span>
+                    {ack.sub && <span className="text-xs text-green-700">· {ack.sub}</span>}
+                  </div>
+                  <button
+                    onClick={() => setActionAcks(prev => { const next = { ...prev }; delete next[item.caseId]; return next })}
+                    className="text-green-600 hover:text-green-800 text-xs"
+                    aria-label="Dismiss"
+                  >✕</button>
+                </div>
+              )}
               {/* Main row */}
               <div className="flex items-center gap-3 px-4 py-3">
                 {/* Rank */}

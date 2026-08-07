@@ -1,11 +1,10 @@
 "use client"
 
-import { Phone, ArrowUpRight, AlertTriangle, Clock } from "lucide-react"
+import { Phone, MessageSquare, ArrowUpRight, AlertTriangle, Clock } from "lucide-react"
 import { formatINR, cn } from "@/lib/utils"
 import { MoneyJourney } from "./MoneyJourney"
 import { PromiseHealthBadge } from "./PromiseHealthBadge"
 import { RecoveryClock } from "./RecoveryClock"
-import Link from "next/link"
 
 interface TimelineEntry {
   type: string
@@ -29,6 +28,9 @@ interface WorkspaceHeroProps {
     promiseBrokenCount: number
   }
   timeline?: TimelineEntry[]
+  onCall?: () => void
+  onSendReminder?: () => void
+  onRecordOutcome?: () => void
 }
 
 function computeJourneySteps(timeline?: TimelineEntry[]) {
@@ -78,10 +80,67 @@ export function WorkspaceHero({
   recommendation,
   metrics,
   timeline,
+  onCall,
+  onSendReminder,
+  onRecordOutcome,
 }: WorkspaceHeroProps) {
   const steps = computeJourneySteps(timeline)
   const badge = priorityBadge(priority)
   const hasPhone = !!customerPhone
+
+  const renderActionBtn = () => {
+    if (!recommendation) return null
+    const action = recommendation.nextBestAction
+
+    if (action === "call") {
+      return (
+        <a
+          href={hasPhone ? `tel:${customerPhone}` : "#"}
+          onClick={onCall}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
+        >
+          <Phone size={13} />
+          Call Today
+          <ArrowUpRight size={13} />
+        </a>
+      )
+    }
+
+    if (action === "send_reminder") {
+      return (
+        <button
+          onClick={onSendReminder || onRecordOutcome}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+        >
+          <MessageSquare size={13} />
+          Send Reminder
+          <ArrowUpRight size={13} />
+        </button>
+      )
+    }
+
+    if (action === "update_contact" && !hasPhone) {
+      return (
+        <button
+          onClick={onRecordOutcome}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-danger-soft text-danger hover:bg-danger/20 transition-colors shadow-sm"
+        >
+          Add Phone Number
+          <ArrowUpRight size={13} />
+        </button>
+      )
+    }
+
+    return (
+      <button
+        onClick={onRecordOutcome}
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
+      >
+        {recommendationActionLabel(action, hasPhone)}
+        <ArrowUpRight size={13} />
+      </button>
+    )
+  }
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -122,27 +181,16 @@ export function WorkspaceHero({
 
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Payment Chance</p>
+              <p className="text-xs text-muted-foreground font-medium mb-1">Payment Chance</p>
               {recommendation && (
-                <div className="mt-1 space-y-1">
-                  <Link
-                    href={hasPhone ? `tel:${customerPhone}` : "#"}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
-                      recommendation.nextBestAction === "update_contact" && !hasPhone
-                        ? "bg-danger-soft text-danger"
-                        : "bg-recovery text-white hover:bg-recovery/90",
-                    )}
-                  >
-                    {recommendationActionLabel(recommendation.nextBestAction, hasPhone)}
-                    <ArrowUpRight size={12} />
-                  </Link>
+                <div className="space-y-1">
+                  {renderActionBtn()}
                   {recommendation.nextBestAction === "update_contact" && !hasPhone && (
                     <p className="text-[11px] text-danger leading-relaxed">
                       No phone number — can&apos;t send reminders until added
                     </p>
                   )}
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed pt-0.5">
                     {recommendation.reason}
                   </p>
                 </div>
