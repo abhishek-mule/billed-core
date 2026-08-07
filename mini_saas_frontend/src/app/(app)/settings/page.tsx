@@ -123,6 +123,15 @@ export default function SettingsPage() {
       description: 'Auto-reminders, scheduling, quiet hours, per-customer settings',
     },
     {
+      id: 'notifications',
+      href: '/settings/developer',
+      icon: <Bug className={ICON_CLASS} />,
+      title: 'Push Notifications',
+      description: 'Enable FCM device alerts for payment received & broken promises',
+      status: 'connected' as CategoryStatus,
+      statusLabel: 'FCM push enabled',
+    },
+    {
       id: 'help',
       href: '/settings/help',
       icon: <Shield className={ICON_CLASS} />,

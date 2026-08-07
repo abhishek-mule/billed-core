@@ -62,14 +62,21 @@ export async function initNotifications(): Promise<string | null> {
 
     // Listen for foreground messages
     onMessage(messaging, (payload: any) => {
-      console.log("Foreground message:", payload);
-      // Handle foreground notification
-      if (payload.notification) {
-        new Notification(payload.notification.title || "BillZo", {
-          body: payload.notification.body,
-          icon: payload.notification.icon,
-          tag: payload.data?.type,
+      console.log("Foreground FCM message received:", payload);
+      const title = payload.notification?.title || payload.data?.title || "💰 Payment Received";
+      const body = payload.notification?.body || payload.data?.body || "Rajesh Traders paid ₹2,450 via UPI";
+      const icon = payload.notification?.icon || "/logo.svg";
+
+      if (registration && 'showNotification' in registration) {
+        registration.showNotification(title, {
+          body,
+          icon,
+          badge: "/logo.svg",
+          tag: payload.data?.type || "billzo-alert",
+          data: payload.data,
         });
+      } else if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body, icon });
       }
     });
 
@@ -131,13 +138,13 @@ function getDeviceType(): "android" | "ios" | "web" {
   return "web";
 }
 
-// Event-based notification triggers
+// High-value, actionable notification triggers (Zero noise, merchant assistant model)
 export type NotificationEvent = 
-  | { type: "payment_success"; data: { amount: number; customerName: string } }
-  | { type: "payment_failed"; data: { amount: number; customerName: string } }
-  | { type: "reminder_sent"; data: { invoiceId: string; customerName: string } }
-  | { type: "invoice_overdue"; data: { invoiceId: string; amount: number; daysOverdue: number } }
-  | { type: "low_stock"; data: { productName: string; currentStock: number } };
+  | { type: "payment_received"; data: { amount: number; customerName: string; invoiceId: string } }
+  | { type: "promise_broken"; data: { customerName: string; amount: number; caseId: string } }
+  | { type: "manual_attention_required"; data: { count: number } }
+  | { type: "auto_recovery_paused"; data: { daysRemaining: number } }
+  | { type: "high_value_recovered"; data: { totalToday: number; milestoneName: string } };
 
 export async function sendNotification(event: NotificationEvent): Promise<void> {
   // This would be called from the server-side in production

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { PageShell } from "@/components/billzo/PageShell"
 import { Skeleton } from "@/components/billzo/Skeleton"
 import { MorningBrief } from "@/components/billzo/MorningBrief"
@@ -9,6 +10,8 @@ import { MissionHeader } from "@/components/billzo/MissionHeader"
 import { PriorityAlert } from "@/components/billzo/PriorityAlert"
 import { RecoveryQueue } from "@/components/billzo/RecoveryQueue"
 import { RecoveryScoreCard } from "@/components/billzo/RecoveryScoreCard"
+import { PromiseModal } from "@/components/billzo/PromiseModal"
+import { PaymentModal } from "@/components/billzo/PaymentModal"
 import type { CustomerCardItem } from "@/components/billzo/CustomerCard"
 
 type ActionItem = {
@@ -24,6 +27,10 @@ type ActionItem = {
   actionType: string
   state: string
   reasons: { type: string; impact: string }[]
+  promiseToPayDate?: string | null
+  maxDeliveryStatus?: "sent" | "delivered" | "read" | null
+  ignoredReminders?: number
+  brokenPromises?: number
 }
 
 type HealthDriver = {
@@ -122,6 +129,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [sendingFor, setSendingFor] = useState<string | null>(null)
+  const [promiseFor, setPromiseFor] = useState<CustomerCardItem | null>(null)
+  const [paymentFor, setPaymentFor] = useState<CustomerCardItem | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -159,6 +169,44 @@ export default function DashboardPage() {
     return isUrgent ? first : null
   })()
 
+  const sendReminder = async (item: CustomerCardItem) => {
+    setSendingFor(item.caseId)
+    try {
+      const res = await fetch("/api/recovery/queue/actions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId: item.caseId,
+          action: "send_reminder",
+          customerId: item.customerId,
+          payload: { origin: "dashboard" },
+        }),
+      })
+      if (res.ok) {
+        toast.success("Reminder sent")
+        load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        if (data.error === "FEATURE_LOCKED" || data.code === "FEATURE_LOCKED") {
+          toast.error("Upgrade to Pro to send reminders")
+        } else if (data.error === "TENANT_NOT_FOUND" || data.code === "TENANT_NOT_FOUND") {
+          toast.error("Session expired — please sign in again")
+        } else {
+          toast.error(data.error || data.message || "Failed to send reminder")
+        }
+      }
+    } catch {
+      toast.error("Network error — could not send reminder")
+    } finally {
+      setSendingFor(null)
+    }
+  }
+
+  const callCustomer = (item: CustomerCardItem) => {
+    if (item.phone) window.location.href = `tel:${item.phone}`
+  }
+
   return (
     <PageShell>
       <div className="space-y-4 pb-8">
@@ -186,13 +234,43 @@ export default function DashboardPage() {
         {todayPlan.length === 0 ? (
           <QueueComplete />
         ) : (
-          <RecoveryQueue items={todayPlan as CustomerCardItem[]} />
+          <RecoveryQueue
+            items={todayPlan as CustomerCardItem[]}
+            sendingFor={sendingFor}
+            onSend={sendReminder}
+            onCall={callCustomer}
+            onPayment={(i) => setPaymentFor(i)}
+            onPromise={(i) => setPromiseFor(i)}
+            onOpenCustomer={(i) => (window.location.href = `/parties/${i.customerId}`)}
+          />
         )}
 
         {todayPlan.length <= 15 && todayPlan.length > 0 && (
           <RecoveryScoreCard score={health.score} drivers={health.drivers} />
         )}
       </div>
+
+      {promiseFor && (
+        <PromiseModal
+          customerId={promiseFor.customerId}
+          customerName={promiseFor.customerName}
+          amount={promiseFor.amount}
+          caseId={promiseFor.caseId}
+          onClose={() => setPromiseFor(null)}
+          onSuccess={() => { setPromiseFor(null); load() }}
+        />
+      )}
+      {paymentFor && (
+        <PaymentModal
+          customerId={paymentFor.customerId}
+          customerName={paymentFor.customerName}
+          amount={paymentFor.amount}
+          openInvoiceCount={paymentFor.invoiceCount}
+          caseId={paymentFor.caseId}
+          onClose={() => setPaymentFor(null)}
+          onSuccess={() => { setPaymentFor(null); load() }}
+        />
+      )}
     </PageShell>
   )
 }

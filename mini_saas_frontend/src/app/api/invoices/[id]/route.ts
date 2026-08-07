@@ -21,10 +21,18 @@ export async function GET(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
+    const { data: items } = await supabaseAdmin
+      .from('invoice_items')
+      .select('name, qty, price, hsn, gst_rate')
+      .eq('invoice_id', invoice.id)
+
     const tenantId = getVerifiedTenantIdFromRequest(request)
 
     if (tenantId && tenantId === invoice.tenant_id) {
-      return NextResponse.json(invoice)
+      return NextResponse.json({
+        ...invoice,
+        items: items || [],
+      })
     }
 
     const { data: tenant } = await supabaseAdmin
@@ -32,11 +40,6 @@ export async function GET(
       .select('name, phone, address, logo, upi_id, bank_details, gstin, payment_config')
       .eq('id', invoice.tenant_id)
       .single()
-
-    const { data: items } = await supabaseAdmin
-      .from('invoice_items')
-      .select('name, qty, price, hsn, gst_rate')
-      .eq('invoice_id', invoice.id)
 
     return NextResponse.json({
       id: invoice.id,

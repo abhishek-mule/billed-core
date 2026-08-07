@@ -8,10 +8,10 @@ import {
   ExternalLink, Receipt, Calendar, Settings2, CheckCircle2, AlertCircle, RefreshCw,
   Mail, MoreHorizontal, Wallet, TrendingUp, Hand, CalendarClock, IndianRupee,
 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/billzo/Button"
 import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar"
 import { db } from "@/lib/billzo/db"
-
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
@@ -19,6 +19,8 @@ import type { AutomationMode } from "@/lib/billzo/types"
 import { scheduleBackgroundSync } from "@/lib/billzo/sync"
 import { CustomerIntelligencePanel } from "@/components/billzo/CustomerIntelligencePanel"
 import { RecoveryPlanCard, type RecoveryPlanData, type RecoveryPlanMode, type RecoveryPlanAction } from "@/components/billzo/RecoveryPlanCard"
+import { PromiseModal } from "@/components/billzo/PromiseModal"
+import { PaymentModal } from "@/components/billzo/PaymentModal"
 
 const MODE_LABELS: Record<AutomationMode, string> = {
   full_auto: "Auto",
@@ -59,47 +61,219 @@ export default function PartyDetailPage() {
   const [editingMessage, setEditingMessage] = useState("")
   const [missingPhone, setMissingPhone] = useState("")
   const [editing, setEditing] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', phone: '', whatsapp_number: '', gstin: '', email: '', address: '' })
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments'>('invoices')
+  const [showPromiseModal, setShowPromiseModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   useEffect(() => { loadParty() }, [id])
 
   const loadParty = async () => {
     try {
+      setLoading(true)
       setError(null)
       const tenantId = getCookie("bz_tenant")
-      if (!tenantId) { router.push("/auth"); return }
 
-      const cust = await db().customers.get(id)
-      if (!cust) { router.push("/parties"); return }
-      setCustomer(cust)
+      // 1. Primary server-side API fetch
+      let serverData: any = null
+      try {
+        const res = await fetch(`/api/recovery/customer?customerId=${id}`, {
+          credentials: "include",
+        })
+        if (res.ok) {
+          serverData = await res.json()
+        }
+      } catch (e) {
+        console.warn("Failed to fetch customer server data:", e)
+      }
 
-      const [invData, payData] = await Promise.all([
-        db().invoices.where("tenantId").equals(tenantId).toArray(),
-        db().payments?.where("tenantId").equals(tenantId).toArray() || Promise.resolve([]),
-      ])
+      // 2. Local Dexie fetch as fallback / supplement
+      let localCust: any = null
+      let localInvoices: any[] = []
+      let localPayments: any[] = []
+      try {
+        localCust = await db().customers.get(id)
+        if (tenantId) {
+          const [invData, payData] = await Promise.all([
+            db().invoices.where("tenantId").equals(tenantId).toArray(),
+            db().payments?.where("tenantId").equals(tenantId).toArray() || Promise.resolve([]),
+          ])
+          localInvoices = invData.filter((inv: any) => inv.customerId === id || (inv as any).customer_id === id)
+          localPayments = payData.filter((p: any) => localInvoices.some((inv: any) => inv.id === (p.invoiceId || p.invoice_id)))
+        }
+      } catch (e) {
+        console.warn("Failed to fetch Dexie customer data:", e)
+      }
 
-      const customerInvoices = invData
-        .filter((inv: any) => inv.customerId === id || (inv as any).customer_id === id)
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      setInvoices(customerInvoices)
+      // If neither server nor local data has customer info
+      if (!serverData?.customer && !localCust) {
+        setError(MerchantLanguage.customer.notFound)
+        return
+      }
 
-      const customerPayments = payData
-        .filter((p: any) => customerInvoices.some((inv: any) => inv.id === (p.invoiceId || p.invoice_id)))
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      setPayments(customerPayments)
-    } catch (err) {
+      // Normalize customer object
+      const rawCust = serverData?.customer || localCust || {}
+      const custName = rawCust.name || rawCust.customer_name || rawCust.customerName || 'Customer'
+      const custPhone = rawCust.phone || rawCust.whatsapp_number || ''
+      const custEmail = rawCust.email || ''
+      const custGstin = rawCust.gstin || ''
+      const custAddress = rawCust.address || rawCust.billing_address || ''
+      const custAutomation = rawCust.automation_mode || rawCust.automationMode || localCust?.automationMode || 'full_auto'
+
+      const normalizedCustomer = {
+        id,
+        name: custName,
+        customer_name: custName,
+        phone: custPhone,
+        whatsapp_number: custPhone,
+        email: custEmail,
+        gstin: custGstin,
+        address: custAddress,
+        billing_address: custAddress,
+        automationMode: custAutomation,
+        automation_mode: custAutomation,
+      }
+      setCustomer(normalizedCustomer)
+
+      // Normalize invoices
+      let mergedInvoices: any[] = []
+      if (serverData?.invoices && serverData.invoices.length > 0) {
+        mergedInvoices = serverData.invoices.map((inv: any) => ({
+          id: inv.id,
+          invoiceNumber: inv.number || inv.invoice_number || `#${inv.id?.slice(-8)}`,
+          total: Number(inv.total) || 0,
+          status: inv.status || 'unpaid',
+          dueDate: inv.dueDate || inv.due_date,
+          createdAt: inv.createdAt || inv.created_at,
+          paidAmount: inv.paidAmount || 0,
+        }))
+      } else if (localInvoices.length > 0) {
+        mergedInvoices = localInvoices.map((inv: any) => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber || inv.invoice_number || `#${inv.id?.slice(-8)}`,
+          total: Number(inv.total) || Number(inv.grand_total) || 0,
+          status: inv.status || 'unpaid',
+          dueDate: inv.dueAt || inv.dueDate || inv.due_date,
+          createdAt: inv.createdAt || inv.created_at,
+          paidAmount: inv.paidAmount || 0,
+        }))
+      }
+      setInvoices(mergedInvoices)
+
+      // Normalize payments
+      let mergedPayments: any[] = []
+      if (serverData?.actions && serverData.actions.length > 0) {
+        const serverPayments = (serverData.actions || [])
+          .filter((a: any) => a.actionType === 'record_payment' || a.status === 'completed')
+          .map((a: any) => ({
+            id: a.id,
+            amount: a.amount || 0,
+            method: a.channel || 'Payment',
+            createdAt: a.completedAt || a.scheduledAt,
+            status: 'paid',
+          }))
+        mergedPayments = [...serverPayments]
+      }
+      if (localPayments.length > 0) {
+        const localP = localPayments.map((p: any) => ({
+          id: p.id,
+          amount: Number(p.amount) || 0,
+          method: p.method || p.provider || 'Payment',
+          createdAt: p.createdAt || p.created_at,
+          status: p.status || 'paid',
+        }))
+        const existingIds = new Set(mergedPayments.map(p => p.id))
+        for (const p of localP) {
+          if (!existingIds.has(p.id)) mergedPayments.push(p)
+        }
+      }
+      setPayments(mergedPayments)
+    } catch (err: any) {
+      console.error("[PartyDetailPage] loadParty error:", err)
       setError(MerchantLanguage.error.loadFailed)
     } finally {
       setLoading(false)
     }
   }
 
-  const totalInvoiced = invoices.reduce((s: number, i: any) => s + (i.total || 0), 0)
-  const totalPaid = payments.reduce((s: number, p: any) => s + (p.amount || 0), 0) +
-    invoices.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + (i.paidAmount || 0), 0)
-  const pending = totalInvoiced - totalPaid
-  const unpaidInvoices = invoices.filter((i: any) => i.status === "unpaid" || i.status === "overdue")
+  const totalInvoiced = invoices.reduce((s: number, i: any) => s + (Number(i.total) || 0), 0)
+  const totalPaid = payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) +
+    invoices.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + (Number(i.paidAmount) || Number(i.total) || 0), 0)
+  const pending = Math.max(0, totalInvoiced - totalPaid)
+  // Include all non-paid and non-cancelled invoices (open, overdue, unpaid, partially_paid)
+  const unpaidInvoices = invoices.filter((i: any) => i.status !== "paid" && i.status !== "cancelled")
+  const hasPendingBalance = pending > 0 || unpaidInvoices.length > 0
+
+  const handleSaveEdit = async () => {
+    if (!customer) return
+    setSavingEdit(true)
+    const now = new Date().toISOString()
+    const updatedName = editForm.name.trim() || customer.name
+    const updatedPhone = editForm.phone.trim()
+    const updatedEmail = editForm.email.trim()
+    const updatedGstin = editForm.gstin.trim()
+    const updatedAddress = editForm.address.trim()
+
+    try {
+      // 1. PATCH backend database
+      const res = await fetch('/api/customers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          id: customer.id,
+          name: updatedName,
+          phone: updatedPhone,
+          email: updatedEmail,
+          gstin: updatedGstin,
+          address: updatedAddress,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        toast.error(errData.error || 'Failed to update customer in backend')
+      } else {
+        toast.success('Customer profile updated')
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Error updating customer')
+    }
+
+    // 2. Update local Dexie if available
+    try {
+      await db().customers.update(customer.id, {
+        name: updatedName,
+        phone: updatedPhone,
+        whatsapp_number: editForm.whatsapp_number.trim() || updatedPhone,
+        gstin: updatedGstin,
+        email: updatedEmail,
+        address: updatedAddress,
+        updatedAt: now,
+      })
+    } catch (e) {
+      // ignore dexie missing error
+    }
+
+    // 3. Update React state
+    setCustomer((prev: any) => ({
+      ...prev,
+      name: updatedName,
+      customer_name: updatedName,
+      phone: updatedPhone,
+      whatsapp_number: editForm.whatsapp_number.trim() || updatedPhone,
+      email: updatedEmail,
+      gstin: updatedGstin,
+      address: updatedAddress,
+      billing_address: updatedAddress,
+      updatedAt: now,
+    }))
+
+    scheduleBackgroundSync()
+    setSavingEdit(false)
+    setEditing(false)
+  }
 
   const sendReminder = async (invoiceId?: string, phoneOverride?: string) => {
     const tenantId = getCookie("bz_tenant")
@@ -137,6 +311,7 @@ export default function PartyDetailPage() {
       setMissingPhone("")
       setPersonalNote("")
       setTimeout(() => setWaSuccess(false), 3000)
+      loadParty()
     } catch (err: any) {
       setWaError(err.message)
     } finally {
@@ -151,9 +326,16 @@ export default function PartyDetailPage() {
           <div className="bg-card border border-danger rounded-lg p-6 text-center">
             <AlertCircle className="w-8 h-8 text-danger mx-auto mb-3" />
             <p className="text-sm text-danger mb-4">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => { setLoading(true); setError(null); loadParty() }}>
-              <RefreshCw className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.retry}
-            </Button>
+            <div className="flex justify-center gap-3">
+              <Link href="/parties">
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Customers
+                </Button>
+              </Link>
+              <Button variant="outline" size="sm" onClick={() => { setLoading(true); setError(null); loadParty() }}>
+                <RefreshCw className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.retry}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -171,7 +353,7 @@ export default function PartyDetailPage() {
     let executionAt: string | null = null
     let afterExecution = ''
     let status: RecoveryPlanData['status'] = 'completed'
-      const nextAction: RecoveryPlanAction = { type: 'Nothing to do', at: null, isAutomatic: true, reason: 'No pending invoices' }
+    const nextAction: RecoveryPlanAction = { type: 'Nothing to do', at: null, isAutomatic: true, reason: 'No pending invoices' }
     const history: RecoveryPlanData['history'] = []
 
     if (pending > 0) {
@@ -194,7 +376,7 @@ export default function PartyDetailPage() {
         nextAction.at = nextReminderInv.nextRecoveryAt
         nextAction.reason = `${unpaidInvoices.length} invoice${unpaidInvoices.length > 1 ? 's' : ''} unpaid`
         nextAction.isAutomatic = true
-      } else if (customer.automationMode === 'muted') {
+      } else if (customer?.automationMode === 'muted') {
         mode = 'paused'
         modeLabel = 'Paused'
         afterExecution = 'Manual only'
@@ -211,7 +393,6 @@ export default function PartyDetailPage() {
       }
     }
 
-    // Build history from payments and last reminder
     if (lastReminderInv?.lastReminderAt) {
       history.push({
         date: lastReminderInv.lastReminderAt,
@@ -264,18 +445,18 @@ export default function PartyDetailPage() {
   const transactions = [
     ...invoices.map((inv: any) => ({
       type: "invoice" as const,
-      date: inv.createdAt,
-      amount: inv.total,
+      date: inv.createdAt || new Date().toISOString(),
+      amount: inv.total || 0,
       label: `Invoice ${inv.invoiceNumber || `#${inv.id?.slice(-8)}`}`,
-      status: inv.status,
+      status: inv.status || 'unpaid',
       id: inv.id,
     })),
     ...payments.map((pay: any) => ({
       type: "payment" as const,
-      date: pay.createdAt,
-      amount: pay.amount,
+      date: pay.createdAt || new Date().toISOString(),
+      amount: pay.amount || 0,
       label: `Payment${pay.method ? ` via ${pay.method}` : ''}`,
-      status: pay.status,
+      status: pay.status || 'paid',
       id: pay.id,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -317,10 +498,17 @@ export default function PartyDetailPage() {
                 </button>
                 {!editing && (
                   <button
-                    onClick={() => { setEditForm({
-                      name: customer.name, phone: customer.phone || '', whatsapp_number: customer.whatsapp_number || '',
-                      gstin: customer.gstin || '', email: customer.email || '', address: customer.address || ''
-                    }); setEditing(true) }}
+                    onClick={() => {
+                      setEditForm({
+                        name: customer.name || '',
+                        phone: customer.phone || '',
+                        whatsapp_number: customer.whatsapp_number || customer.phone || '',
+                        gstin: customer.gstin || '',
+                        email: customer.email || '',
+                        address: customer.address || customer.billing_address || ''
+                      })
+                      setEditing(true)
+                    }}
                     className="text-xs text-muted-foreground font-medium shrink-0 hover:text-foreground"
                   >
                     {MerchantLanguage.action.edit}
@@ -349,13 +537,10 @@ export default function PartyDetailPage() {
                   ))}
                   <div className="flex gap-2 pt-2">
                     <Button variant="outline" size="sm" onClick={() => setEditing(false)}>{MerchantLanguage.action.cancel}</Button>
-                    <Button size="sm" onClick={async () => {
-                      const now = new Date().toISOString()
-                      await db().customers.update(customer.id, { ...editForm, updatedAt: now })
-                      setCustomer({ ...customer, ...editForm, updatedAt: now })
-                      scheduleBackgroundSync()
-                      setEditing(false)
-                    }}>{MerchantLanguage.action.save}</Button>
+                    <Button size="sm" onClick={handleSaveEdit} disabled={savingEdit}>
+                      {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                      {MerchantLanguage.action.save}
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -386,101 +571,49 @@ export default function PartyDetailPage() {
           </div>
         </div>
 
-        {/* Financial summary */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-card border border-border rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.lifetimePurchases}</p>
-            <p className="text-base font-semibold text-foreground tabular-nums">{formatINR(totalInvoiced)}</p>
-          </div>
-          <div className="bg-card border border-border rounded-lg p-3">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.paymentsReceived}</p>
-            <p className="text-base font-semibold text-success tabular-nums">{formatINR(totalPaid)}</p>
-          </div>
-          <div className={`bg-card border rounded-lg p-3 ${pending > 0 ? 'border-warning bg-warning-soft/30' : 'border-border'}`}>
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.outstanding}</p>
-            <p className={`text-base font-semibold tabular-nums ${pending > 0 ? 'text-warning' : 'text-success'}`}>
-              {formatINR(pending)}
-            </p>
-          </div>
-        </div>
-
-        {/* Udhar Summary Card */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <IndianRupee size={14} />
-            {MerchantLanguage.customer.outstanding}
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.invoices}</p>
-              <p className="text-lg font-bold">{unpaidInvoices.length}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.oldestDue}</p>
-              <p className="text-lg font-bold">
-                {(() => {
-                  const oldest = unpaidInvoices.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
-                  if (!oldest) return '—'
-                  const days = Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-                  return `${days}d`
-                })()}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">{MerchantLanguage.customer.lifetime}</p>
-              <p className="text-lg font-bold">{formatINR(totalInvoiced)}</p>
-            </div>
-          </div>
-          {pending > 0 && (
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-warning">{formatINR(pending)}</span> outstanding across {unpaidInvoices.length} invoice{unpaidInvoices.length !== 1 ? 's' : ''}
-            </p>
-          )}
-        </div>
-
-        {/* Recovery Plan */}
-        <RecoveryPlanCard
-          plan={recoveryPlan}
-          onEdit={() => {
-            if (unpaidInvoices[0]) router.push(`/send/${unpaidInvoices[0].id}`)
-          }}
-          onPause={() => setShowAutomationModal(true)}
-          onCancel={pending > 0 ? undefined : undefined}
-        />
-
-        {/* Quick Actions */}
-        <div className="bg-card border border-border rounded-xl p-3">
-          <div className="grid grid-cols-5 gap-1.5">
+        {/* Quick Actions Bar — Primary operational controls */}
+        <div className="bg-card border border-border rounded-xl p-3.5 shadow-sm">
+          <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">Quick Recovery Actions</p>
+          <div className="grid grid-cols-5 gap-2">
             <QuickAction
               icon={MessageSquare}
               label={MerchantLanguage.common.send}
+              variant="emerald"
               onClick={() => {
                 setSelectedInvoiceId(null)
                 setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
                 setShowWAModal(true)
               }}
-              disabled={unpaidInvoices.length === 0 || customer.automationMode === 'muted'}
+              disabled={!hasPendingBalance || customer.automationMode === 'muted'}
             />
             <QuickAction
               icon={CalendarClock}
               label={MerchantLanguage.common.schedule}
-              onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_reminder`)}
-              disabled={unpaidInvoices.length === 0}
+              variant="indigo"
+              onClick={() => {
+                setSelectedInvoiceId(null)
+                setEditingMessage(`Hello ${customer.name}, reminder for your upcoming payment of ${formatINR(pending)}.`)
+                setShowWAModal(true)
+              }}
+              disabled={!hasPendingBalance}
             />
             <QuickAction
               icon={Hand}
               label={MerchantLanguage.payment.promise}
-              onClick={() => router.push(`/send/${unpaidInvoices[0]?.id}?action=schedule_promise`)}
-              disabled={unpaidInvoices.length === 0}
+              variant="purple"
+              onClick={() => setShowPromiseModal(true)}
+              disabled={!hasPendingBalance}
             />
             <QuickAction
               icon={Wallet}
               label={MerchantLanguage.payment.recordPayment}
-              onClick={() => router.push(`/pulse?payInvoice=${id}`)}
+              variant="success"
+              onClick={() => setShowPaymentModal(true)}
             />
             <QuickAction
               icon={Phone}
               label={MerchantLanguage.customer.call}
+              variant="blue"
               onClick={() => {
                 if (customer.phone) window.location.href = `tel:${customer.phone}`
               }}
@@ -488,6 +621,62 @@ export default function PartyDetailPage() {
             />
           </div>
         </div>
+
+        {/* Consolidated Financial & Recovery Overview */}
+        <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              <IndianRupee size={14} className="text-primary" />
+              Financial & Recovery Summary
+            </div>
+            {pending > 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-warning-soft text-warning border border-warning/30">
+                {formatINR(pending)} Outstanding
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-success-soft text-success border border-success/30">
+                All Clear · ₹0 Pending
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div className="bg-muted/40 rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Lifetime Invoiced</p>
+              <p className="text-base font-bold text-foreground tabular-nums">{formatINR(totalInvoiced)}</p>
+            </div>
+            <div className="bg-muted/40 rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Payments Received</p>
+              <p className="text-base font-bold text-success tabular-nums">{formatINR(totalPaid)}</p>
+            </div>
+            <div className="bg-muted/40 rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Unpaid Invoices</p>
+              <p className="text-base font-bold text-foreground tabular-nums">{unpaidInvoices.length}</p>
+            </div>
+            <div className="bg-muted/40 rounded-lg p-3">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Oldest Overdue</p>
+              <p className="text-base font-bold text-foreground tabular-nums">
+                {(() => {
+                  const oldest = unpaidInvoices.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
+                  if (!oldest) return '—'
+                  const days = Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                  return `${days} days`
+                })()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Recovery Plan */}
+        <RecoveryPlanCard
+          plan={recoveryPlan}
+          onEdit={() => {
+            setSelectedInvoiceId(null)
+            setEditingMessage(`Hello ${customer.name}, your pending amount of ${formatINR(pending)} is due. Please clear it at your earliest convenience.`)
+            setShowWAModal(true)
+          }}
+          onPause={() => setShowAutomationModal(true)}
+        />
 
         {/* Recovery Intelligence */}
         <CustomerIntelligencePanel customerId={id} />
@@ -744,6 +933,39 @@ export default function PartyDetailPage() {
           </div>
         )}
 
+        {/* Promise Modal */}
+        {showPromiseModal && customer && (
+          <PromiseModal
+            customerId={customer.id}
+            customerName={customer.name}
+            amount={pending}
+            caseId={customer.id}
+            onClose={() => setShowPromiseModal(false)}
+            onSuccess={() => {
+              setShowPromiseModal(false)
+              toast.success("Promise to pay recorded")
+              loadParty()
+            }}
+          />
+        )}
+
+        {/* Payment Modal */}
+        {showPaymentModal && customer && (
+          <PaymentModal
+            customerId={customer.id}
+            customerName={customer.name}
+            amount={pending}
+            openInvoiceCount={unpaidInvoices.length}
+            caseId={customer.id}
+            onClose={() => setShowPaymentModal(false)}
+            onSuccess={() => {
+              setShowPaymentModal(false)
+              toast.success("Payment recorded")
+              loadParty()
+            }}
+          />
+        )}
+
       </div>
     </div>
   )
@@ -754,20 +976,33 @@ function QuickAction({
   label,
   onClick,
   disabled,
+  variant = 'default',
 }: {
   icon: any
   label: string
   onClick: () => void
   disabled?: boolean
+  variant?: 'emerald' | 'indigo' | 'purple' | 'success' | 'blue' | 'default'
 }) {
+  const variantStyles: Record<string, string> = {
+    emerald: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 group-hover:bg-emerald-500/20',
+    indigo: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 group-hover:bg-indigo-500/20',
+    purple: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 group-hover:bg-purple-500/20',
+    success: 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 group-hover:bg-emerald-500/20',
+    blue: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 group-hover:bg-blue-500/20',
+    default: 'bg-muted text-muted-foreground group-hover:bg-muted/80',
+  }
+
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex flex-col items-center gap-0.5 rounded-lg py-2 text-center text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+      className="group flex flex-col items-center gap-1.5 p-2.5 rounded-xl text-center bg-card border border-border/60 shadow-sm hover:border-border hover:shadow-md transition-all active:scale-[0.97] disabled:opacity-35 disabled:pointer-events-none disabled:shadow-none"
     >
-      <Icon size={16} />
-      {label}
+      <div className={`p-2.5 rounded-xl transition-colors ${variantStyles[variant]}`}>
+        <Icon size={18} />
+      </div>
+      <span className="text-[11px] font-bold text-foreground leading-tight">{label}</span>
     </button>
   )
 }

@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import Link from 'next/link'
 import { ChevronLeft, Bug } from 'lucide-react'
+import { PushNotificationControl } from '@/components/billzo/PushNotificationControl'
 
 interface PaymentRow {
   id: string
@@ -104,6 +105,9 @@ export default async function DeveloperPage() {
           <ChevronLeft className="w-3.5 h-3.5" />
           Back to Settings
         </Link>
+
+        {/* Firebase Push Notification Hub */}
+        <PushNotificationControl tenantId={tenantId} />
 
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-3 mb-1">

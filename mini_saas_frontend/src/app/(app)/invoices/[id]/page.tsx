@@ -3,7 +3,8 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote, Smartphone, Copy, Check } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote, Copy, Check, Link2, QrCode, Download } from "lucide-react";
+import QRCode from "qrcode";
 import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
 import RecoveryJourney from "@/components/recovery/RecoveryJourney";
@@ -32,8 +33,9 @@ export default function InvoiceDetailPage() {
   const [missingPhone, setMissingPhone] = useState('');
   const [genLinkLoading, setGenLinkLoading] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
-  const [upiId, setUpiId] = useState('');
-  const [upiCopied, setUpiCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const [recoveryAttribution, setRecoveryAttribution] = useState<any>(null);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -68,11 +70,65 @@ export default function InvoiceDetailPage() {
         return;
       }
 
-      const invoiceData = await db().invoices.get(id);
+      let invoiceData = await db().invoices.get(id);
+      let itemData: any[] = [];
+
+      if (!invoiceData) {
+        try {
+          const res = await fetch(`/api/invoices/${id}`, { credentials: 'include' });
+          if (res.ok) {
+            const remoteData = await res.json();
+            invoiceData = {
+              id: remoteData.id,
+              invoiceNumber: remoteData.invoice_number || remoteData.id.slice(0, 8),
+              customerName: remoteData.customer_name || 'Walk-In Customer',
+              customerPhone: remoteData.customer_phone || remoteData.phone || '',
+              total: Number(remoteData.total || remoteData.grand_total || 0),
+              outstandingAmount: Number(remoteData.outstanding_amount ?? remoteData.total ?? 0),
+              status: remoteData.status || 'unpaid',
+              syncStatus: remoteData.sync_status || 'synced',
+              createdAt: remoteData.created_at || remoteData.createdAt || new Date().toISOString(),
+              dueAt: remoteData.due_date || remoteData.dueAt || new Date().toISOString(),
+            } as any;
+            if (remoteData.items && remoteData.items.length > 0) {
+              itemData = remoteData.items.map((it: any) => ({
+                name: it.name || it.item_name || 'Item',
+                qty: Number(it.qty || it.quantity || 1),
+                price: Number(it.price || it.rate || 0),
+                hsn: it.hsn || '',
+                gstRate: it.gst_rate || 0
+              }));
+            }
+          }
+        } catch {
+          // ignore fallback error
+        }
+      } else {
+        itemData = await db().invoiceItems.where("invoiceId").equals(id).toArray();
+        if (!itemData || itemData.length === 0) {
+          try {
+            const res = await fetch(`/api/invoices/${id}`, { credentials: 'include' });
+            if (res.ok) {
+              const remoteData = await res.json();
+              if (remoteData.items && remoteData.items.length > 0) {
+                itemData = remoteData.items.map((it: any) => ({
+                  name: it.name || it.item_name || 'Item',
+                  qty: Number(it.qty || it.quantity || 1),
+                  price: Number(it.price || it.rate || 0),
+                  hsn: it.hsn || '',
+                  gstRate: it.gst_rate || 0
+                }));
+              }
+            }
+          } catch {
+            // ignore fallback error
+          }
+        }
+      }
+
       if (invoiceData) {
         setInvoice(invoiceData);
-        const itemData = await db().invoiceItems.where("invoiceId").equals(id).toArray();
-        setItems(itemData);
+        setItems(itemData || []);
       } else {
         setInvoiceError('Invoice not found');
       }
@@ -177,13 +233,40 @@ export default function InvoiceDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to generate link')
       setPaymentLink(data.short_url)
-      setUpiId(data.upi_id || '')
+      setShowQr(false)
+      setQrDataUrl('')
       await loadInvoice()
+
+      // Prerender QR so the Show QR action is instant
+      if (!data.short_url) return
+      try {
+        const url = await QRCode.toDataURL(data.short_url, { width: 512, margin: 2 })
+        setQrDataUrl(url)
+      } catch {
+        // QR is optional; the copy link / send actions still work
+      }
     } catch (err: any) {
       setWaError(err.message)
     } finally {
       setGenLinkLoading(false)
     }
+  }
+
+  const copyPaymentLink = async () => {
+    const link = paymentLink || ''
+    if (!link) return
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = link
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
   }
 
   const handleOverride = (blockedReason: string) => {
@@ -298,15 +381,15 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-5">
-      <Link href="/invoices" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> All invoices
-      </Link>
+      <button onClick={() => router.back()} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
 
       <div className="rounded-2xl border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-[0.1em]">
-              <Receipt className="h-3.5 w-3.5 inline mr-1" /> {invoice.invoiceNumber || invoice.id?.slice(0, 8)}
+              <Receipt className="h-3.5 w-3.5 inline mr-1" /> {invoice.invoiceNumber || invoice.number || invoice.invoice_number || ('INV-' + (invoice.id ? invoice.id.slice(0, 8).toUpperCase() : '000000'))}
             </div>
             <div className="mt-2 text-[40px] font-bold text-[#16802d] leading-none tracking-tight tabular-nums">{formatINR(total)}</div>
             <div className="mt-3 inline-flex items-center gap-2 flex-wrap">
@@ -356,49 +439,112 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            onClick={() => setShowWAModal(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-success py-4 text-sm font-bold text-white hover:bg-success transition-colors disabled:opacity-50"
-          >
-            {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-            WhatsApp
-          </button>
-
-          {paid ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl bg-success-soft py-4 text-sm font-bold text-success">
+      {/* Invoice Actions */}
+      <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
+        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">Invoice Actions</p>
+        {paid ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-success-soft text-success px-3 py-3 text-xs font-bold border border-success/30">
               <CheckCircle2 className="h-4 w-4" />
-              Paid
+              Paid in Full
             </div>
-          ) : (
-            <>
+            <button
+              onClick={() => setShowWAModal(true)}
+              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
+            >
+              {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+              Send Receipt
+            </button>
+            <a
+              href={`/api/invoices/${id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors shadow-sm active:scale-[0.98]"
+            >
+              <Download className="h-4 w-4 text-primary" />
+              Download PDF
+            </a>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <button
+              onClick={() => setShowWAModal(true)}
+              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
+            >
+              {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+              Send WhatsApp
+            </button>
+            <button
+              onClick={generatePaymentLink}
+              disabled={genLinkLoading}
+              className="flex items-center justify-center gap-2 rounded-xl bg-foreground text-background px-3 py-3 text-xs font-bold hover:bg-foreground/90 transition-colors disabled:opacity-50 shadow-sm active:scale-[0.98]"
+            >
+              {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              {paymentLink ? 'Payment Link Ready' : 'Get Payment Link'}
+            </button>
+            <button
+              onClick={() => setShowRecordPaymentModal(true)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors active:scale-[0.98]"
+            >
+              <Banknote className="h-4 w-4 text-emerald-600" />
+              Record Payment
+            </button>
+            <a
+              href={`/api/invoices/${id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors shadow-sm active:scale-[0.98]"
+            >
+              <Download className="h-4 w-4 text-primary" />
+              Download PDF
+            </a>
+          </div>
+        )}
+      </div>
+
+        {paymentLink && (
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.1em] mb-1">Payment Link</div>
+                <div className="truncate text-xs text-primary font-medium">{paymentLink}</div>
+              </div>
               <button
-                onClick={() => {
-                  if (upiId || invoice?.upiId) {
-                    navigator.clipboard.writeText(upiId || invoice?.upiId || '')
-                    setUpiCopied(true)
-                    setTimeout(() => setUpiCopied(false), 2000)
-                  } else {
-                    generatePaymentLink()
-                  }
-                }}
-                disabled={genLinkLoading}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-foreground py-4 text-sm font-bold text-background hover:bg-foreground/90 transition-colors disabled:opacity-50"
+                onClick={copyPaymentLink}
+                className="shrink-0 flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/70 transition-colors"
               >
-                {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
-                {upiCopied ? 'UPI ID Copied!' : (upiId || invoice?.upiId ? 'Copy UPI ID' : 'Get UPI ID')}
+                {linkCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                {linkCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowQr(false); setShowWAModal(true) }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-3 text-xs font-bold text-white hover:bg-success transition-colors"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                Send via WhatsApp
               </button>
               <button
-                onClick={() => setShowRecordPaymentModal(true)}
-                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card py-4 text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+                onClick={() => setShowQr(v => !v)}
+                disabled={!qrDataUrl}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 border-border bg-card py-3 text-xs font-bold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
-                <Banknote className="h-4 w-4" />
-                Record Payment
+                <QrCode className="h-3.5 w-3.5" />
+                {showQr ? 'Hide QR' : 'Show QR'}
               </button>
-            </>
-          )}
-        </div>
+            </div>
+            {showQr && qrDataUrl && (
+              <div className="flex flex-col items-center gap-2 py-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrDataUrl} alt="UPI payment QR" className="h-44 w-44 rounded-xl border border-border" />
+                <div className="text-[11px] text-muted-foreground text-center">
+                  Scan to pay — opens the payment page on the customer's phone
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {(waSuccess) && (
           <div className="flex items-center gap-2 p-3 rounded-xl bg-success-soft border border-success">
@@ -406,7 +552,6 @@ export default function InvoiceDetailPage() {
             <span className="text-xs text-success font-medium">Message sent!</span>
           </div>
         )}
-      </div>
 
       {showWAModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -425,7 +570,7 @@ export default function InvoiceDetailPage() {
                     <div className="rounded-xl bg-muted/50 p-3 text-sm text-foreground leading-relaxed">
                       {paid
                         ? `Payment received! ₹${total} received from ${invoice.customerName} for invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Thank you!${personalNote ? `\n\n${personalNote}` : ''}`
-                        : `Hello ${invoice.customerName}, ₹${total} due on invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Pay via UPI: ${upiId || invoice?.upiId || '[UPI ID]'}${personalNote ? `\n\n${personalNote}` : ''}`}
+                        : `Hello ${invoice.customerName}, ₹${total} due on invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)}. Pay here: ${paymentLink || '[payment link]'}${personalNote ? `\n\n${personalNote}` : ''}`}
                     </div>
                   </div>
                   <div>
@@ -497,48 +642,57 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {items.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="px-6 py-4 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/30">
-            Items
+      {/* Items Purchased Section */}
+      {items.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-border text-xs font-bold text-foreground uppercase tracking-wider bg-muted/40 flex items-center justify-between">
+            <span>Items Purchased ({items.length})</span>
+            <span className="text-[11px] text-muted-foreground font-normal normal-case">Itemized Breakdown</span>
           </div>
-          <div className="px-6 py-3 grid grid-cols-12 gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border bg-secondary/20">
+          <div className="px-6 py-3 grid grid-cols-12 gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border bg-muted/20">
             <div className="col-span-1 text-center">#</div>
-            <div className="col-span-5">Item</div>
+            <div className="col-span-5">Item Name</div>
             <div className="col-span-2 text-center">Qty</div>
             <div className="col-span-2 text-right">Rate</div>
             <div className="col-span-2 text-right">Amount</div>
           </div>
           {items.map((it, i) => (
-            <div key={i} className="px-6 py-3 grid grid-cols-12 gap-2 text-sm items-center border-b border-border/50 last:border-0 hover:bg-secondary/20 transition-colors">
+            <div key={i} className="px-6 py-3.5 grid grid-cols-12 gap-2 text-sm items-center border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
               <div className="col-span-1 text-center text-muted-foreground text-xs">{i + 1}</div>
               <div className="col-span-5">
-                <div className="font-medium text-foreground">{it.name}</div>
+                <div className="font-semibold text-foreground">{it.name}</div>
                 <div className="text-[11px] text-muted-foreground">
                   {it.hsn && <>HSN {it.hsn}</>}
                   {it.hsn && it.gstRate ? ' · ' : ''}
                   {it.gstRate ? `GST ${it.gstRate}%` : ''}
                 </div>
               </div>
-              <div className="col-span-2 text-center text-muted-foreground">{it.qty}</div>
-              <div className="col-span-2 text-right text-muted-foreground tabular-nums">{formatINR(it.price)}</div>
-              <div className="col-span-2 text-right font-medium text-foreground tabular-nums">{formatINR(it.qty * it.price)}</div>
+              <div className="col-span-2 text-center text-muted-foreground font-medium">{it.qty}</div>
+              <div className="col-span-2 text-right text-muted-foreground tabular-nums font-medium">{formatINR(it.price)}</div>
+              <div className="col-span-2 text-right font-bold text-foreground tabular-nums">{formatINR(it.qty * it.price)}</div>
             </div>
           ))}
-          <div className="border-t border-border px-6 py-4 bg-secondary/30 space-y-1">
+          <div className="border-t border-border px-6 py-4 bg-muted/30 space-y-1.5">
             <div className="grid grid-cols-12 gap-2 text-sm">
-              <div className="col-span-10 text-right text-muted-foreground">Subtotal</div>
-              <div className="col-span-2 text-right text-foreground tabular-nums">{formatINR(subtotal)}</div>
+              <div className="col-span-10 text-right text-muted-foreground font-medium">Subtotal</div>
+              <div className="col-span-2 text-right text-foreground font-semibold tabular-nums">{formatINR(subtotal)}</div>
             </div>
-            <div className="grid grid-cols-12 gap-2 text-sm">
-              <div className="col-span-10 text-right text-muted-foreground">GST</div>
-              <div className="col-span-2 text-right text-foreground tabular-nums">{formatINR(tax)}</div>
-            </div>
+            {tax > 0 && (
+              <div className="grid grid-cols-12 gap-2 text-sm">
+                <div className="col-span-10 text-right text-muted-foreground font-medium">GST / Tax</div>
+                <div className="col-span-2 text-right text-foreground font-semibold tabular-nums">{formatINR(tax)}</div>
+              </div>
+            )}
             <div className="grid grid-cols-12 gap-2 text-base font-bold pt-2 border-t border-border mt-2">
               <div className="col-span-10 text-right text-foreground">Grand Total</div>
-              <div className="col-span-2 text-right text-[#16802d] tabular-nums">{formatINR(total)}</div>
+              <div className="col-span-2 text-right text-emerald-600 tabular-nums">{formatINR(total)}</div>
             </div>
           </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-1 shadow-sm">
+          <div className="text-xs font-bold text-foreground uppercase tracking-wider">Items Purchased</div>
+          <p className="text-xs text-muted-foreground">General Sale / Standard invoice total of {formatINR(total)} (no itemized breakdown logged).</p>
         </div>
       )}
 

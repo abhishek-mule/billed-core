@@ -137,35 +137,46 @@ export default function InvoicesPage() {
   const collectionStats = useMemo(() => {
     const total = invoices.reduce((s, i) => s + i.total, 0)
     const paidAmt = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total, 0)
-    const overdueAmt = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + getOutstanding(i), 0)
+    const overdueAmt = invoices.filter(i => (i.status as string) !== "paid" && (i.status as string) !== "cancelled" && getOutstanding(i) > 0).reduce((s, i) => s + getOutstanding(i), 0)
     const partialAmt = invoices.filter(i => i.status === "partial").reduce((s, i) => s + getOutstanding(i), 0)
     return { total, paidAmt, overdueAmt, partialAmt }
   }, [invoices])
 
   const attentionInvs = useMemo(() =>
-    invoices.filter(i => i.status === "overdue").sort((a, b) => daysSince(b.dueAt) - daysSince(a.dueAt)),
+    invoices.filter(i => {
+      const st = i.status as string
+      if (st === "paid" || st === "cancelled") return false
+      const outstanding = getOutstanding(i)
+      if (outstanding <= 0) return false
+      if (st === "overdue" || st === "unpaid" || st === "open" || st === "partial") return true
+      return i.dueAt ? new Date(i.dueAt) < new Date() : false
+    }).sort((a, b) => daysSince(b.dueAt || b.createdAt) - daysSince(a.dueAt || a.createdAt)),
     [invoices]
   )
 
-  // ── export (moved to secondary actions) ──
-  const exportExcel = async () => {
+  // ── export ──
+  const exportCSV = () => {
     try {
-      const XLSX = await import("xlsx")
-      const ws = XLSX.utils.json_to_sheet(filtered.map(i => ({
-        ID: i.invoiceNumber || i.id.slice(0, 8),
-        Date: new Date(i.createdAt).toLocaleDateString(),
-        Customer: i.customerName,
-        Phone: i.customerPhone,
-        Amount: i.total,
-        Status: i.status,
-      })))
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "Invoices")
-      XLSX.writeFile(wb, "Invoices_Export.xlsx")
+      const headers = ["Invoice #", "Date", "Customer Name", "Phone", "Total Amount (INR)", "Status"]
+      const rows = filtered.map(i => [
+        i.invoiceNumber || (i as any).number || ('INV-' + i.id.slice(0, 6).toUpperCase()),
+        new Date(i.createdAt).toLocaleDateString("en-IN"),
+        `"${(i.customerName || 'Walk-In Customer').replace(/"/g, '""')}"`,
+        i.customerPhone || '',
+        i.total || 0,
+        i.status,
+      ])
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n")
+      const encodedUri = encodeURI(csvContent)
+      const link = document.createElement("a")
+      link.setAttribute("href", encodedUri)
+      link.setAttribute("download", `BillZo_Invoices_${new Date().toISOString().slice(0, 10)}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
     } catch (err) {
       setError(getErrorMessage(err, "Export failed"))
     }
-    setActionsOpen(false)
   }
 
   const exportPDF = async () => {
@@ -178,7 +189,7 @@ export default function InvoicesPage() {
         startY: 20,
         head: [["ID", "Date", "Customer", "Amount", "Status"]],
         body: filtered.map(i => [
-          i.invoiceNumber || i.id.slice(0, 8),
+          i.invoiceNumber || (i as any).number || i.id.slice(0, 8),
           new Date(i.createdAt).toLocaleDateString(),
           i.customerName,
           formatINR(i.total),
@@ -189,7 +200,6 @@ export default function InvoicesPage() {
     } catch (err) {
       setError(getErrorMessage(err, "Export failed"))
     }
-    setActionsOpen(false)
   }
 
   // ── loading ──
@@ -344,7 +354,25 @@ export default function InvoicesPage() {
               className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
-          <div className="relative" ref={actionsRef}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
+              title="Download all invoices as CSV"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              CSV
+            </button>
+            <button
+              onClick={exportPDF}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
+              title="Download summary PDF report"
+            >
+              <FileText className="h-4 w-4 text-primary" />
+              PDF
+            </button>
+          </div>
+          <div className="relative lg:hidden" ref={actionsRef}>
             <button
               onClick={() => setActionsOpen(!actionsOpen)}
               className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
@@ -353,11 +381,11 @@ export default function InvoicesPage() {
             </button>
             {actionsOpen && (
               <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] z-20 py-1">
-                <button onClick={exportExcel} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-success" /> Export Excel
+                <button onClick={exportCSV} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export CSV
                 </button>
                 <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileText className="h-3.5 w-3.5 text-danger" /> Export PDF
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Export PDF
                 </button>
               </div>
             )}
@@ -391,32 +419,34 @@ export default function InvoicesPage() {
               const badge = getStatusBadge(inv)
               const risk = getRisk(inv)
               const outstanding = getOutstanding(inv)
-              return (
-                <Link
-                  key={inv.id}
-                  href={`/invoices/${inv.id}`}
-                  className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-border transition-colors group"
-                >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
-                    {inv.customerName?.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground truncate">{inv.customerName}</span>
-                      {inv.customerPhone && (
-                        <span className="text-[12px] text-muted-foreground font-mono">{inv.customerPhone}</span>
-                      )}
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                      {risk && (
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${risk.cls}`}>
-                          {risk.label}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="text-[11px] text-muted-foreground font-medium">{inv.invoiceNumber || inv.id.slice(0, 8)}</span>
+                  const displayName = (inv.customerName || 'Walk-In Customer').replace(/\s+\d+$/, '')
+                  const displayInvNo = inv.invoiceNumber || (inv as any).number || ('INV-' + inv.id.slice(0, 6).toUpperCase())
+                  return (
+                    <Link
+                      key={inv.id}
+                      href={`/invoices/${inv.id}`}
+                      className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-border transition-colors group"
+                    >
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+                        {displayName.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground truncate">{displayName}</span>
+                          {inv.customerPhone && (
+                            <span className="text-[12px] text-muted-foreground font-mono">{inv.customerPhone}</span>
+                          )}
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                          {risk && (
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${risk.cls}`}>
+                              {risk.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[11px] text-muted-foreground font-medium">{displayInvNo}</span>
                       <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                       <span className="text-[11px] text-muted-foreground">
                         {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
@@ -439,6 +469,16 @@ export default function InvoicesPage() {
                   </div>
                   <div className="text-right shrink-0 flex items-center gap-2">
                     <span className="text-base font-bold tabular-nums tracking-tight text-foreground">{formatINR(inv.total)}</span>
+                    <a
+                      href={`/api/invoices/${inv.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1.5 rounded-lg border border-border/60 hover:border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Download PDF"
+                    >
+                      <Download className="h-3.5 w-3.5 text-primary" />
+                    </a>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                   </div>
                 </Link>

@@ -50,7 +50,8 @@ pipeline. There is no migration runner — each file is applied once.
 | 023_mutation_gate.sql | Applied | |
 | 024_messaging_channels.sql | Applied | |
 | 025_cognition_layer.sql | Applied | |
-| 027_recovery_case_state.sql | Applied | Gap at 026 — no file exists |
+| _(026 missing)_ | — | Gap — sequence intentionally skips 026. Do not create. |
+| 027_recovery_case_state.sql | Applied | |
 | 028_fix_recovery_case_fk_types.sql | Applied | Creates `recovery_case_events` |
 | 028_shadow_recovery_cases.sql | Applied | Duplicate number — see below |
 | 029_supabase_missing_tables.sql | Applied | |
@@ -79,7 +80,40 @@ pipeline. There is no migration runner — each file is applied once.
 | 051_recovery_queue_events.sql | **Superseded** | Replaced by `recovery_case_events` in 028. Do not apply. |
 | 052_tenants_complete_schema.sql | Applied | |
 | 053_identity_schema.sql | Pending | Not yet applied |
-| 054_fix_priority_cases_rpc_filter.sql | Pending | Relaxes next_action_type filter to include review_payment and merchant_review |
+| 054_fix_priority_cases_rpc_filter.sql | Pending | Relaxes next_action_type filter |
+| 055_payment_lifecycle_and_source_id.sql | Applied | |
+| 056_anon_sync_policies.sql | Applied | |
+| 057_recovery_state_machine.sql | Applied | |
+| 058_collection_actions.sql | Applied | Core collection actions table |
+| _(059 missing)_ | — | Gap — no file exists. Do not create. |
+| _(060 missing)_ | — | Gap — no file exists. Do not create. |
+| 061_behavior_profiles.sql | Applied | |
+| 062_auth_store.sql | Applied | |
+| 063_drop_permissive_sync_policies.sql | Applied | |
+| 064_collection_action_delivery_columns.sql | Applied | |
+| 065_customer_messaging_projections.sql | Applied | |
+| 066_recovery_policies.sql | Applied | Recovery policy + steps tables |
+| 067_collection_action_scheduling.sql | Applied | |
+| 068_collection_action_events.sql | Applied | Audit log for actions |
+| 069_plans_and_tenant_billing.sql | Applied | Versioned plans catalog |
+| 070_subscriptions.sql | Applied | |
+| 071_billing_events.sql | Applied | |
+| 072_tenant_usage_and_feature_flags.sql | Applied | |
+| 073_subscription_history.sql | Applied | |
+| 074_recovery_policy_call_steps.sql | Applied | |
+| 075_merchant_customer_memory.sql | Applied | |
+| 076_recovery_invoice_columns.sql | Applied | |
+| 077_bring_invoices_to_expected_schema.sql | Applied | |
+| 078_merchant_interest.sql | Applied | |
+| 079_fix_priority_cases_business_rules.sql | Applied | |
+| 080_add_document_type.sql | Applied | |
+| 081_recovery_activities.sql | Applied | |
+| 082_add_new_recovery_activity_types.sql | Applied | |
+| 083_add_call_outcome.sql | Applied | |
+| 084_recovery_sessions.sql | Applied | |
+| 085_recovery_events_canonical.sql | Applied | |
+| 086_business_identity.sql | Applied | |
+| 087_fix_collection_actions_fk_types.sql | Applied | Latest migration |
 | verify_schema.sql | — | Helper script, not a migration |
 
 ## Duplicate migration numbers
@@ -99,8 +133,14 @@ same number.
 
 ## Missing numbers
 
-- **026** — No file exists. The sequence jumps from 025 to 027. Do not
-  create one — closing the gap would imply a migration was missed.
+Three sequence gaps exist — all are intentional or result of branch merges:
+
+- **026** — No file. Sequence jumps from 025 → 027. Do not create.
+- **059** — No file. Sequence jumps from 058 → 061. Do not create.
+- **060** — No file. Same jump. Do not create.
+
+Rule: closing any gap retrospectively is misleading — it implies a migration was
+missed rather than that the slot was never used.
 
 ## Applying migrations
 

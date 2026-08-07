@@ -190,9 +190,25 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
 export async function syncPendingQueue() {
   if (typeof window === 'undefined') return
   if ((navigator as any).onLine === false) return
+
+  // Web Locks API for robust cross-tab sync serialization
+  if ('locks' in navigator) {
+    return await (navigator as any).locks.request('billzo_queue_sync_lock', { ifAvailable: true }, async (lock: any) => {
+      if (!lock) return // Another tab holds the lock
+      return await executeSyncPendingQueue()
+    })
+  }
+
   if ((window as any).__billzoSyncing) return
   ;(window as any).__billzoSyncing = true
+  try {
+    return await executeSyncPendingQueue()
+  } finally {
+    ;(window as any).__billzoSyncing = false
+  }
+}
 
+async function executeSyncPendingQueue() {
   try {
     const tenantId = getTenantId()
     if (!tenantId) return
@@ -225,12 +241,23 @@ export async function syncPendingQueue() {
         await db().queue.update(item.id, { status: 'synced', lastError: undefined, updatedAt: new Date().toISOString() })
 
         // Payment entities: emit payment.completed so the worker processes it
-        // Skip negative amounts (reversals) — worker handles those separately
         if (item.entity === 'payment' && (item.payload as any)?.amount > 0) {
           const p = item.payload as any
           syncPaymentEvent(p).catch(() => {})
         }
       } else {
+        const isAuthError = result?.status === 401 || (result?.error && result.error.includes('Unauthorized'))
+        if (isAuthError) {
+          // Session expired — pause retries, set status to auth_required (DO NOT dead-letter merchant data!)
+          await db().queue.update(item.id, {
+            status: 'auth_required',
+            attempts: current.attempts, // Preserve attempt counter
+            lastError: 'Session expired — re-authentication required',
+            updatedAt: new Date().toISOString(),
+          })
+          break // Stop queue processing until user re-logs in
+        }
+
         const conflict = result?.status === 409
         const errMsg = result?.error || 'Sync failed'
         const nextAttemptAt = new Date(Date.now() + backoffMs(current.attempts + 1)).toISOString()
@@ -243,8 +270,25 @@ export async function syncPendingQueue() {
       }
     }
     notifyChanged()
-  } finally {
-    ;(window as any).__billzoSyncing = false
+  } catch (err) {
+    console.error('[Sync] Error during execution:', err)
+  }
+}
+
+/** Re-activate queue items paused for authentication upon successful user sign-in */
+export async function resumeAuthPausedSync() {
+  const tenantId = getTenantId()
+  if (!tenantId) return
+  try {
+    const paused = await db().queue.where('[tenantId+status]').equals([tenantId, 'auth_required']).toArray()
+    for (const item of paused) {
+      await db().queue.update(item.id, { status: 'pending', attempts: 0, updatedAt: new Date().toISOString() })
+    }
+    if (paused.length > 0) {
+      scheduleBackgroundSync(0)
+    }
+  } catch (err) {
+    console.error('[Sync] Error resuming auth-paused items:', err)
   }
 }
 

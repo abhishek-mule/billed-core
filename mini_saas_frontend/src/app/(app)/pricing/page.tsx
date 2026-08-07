@@ -13,76 +13,31 @@ const PLANS = [
     code: 'free',
     name: 'Free',
     price: 0,
-    desc: 'Perfect for trying BillZo.',
+    desc: 'Everything you need to start recovering money today.',
     features: [
-      'Unlimited invoices',
-      'Unlimited customers',
-      'Payment links',
-      'Basic dashboard',
-      'Recover up to 5 overdue invoices / month',
+      '5 recovery reminders / month',
+      'Unlimited invoices & customers',
+      'UPI payment links & QR codes',
+      'Manual recovery queue',
+      'Payment tracking & ledger',
     ],
-    cta: 'Start Free',
+    cta: 'Start Recovering Free',
     highlight: false,
   },
   {
-    code: 'starter',
-    name: 'Starter',
+    code: 'pro',
+    name: 'Pro',
     price: 299,
-    desc: 'Best for most merchants.',
+    desc: 'Automate collections and recover money 3x faster.',
     features: [
-      'Recover up to 100 overdue invoices every month',
-      'Automatic WhatsApp payment reminders',
-      'Recovery Queue',
-      'Payment tracking',
-      'Recovery history',
+      '500 recovery reminders / month',
+      'Automated WhatsApp payment reminders',
+      'Smart Recovery Queue & Priority engine',
+      'WhatsApp delivery & read receipts',
+      'Payment promise tracking & broken promise alerts',
     ],
-    cta: 'Start Recovering',
+    cta: 'Upgrade to Pro (₹299/mo)',
     highlight: true,
-  },
-  {
-    code: 'growth',
-    name: 'Growth',
-    price: 499,
-    desc: 'Growing business.',
-    features: [
-      'Recover up to 250 overdue invoices / month',
-      'Priority reminder scheduling',
-      'Advanced recovery reports',
-      'Merchant memory & follow-up history',
-      'Faster support',
-    ],
-    cta: 'Join Waitlist',
-    highlight: false,
-  },
-  {
-    code: 'business',
-    name: 'Business',
-    price: 1499,
-    desc: 'Teams & branches.',
-    features: [
-      'Recover 1000+ overdue invoices / month',
-      'Multi-user team access',
-      'Multiple business locations',
-      'Priority support',
-      'Early access to new features',
-    ],
-    cta: 'Talk to Us',
-    highlight: false,
-  },
-  {
-    code: 'enterprise',
-    name: 'Enterprise',
-    price: null,
-    desc: 'Custom recovery workflows.',
-    features: [
-      'Unlimited recovery workflows',
-      'Dedicated onboarding',
-      'SLA support',
-      'Custom integrations',
-      'Volume pricing',
-    ],
-    cta: 'Contact Sales',
-    highlight: false,
   },
 ]
 
@@ -254,75 +209,68 @@ export default function PricingPage() {
 
   const planAction = (code: string) => {
     if (code === 'free') return handleFree
-    if (code === 'starter') return handleStarter
-    if (code === 'growth') return () => openInterestModal('growth')
-    if (code === 'business') return () => openInterestModal('business')
-    if (code === 'enterprise') return () => openInterestModal('enterprise')
-    return () => {}
+    return handleStarter
   }
 
   const planButtonText = (code: string) => {
-    if (code === 'free' && currentPlan && currentPlan !== 'starter') return 'Continue Free'
-    if (code === 'starter' && currentPlan === 'pro') return 'Current Plan'
-    return PLANS.find(p => p.code === code)?.cta || 'Select'
+    if (code === 'free') return currentPlan === 'free' || !currentPlan ? 'Current Plan' : 'Use Free Version'
+    if (code === 'pro' && currentPlan === 'pro') return 'Current Plan'
+    return 'Start 7-Day Free Trial'
   }
 
   return (
-    <div className="container py-8">
-      <div className="mx-auto max-w-5xl text-center">
-        <h1 className="text-3xl font-bold">Pricing that pays for itself</h1>
-        <p className="mt-2 text-muted-foreground">
-          Start free. Upgrade when you want to recover more of your stuck money.
+    <div className="container py-8 max-w-4xl mx-auto">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+          Recover more money. Pay only after you see results.
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+          Start recovering for free today. Upgrade to automate follow-ups when you see the value.
         </p>
       </div>
 
-      <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
         {PLANS.map((plan) => {
-          const isCurrent = (plan.code === 'free' && currentPlan && currentPlan !== 'pro') ||
-            (plan.code === 'starter' && currentPlan === 'pro')
-          const isProcessing = processing && plan.code === 'starter'
+          const isCurrent = (plan.code === 'free' && (!currentPlan || currentPlan === 'free' || currentPlan === 'starter')) ||
+            (plan.code === 'pro' && currentPlan === 'pro')
+          const isProcessing = processing && plan.code === 'pro'
 
           return (
             <div
               key={plan.code}
-              className={`relative flex flex-col rounded-2xl border p-5 ${
+              className={`relative flex flex-col rounded-2xl border p-6 transition-all ${
                 plan.highlight
-                  ? 'border-primary shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
-                  : 'border-border'
+                  ? 'border-teal-500/80 bg-teal-500/[0.03] shadow-lg ring-1 ring-teal-500/20'
+                  : 'border-border bg-card'
               }`}
             >
               {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground whitespace-nowrap">
-                  Most Popular
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-teal-600 px-3 py-0.5 text-[11px] font-bold text-white uppercase tracking-wider shadow-sm">
+                  Recommended for Merchants
                 </div>
               )}
 
-              <h3 className="text-lg font-bold">{plan.name}</h3>
-              <p className="mt-1 text-xs text-muted-foreground min-h-[2.5rem]">{plan.desc}</p>
+              <h3 className="text-xl font-bold text-foreground">{plan.name}</h3>
+              <p className="mt-1 text-xs text-muted-foreground min-h-[2.5rem] leading-relaxed">{plan.desc}</p>
 
-              <div className="mt-3 flex items-baseline gap-1">
-                {plan.price !== null ? (
-                  <>
-                    <span className="text-2xl font-bold">
-                      {plan.price === 0 ? 'Free' : `₹${plan.price.toLocaleString('en-IN')}`}
-                    </span>
-                    {plan.price > 0 && <span className="text-xs text-muted-foreground">/month</span>}
-                  </>
-                ) : (
-                  <span className="text-xl font-bold">Custom</span>
-                )}
+              <div className="mt-4 flex items-baseline gap-1">
+                <span className="text-3xl font-black text-foreground">
+                  {plan.price === 0 ? '₹0' : `₹${plan.price.toLocaleString('en-IN')}`}
+                </span>
+                {plan.price > 0 && <span className="text-xs font-medium text-muted-foreground">/month</span>}
               </div>
 
-              {plan.code === 'starter' && (
-                <p className="mt-2 text-sm font-bold text-success">
-                  Recover ₹50,000+ for less than <span className="text-base">₹10/day</span>
-                </p>
+              {plan.code === 'pro' && (
+                <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-700 dark:text-emerald-300 space-y-1">
+                  <p className="font-bold">⚡ Average merchant recovers ₹15,000–₹50,000/month</p>
+                  <p className="text-[11px] opacity-90 font-normal">BillZo costs only ₹299/month (~₹10/day)</p>
+                </div>
               )}
 
-              <ul className="mt-4 flex-1 space-y-2.5">
+              <ul className="mt-5 flex-1 space-y-2.5">
                 {plan.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                  <li key={i} className="flex items-start gap-2 text-xs text-foreground/90 font-medium">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     {f}
                   </li>
                 ))}
@@ -331,12 +279,10 @@ export default function PricingPage() {
               <button
                 onClick={planAction(plan.code)}
                 disabled={isProcessing || isCurrent}
-                className={`mt-5 w-full rounded-xl py-2.5 text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${
+                className={`mt-6 w-full rounded-xl py-3 text-sm font-bold transition-all active:scale-[0.98] ${
                   plan.highlight
-                    ? 'bg-gradient-to-br from-primary to-success text-primary-foreground shadow-lg'
-                    : plan.code === 'free'
-                    ? 'border-2 border-border bg-transparent text-foreground hover:bg-secondary'
-                    : 'border border-border bg-secondary text-foreground hover:bg-secondary/80'
+                    ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-md hover:shadow-lg disabled:opacity-60'
+                    : 'border-2 border-border bg-card hover:bg-muted text-foreground disabled:opacity-60'
                 }`}
               >
                 {isProcessing ? (
@@ -344,12 +290,18 @@ export default function PricingPage() {
                 ) : isCurrent ? (
                   'Current Plan'
                 ) : (
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex items-center justify-center gap-1.5">
                     {planButtonText(plan.code)}
-                    {plan.code !== 'free' && plan.code !== 'starter' && <ArrowUpRight className="h-3.5 w-3.5" />}
+                    <ArrowUpRight className="h-4 w-4" />
                   </span>
                 )}
               </button>
+
+              {plan.code === 'pro' && !isCurrent && (
+                <p className="mt-2 text-[11px] text-center text-muted-foreground">
+                  Starts with 7-day free trial · Cancel anytime
+                </p>
+              )}
             </div>
           )
         })}

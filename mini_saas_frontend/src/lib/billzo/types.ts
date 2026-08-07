@@ -15,7 +15,7 @@ import {
   RECOVERY_ENGAGEMENT_STATES,
 } from '@billzo/shared'
 
-export type SyncStatus = SharedSyncStatus
+export type SyncStatus = SharedSyncStatus | 'auth_required'
 export type InvoiceStatus = SharedInvoiceStatus
 export type RecoveryStage = SharedReminderStage
 export type WhatsAppStatus = SharedWhatsAppStatus
