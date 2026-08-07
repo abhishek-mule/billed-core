@@ -138,22 +138,85 @@ export async function computeAllCustomerReputations(): Promise<number> {
   if (!tenants) return 0
 
   let total = 0
-  for (const t of tenants) {
-    const { data: customers } = await supabaseAdmin
-      .from('customers')
-      .select('id')
-      .eq('tenant_id', t.id)
-      .limit(200)
 
-    if (!customers) continue
+  // Process tenants with bounded concurrency (pool of 5) to avoid overwhelming the DB
+  const TENANT_CONCURRENCY = 5
+  const tenantChunks: typeof tenants[] = []
+  for (let i = 0; i < tenants.length; i += TENANT_CONCURRENCY) {
+    tenantChunks.push(tenants.slice(i, i + TENANT_CONCURRENCY))
+  }
 
-    for (const c of customers) {
-      const result = await computeCustomerReputation(t.id, c.id)
-      if (result) total++
-    }
+  for (const tenantBatch of tenantChunks) {
+    const batchResults = await Promise.all(tenantBatch.map(t => processOneTenant(t.id)))
+    total += batchResults.reduce((s, n) => s + n, 0)
   }
 
   return total
+}
+
+/**
+ * Compute and persist reputation for all customers in a single tenant.
+ * Fetches all behavioral metrics in ONE query, then runs computations in
+ * parallel batches of 100 to avoid per-customer roundtrip overhead.
+ */
+async function processOneTenant(tenantId: string): Promise<number> {
+  // Fetch all metrics in one query (single roundtrip per tenant)
+  const { data: allMetrics } = await supabaseAdmin
+    .from('customer_behavioral_metrics')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .limit(2000)
+
+  if (!allMetrics || allMetrics.length === 0) return 0
+
+  const CUSTOMER_BATCH_SIZE = 100
+  let processed = 0
+
+  for (let i = 0; i < allMetrics.length; i += CUSTOMER_BATCH_SIZE) {
+    const chunk = allMetrics.slice(i, i + CUSTOMER_BATCH_SIZE)
+
+    // Compute reputation for all in this chunk (pure CPU, no DB)
+    const updates = chunk.map((metrics: any) => {
+      const m: CustomerBehavioralMetrics = {
+        tenantId: metrics.tenant_id,
+        customerId: metrics.customer_id,
+        schemaVersion: metrics.schema_version,
+        readRate: metrics.read_rate || 0,
+        paymentConversionRate: metrics.payment_conversion_rate || 0,
+        avgReadToPayHours: metrics.avg_read_to_pay_hours || 0,
+        avgReminderResponseHours: metrics.avg_reminder_response_hours || 0,
+        avgSettlementLatencyHours: metrics.avg_settlement_latency_hours || 0,
+        observationCount: metrics.observation_count || 0,
+        totalInterventionsSent: metrics.total_interventions_sent || 0,
+        totalInterventionsRead: metrics.total_interventions_read || 0,
+        totalResolutionsAfterIntervention: metrics.total_resolutions_after_intervention || 0,
+        totalEscalationsReceived: metrics.total_escalations_received || 0,
+        lastEscalationAt: metrics.last_escalation_at || null,
+        interventionsUntilResolution: metrics.interventions_until_resolution || null,
+        lastResolutionAt: metrics.last_resolution_at || null,
+        lastReadAt: metrics.last_read_at || null,
+        lastResponseAt: metrics.last_response_at || null,
+        lastEventAt: metrics.last_event_at || null,
+        updatedAt: metrics.updated_at,
+      }
+      const reputation = computeReputationScore(m)
+      const tier = autoAssignTier(reputation, m)
+      return { id: metrics.customer_id, reputation, tier }
+    })
+
+    // Bulk-update this chunk in parallel (one update per customer, but all in-flight at once)
+    const results = await Promise.allSettled(
+      updates.map(u =>
+        supabaseAdmin
+          .from('customers')
+          .update({ reputation_score: u.reputation, customer_tier: u.tier })
+          .eq('id', u.id),
+      ),
+    )
+    processed += results.filter(r => r.status === 'fulfilled').length
+  }
+
+  return processed
 }
 
 // ============================================================

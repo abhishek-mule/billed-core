@@ -1444,7 +1444,53 @@ async function tryHandleActionCancellation(event: any): Promise<void> {
 
   const now = new Date().toISOString()
 
-  // Cancel all pending scheduled actions for this invoice
+  // ── PARTIAL PAYMENT GUARD ────────────────────────────────────────────
+  // Only cancel recovery actions when the invoice is FULLY paid.
+  // A partial payment keeps all scheduled reminders alive so the merchant
+  // continues to recover the remaining outstanding balance.
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('outstanding_amount, status')
+    .eq('id', invoiceId)
+    .maybeSingle()
+
+  const outstandingAmount = Number(invoice?.outstanding_amount ?? 0)
+  const isFullyPaid = outstandingAmount <= 0 || invoice?.status === 'paid'
+
+  if (!isFullyPaid) {
+    // Log that we deliberately preserved actions for this partial payment
+    const { data: pending } = await supabaseAdmin
+      .from('collection_actions')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .contains('invoice_ids', [invoiceId])
+      .eq('status', 'scheduled')
+
+    if (pending && pending.length > 0) {
+      const preservedRows = pending.map((a: any) => ({
+        action_id: a.id,
+        event_type: 'partial_payment_preserved',
+        payload: {
+          reason: 'partial_payment',
+          invoice_id: invoiceId,
+          outstanding_amount: outstandingAmount,
+          preserved_at: now,
+        },
+      }))
+      await supabaseAdmin
+        .from('collection_action_events')
+        .insert(preservedRows)
+        .then(() => {}, () => {})
+      logger.info(
+        { tenantId, invoiceId, outstandingAmount, preservedCount: pending.length },
+        'Partial payment received — keeping scheduled recovery actions',
+      )
+    }
+    return
+  }
+  // ── END PARTIAL PAYMENT GUARD ────────────────────────────────────────
+
+  // Cancel all pending scheduled actions for this invoice (fully paid)
   const { data: pending } = await supabaseAdmin
     .from('collection_actions')
     .select('id')
@@ -1478,5 +1524,5 @@ async function tryHandleActionCancellation(event: any): Promise<void> {
     .insert(auditRows)
     .then(() => {}, () => {})
 
-  logger.info({ tenantId, invoiceId, cancelledCount: ids.length }, 'Pending actions cancelled after payment')
+  logger.info({ tenantId, invoiceId, cancelledCount: ids.length }, 'Pending actions cancelled after full payment')
 }
