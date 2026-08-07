@@ -14,6 +14,7 @@ export interface PushNotification {
 
 let messaging: any = null;
 let fcmToken: string | null = null;
+let lastFcmError: string | null = null;
 
 export async function initNotifications(): Promise<string | null> {
   if (typeof window === "undefined") return null;
@@ -38,6 +39,7 @@ export async function initNotifications(): Promise<string | null> {
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         messaging = getMessaging(app);
       } else {
+        lastFcmError = "Firebase client config not set (NEXT_PUBLIC_FIREBASE_* env vars missing in the deployed app).";
         console.log("Firebase config not set, skipping push notifications");
         return null;
       }
@@ -46,6 +48,7 @@ export async function initNotifications(): Promise<string | null> {
     // Request permission
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
+      lastFcmError = `Notification permission was ${permission}, not granted.`;
       console.log("Notification permission not granted");
       return null;
     }
@@ -58,12 +61,15 @@ export async function initNotifications(): Promise<string | null> {
     const tokenOptions: any = { serviceWorkerRegistration: registration };
     if (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
       tokenOptions.vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    } else {
+      lastFcmError = "NEXT_PUBLIC_FIREBASE_VAPID_KEY is not set in the deployed app. Without it Firebase rejects tokens.";
     }
 
     try {
       fcmToken = await getToken(messaging, tokenOptions);
     } catch (tokenErr) {
-      console.warn("FCM getToken failed (VAPID key optional), using PWA device token:", tokenErr);
+      lastFcmError = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+      console.warn("FCM getToken failed, using PWA device token:", lastFcmError);
       fcmToken = `pwa_token_${Date.now()}`;
     }
 
@@ -83,6 +89,7 @@ export async function initNotifications(): Promise<string | null> {
 
     return fcmToken || `pwa_token_${Date.now()}`;
   } catch (error) {
+    lastFcmError = error instanceof Error ? error.message : String(error);
     console.warn("FCM initialization skipped or falling back to Web Notification API:", error);
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       return `pwa_token_${Date.now()}`;
@@ -114,7 +121,7 @@ export async function registerDevice(
     return {
       success: false,
       reason:
-        "Could not generate a real FCM token (got a fallback). Ensure NEXT_PUBLIC_FIREBASE_VAPID_KEY is set in the deployed app, Firebase client config is present, and notification permission is granted. Then tap Re-register Device again.",
+        `Could not generate a real FCM token.${lastFcmError ? ` Reason: ${lastFcmError}` : ""} Fix that (usually the VAPID key / Firebase client config in the deployed app), then tap Re-register Device again.`,
     };
   }
 

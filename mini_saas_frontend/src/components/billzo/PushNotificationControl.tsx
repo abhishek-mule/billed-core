@@ -61,6 +61,8 @@ export function PushNotificationControl({ tenantId }: { tenantId: string }) {
           setStatusMsg(`⚠️ Local banner shown, but NO server push — Firebase Admin not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON (and NEXT_PUBLIC_FIREBASE_VAPID_KEY) in Vercel, then redeploy, for real mobile push.`)
         } else if (typeof data.deliveredCount === 'number' && data.deliveredCount === 0) {
           setStatusMsg(`⚠️ No devices delivered (${data.failedCount ?? 0} failed) — FCM tokens invalid/not registered. On your phone tap Re-register Device, grant permission, keep the app open.`)
+        } else if (typeof data.deliveredCount !== 'number' || data.deliveredCount <= 0) {
+          setStatusMsg(`⚠️ ${data.message || 'No registered devices found for this tenant.'} Tap Re-register Device on your phone to add one.`)
         } else {
           setStatusMsg(`✅ Push sent! Delivered to ${data.deliveredCount} device(s). Check your phone lockscreen.`)
         }
