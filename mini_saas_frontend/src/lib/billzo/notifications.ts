@@ -91,7 +91,9 @@ export async function initNotifications(): Promise<string | null> {
   }
 }
 
-export async function registerDevice(tenantId: string): Promise<boolean> {
+export async function registerDevice(
+  tenantId: string,
+): Promise<{ success: boolean; reason?: string }> {
   let token = await initNotifications();
   if (!token && typeof window !== "undefined" && "Notification" in window) {
     const permission = await Notification.requestPermission();
@@ -99,7 +101,22 @@ export async function registerDevice(tenantId: string): Promise<boolean> {
       token = `pwa_device_${tenantId}_${Date.now()}`;
     }
   }
-  if (!token) return false;
+  if (!token) {
+    return { success: false, reason: "Notification permission not granted." };
+  }
+
+  // Dummy fallback tokens can never receive FCM — do NOT persist them.
+  if (token.startsWith("pwa_")) {
+    console.warn(
+      "[Register Device] Refusing to save fallback token. Real FCM token unavailable — set NEXT_PUBLIC_FIREBASE_VAPID_KEY and verify Firebase client config.",
+      token,
+    );
+    return {
+      success: false,
+      reason:
+        "Could not generate a real FCM token (got a fallback). Ensure NEXT_PUBLIC_FIREBASE_VAPID_KEY is set in the deployed app, Firebase client config is present, and notification permission is granted. Then tap Re-register Device again.",
+    };
+  }
 
   try {
     const res = await fetch("/api/register-device", {
@@ -112,10 +129,14 @@ export async function registerDevice(tenantId: string): Promise<boolean> {
       }),
     });
 
-    return res.ok;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { success: false, reason: data.error || "Server rejected the device registration." };
+    }
+    return { success: true };
   } catch (error) {
     console.error("Failed to register device:", error);
-    return false;
+    return { success: false, reason: "Network error while registering device." };
   }
 }
 

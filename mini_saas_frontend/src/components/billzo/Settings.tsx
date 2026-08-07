@@ -15,9 +15,9 @@ export function Settings() {
     try {
       const { registerDevice } = await import('@/lib/billzo/notifications')
       if (state.session.tenantId) {
-        const success = await registerDevice(state.session.tenantId)
-        if (success) alert('Notifications enabled successfully!')
-        else alert('Failed to enable notifications. Please check browser permissions and Firebase config.')
+        const result = await registerDevice(state.session.tenantId)
+        if (result.success) alert('Notifications enabled successfully!')
+        else alert(result.reason || 'Failed to enable notifications. Please check browser permissions and Firebase config.')
       }
     } finally {
       setPushBusy(false)

@@ -19,14 +19,14 @@ export function PushNotificationControl({ tenantId }: { tenantId: string }) {
     setStatusMsg(null)
     try {
       const { registerDevice } = await import('@/lib/billzo/notifications')
-      const success = await registerDevice(tenantId)
+      const result = await registerDevice(tenantId)
       if (typeof window !== 'undefined' && 'Notification' in window) {
         setPermission(Notification.permission)
       }
-      if (success) {
+      if (result.success) {
         setStatusMsg('✅ Push notifications enabled successfully!')
       } else {
-        setStatusMsg('⚠️ Notification permission not granted or Firebase config missing.')
+        setStatusMsg(`⚠️ ${result.reason || 'Notification permission not granted or Firebase config missing.'}`)
       }
     } catch (err: any) {
       setStatusMsg(`❌ Error: ${err.message || 'Failed to enable notifications'}`)

@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       .map((response, index) => ({ response, token: tokens[index] }))
       .filter(({ response }) => {
         const code = response.error?.code || ''
-        return code.includes('registration-token-not-registered') || code.includes('invalid-registration-token')
+        return code.includes('registration-token-not-registered') || code.includes('invalid-registration-token') || code.includes('invalid-argument')
       })
       .map(({ token }) => token)
 

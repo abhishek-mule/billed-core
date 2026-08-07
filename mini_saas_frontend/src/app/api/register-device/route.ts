@@ -18,6 +18,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Reject dummy fallback tokens — they can never receive FCM pushes.
+    if (typeof fcmToken === 'string' && fcmToken.startsWith('pwa_')) {
+      return NextResponse.json(
+        { error: 'Fallback token rejected. Generate a real FCM token (check VAPID key + Firebase config).' },
+        { status: 400 },
+      )
+    }
+
     await saveDeviceToken(tenantId, fcmToken, deviceType)
 
     return NextResponse.json({ success: true })
