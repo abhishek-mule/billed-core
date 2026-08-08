@@ -30,15 +30,15 @@ export function MissionHeader({
   const pct = outstanding > 0 ? Math.round((expectedToday / outstanding) * 100) : 0
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-recovery-soft text-recovery">
+    <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-recovery-soft text-recovery flex-shrink-0">
             <Banknote size={14} />
           </span>
-          <span className="text-sm font-semibold text-foreground">Total Outstanding</span>
+          <span className="text-xs sm:text-sm font-semibold text-foreground truncate">Total Outstanding</span>
         </div>
-        <span className="text-2xl font-bold text-foreground tabular-nums">
+        <span className="text-xl sm:text-2xl font-bold text-foreground tabular-nums flex-shrink-0">
           {formatINR(outstanding)}
         </span>
       </div>
@@ -53,11 +53,11 @@ export function MissionHeader({
           breakdown && breakdown.length > 0 ? "hover:bg-muted/50 transition-colors px-1 -mx-1" : "cursor-default",
         )}
       >
-        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-warning-soft text-warning">
+        <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-warning-soft text-warning flex-shrink-0">
           <Target size={12} />
         </span>
-        <span className="text-xs font-semibold text-muted-foreground">Today&apos;s Recovery Target</span>
-        <span className="ml-auto text-lg font-bold text-foreground tabular-nums">
+        <span className="text-xs font-semibold text-muted-foreground truncate">Today&apos;s Recovery Target</span>
+        <span className="ml-auto text-base sm:text-lg font-bold text-foreground tabular-nums flex-shrink-0">
           {formatINR(expectedToday)}
         </span>
         {breakdown && breakdown.length > 0 ? (

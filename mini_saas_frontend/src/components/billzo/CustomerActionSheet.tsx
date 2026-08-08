@@ -32,16 +32,10 @@ interface ActionDef {
 const ACTIONS: ActionDef[] = [
   { key: "whatsapp", icon: Send, label: "Send WhatsApp" },
   { key: "call", icon: Phone, label: "Call" },
-  { key: "record_payment", icon: CreditCard, label: "Record Payment" },
+  { key: "record_payment", icon: CreditCard, label: "Pay" },
   { key: "promise", icon: HeartHandshake, label: "Promise" },
 ];
 
-/**
- * The fixed action sheet. Every customer — on Home, Recovery, queue,
- * customer page — shows the exact same buttons in the exact same order so
- * merchant muscle memory works. Only one button is emphasised (dominant),
- * never re-labelled or hidden.
- */
 export function CustomerActionSheet({
   dominant,
   onWhatsApp,
@@ -69,9 +63,9 @@ export function CustomerActionSheet({
       );
 
   const base =
-    "inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none";
-  const regular = "h-9 border border-border bg-card text-foreground hover:bg-muted";
-  const emphasized = "h-9 bg-primary text-primary-foreground shadow-sm hover:opacity-90";
+    "inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none min-w-0 truncate";
+  const regular = "h-8 sm:h-9 border border-border bg-card text-foreground hover:bg-muted px-1.5 sm:px-2.5";
+  const emphasized = "h-8 sm:h-9 bg-primary text-primary-foreground shadow-sm hover:opacity-90 px-2 sm:px-3";
 
   const isDominant = (key: DominantAction) =>
     !!dominant && dominant === key;
@@ -80,7 +74,7 @@ export function CustomerActionSheet({
     <div
       className={cn(
         "w-full",
-        layout === "row" ? "flex items-center gap-2" : "grid grid-cols-2 gap-2",
+        layout === "row" ? "flex items-center gap-1.5 sm:gap-2" : "grid grid-cols-2 gap-1.5 sm:gap-2",
       )}
     >
       {ACTIONS.map(({ key, icon: Icon, label }) => {
@@ -100,12 +94,14 @@ export function CustomerActionSheet({
             className={cn(
               base,
               dominantFlag ? emphasized : regular,
-              layout === "row" ? "flex-1" : "",
+              layout === "row" ? "flex-1 min-w-0" : "",
               dominantFlag && "ring-1 ring-primary/30",
             )}
           >
-            {key === "whatsapp" && busy ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
-            {dominantFlag ? label : label.startsWith("Send") ? "WhatsApp" : label}
+            {key === "whatsapp" && busy ? <Loader2 size={12} className="animate-spin flex-shrink-0" /> : <Icon size={12} className="flex-shrink-0" />}
+            <span className="truncate">
+              {dominantFlag ? label : label.startsWith("Send") ? "WhatsApp" : label}
+            </span>
           </button>
         );
       })}
@@ -115,13 +111,13 @@ export function CustomerActionSheet({
           title="Open Customer"
           className={cn(
             base,
-            "border border-border text-muted-foreground hover:bg-muted",
+            "border border-border text-muted-foreground hover:bg-muted flex-shrink-0",
             layout === "row"
-              ? "flex-none h-9 px-2.5"
-              : "col-span-2 h-9 px-3",
+              ? "h-8 sm:h-9 px-2 sm:px-2.5"
+              : "col-span-2 h-8 sm:h-9 px-3",
           )}
         >
-          <User size={13} />
+          <User size={12} className="flex-shrink-0" />
           <span>{layout === "column" ? "Open Customer" : ""}</span>
         </OpenTrigger>
       ) : null}
