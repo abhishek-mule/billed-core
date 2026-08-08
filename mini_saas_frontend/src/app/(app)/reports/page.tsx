@@ -460,14 +460,14 @@ export default function ReportsPage() {
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {hasAnyData ? `${dateRange.start} — ${dateRange.end}` : 'Track your business performance'}
             </p>
           </div>
 
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <DateRangePicker value={dateRange} onChange={setDateRange} align="right" className="shrink-0" />
         </div>
 
         {/* ── SALES ── */}

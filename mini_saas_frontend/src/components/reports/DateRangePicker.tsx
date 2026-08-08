@@ -8,9 +8,10 @@ interface DateRangePickerProps {
   value: DateRange
   onChange: (range: DateRange) => void
   className?: string
+  align?: 'left' | 'right'
 }
 
-export function DateRangePicker({ value, onChange, className = '' }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, className = '', align = 'right' }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const options = getDateRangeOptions()
@@ -45,7 +46,7 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-20 w-56 max-w-[calc(100vw-2rem)] rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-2 space-y-1">
+          <div className={`absolute ${align === 'left' ? 'left-0' : 'right-0'} top-full mt-2 z-20 w-52 max-w-[calc(100vw-2rem)] rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-2 space-y-1`}>
             {options.map(opt => (
               <button
                 key={opt.value}
