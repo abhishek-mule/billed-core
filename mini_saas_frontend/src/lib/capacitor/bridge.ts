@@ -25,11 +25,31 @@ export async function initCapacitorBridge(): Promise<void> {
     }
   })
 
+  // Deep links (magic-link confirm, link handoffs): navigate the SAME WebView
+  // so cookies/session from the app are preserved. Chrome handing us the link
+  // means App Links claimed billzo-phi.vercel.app.
+  const launch = await CapApp.getLaunchUrl()
+  if (launch?.url) void navigateToAppUrl(launch.url)
+  await CapApp.addListener('appUrlOpen', ({ url }) => {
+    void navigateToAppUrl(url)
+  })
+
   await StatusBar.setStyle({ style: StatusBarStyle.Light })
   await StatusBar.setBackgroundColor({ color: '#0B0F19' })
   await StatusBar.setOverlaysWebView({ overlay: true })
 
   await Keyboard.setResizeMode({ mode: KeyboardResize.Native })
+}
+
+function navigateToAppUrl(raw: string): void {
+  try {
+    const url = new URL(raw)
+    if (url.hostname.endsWith('billzo-phi.vercel.app')) {
+      window.location.href = url.href
+    }
+  } catch {
+    // ignore malformed / non-app links
+  }
 }
 
 export async function hapticTap(): Promise<void> {

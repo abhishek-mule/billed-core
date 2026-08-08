@@ -17,15 +17,9 @@ importers:
       '@billzo/shared':
         specifier: workspace:*
         version: link:../packages/shared
-      '@capacitor/android':
-        specifier: ^8.5.0
-        version: 8.5.0(@capacitor/core@8.5.0)
       '@capacitor/app':
         specifier: ^8.1.1
         version: 8.1.1(@capacitor/core@8.5.0)
-      '@capacitor/cli':
-        specifier: ^8.5.0
-        version: 8.5.0
       '@capacitor/core':
         specifier: ^8.5.0
         version: 8.5.0
@@ -111,6 +105,12 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
+      '@capacitor/android':
+        specifier: ^8.5.0
+        version: 8.5.0(@capacitor/core@8.5.0)
+      '@capacitor/cli':
+        specifier: ^8.5.0
+        version: 8.5.0
       '@storybook/addon-essentials':
         specifier: ^8.6.18
         version: 8.6.18(@types/react@18.3.29)(storybook@8.6.18)
