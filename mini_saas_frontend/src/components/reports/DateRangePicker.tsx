@@ -45,7 +45,7 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 z-20 w-52 rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-2 space-y-1">
+          <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-20 w-56 max-w-[calc(100vw-2rem)] rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)] p-2 space-y-1">
             {options.map(opt => (
               <button
                 key={opt.value}
@@ -69,20 +69,20 @@ export function DateRangePicker({ value, onChange, className = '' }: DateRangePi
       )}
 
       {showCustom && (
-        <div className="mt-2 p-3 border rounded-xl bg-white shadow-sm space-y-2">
+        <div className="mt-2 p-3 border rounded-xl bg-card shadow-sm space-y-2">
           <label className="text-xs font-semibold text-muted-foreground">Start Date</label>
           <input
             type="date"
             value={value.start}
             onChange={e => onChange({ ...value, start: e.target.value })}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
+            className="w-full rounded-lg border px-3 py-2 text-sm bg-background text-foreground"
           />
           <label className="text-xs font-semibold text-muted-foreground">End Date</label>
           <input
             type="date"
             value={value.end}
             onChange={e => onChange({ ...value, end: e.target.value })}
-            className="w-full rounded-lg border px-3 py-2 text-sm"
+            className="w-full rounded-lg border px-3 py-2 text-sm bg-background text-foreground"
           />
         </div>
       )}
