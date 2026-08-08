@@ -273,20 +273,26 @@ function BottomNav({ pathname }: { pathname: string }) {
   return (
     <nav className="bz-bottom-nav" aria-label="Main navigation">
       {MOBILE_NAV.map(({ href, label, icon: Icon, primary }) => {
-        const active = pathname === href
+        const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+
         if (primary) {
           return (
             <Link
               key={href}
               href={href}
-              className="bz-bottom-item bz-bottom-item--primary"
+              className={cn('bz-bottom-item bz-bottom-item--primary', active && 'bz-bottom-item--primary-active')}
               aria-current={active ? 'page' : undefined}
             >
-              <span className="bz-bottom-fab" aria-hidden="true"><Icon size={26} strokeWidth={2.25} /></span>
-              <span>{label}</span>
+              <div className="bz-bottom-fab-wrapper">
+                <span className="bz-bottom-fab" aria-hidden="true">
+                  <Icon size={24} strokeWidth={2.5} />
+                </span>
+              </div>
+              <span className="bz-bottom-label">{label}</span>
             </Link>
           )
         }
+
         return (
           <Link
             key={href}
@@ -294,8 +300,11 @@ function BottomNav({ pathname }: { pathname: string }) {
             className={cn('bz-bottom-item', active && 'bz-bottom-item--active')}
             aria-current={active ? 'page' : undefined}
           >
-            <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-            <span>{label}</span>
+            <div className="bz-bottom-icon-wrap">
+              <Icon size={20} strokeWidth={active ? 2.3 : 1.7} aria-hidden="true" />
+              {active && <span className="bz-bottom-active-dot" />}
+            </div>
+            <span className="bz-bottom-label">{label}</span>
           </Link>
         )
       })}
