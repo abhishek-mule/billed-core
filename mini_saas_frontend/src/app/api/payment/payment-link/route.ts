@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         upi_id: upiId,
       })
       .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
 
     return NextResponse.json({
       id: linkId,

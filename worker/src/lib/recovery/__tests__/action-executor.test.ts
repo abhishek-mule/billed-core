@@ -32,6 +32,7 @@ interface Row {
   attempt_count: number
   max_attempts: number
   phone?: string
+  source?: string | null
 }
 
 function baseAction(overrides: Partial<Row> = {}): Row {
@@ -64,6 +65,7 @@ function makeChains(config: Record<string, { single?: any; list?: any }>) {
       order: vi.fn(() => chain),
       limit: vi.fn(() => chain),
       single: vi.fn().mockResolvedValue(cfg.single ?? { data: null, error: null }),
+      maybeSingle: vi.fn(() => chain),
       update: vi.fn(() => chain),
       insert: vi.fn(() => chain),
       // Awaiting the chain directly (no .single) resolves the list result.
@@ -206,5 +208,72 @@ describe('executeAction — full automation path (worker reminders queue)', () =
     expect(result.status).toBe('failed')
     const updateCalls = (supabaseAdmin.from as any).mock.calls.filter((c: any) => c[0] === 'collection_actions')
     expect(updateCalls.length).toBeGreaterThan(0)
+  })
+})
+
+describe('executeAction — enforcement gate for automatic recovery', () => {
+  it('cancels a source=system action and skips dispatch when Auto Recovery is disabled', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    makeChains({
+      tenants: { list: { data: { plan: 'pro', auto_recovery_enabled: false }, error: null } },
+      collection_actions: { single: { data: action, error: null } },
+      invoices: {
+        list: { data: [{ id: 'inv_1', customer_id: 'cust_1' }], error: null },
+        single: { data: { id: 'inv_1', total: 5000, paid_amount: 0, status: 'unpaid', invoice_number: 'INV-1', due_at: new Date().toISOString() }, error: null },
+      },
+      customers: {
+        single: { data: { id: 'cust_1', customer_name: 'Rahul', phone: '9876543210', automation_mode: 'full_auto' }, error: null },
+      },
+    })
+
+    const result = await executeAction('act_1')
+
+    expect(result).toEqual({ status: 'skipped', reason: 'auto_recovery_disabled' })
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+    const updateCalls = (supabaseAdmin.from as any).mock.results
+      .map((r: any) => r.value)
+      .filter((c: any) => c && c.update)
+      .flatMap((c: any) => (c.update as any).mock.calls)
+    const cancelled = updateCalls.some((c: any) => c[0] && c[0].cancel_reason === 'auto_recovery_disabled')
+    expect(cancelled).toBe(true)
+  })
+
+  it('cancels a source="system" action when the plan has no auto-recovery entitlement', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    makeChains({
+      tenants: { list: { data: { plan: 'starter', auto_recovery_enabled: true }, error: null } },
+      collection_actions: { single: { data: action, error: null } },
+      invoices: {
+        list: { data: [{ id: 'inv_1', customer_id: 'cust_1' }], error: null },
+        single: { data: { id: 'inv_1', total: 5000, paid_amount: 0, status: 'unpaid', invoice_number: 'INV-1', due_at: new Date().toISOString() }, error: null },
+      },
+      customers: {
+        single: { data: { id: 'cust_1', customer_name: 'Rahul', phone: '9876543210', automation_mode: 'full_auto' }, error: null },
+      },
+    })
+
+    const result = await executeAction('act_1')
+
+    expect(result).toEqual({ status: 'skipped', reason: 'plan_requires_auto_recovery' })
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+
+  it('never blocks manual (source="merchant") actions even when auto recovery is off', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'merchant' })
+    makeChains({
+      tenants: { list: { data: { plan: 'pro', auto_recovery_enabled: false }, error: null } },
+      collection_actions: { single: { data: action, error: null } },
+      invoices: {
+        list: { data: [{ id: 'inv_1', customer_id: 'cust_1' }], error: null },
+        single: { data: { id: 'inv_1', total: 5000, paid_amount: 0, status: 'unpaid', invoice_number: 'INV-1', due_at: new Date().toISOString() }, error: null },
+      },
+      customers: {
+        single: { data: { id: 'cust_1', customer_name: 'Rahul', phone: '9876543210', automation_mode: 'full_auto' }, error: null },
+      },
+    })
+
+    const result = await executeAction('act_1')
+    expect(result.status).toBe('completed')
+    expect(sendWhatsAppMessage).toHaveBeenCalledTimes(1)
   })
 })

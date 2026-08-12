@@ -6,6 +6,7 @@ import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { nextBusinessSlot, DEFAULTS as DEFAULT_HOURS } from './business-hours'
 import type { OperatingHours } from './business-hours'
+import { getAutoRecoveryGate, blockedReason } from './enforcement'
 
 const SYSTEM_TENANT = '00000000-0000-0000-0000-000000000000'
 
@@ -90,7 +91,12 @@ export async function resolvePolicy(tenantId: string, policyId?: string): Promis
  * Generate collection_actions for an invoice based on the tenant's policy.
  * Idempotent: skips if actions already exist for this policy+invoices.
  */
-export async function planRecoveryForInvoice(ctx: PlanContext): Promise<{ created: number; policyId: string | null }> {
+export async function planRecoveryForInvoice(ctx: PlanContext): Promise<{ created: number; policyId: string | null; blocked?: boolean; blockedReason?: string | null }> {
+  const gate = await getAutoRecoveryGate(ctx.tenantId)
+  if (gate.blocked) {
+    return { created: 0, policyId: null, blocked: true, blockedReason: blockedReason(gate) }
+  }
+
   const policy = await resolvePolicy(ctx.tenantId, ctx.policyId)
   if (!policy) return { created: 0, policyId: null }
 
@@ -137,8 +143,13 @@ export async function planRecoveryForInvoice(ctx: PlanContext): Promise<{ create
  * Generate a single promise follow-up collection_action. Called when a customer
  * makes a promise to pay. Schedules a check on the promise date.
  */
-export async function planPromiseFollowup(ctx: PlanContext): Promise<{ created: number }> {
+export async function planPromiseFollowup(ctx: PlanContext): Promise<{ created: number; blocked?: boolean; blockedReason?: string | null }> {
   if (!ctx.promiseDate) return { created: 0 }
+
+  const gate = await getAutoRecoveryGate(ctx.tenantId)
+  if (gate.blocked) {
+    return { created: 0, blocked: true, blockedReason: blockedReason(gate) }
+  }
 
   const { data: existing } = await supabaseAdmin
     .from('collection_actions')

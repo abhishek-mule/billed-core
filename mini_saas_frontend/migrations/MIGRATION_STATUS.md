@@ -113,7 +113,8 @@ pipeline. There is no migration runner — each file is applied once.
 | 084_recovery_sessions.sql | Applied | |
 | 085_recovery_events_canonical.sql | Applied | |
 | 086_business_identity.sql | Applied | |
-| 087_fix_collection_actions_fk_types.sql | Applied | Latest migration |
+| 087_fix_collection_actions_fk_types.sql | Applied | |
+| 088_auto_recovery_toggle.sql | Applied | Applied to production 2026-08-08; gate verified live (ON/pro→unblocked, OFF→system cancelled, manual bypass). Latest migration |
 | verify_schema.sql | — | Helper script, not a migration |
 
 ## Duplicate migration numbers

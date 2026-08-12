@@ -30,6 +30,7 @@ import {
   type InvoiceRecoveryState,
 } from '@billzo/shared'
 import { canSendReminder } from '../src/lib/recovery/decision-engine'
+import { getAutoRecoveryGate } from '../src/lib/recovery/enforcement'
 
 const logger = createQueueLogger('reminders')
 
@@ -945,7 +946,7 @@ export async function enqueueOverdueReminders(): Promise<number> {
   // This is the scheduler's single responsibility: find what's due and enqueue it.
   const { data: actions, error } = await supabaseAdmin
     .from('collection_actions')
-    .select('id, tenant_id, customer_id, invoice_ids, action_type, template_name, scheduled_at, attempt_count, max_attempts')
+    .select('id, tenant_id, customer_id, invoice_ids, action_type, template_name, scheduled_at, attempt_count, max_attempts, source')
     .eq('status', 'scheduled')
     .in('action_type', ['reminder', 'promise_followup'])
     .lte('scheduled_at', now)
@@ -957,8 +958,26 @@ export async function enqueueOverdueReminders(): Promise<number> {
     return 0
   }
 
+  // Enforcement gate: automatic (source='system') actions must not be enqueued
+  // for tenants without auto_recovery entitlement or with Auto Recovery OFF.
+  // Manual merchant actions (source='merchant') always pass.
+  const gateCache = new Map<string, boolean>()
+  const gateTenants = [...new Set(actions.map((a: any) => a.tenant_id).filter(Boolean))]
+  await Promise.all(gateTenants.map(async (tid) => {
+    const gate = await getAutoRecoveryGate(tid)
+    gateCache.set(tid, gate.blocked)
+  }))
+
+  const enqueueable = actions.filter((a: any) => {
+    if (a.source === 'system' && gateCache.get(a.tenant_id)) {
+      logger.warn({ actionId: a.id, tenantId: a.tenant_id }, 'Skipping enqueue — auto recovery gated (disabled or not entitled)')
+      return false
+    }
+    return true
+  })
+
   // Filter: attempt_count < max_attempts (Supabase doesn't support column comparison in lte easily)
-  const dueActions = actions.filter((a: any) => (a.attempt_count || 0) < (a.max_attempts || 3))
+  const dueActions = enqueueable.filter((a: any) => (a.attempt_count || 0) < (a.max_attempts || 3))
 
   if (dueActions.length === 0) return 0
 

@@ -8,6 +8,8 @@ import { supabaseAdmin } from '../billzo/supabase-admin'
 import { sendWhatsAppMessage } from '../../../lib/whatsapp-router'
 import { writeOutboxEvent } from '../billzo/outbox'
 import { createQueueLogger } from '../../../lib/queue-logger'
+import { getAutoRecoveryGate } from './enforcement'
+import { billzoPlanOf, reminderMonthlyAllowance } from '@billzo/shared'
 
 const logger = createQueueLogger('action-executor')
 
@@ -29,6 +31,7 @@ interface ActionRow {
   attempt_count: number
   max_attempts: number
   phone?: string
+  source?: string | null
 }
 
 /**
@@ -47,7 +50,47 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
     return { status: 'skipped', reason: validation }
   }
 
-  // 3. RESOLVE CONTENT
+  // 3. ENFORCEMENT GATE (final safety check) — automatic (source='system')
+  //    actions must not dispatch when auto recovery is disabled or the
+  //    tenant has no entitlement. Manual merchant actions pass regardless.
+  if (action.source === 'system') {
+    const gate = await getAutoRecoveryGate(action.tenant_id)
+    if (gate.blocked) {
+      const reason = gate.entitled ? 'auto_recovery_disabled' : 'plan_requires_auto_recovery'
+      logger.warn({ actionId, tenantId: action.tenant_id, reason }, 'Dispatch blocked by auto-recovery gate')
+      await supabaseAdmin
+        .from('collection_actions')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancel_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', action.id)
+      await writeActionEvent(action.id, 'cancelled', { reason })
+      return { status: 'skipped', reason }
+    }
+  }
+
+  // 3b. QUOTA GATE — every dispatched reminder (scheduled manual + automatic)
+  //      counts against the plan's monthly allowance. Hard-disabled past 110%.
+  if (await isReminderQuotaExceeded(action.tenant_id)) {
+    const reason = 'monthly_reminder_quota_exceeded'
+    logger.warn({ actionId, tenantId: action.tenant_id }, 'Dispatch blocked by monthly reminder quota')
+    await supabaseAdmin
+      .from('collection_actions')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancel_reason: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', action.id)
+    await writeActionEvent(action.id, 'cancelled', { reason })
+    return { status: 'skipped', reason }
+  }
+
+  // 4. RESOLVE CONTENT
   const invoiceId = action.invoice_ids[0]
   const invoice = await loadInvoice(invoiceId)
   if (!invoice) {
@@ -135,6 +178,22 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
       idempotencyKey: null,
     })
 
+    // 7b. METER USAGE — billing worker increments tenant_usage.reminders_sent
+    //      from this event. One event per successful dispatch (per action id).
+    try {
+      await writeOutboxEvent({
+        type: 'billing.usage',
+        tenantId: action.tenant_id,
+        entityId: action.tenant_id,
+        payload: { metric: 'reminders_sent', amount: 1 },
+        causationId: null,
+        correlationId: '',
+        idempotencyKey: `reminders_sent:${action.id}`,
+      })
+    } catch (meterErr: any) {
+      logger.warn({ actionId, tenantId: action.tenant_id, error: meterErr.message }, 'Failed to meter reminders_sent usage')
+    }
+
     return { status: 'completed', messageId: sendResult.messageId }
   } catch (err: any) {
     const errorMessage = err.message || 'unknown_error'
@@ -185,6 +244,44 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
 // ============================================================
 // INTERNAL HELPERS
 // ============================================================
+
+/**
+ * True when a tenant has hard-exceeded its monthly recovery-reminder
+ * allowance (used/limit ≥ 110%, mirroring the API soft-limit policy).
+ * Reads are cheap and fail-open on metering errors so a transient DB
+ * hiccup never silently stops recovery dispatch.
+ */
+async function isReminderQuotaExceeded(tenantId: string): Promise<boolean> {
+  try {
+    const { data: tenant } = await supabaseAdmin
+      .from('tenants')
+      .select('plan')
+      .eq('id', tenantId)
+      .maybeSingle()
+
+    const limit = reminderMonthlyAllowance(billzoPlanOf(tenant?.plan as string | null))
+    if (limit === -1) return false
+
+    const month = currentMonth()
+    const { data: usage } = await supabaseAdmin
+      .from('tenant_usage')
+      .select('reminders_sent')
+      .eq('tenant_id', tenantId)
+      .eq('month', month)
+      .maybeSingle()
+
+    const used = Number((usage as { reminders_sent?: number } | null)?.reminders_sent ?? 0)
+    return (used / limit) * 100 >= 110
+  } catch (err: any) {
+    logger.warn({ tenantId, error: err.message }, 'Quota gate failed open')
+    return false
+  }
+}
+
+function currentMonth(): string {
+  const d = new Date()
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
 
 async function loadAction(actionId: string): Promise<ActionRow | null> {
   const { data, error } = await supabaseAdmin

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest, validateJsonBody } from '@/lib/billzo/api-middleware'
 import { planRecoveryForInvoice, planPromiseFollowup } from '@/lib/recovery/planner'
+import { getAutoRecoveryGate, blockedReason } from '@/lib/recovery/enforcement'
 
 /**
  * POST /api/recovery/plan — trigger the Recovery Planner for a business event.
@@ -18,6 +19,20 @@ export async function POST(request: NextRequest) {
   if (auth.response) return auth.response
   const tenantId = auth.tenantId!
   if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Enforcement gate: automatic recovery requires plan entitlement AND the
+  // tenant's Auto Recovery toggle to be ON. Manual merchant actions are never
+  // planned through this route, so this gate only blocks source='system' flow.
+  const gate = await getAutoRecoveryGate(tenantId)
+  if (gate.blocked) {
+    return NextResponse.json({
+      ok: true,
+      blocked: true,
+      reason: blockedReason(gate),
+      created: 0,
+      mode: 'blocked',
+    })
+  }
 
   const body = await validateJsonBody(request, {
     fields: {

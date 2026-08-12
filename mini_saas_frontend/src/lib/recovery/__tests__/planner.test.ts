@@ -54,6 +54,7 @@ describe('recovery planner', () => {
 
   it('planRecoveryForInvoice inserts one action per DUE_DATE step', async () => {
     const { mod, mock } = await loadWithMock({
+      tenants: { data: { plan: 'pro', auto_recovery_enabled: true }, error: null },
       recovery_policies: { data: { id: 'sys_standard' }, error: null },
       recovery_policy_steps: {
         data: [
@@ -77,6 +78,7 @@ describe('recovery planner', () => {
 
   it('planRecoveryForInvoice is idempotent (skips when actions exist)', async () => {
     const { mod } = await loadWithMock({
+      tenants: { data: { plan: 'pro', auto_recovery_enabled: true }, error: null },
       recovery_policies: { data: { id: 'sys_standard' }, error: null },
       recovery_policy_steps: {
         data: [{ sequence: 1, trigger_type: 'DUE_DATE', offset_days: 0, action_type: 'reminder', template_name: 'invoice_due', channel: 'whatsapp' }],
@@ -95,6 +97,7 @@ describe('recovery planner', () => {
 
   it('planPromiseFollowup creates a promise_followup action', async () => {
     const { mod, mock } = await loadWithMock({
+      tenants: { data: { plan: 'pro', auto_recovery_enabled: true }, error: null },
       collection_actions: { data: [], error: null },
     })
     const res = await mod.planPromiseFollowup({
@@ -109,6 +112,50 @@ describe('recovery planner', () => {
     expect(inserts).toHaveLength(1)
     expect(inserts[0].row.action_type).toBe('promise_followup')
     expect(inserts[0].row.trigger_type).toBe('PROMISE_DATE')
+  })
+
+  it('planRecoveryForInvoice blocks planning when Auto Recovery is disabled', async () => {
+    const { mod, mock } = await loadWithMock({
+      tenants: { data: { plan: 'pro', auto_recovery_enabled: false }, error: null },
+      recovery_policies: { data: { id: 'sys_standard' }, error: null },
+      recovery_policy_steps: {
+        data: [{ sequence: 1, trigger_type: 'DUE_DATE', offset_days: 0, action_type: 'reminder', template_name: 'invoice_due', channel: 'whatsapp' }],
+        error: null,
+      },
+      collection_actions: { data: [], error: null },
+    })
+    const res = await mod.planRecoveryForInvoice({
+      tenantId: 't1',
+      customerId: 'c1',
+      invoiceIds: ['inv1'],
+      reason: 'invoice_created',
+    })
+    expect(res.blocked).toBe(true)
+    expect(res.blockedReason).toBe('auto_recovery_disabled')
+    expect(res.created).toBe(0)
+    expect(mock.inserts.filter((i: any) => i.table === 'collection_actions')).toHaveLength(0)
+  })
+
+  it('planRecoveryForInvoice blocks planning for non-entitled plans', async () => {
+    const { mod, mock } = await loadWithMock({
+      tenants: { data: { plan: 'starter', auto_recovery_enabled: true }, error: null },
+      recovery_policies: { data: { id: 'sys_standard' }, error: null },
+      recovery_policy_steps: {
+        data: [{ sequence: 1, trigger_type: 'DUE_DATE', offset_days: 0, action_type: 'reminder', template_name: 'invoice_due', channel: 'whatsapp' }],
+        error: null,
+      },
+      collection_actions: { data: [], error: null },
+    })
+    const res = await mod.planRecoveryForInvoice({
+      tenantId: 't1',
+      customerId: 'c1',
+      invoiceIds: ['inv1'],
+      reason: 'invoice_created',
+    })
+    expect(res.blocked).toBe(true)
+    expect(res.blockedReason).toBe('plan_requires_auto_recovery')
+    expect(res.created).toBe(0)
+    expect(mock.inserts.filter((i: any) => i.table === 'collection_actions')).toHaveLength(0)
   })
 
   it('cancelFutureActions cancels scheduled actions for a paid invoice', async () => {

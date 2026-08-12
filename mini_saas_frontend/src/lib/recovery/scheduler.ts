@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed } from '@/lib/billzo/outbox'
 import { EventType } from '@billzo/shared'
+import { getAutoRecoveryGate } from './enforcement'
 
 const MAX_ATTEMPTS = 5
 
@@ -25,7 +26,7 @@ export async function runRecoveryScheduler(limit = 200): Promise<SchedulerResult
 
   const { data: due, error } = await supabaseAdmin
     .from('collection_actions')
-    .select('id, tenant_id, customer_id, invoice_ids, action_type, template_name, channel, trigger_type, attempt_count, metadata')
+    .select('id, tenant_id, customer_id, invoice_ids, action_type, template_name, channel, trigger_type, attempt_count, metadata, source')
     .eq('status', 'scheduled')
     .lte('scheduled_at', now)
     .order('scheduled_at', { ascending: true })
@@ -36,12 +37,31 @@ export async function runRecoveryScheduler(limit = 200): Promise<SchedulerResult
     return { due: 0, dispatched: 0, skipped: 0, errors: 1 }
   }
 
+  // Bulk load auto-recovery gates for every tenant touched (avoids N+1).
+  const gateCache = new Map<string, { entitled: boolean; enabled: boolean; blocked: boolean }>()
+  const tenantIds = [...new Set((due || []).map((a: any) => a.tenant_id).filter(Boolean))] as string[]
+  await Promise.all(tenantIds.map(async (tid) => {
+    gateCache.set(tid, await getAutoRecoveryGate(tid))
+  }))
+
   let dispatched = 0
   let skipped = 0
   let errors = 0
 
   for (const action of due || []) {
     try {
+      // Enforcement gate: automatic (source='system') actions must not dispatch
+      // for tenants without auto_recovery entitlement or with the toggle OFF.
+      // Manual merchant actions always dispatch.
+      if (action.source === 'system') {
+        const gate = gateCache.get(action.tenant_id)
+        if (gate?.blocked) {
+          await cancelAction(action.id, 'auto_recovery_env_blocked')
+          skipped++
+          continue
+        }
+      }
+
       const valid = await validateAction(action)
       if (!valid) {
         await cancelAction(action.id, 'invoice_paid_or_cancelled')
