@@ -71,8 +71,8 @@ export default function SettingsPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const handleSignOut = () => {
-    clearAuthCookies()
+  const handleSignOut = async () => {
+    await clearAuthCookies()
     localStorage.clear()
     router.push('/auth')
   }

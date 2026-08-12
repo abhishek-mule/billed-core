@@ -43,8 +43,8 @@ export default function DataPrivacyPage() {
     }
   }
 
-  const handleDeleteAccount = () => {
-    clearAuthCookies()
+  const handleDeleteAccount = async () => {
+    await clearAuthCookies()
     localStorage.clear()
     router.push("/auth")
   }

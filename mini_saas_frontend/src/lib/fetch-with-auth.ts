@@ -20,7 +20,7 @@ export async function fetchWithAuth(url: string, options: FetchWithAuthOptions =
 
   if (!res.ok) {
     if (res.status === 401 && autoRedirect) {
-      clearAuthCookies()
+      await clearAuthCookies()
       if (typeof window !== "undefined") {
         window.location.href = "/auth"
       }

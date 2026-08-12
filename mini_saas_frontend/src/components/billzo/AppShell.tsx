@@ -12,6 +12,8 @@ import { ProfileMenu } from './ProfileMenu'
 import { Button } from './Button'
 import { BrandAvatar } from './Avatar'
 import { db } from '@/lib/billzo/db'
+import { clearAuthCookies } from '@/lib/cookies'
+import { clearSession } from '@/lib/billzo/tenant'
 import { cn } from '@/lib/utils'
 import '@/styles/app-shell.css'
 import { resolveQuickNav } from '@/lib/billzo/app-shell-search'
@@ -52,11 +54,12 @@ function getCookie(name: string) {
   return match ? match[2] : null
 }
 
-function doLogout() {
-  ;['bz_access', 'bz_refresh', 'bz_tenant', 'bz_tenant_name', 'bz_user_id'].forEach(
-    k => (document.cookie = `${k}=; Max-Age=0; path=/`)
-  )
-  ;['accessToken', 'refreshToken', 'tokenExpiry', 'tenantLogo'].forEach(k => localStorage.removeItem(k))
+async function doLogout() {
+  // Auth cookies are httpOnly, so the server must clear them for the session
+  // to actually end (client cookie writes cannot delete httpOnly cookies).
+  await clearAuthCookies()
+  clearSession()
+  window.localStorage.removeItem('tenantLogo')
   window.location.href = '/auth'
 }
 
