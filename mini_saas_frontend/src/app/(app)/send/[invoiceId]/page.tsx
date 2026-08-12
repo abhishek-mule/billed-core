@@ -6,10 +6,10 @@ import Link from "next/link"
 import {
   ArrowLeft, Phone, CheckCircle2,
   Loader2, AlertTriangle, Send, IndianRupee,
-  Clock, ExternalLink, FileText, CreditCard,
-  Bell, MessageSquare, Hand, Printer,
+  Clock, ExternalLink,
+  MessageSquare, Hand, Printer,
   CalendarClock, Copy, Check, ChevronDown,
-  Download, Repeat, Sun, Sunrise, Sunset, Moon, Smartphone,
+  Download, Sun, Sunrise, Sunset, Moon, Smartphone,
 } from "lucide-react"
 import { formatINR } from "@/lib/utils"
 import { toast } from "sonner"
@@ -19,7 +19,6 @@ import { getTenantId } from "@/lib/billzo/tenant"
 import { downloadInvoicePDF, generateInvoicePDF, printInvoicePDF, getWhatsAppShareLink, type InvoiceData } from "@/lib/billzo/pdf"
 import { logRecoveryActivity } from "@/lib/billzo/recovery/activity"
 import type { Tenant } from "@/lib/billzo/types"
-import type { PaymentConfig } from "@/lib/billzo/payment-renderer"
 
 interface InvoiceDataFull {
   id: string
@@ -37,7 +36,7 @@ interface InvoiceDataFull {
   method?: string
 }
 
-type ActionView = 'main' | 'send_now' | 'schedule_promise' | 'schedule_reminder' | 'mark_paid'
+type ActionView = 'main' | 'send_now' | 'schedule_promise' | 'schedule_reminder'
 
 const TIME_LABELS: Record<string, string> = {
   morning: 'Morning (9 AM)',
@@ -53,17 +52,43 @@ const TIME_ICONS: Record<string, any> = {
   night: Moon,
 }
 
+function StatusBadge({ invoice, paidAmount }: { invoice: InvoiceDataFull; paidAmount: number }) {
+  const isPaid = invoice.status === 'paid' || paidAmount >= invoice.total
+  const isPartial = !isPaid && paidAmount > 0
+  const isOverdue = !isPaid && !isPartial && !!invoice.dueAt && new Date(invoice.dueAt) < new Date()
+
+  const label = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : isOverdue ? 'OVERDUE' : 'UDHARI'
+  const style = isPaid
+    ? 'bg-success-soft text-success'
+    : isPartial
+      ? 'bg-info-soft text-info'
+      : isOverdue
+        ? 'bg-overdue-soft text-overdue'
+        : 'bg-warning-soft text-warning'
+
+  return (
+    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${style}`}>
+      {label}
+    </span>
+  )
+}
+
+function QuickAction({ icon: Icon, label, onClick }: { icon: any; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
+  )
+}
+
 function getNextSunday(): string {
   const d = new Date()
   d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7))
   return d.toISOString().split('T')[0]
-}
-
-function getDefaultTiming(): string {
-  const h = new Date().getHours()
-  if (h < 12) return 'afternoon'
-  if (h < 17) return 'evening'
-  return 'night'
 }
 
 function getTomorrow(): string {
@@ -83,7 +108,6 @@ export default function InvoiceSendPage() {
   const [tenantData, setTenantData] = useState<Tenant | null>(null)
   const [customerPhone, setCustomerPhone_] = useState("")
   const [customerOutstanding, setCustomerOutstanding] = useState(0)
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "upi" | "udhar">("udhar")
 
   const [actionView, setActionView] = useState<ActionView>('main')
   const [sending, setSending] = useState(false)
@@ -94,7 +118,6 @@ export default function InvoiceSendPage() {
   const [paymentLinkError, setPaymentLinkError] = useState(false)
 
   const [detailsExpanded, setDetailsExpanded] = useState(false)
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showPaymentCollect, setShowPaymentCollect] = useState(false)
 
   // Promise fields
@@ -119,11 +142,13 @@ export default function InvoiceSendPage() {
   // Share fallback sheet
   const [showNoPhoneSheet, setShowNoPhoneSheet] = useState(false)
 
+  // Monthly reminder quota (from /api/billing/usage)
+  const [quota, setQuota] = useState<{ used: number; limit: number; remaining: number; unlimited: boolean; exceeded: boolean } | null>(null)
+
   // Send flow fields
   const [customMessage, setCustomMessage] = useState("")
-  const [showMessagePreview, setShowMessagePreview] = useState(false)
 
-  const isUdhar = paymentMethod === "udhar" || (invoice ? invoice.status !== "paid" && invoice.paidAmount === 0 : false)
+  const isUdhar = !!invoice && invoice.status !== 'paid' && invoice.paidAmount < invoice.total
   const totalExposure = invoice ? invoice.total + customerOutstanding : 0
 
   const paymentReady = useMemo(() => {
@@ -165,9 +190,21 @@ export default function InvoiceSendPage() {
       })
       setCustomerPhone_(inv.customerPhone || "")
       setCustomerOutstanding(prevOutstanding)
-      setPaymentMethod(inv.paidAmount > 0 ? "cash" : "udhar")
       setPromiseAmount(inv.total - inv.paidAmount)
       setPromiseDate(getNextSunday())
+
+      // Hydrate recovery state from the local DB so the timeline survives reloads.
+      const SHARED_STATUSES = ['sent', 'server_ack', 'delivered', 'read', 'clicked_upi', 'payment_confirmed', 'received']
+      setSent(Boolean(inv.lastWhatsAppAt) || SHARED_STATUSES.includes(inv.lastWhatsAppStatus))
+      setReminderScheduled(Boolean(inv.nextRecoveryAt) || Boolean(inv.lastReminderAt))
+
+      let promiseRecorded = false
+      if (inv.customerId) {
+        const promises = await db().promises.where("customerId").equals(inv.customerId).toArray()
+        promiseRecorded = promises.some(p => p.invoiceIds.includes(invoiceId) && p.status === 'active')
+      }
+      setPromiseRecorded(promiseRecorded)
+
       setLoading(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load invoice")
@@ -193,6 +230,23 @@ export default function InvoiceSendPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice])
 
+  // Load the monthly reminder quota so send/schedule can be gated up front.
+  useEffect(() => {
+    const loadQuota = async () => {
+      try {
+        const res = await fetch("/api/billing/usage", { credentials: "include" })
+        if (!res.ok) return
+        const d = await res.json()
+        if (typeof d.used === "number" && typeof d.limit === "number") {
+          setQuota({ used: d.used, limit: d.limit, remaining: d.remaining, unlimited: d.unlimited, exceeded: d.exceeded })
+        }
+      } catch {
+        /* non-fatal — server gates still apply */
+      }
+    }
+    loadQuota()
+  }, [])
+
   const updatePhone = async (phone: string) => {
     setCustomerPhone_(phone)
     if (invoice && phone) {
@@ -200,8 +254,9 @@ export default function InvoiceSendPage() {
     }
   }
 
-  const generatePaymentLink = async () => {
-    if (!invoice || paymentLinkUrl) return
+  const generatePaymentLink = async (): Promise<string | null> => {
+    if (!invoice) return null
+    if (paymentLinkUrl) return paymentLinkUrl
     setPaymentLinkLoading(true)
     setPaymentLinkError(false)
     try {
@@ -217,33 +272,40 @@ export default function InvoiceSendPage() {
         }),
       })
       const data = await res.json()
-      if (data.short_url || data.url) {
-        setPaymentLinkUrl(data.short_url || data.url)
+      const url = data.short_url || data.url
+      if (url) {
+        setPaymentLinkUrl(url)
+        return url
       } else {
         setPaymentLinkError(true)
+        return null
       }
     } catch (err) {
       console.error("Payment link error:", err)
       setPaymentLinkError(true)
+      return null
     } finally {
       setPaymentLinkLoading(false)
     }
   }
 
-  const buildMessage = (): string => {
+  const buildDefaultMessage = (paymentUrl?: string | null): string => {
     const shopName = getCookie("bz_tenant_name") || "My Shop"
     const inv = invoice
     if (!inv) return ""
-    if (customMessage) return customMessage
 
-    const paymentNote = isUdhar && paymentLinkUrl
-      ? `\n\nPay here: ${paymentLinkUrl}`
+    const effectiveLink = paymentUrl || paymentLinkUrl
+    const paymentNote = isUdhar && effectiveLink
+      ? `\n\nPay here: ${effectiveLink}`
       : isUdhar
         ? ""
         : "\n\nPayment received. Thank you!"
 
     return `Namaste ${inv.customerName},\n\nInvoice #${inv.invoiceNumber || inv.id.slice(0, 8)}\nAmount: ${formatINR(inv.total)}${paymentNote}\n\nThank you,\n${shopName}`
   }
+
+  const defaultMessage = buildDefaultMessage()
+  const messageToSend = customMessage && customMessage.trim() ? customMessage.trim() : defaultMessage
 
   const buildPdfData = (): InvoiceData => {
     const inv = invoice!
@@ -277,10 +339,40 @@ export default function InvoiceSendPage() {
     }
   }
 
-  const getDefaultMessage = buildMessage()
+  const downloadPdf = async () => {
+    const pdfData = buildPdfData()
+    await downloadInvoicePDF(pdfData)
+  }
+
+  const printPdf = async () => {
+    const pdfData = buildPdfData()
+    await printInvoicePDF(pdfData)
+  }
+
+  const openUpiPayment = async () => {
+    if (paymentLinkUrl) {
+      window.open(paymentLinkUrl, '_blank')
+    } else {
+      const url = await generatePaymentLink()
+      if (url) window.open(url, '_blank')
+    }
+  }
+
+  const shareViaOwnWhatsApp = async () => {
+    let url = paymentLinkUrl
+    if (isUdhar && !url) url = await generatePaymentLink()
+    const msg = customMessage && customMessage.trim() ? customMessage.trim() : buildDefaultMessage(url)
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank')
+    setShowNoPhoneSheet(false)
+  }
 
   const handleSendNow = async () => {
     if (!invoice) return
+    if (!customerPhone) { setShowNoPhoneSheet(true); return }
+    if (quota?.exceeded) {
+      setError("Monthly reminder limit reached. Upgrade to Pro to keep sending.")
+      return
+    }
     setSending(true)
     setError(null)
 
@@ -308,15 +400,14 @@ export default function InvoiceSendPage() {
         whiteLabel: true,
         documentType: invoice.documentType || 'tax_invoice',
       }
-      const waLink = getWhatsAppShareLink(waData)
-      window.open(waLink, "_blank")
+      // Generate the payment link FIRST so it can be embedded in the message,
+      // then open WhatsApp (blank tab opened synchronously to dodge popup blockers).
+      const waWin = window.open("", "_blank")
+      const linkUrl = isUdhar ? await generatePaymentLink() : null
+      const waLink = getWhatsAppShareLink(waData, linkUrl)
+      if (waWin) waWin.location.href = waLink
 
-      // Now async operations
-      if (isUdhar && !paymentLinkUrl) {
-        await generatePaymentLink()
-      }
-
-      const message = buildMessage()
+      const message = customMessage && customMessage.trim() ? customMessage.trim() : buildDefaultMessage(linkUrl)
 
       await fetch("/api/intents/send-message", {
         method: "POST",
@@ -355,7 +446,14 @@ export default function InvoiceSendPage() {
         actor: "merchant",
       })
 
+      await db().invoices.update(invoice.id, {
+        lastWhatsAppStatus: 'sent',
+        lastWhatsAppAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+
       setSent(true)
+      toast.success("Invoice sent on WhatsApp")
       setTimeout(() => setActionView('main'), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send")
@@ -366,6 +464,10 @@ export default function InvoiceSendPage() {
 
   const handleScheduleReminder = async () => {
     if (!invoice) return
+    if (quota?.exceeded) {
+      setError("Monthly reminder limit reached. Upgrade to Pro to schedule more reminders.")
+      return
+    }
     setScheduleSaving(true)
     setError(null)
     try {
@@ -396,6 +498,10 @@ export default function InvoiceSendPage() {
       }
 
       toast.success("Reminder scheduled")
+      await db().invoices.update(invoice.id, {
+        nextRecoveryAt: dueDate.toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
       setScheduleSaved(true)
       setReminderScheduled(true)
       setTimeout(() => { setScheduleSaved(false); setActionView('main') }, 2000)
@@ -450,8 +556,23 @@ export default function InvoiceSendPage() {
         })
       }
 
+      const tid = getTenantId()
+      await db().promises.put({
+        id: `p_${Date.now()}`,
+        tenantId: tid || '',
+        customerId: invoice.customerId,
+        invoiceIds: [invoice.id],
+        amount: promiseAmount,
+        dueDate: dueDate.toISOString(),
+        status: 'active',
+        note: promiseNotes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+
       setPromiseSaved(true)
       setPromiseRecorded(true)
+      toast.success("Promise recorded")
       setTimeout(() => { setPromiseSaved(false); setActionView('main') }, 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save promise")
@@ -495,17 +616,18 @@ export default function InvoiceSendPage() {
 
   if (loading) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-8 space-y-4">
-        <div className="h-8 bg-muted rounded-lg animate-pulse" />
-        <div className="h-40 bg-muted rounded-xl animate-pulse" />
-        <div className="h-24 bg-muted rounded-xl animate-pulse" />
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+        <div className="h-8 w-40 bg-muted rounded-lg animate-pulse" />
+        <div className="h-40 bg-muted rounded-2xl animate-pulse" />
+        <div className="h-28 bg-muted rounded-2xl animate-pulse" />
+        <div className="h-24 bg-muted rounded-2xl animate-pulse" />
       </div>
     )
   }
 
   if (error && !invoice) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-20 text-center">
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
         <p className="text-lg font-semibold mb-2">Something went wrong</p>
         <p className="text-sm text-muted-foreground mb-6">{error}</p>
@@ -531,12 +653,12 @@ export default function InvoiceSendPage() {
         {steps.map((step, i) => (
           <div key={i} className="flex items-center gap-2.5">
             <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-              step.done ? 'bg-[#16802d]' : 'bg-[#e2e8f0]'
+              step.done ? 'bg-success' : 'bg-muted'
             }`}>
-              {step.done && <Check className="w-3 h-3 text-white" />}
-              {!step.done && <span className="text-[10px] text-[#94a3b8] font-medium">{i + 1}</span>}
+              {step.done && <Check className="w-3 h-3 text-success-foreground" />}
+              {!step.done && <span className="text-[10px] text-muted-foreground font-medium">{i + 1}</span>}
             </div>
-            <span className={`text-xs ${step.done ? 'text-[#1e293b] font-medium' : 'text-[#94a3b8]'}`}>
+            <span className={`text-xs ${step.done ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
               {step.label}
             </span>
           </div>
@@ -554,25 +676,25 @@ export default function InvoiceSendPage() {
     // ── State 1: Already Paid ──
     if (alreadyPaid) {
       return (
-        <div className="space-y-5 text-center max-w-sm mx-auto pt-8">
-          <div className="w-14 h-14 rounded-full bg-[#f0fdf4] flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-7 h-7 text-[#16802d]" />
+        <div className="space-y-5 text-center max-w-sm mx-auto pt-6">
+          <div className="w-16 h-16 rounded-full bg-success-soft flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-8 h-8 text-success" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[#1e293b]">Payment received</h1>
-            <p className="text-[36px] font-bold text-[#16802d] mt-2 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
-            <p className="text-xs text-[#94a3b8] mt-2">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+            <h1 className="text-xl font-bold text-foreground">Payment received</h1>
+            <p className="text-[40px] font-bold text-success mt-2 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
+            <p className="text-sm text-muted-foreground mt-2">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
           </div>
           <div className="flex gap-3 pt-4">
             <button
               onClick={() => router.push('/pos')}
-              className="flex-1 py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all"
+              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all"
             >
               New Sale
             </button>
             <Link
               href={`/invoices/${invoiceId}`}
-              className="flex-1 py-3 rounded-xl border border-[#e2e8f0] text-sm font-semibold text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] text-center transition-all"
+              className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary text-center transition-all"
             >
               View Invoice
             </Link>
@@ -586,350 +708,297 @@ export default function InvoiceSendPage() {
       if (!phoneVerified) {
         return {
           id: 'add_phone' as const,
-          label: 'Add phone number',
-          why: 'Customer needs a phone number to receive the invoice and payment link.',
+          title: 'Add phone number',
+          why: 'Add a WhatsApp number so the invoice and payment link can reach the customer.',
         }
       }
       if (!sent) {
         return {
           id: 'share' as const,
-          label: 'Share on WhatsApp',
-          why: 'Customer has not received this invoice yet. Most customers pay after receiving it.',
+          title: 'Send invoice on WhatsApp',
+          why: "The customer hasn't received this invoice yet. Most customers pay right after receiving it.",
         }
       }
       if (!reminderScheduled) {
         return {
           id: 'reminder' as const,
-          label: 'Schedule Reminder',
-          why: 'Invoice was sent but not paid yet. A gentle reminder keeps it top of mind.',
+          title: 'Schedule a reminder',
+          why: 'Invoice sent but not paid yet. A gentle reminder keeps it top of mind.',
         }
       }
       return {
         id: 'waiting' as const,
-        label: 'Waiting for customer',
-        why: 'Invoice sent. Reminder scheduled. BillZo will notify you when there is activity.',
+        title: 'Waiting for customer',
+        why: 'Invoice sent and reminder scheduled. You will be notified when there is activity.',
       }
     })()
 
     // ── State 2 & 3: Unpaid ──
     return (
-      <div className="lg:grid lg:grid-cols-2 lg:gap-8">
-        {/* ── LEFT COLUMN: Invoice Info ── */}
-        <div className="space-y-4">
-          {/* 1. Invoice Header */}
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider">Invoice Created</p>
-                <p className="text-[32px] font-bold text-[#16802d] mt-1 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
-              </div>
-              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#fef3c7] text-[#d97706]">
-                UDHARI
-              </span>
+      <div className="space-y-4">
+        {/* Hero card: amount + customer */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Invoice amount</p>
+              <p className="text-[34px] font-bold text-success mt-1 leading-none tracking-tight tabular-nums">{formatINR(i.total)}</p>
             </div>
-            <p className="text-xs text-[#94a3b8] mt-2">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+            <StatusBadge invoice={i} paidAmount={i.paidAmount} />
           </div>
-
-          {/* 2. Customer Card */}
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#f1f5f9] flex items-center justify-center text-[#1e293b] font-bold text-lg shrink-0">
-                {i.customerName.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-[#1e293b] text-sm">{i.customerName}</p>
-                <p className="text-[11px] text-[#94a3b8]">{customerPhone || 'No phone'}</p>
-              </div>
+          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border/60">
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-foreground font-bold text-lg shrink-0">
+              {i.customerName.charAt(0)}
             </div>
-            <div className="mt-3 space-y-1.5 border-t border-[#f1f5f9] pt-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-[#64748b]">Outstanding</span>
-                <span className="font-semibold text-[#1e293b] tabular-nums">{formatINR(customerOutstanding)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-[#64748b]">Current Invoice</span>
-                <span className="font-semibold text-[#16802d] tabular-nums">{formatINR(i.total)}</span>
-              </div>
-              <div className="flex justify-between text-sm border-t border-[#f1f5f9] pt-1.5 mt-1.5">
-                <span className="text-[#64748b] font-medium">Total Exposure</span>
-                <span className={`font-bold tabular-nums ${totalExposure > 50000 ? 'text-[#d97706]' : 'text-[#1e293b]'}`}>
-                  {formatINR(totalExposure)}
-                </span>
-              </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground text-sm truncate">{i.customerName}</p>
+              <p className="text-xs text-muted-foreground">{customerPhone || 'No phone saved'}</p>
             </div>
-            {!phoneVerified && (
-              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-[#f1f5f9]">
-                <Phone size={13} className="text-[#94a3b8] shrink-0" />
-                <input
-                  value={customerPhone}
-                  onChange={e => updatePhone(e.target.value)}
-                  placeholder="Add phone for WhatsApp"
-                  type="tel"
-                  className="flex-1 text-sm bg-transparent border-b border-[#e2e8f0] focus:outline-none focus:border-[#1e293b] py-1 placeholder:text-[#94a3b8]/60 text-[#1e293b]"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* 3. Items */}
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
-            <p className="text-[11px] text-[#94a3b8] font-medium uppercase tracking-wider mb-3">Items</p>
-            {i.items.length === 1 ? (
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-[#1e293b]">{i.items[0].name}</p>
-                  <p className="text-xs text-[#94a3b8] mt-0.5">{i.items[0].qty} × {formatINR(i.items[0].price)}</p>
-                </div>
-                <p className="text-sm font-bold text-[#1e293b] tabular-nums">{formatINR(i.items[0].price * i.items[0].qty)}</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wider pb-2 border-b border-[#f1f5f9] mb-1">
-                  <div className="col-span-7">Item</div>
-                  <div className="col-span-2 text-center">Qty</div>
-                  <div className="col-span-3 text-right">Amount</div>
-                </div>
-                {i.items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 py-2 text-sm border-b border-[#f8fafc] last:border-0">
-                    <div className="col-span-7 text-[#1e293b]">{item.name}</div>
-                    <div className="col-span-2 text-center text-[#94a3b8]">{item.qty}</div>
-                    <div className="col-span-3 text-right text-[#1e293b] font-medium tabular-nums">{formatINR(item.price * item.qty)}</div>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-
-          {/* 4. Invoice Information (collapsible) */}
-          <div>
-            <button
-              onClick={() => setDetailsExpanded(!detailsExpanded)}
-              className="w-full flex items-center justify-between text-xs text-[#94a3b8] hover:text-[#64748b] py-2 transition-colors"
-            >
-              <span className="font-medium uppercase tracking-wider">Invoice Information</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${detailsExpanded ? 'rotate-180' : ''}`} />
-            </button>
-            {detailsExpanded && (
-              <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-sm space-y-3 mt-1">
-                <div className="space-y-2 text-sm">
-                  {i.items[0]?.hsn && (
-                    <div className="flex justify-between">
-                      <span className="text-[#94a3b8]">HSN</span>
-                      <span className="text-[#1e293b] font-medium">{i.items[0].hsn}</span>
-                    </div>
-                  )}
-                  {i.items[0]?.gstRate ? (
-                    <div className="flex justify-between">
-                      <span className="text-[#94a3b8]">GST</span>
-                      <span className="text-[#1e293b] font-medium">{i.items[0].gstRate}%</span>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between">
-                    <span className="text-[#94a3b8]">Payment Status</span>
-                    <span className="text-[#d97706] font-medium">Pending</span>
-                  </div>
-                </div>
-                <div className="border-t border-[#f1f5f9] pt-3">
-                  <p className="text-[11px] text-[#94a3b8] font-medium uppercase tracking-wider mb-2">Documents</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={async () => {
-                        const pdfData = buildPdfData()
-                        await downloadInvoicePDF(pdfData)
-                      }}
-                      className="flex items-center gap-2 rounded-lg border border-[#e2e8f0] px-3 py-2 text-xs text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Download PDF
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const pdfData = buildPdfData()
-                        await printInvoicePDF(pdfData)
-                      }}
-                      className="flex items-center gap-2 rounded-lg border border-[#e2e8f0] px-3 py-2 text-xs text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
-                    >
-                      <Printer className="w-3.5 h-3.5" /> Print
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 5. Recovery Timeline */}
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
-            <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider mb-3">Recovery Timeline</p>
-            <RecoveryTimelinePreview alreadyPaid={alreadyPaid} />
+            <div className="text-right shrink-0">
+              <p className="text-[11px] text-muted-foreground">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
+              <p className="text-[11px] text-muted-foreground">{new Date(i.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+            </div>
           </div>
         </div>
 
-        {/* ── RIGHT COLUMN: Single Recommended Action ── */}
-        <div className="space-y-4 mt-6 lg:mt-0">
-          <div className="bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm">
-            <p className="text-[11px] text-[#94a3b8] font-semibold uppercase tracking-wider mb-1">Next Step</p>
-            <p className="text-[13px] text-[#64748b] mb-4 leading-relaxed">{recommendedAction.why}</p>
-
-            {recommendedAction.id === 'add_phone' && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 rounded-xl border border-[#e2e8f0] px-4 py-3 bg-[#f8fafc]">
-                  <Phone size={14} className="text-[#94a3b8] shrink-0" />
-                  <input
-                    value={customerPhone}
-                    onChange={e => updatePhone(e.target.value)}
-                    placeholder="Enter phone number"
-                    type="tel"
-                    className="flex-1 text-sm bg-transparent focus:outline-none text-[#1e293b] placeholder:text-[#94a3b8]/60"
-                    autoFocus
-                  />
-                </div>
-                <button
-                  onClick={() => {
-                    if (!customerPhone) return
-                    setShowMessagePreview(true)
-                    setActionView('send_now')
-                  }}
-                  disabled={!customerPhone}
-                  className="w-full py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-4 h-4 inline mr-1.5" />
-                  Share Invoice
-                </button>
-              </div>
-            )}
-
-            {recommendedAction.id === 'share' && (
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    setShowMessagePreview(true)
-                    setActionView('send_now')
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all shadow-sm"
-                >
-                  <Send className="w-4 h-4 inline mr-1.5" />
-                  Share on WhatsApp
-                </button>
-                <button
-                  onClick={() => {
-                    if (paymentLinkUrl) {
-                      copyPaymentLink()
-                    } else {
-                      generatePaymentLink()
-                    }
-                  }}
-                  className="w-full py-2.5 rounded-xl border border-[#e2e8f0] text-xs font-medium text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] transition-all"
-                >
-                  <Copy className="w-3.5 h-3.5 inline mr-1" />
-                  {paymentLinkUrl ? 'Copy payment link' : paymentLinkLoading ? 'Generating...' : 'Copy payment link'}
-                </button>
-                {paymentLinkUrl && copied && (
-                  <p className="text-xs text-[#16802d] font-medium text-center">Copied!</p>
-                )}
-                {paymentLinkError && (
-                  <p className="text-xs text-[#d97706] text-center">Payment link failed. <button onClick={generatePaymentLink} className="underline font-medium">Retry</button></p>
-                )}
-              </div>
-            )}
-
-            {recommendedAction.id === 'reminder' && (
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    setScheduleDate(getTomorrow())
-                    setScheduleTime("18:30")
-                    setActionView('schedule_reminder')
-                  }}
-                  className="w-full py-3.5 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all shadow-sm"
-                >
-                  <CalendarClock className="w-4 h-4 inline mr-1.5" />
-                  Schedule Reminder
-                </button>
-                <p className="text-xs text-[#94a3b8] text-center">
-                  Sent tomorrow at 6:30 PM. Customer will receive a WhatsApp reminder.
-                </p>
-              </div>
-            )}
-
-            {recommendedAction.id === 'waiting' && (
-              <div className="space-y-3">
-                <div className="rounded-xl bg-[#f8fafc] border border-[#e2e8f0] p-4 text-center">
-                  <Clock className="w-6 h-6 text-[#94a3b8] mx-auto mb-2" />
-                  <p className="text-sm font-medium text-[#1e293b]">All set for now</p>
-                  <p className="text-xs text-[#94a3b8] mt-1">BillZo will notify you when the customer responds.</p>
-                </div>
-              </div>
-            )}
+        {/* Next step */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">Next step</span>
           </div>
+          <p className="text-[13px] text-muted-foreground mb-4 leading-relaxed">{recommendedAction.why}</p>
 
-          {/* Receive Payment — always available as secondary */}
-          <button
-            onClick={() => {
-              if (!paymentReady && !paymentLinkUrl) {
-                generatePaymentLink()
-              }
-              setShowPaymentCollect(!showPaymentCollect)
-            }}
-            className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#e2e8f0] text-xs font-medium text-[#64748b] hover:text-[#1e293b] hover:border-[#1e293b] hover:bg-[#f8fafc] transition-all"
-          >
-            <IndianRupee className="w-3.5 h-3.5 inline mr-1" />
-            {showPaymentCollect ? 'Close Payment' : 'Receive Payment'}
-          </button>
-
-          {showPaymentCollect && (
-            <div className="bg-white border border-[#e2e8f0] rounded-xl p-4 shadow-sm space-y-2">
-              <p className="text-xs font-medium text-[#1e293b]">Collect Payment</p>
+          {recommendedAction.id === 'add_phone' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-xl border border-input bg-background px-4 py-3">
+                <Phone size={15} className="text-muted-foreground shrink-0" />
+                <input
+                  value={customerPhone}
+                  onChange={e => updatePhone(e.target.value)}
+                  placeholder="Enter WhatsApp number"
+                  type="tel"
+                  inputMode="tel"
+                  className="flex-1 text-sm bg-transparent focus:outline-none text-foreground placeholder:text-muted-foreground/60"
+                  autoFocus
+                />
+              </div>
               <button
-                onClick={() => router.push(`/invoices/${invoiceId}`)}
-                className="w-full flex items-center gap-3 rounded-lg border border-[#e2e8f0] p-3 hover:bg-[#f8fafc] transition-all text-left"
+                onClick={() => customerPhone && setActionView('send_now')}
+                disabled={!customerPhone}
+                className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
-                  <IndianRupee className="w-4 h-4 text-[#1e293b]" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1e293b]">Cash</p>
-                  <p className="text-[10px] text-[#94a3b8]">Record cash payment</p>
-                </div>
+                <Send className="w-4 h-4 inline mr-1.5" />
+                Save & Continue
               </button>
-              <button
-                onClick={() => {
-                  if (paymentLinkUrl) {
-                    window.open(paymentLinkUrl, '_blank')
-                  } else {
-                    generatePaymentLink().then(() => {
-                      setTimeout(() => {
-                        if (paymentLinkUrl) window.open(paymentLinkUrl, '_blank')
-                      }, 500)
-                    })
-                  }
-                }}
-                className="w-full flex items-center gap-3 rounded-lg border border-[#e2e8f0] p-3 hover:bg-[#f8fafc] transition-all text-left"
-              >
-                <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
-                  <Smartphone className="w-4 h-4 text-[#1e293b]" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#1e293b]">UPI</p>
-                  <p className="text-[10px] text-[#94a3b8]">QR code or payment link</p>
-                </div>
-              </button>
+              <p className="text-xs text-muted-foreground text-center">
+                Already received on WhatsApp?{' '}
+                <button onClick={() => setShowNoPhoneSheet(true)} className="font-medium text-primary hover:underline">
+                  Share another way
+                </button>
+              </p>
             </div>
           )}
 
-          {/* Bottom actions */}
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={() => router.push('/pos')}
-              className="flex-1 py-3 rounded-xl bg-[#1e293b] text-white text-sm font-semibold hover:bg-[#334155] transition-all"
-            >
-              New Sale
-            </button>
-            <Link
-              href={`/invoices/${invoiceId}`}
-              className="flex-1 py-3 rounded-xl border border-[#e2e8f0] text-sm font-semibold text-[#64748b] hover:text-[#1e293b] hover:bg-[#f8fafc] text-center transition-all"
-            >
-              View Invoice
-            </Link>
+          {recommendedAction.id === 'share' && (
+            <div className="space-y-3">
+              <button
+                onClick={() => setActionView('send_now')}
+                className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                Send on WhatsApp
+              </button>
+              <button
+                onClick={() => paymentLinkUrl ? copyPaymentLink() : void generatePaymentLink()}
+                disabled={paymentLinkLoading}
+                className="w-full py-2.5 rounded-xl border border-input text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {paymentLinkLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                {paymentLinkLoading ? 'Generating link…' : paymentLinkUrl ? 'Copy payment link' : 'Generate payment link'}
+              </button>
+              {paymentLinkUrl && copied && (
+                <p className="text-xs text-success font-medium text-center">Payment link copied!</p>
+              )}
+              {paymentLinkError && (
+                <p className="text-xs text-warning text-center">Payment link failed. <button onClick={generatePaymentLink} className="underline font-medium">Retry</button></p>
+              )}
+            </div>
+          )}
+
+          {recommendedAction.id === 'reminder' && (
+            <div className="space-y-3">
+              <button
+                onClick={() => { setScheduleDate(getTomorrow()); setScheduleTime("18:30"); setActionView('schedule_reminder') }}
+                disabled={!!quota?.exceeded}
+                className="w-full py-3.5 rounded-xl bg-recovery text-recovery-foreground text-sm font-semibold hover:opacity-90 transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <CalendarClock className="w-4 h-4" />
+                {quota?.exceeded ? 'Reminder limit reached' : 'Schedule Reminder'}
+              </button>
+              {quota?.exceeded && (
+                <p className="text-xs text-warning text-center">
+                  You have used {quota.used} of {quota.limit} reminders this month.{' '}
+                  <Link href="/pricing" className="font-semibold text-primary hover:underline">Upgrade to Pro →</Link>
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => { setPromiseDate(getNextSunday()); setActionView('schedule_promise') }}
+                  className="py-2.5 rounded-xl border border-input text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                >
+                  <Hand className="w-3.5 h-3.5 inline mr-1" /> Record promise
+                </button>
+                <button
+                  onClick={() => setShowPaymentCollect(!showPaymentCollect)}
+                  className="py-2.5 rounded-xl border border-input text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                >
+                  <IndianRupee className="w-3.5 h-3.5 inline mr-1" /> Receive payment
+                </button>
+              </div>
+            </div>
+          )}
+
+          {recommendedAction.id === 'waiting' && (
+            <div className="rounded-xl bg-secondary/50 border border-border p-4 text-center">
+              <Clock className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm font-medium text-foreground">All set for now</p>
+              <p className="text-xs text-muted-foreground mt-1">You will be notified when the customer responds.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Quick actions */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <QuickAction icon={Hand} label="Record promise" onClick={() => { setPromiseDate(getNextSunday()); setActionView('schedule_promise') }} />
+          <QuickAction icon={CalendarClock} label="Schedule reminder" onClick={() => { setScheduleDate(getTomorrow()); setScheduleTime("18:30"); setActionView('schedule_reminder') }} />
+          <QuickAction icon={IndianRupee} label="Receive payment" onClick={() => setShowPaymentCollect(!showPaymentCollect)} />
+          <QuickAction icon={Download} label="Download PDF" onClick={downloadPdf} />
+        </div>
+
+        {/* Receive payment options */}
+        {showPaymentCollect && (
+          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
+            <p className="text-xs font-semibold text-foreground">Receive payment</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => router.push(`/invoices/${invoiceId}`)}
+                className="flex items-center gap-3 rounded-xl border border-border p-3 hover:bg-secondary transition-all text-left"
+              >
+                <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                  <IndianRupee className="w-4 h-4 text-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">Cash</p>
+                  <p className="text-[10px] text-muted-foreground">Record payment</p>
+                </div>
+              </button>
+              <button
+                onClick={openUpiPayment}
+                className="flex items-center gap-3 rounded-xl border border-border p-3 hover:bg-secondary transition-all text-left"
+              >
+                <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                  <Smartphone className="w-4 h-4 text-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">UPI</p>
+                  <p className="text-[10px] text-muted-foreground">Payment link</p>
+                </div>
+              </button>
+            </div>
           </div>
+        )}
+
+        {/* Exposure strip */}
+        {customerOutstanding > 0 && (
+          <div className="flex justify-between items-center rounded-xl bg-warning-soft/60 border border-warning/30 px-4 py-3">
+            <span className="text-xs font-medium text-foreground">Total outstanding with {i.customerName}</span>
+            <span className="text-sm font-bold text-foreground tabular-nums">{formatINR(totalExposure)}</span>
+          </div>
+        )}
+
+        {/* Recovery timeline */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+          <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mb-3">Recovery timeline</p>
+          <RecoveryTimelinePreview alreadyPaid={alreadyPaid} />
+        </div>
+
+        {/* Items & documents */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+          <button
+            onClick={() => setDetailsExpanded(!detailsExpanded)}
+            className="w-full flex items-center justify-between"
+          >
+            <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Items</p>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${detailsExpanded ? 'rotate-180' : ''}`} />
+          </button>
+
+          {i.items.length === 1 ? (
+            <div className="flex items-center justify-between mt-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">{i.items[0].name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{i.items[0].qty} × {formatINR(i.items[0].price)}</p>
+              </div>
+              <p className="text-sm font-bold text-foreground tabular-nums">{formatINR(i.items[0].price * i.items[0].qty)}</p>
+            </div>
+          ) : (
+            <div className="mt-3">
+              <div className="grid grid-cols-12 gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider pb-2 border-b border-border/60 mb-1">
+                <div className="col-span-7">Item</div>
+                <div className="col-span-2 text-center">Qty</div>
+                <div className="col-span-3 text-right">Amount</div>
+              </div>
+              {i.items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 py-2 text-sm border-b border-border/40 last:border-0">
+                  <div className="col-span-7 text-foreground">{item.name}</div>
+                  <div className="col-span-2 text-center text-muted-foreground">{item.qty}</div>
+                  <div className="col-span-3 text-right text-foreground font-medium tabular-nums">{formatINR(item.price * item.qty)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {detailsExpanded && (
+            <div className="mt-4 pt-4 border-t border-border/60 space-y-4">
+              <div className="space-y-2 text-sm">
+                {i.items[0]?.hsn && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">HSN</span>
+                    <span className="text-foreground font-medium">{i.items[0].hsn}</span>
+                  </div>
+                )}
+                {i.items[0]?.gstRate ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST</span>
+                    <span className="text-foreground font-medium">{i.items[0].gstRate}%</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Payment Status</span>
+                  <span className="text-warning font-medium">Pending</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mb-2">Documents</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={downloadPdf}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-input px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download PDF
+                  </button>
+                  <button
+                    onClick={printPdf}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-input px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Print
+                  </button>
+                </div>
+              </div>
+              <Link href={`/invoices/${invoiceId}`} className="block text-center text-xs font-medium text-primary hover:underline">
+                View full invoice →
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -940,123 +1009,131 @@ export default function InvoiceSendPage() {
   function renderSendNowView() {
     const i = invoice
     if (!i) return null
-    return (
-      <>
-        <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back
-        </button>
+    const showCustomEditor = !!customMessage
 
-        <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 text-center">
-          <Send className="h-8 w-8 text-primary mx-auto mb-2" />
-          <h2 className="text-lg font-bold">{customerPhone ? 'Send Invoice on WhatsApp' : 'Share Invoice'}</h2>
+    return (
+      <div className="space-y-4">
+        {/* Quota banner */}
+        {quota?.exceeded ? (
+          <div className="rounded-xl bg-warning-soft/60 border border-warning/30 p-3 space-y-2">
+            <p className="text-xs font-semibold text-foreground">Monthly reminder limit reached</p>
+            <p className="text-xs text-muted-foreground">
+              You have used {quota.used} of {quota.limit} reminders this month.
+            </p>
+            <Link href="/pricing" className="inline-block text-xs font-semibold text-primary hover:underline">
+              Upgrade to Pro →
+            </Link>
+          </div>
+        ) : quota ? (
+          <div className="flex items-center justify-between rounded-xl bg-secondary/40 border border-border px-3 py-2 text-xs text-muted-foreground">
+            <span>Reminders this month</span>
+            <span className="font-semibold text-foreground tabular-nums">
+              {quota.unlimited ? `${quota.used} · unlimited` : `${quota.used} / ${quota.limit}`}
+            </span>
+          </div>
+        ) : null}
+
+        {/* Recipient strip */}
+        <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-success-soft flex items-center justify-center shrink-0">
+            <MessageSquare className="w-4 h-4 text-success" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">To {i.customerName}</p>
+            <p className="text-xs text-muted-foreground truncate">{customerPhone || 'No WhatsApp number saved'}</p>
+          </div>
+          <span className="text-sm font-bold text-foreground tabular-nums shrink-0">{formatINR(i.total)}</span>
         </div>
 
-        {!customerPhone && (
-          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
-            No customer WhatsApp number. We'll open your WhatsApp so you can forward the invoice manually.
-          </div>
-        )}
-
-        {isUdhar && !paymentReady && (
-          <div className="rounded-lg bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-3 text-xs text-warning dark:text-warning">
-            Payment method not configured. Customers won't be able to pay online.
-          </div>
-        )}
-
-        {/* Message preview — shown directly before send */}
-        <section className="bg-card border border-border rounded-xl p-4 space-y-2">
+        {/* Message editor */}
+        <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Message Preview</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Message</p>
             <button
-              onClick={() => setCustomMessage(getDefaultMessage !== customMessage ? '' : ' ')}
+              onClick={() => setCustomMessage(showCustomEditor ? '' : defaultMessage)}
               className="text-[10px] font-medium text-primary hover:underline"
             >
-              {customMessage ? 'Reset' : 'Edit'}
+              {showCustomEditor ? 'Use default' : 'Edit'}
             </button>
           </div>
-          <div className="bg-success-soft dark:bg-green-950/20 border border-success dark:border-success rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <MessageSquare size={14} className="text-success shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs text-success dark:text-success font-medium mb-1">To: {i.customerName}</p>
-                <p className="text-xs text-success dark:text-success whitespace-pre-wrap">
-                  {customMessage || getDefaultMessage}
-                </p>
-                {isUdhar && (
-                  <p className="text-xs text-success mt-2 flex items-center gap-1">
-                    <ExternalLink size={10} />
-                    {paymentLinkUrl ? '✓ Payment link included' : 'Payment link will be attached'}
-                  </p>
-                )}
-              </div>
-            </div>
+          <div className="rounded-xl bg-success-soft/60 border border-success/25 p-3">
+            <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{messageToSend}</p>
+            {isUdhar && (
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                <ExternalLink size={11} />
+                {paymentLinkUrl ? 'Payment link included ✓' : 'Payment link will be attached'}
+              </p>
+            )}
           </div>
-          {customMessage && (
+          {showCustomEditor && (
             <textarea
               value={customMessage}
               onChange={e => setCustomMessage(e.target.value)}
-              className="w-full text-xs bg-muted/50 rounded-lg p-3 border border-border focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              className="w-full text-sm bg-background rounded-xl p-3 border border-input focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={4}
-              placeholder="Type your message..."
+              placeholder="Write your own message…"
             />
           )}
         </section>
 
-        {/* Payment link — always included for unpaid invoices */}
+        {/* Payment link */}
         {isUdhar && (
-          <section className="bg-card border border-border rounded-xl p-4 space-y-2">
+          <section className="bg-card border border-border rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Payment Link</span>
+              <span className="text-sm font-medium text-foreground">Payment Link</span>
               {paymentLinkLoading ? (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Loader2 size={12} className="animate-spin" />
-                  Generating...
+                  <Loader2 size={12} className="animate-spin" /> Generating…
                 </span>
               ) : paymentLinkUrl ? (
                 <span className="text-xs text-success flex items-center gap-1">
-                  <CheckCircle2 size={12} />
-                  Ready
+                  <CheckCircle2 size={12} /> Ready
                 </span>
               ) : paymentLinkError ? (
                 <span className="text-xs text-warning flex items-center gap-1">
-                  <AlertTriangle size={12} />
-                  Failed
+                  <AlertTriangle size={12} /> Failed
                 </span>
               ) : null}
             </div>
             {paymentLinkUrl && (
-              <button
-                onClick={copyPaymentLink}
-                className="flex items-center gap-2 text-xs text-primary font-medium"
-              >
+              <button onClick={copyPaymentLink} className="flex items-center gap-2 text-xs text-primary font-medium">
                 <Copy size={12} />
                 {copied ? 'Copied!' : 'Copy payment link'}
               </button>
             )}
             {paymentLinkError && (
-              <button onClick={generatePaymentLink} className="text-xs text-warning underline font-medium">
-                Retry
-              </button>
+              <button onClick={generatePaymentLink} className="text-xs text-warning underline font-medium">Retry</button>
             )}
-            <p className="text-[10px] text-muted-foreground">Automatically included in message. Customer can pay directly via UPI.</p>
+            <p className="text-[10px] text-muted-foreground">Automatically included in the message. Customer can pay directly via UPI.</p>
           </section>
         )}
 
-        {error && (
-          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive">
-            {error}
+        {/* Warnings */}
+        {!customerPhone && (
+          <div className="rounded-xl bg-warning-soft/60 border border-warning/30 p-3 text-xs text-warning">
+            No WhatsApp number saved. Add the number first, or forward manually.
+            <button onClick={() => setShowNoPhoneSheet(true)} className="font-semibold underline ml-1">Forward manually</button>
           </div>
+        )}
+        {isUdhar && !paymentReady && (
+          <div className="rounded-xl bg-warning-soft/60 border border-warning/30 p-3 text-xs text-warning">
+            Payment method not configured — the customer will not be able to pay online.
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/25 p-3 text-xs text-destructive">{error}</div>
         )}
 
         <button
           onClick={handleSendNow}
-          disabled={sending || (isUdhar && paymentLinkLoading)}
-          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+          disabled={sending || (isUdhar && paymentLinkLoading) || !!quota?.exceeded}
+          className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {sent ? <CheckCircle2 size={18} /> : sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-          {sent ? 'Sent!' : sending ? 'Sending...' : 'Send Now'}
+          {sent ? 'Sent!' : sending ? 'Sending…' : quota?.exceeded ? 'Limit reached' : 'Send Now'}
         </button>
-      </>
+      </div>
     )
   }
 
@@ -1065,12 +1142,12 @@ export default function InvoiceSendPage() {
   function renderPromiseView() {
     if (promiseSaved) {
       return (
-        <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center space-y-3">
+        <div className="rounded-xl bg-success-soft/60 border border-success/25 p-8 text-center space-y-3">
           <Hand className="h-12 w-12 text-success mx-auto" />
-          <h2 className="text-xl font-bold">Recovery Plan Updated</h2>
+          <h2 className="text-xl font-bold">Promise recorded</h2>
           <p className="text-sm text-muted-foreground">Promise — {new Date(promiseDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {TIME_LABELS[promiseTime]}</p>
           <p className="text-xs text-muted-foreground">
-            Next Action: Wait for promise &middot; {getPromiseRemindLabel()}
+            Next action: wait for promise &middot; {getPromiseRemindLabel()}
             {promiseAutoFollowup && ' · Auto follow-up enabled'}
           </p>
         </div>
@@ -1078,17 +1155,13 @@ export default function InvoiceSendPage() {
     }
 
     return (
-      <>
-        <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back
-        </button>
-
-        <div className="rounded-xl bg-warning-soft dark:bg-amber-950/30 border border-warning dark:border-warning p-4">
-          <h2 className="font-bold flex items-center gap-2"><Hand size={18} className="text-warning" /> Promise to Pay</h2>
+      <div className="space-y-4">
+        <div className="rounded-xl bg-warning-soft/60 border border-warning/30 p-4">
+          <h2 className="font-bold flex items-center gap-2 text-foreground"><Hand size={18} className="text-warning" /> Promise to Pay</h2>
           <p className="text-xs text-muted-foreground mt-1">Customer committed to pay. BillZo will remind them.</p>
         </div>
 
-        <section className="bg-card border border-border rounded-xl p-4 space-y-4">
+        <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
           <div>
             <label className="text-xs font-medium text-muted-foreground">Amount</label>
             <div className="relative mt-1">
@@ -1097,7 +1170,7 @@ export default function InvoiceSendPage() {
                 type="number"
                 value={promiseAmount}
                 onChange={e => setPromiseAmount(Number(e.target.value))}
-                className="w-full h-11 rounded-xl border border-border bg-card pl-8 pr-3 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full h-11 rounded-xl border border-input bg-background pl-8 pr-3 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
               />
             </div>
           </div>
@@ -1108,7 +1181,7 @@ export default function InvoiceSendPage() {
               value={promiseDate}
               onChange={e => setPromiseDate(e.target.value)}
               min={new Date().toISOString().split('T')[0]}
-              className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
+              className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 mt-1"
             />
           </div>
           <div>
@@ -1122,7 +1195,7 @@ export default function InvoiceSendPage() {
                     onClick={() => setPromiseTime(t)}
                     className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
                       promiseTime === t
-                        ? 'border-warning bg-warning-soft dark:bg-amber-950/30 text-warning'
+                        ? 'border-warning bg-warning-soft text-warning'
                         : 'border-border text-muted-foreground hover:border-warning'
                     }`}
                   >
@@ -1138,7 +1211,7 @@ export default function InvoiceSendPage() {
             <select
               value={promiseRemindWhen}
               onChange={e => setPromiseRemindWhen(e.target.value)}
-              className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
+              className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 mt-1"
             >
               <option value="at_promise_time">At promise time ({formatTimeFromTiming(promiseTime)})</option>
               <option value="thirty_min_before">30 minutes before</option>
@@ -1155,10 +1228,10 @@ export default function InvoiceSendPage() {
                   }`}
                   onClick={() => setPromiseAutoFollowup(!promiseAutoFollowup)}
                 >
-                  {promiseAutoFollowup && <CheckCircle2 size={14} className="text-white" />}
+                  {promiseAutoFollowup && <CheckCircle2 size={14} className="text-warning-foreground" />}
                 </div>
                 <div>
-                  <span className="text-sm font-medium">Auto Follow-up</span>
+                  <span className="text-sm font-medium text-foreground">Auto Follow-up</span>
                   <p className="text-[10px] text-muted-foreground">If unpaid, send reminder next day</p>
                 </div>
               </div>
@@ -1171,7 +1244,7 @@ export default function InvoiceSendPage() {
               value={promiseNotes}
               onChange={e => setPromiseNotes(e.target.value)}
               placeholder="e.g. Salary credit"
-              className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
+              className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring/20 mt-1"
             />
           </div>
         </section>
@@ -1179,12 +1252,12 @@ export default function InvoiceSendPage() {
         <button
           onClick={handleSavePromise}
           disabled={promiseSaving || !promiseDate}
-          className="w-full py-4 bg-warning text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-warning disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
+          className="w-full py-4 bg-warning text-warning-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-warning disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {promiseSaving ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
-          {promiseSaving ? 'Saving...' : 'Save Promise'}
+          {promiseSaving ? 'Saving…' : 'Save Promise'}
         </button>
-      </>
+      </div>
     )
   }
 
@@ -1195,9 +1268,9 @@ export default function InvoiceSendPage() {
     if (!i) return null
     if (scheduleSaved) {
       return (
-        <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center space-y-3">
+        <div className="rounded-xl bg-success-soft/60 border border-success/25 p-8 text-center space-y-3">
           <CalendarClock className="h-12 w-12 text-success mx-auto" />
-          <h2 className="text-xl font-bold">Recovery Plan Updated</h2>
+          <h2 className="text-xl font-bold">Reminder scheduled</h2>
           <p className="text-sm text-muted-foreground">
             Scheduled Reminder — {new Date(scheduleDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} &middot; {scheduleTime}
           </p>
@@ -1206,41 +1279,52 @@ export default function InvoiceSendPage() {
               Repeats {scheduleRepeat === 'daily' ? 'daily' : scheduleRepeat === 'weekly' ? 'weekly' : 'every 2 days'}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">Next Action: Send reminder (automatic)</p>
+          <p className="text-xs text-muted-foreground">Next action: send reminder (automatic)</p>
         </div>
       )
     }
 
     return (
-      <>
-        <button onClick={() => setActionView('main')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
-          <ArrowLeft size={16} /> Back
-        </button>
+      <div className="space-y-4">
+        {/* Quota banner */}
+        {quota?.exceeded && (
+          <div className="rounded-xl bg-warning-soft/60 border border-warning/30 p-3 space-y-2">
+            <p className="text-xs font-semibold text-foreground">Monthly reminder limit reached</p>
+            <p className="text-xs text-muted-foreground">
+              You have used {quota.used} of {quota.limit} reminders this month.
+            </p>
+            <Link href="/pricing" className="inline-block text-xs font-semibold text-primary hover:underline">
+              Upgrade to Pro →
+            </Link>
+          </div>
+        )}
 
-        <div className="rounded-xl bg-recovery-soft dark:bg-violet-950/30 border border-recovery dark:border-recovery p-4">
-          <h2 className="font-bold flex items-center gap-2"><CalendarClock size={18} className="text-recovery" /> Schedule Reminder</h2>
+        <div className="rounded-xl bg-recovery-soft/60 border border-recovery/30 p-4">
+          <h2 className="font-bold flex items-center gap-2 text-foreground"><CalendarClock size={18} className="text-recovery" /> Schedule Reminder</h2>
           <p className="text-xs text-muted-foreground mt-1">BillZo sends at the scheduled time. Rate limits handled automatically.</p>
         </div>
 
-        <section className="bg-card border border-border rounded-xl p-4 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Date</label>
-            <input
-              type="date"
-              value={scheduleDate}
-              onChange={e => setScheduleDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Time</label>
-            <input
-              type="time"
-              value={scheduleTime}
-              onChange={e => setScheduleTime(e.target.value)}
-              className="w-full h-11 rounded-xl border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 mt-1"
-            />
+        <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Date</label>
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={e => setScheduleDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Time</label>
+              <input
+                type="time"
+                value={scheduleTime}
+                onChange={e => setScheduleTime(e.target.value)}
+                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 mt-1"
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Repeat</label>
@@ -1256,7 +1340,7 @@ export default function InvoiceSendPage() {
                   onClick={() => setScheduleRepeat(r.value)}
                   className={`rounded-lg border py-2 text-xs font-medium transition-all ${
                     scheduleRepeat === r.value
-                      ? 'border-recovery bg-recovery-soft dark:bg-violet-950/30 text-recovery'
+                      ? 'border-recovery bg-recovery-soft text-recovery'
                       : 'border-border text-muted-foreground hover:border-recovery'
                   }`}
                 >
@@ -1271,9 +1355,9 @@ export default function InvoiceSendPage() {
               Message
             </div>
             <textarea
-              value={customMessage || getDefaultMessage}
+              value={customMessage || defaultMessage}
               onChange={e => setCustomMessage(e.target.value)}
-              className="w-full text-sm bg-muted/50 rounded-lg p-3 border border-border focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              className="w-full text-sm bg-background rounded-xl p-3 border border-input focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={3}
             />
           </div>
@@ -1281,60 +1365,52 @@ export default function InvoiceSendPage() {
 
         <button
           onClick={handleScheduleReminder}
-          disabled={scheduleSaving || !scheduleDate}
-          className="w-full py-4 bg-recovery text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-recovery disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
+          disabled={scheduleSaving || !scheduleDate || !!quota?.exceeded}
+          className="w-full py-4 bg-recovery text-recovery-foreground rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-recovery disabled:opacity-50 transition-all active:scale-[0.98] shadow-lg"
         >
           {scheduleSaving ? <Loader2 size={18} className="animate-spin" /> : <CalendarClock size={18} />}
-          {scheduleSaving ? 'Scheduling...' : 'Schedule Reminder'}
+          {scheduleSaving ? 'Scheduling…' : quota?.exceeded ? 'Limit reached' : 'Schedule Reminder'}
         </button>
-      </>
+      </div>
     )
   }
 
   // ──────────────────── MAIN RENDER ────────────────────
 
+  const pageTitle =
+    actionView === 'main' ? 'Send Invoice'
+    : actionView === 'send_now' ? 'Send on WhatsApp'
+    : actionView === 'schedule_promise' ? 'Record Promise'
+    : 'Schedule Reminder'
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 pb-10 space-y-4">
+    <div className="max-w-2xl mx-auto px-4 py-6 pb-12 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => actionView !== 'main' ? setActionView('main') : router.back()} className="p-2 -ml-2 rounded-lg hover:bg-secondary">
+        <button
+          onClick={() => actionView !== 'main' ? setActionView('main') : router.back()}
+          className="p-2 -ml-2 rounded-lg hover:bg-secondary"
+        >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold">
-          {actionView === 'main' ? '' : actionView === 'send_now' ? 'Send WhatsApp' : actionView === 'schedule_promise' ? 'Record Promise' : actionView === 'schedule_reminder' ? 'Schedule Reminder' : ''}
-        </h1>
+        <h1 className="text-lg font-bold text-foreground">{pageTitle}</h1>
+        <div className="ml-auto">
+          {actionView === 'main' && <StatusBadge invoice={invoice} paidAmount={invoice.paidAmount} />}
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
-          <AlertTriangle size={14} />
+        <div className="rounded-xl bg-destructive/10 border border-destructive/25 p-3 text-sm text-destructive flex items-center gap-2">
+          <AlertTriangle size={14} className="shrink-0" />
           {error}
         </div>
       )}
 
-      {sent ? (
-        <div className="rounded-xl bg-success/10 border border-success/20 p-8 text-center">
-          <CheckCircle2 className="h-12 w-12 text-success mx-auto mb-2" />
-          <h2 className="text-xl font-bold">Invoice Sent!</h2>
-          <p className="text-sm text-muted-foreground mt-1">WhatsApp opened with your invoice.</p>
-          <div className="flex gap-3 mt-6">
-            <button onClick={() => { setSent(false); setActionView('main') }} className="flex-1 py-3 rounded-xl border border-border text-sm font-semibold hover:bg-secondary transition-colors">
-              Back
-            </button>
-            <Link href="/dashboard" className="flex-1 py-3 rounded-xl bg-foreground text-background text-sm font-semibold text-center hover:opacity-90">
-              Dashboard
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <>
-          {actionView === 'main' && renderMainView()}
-          {actionView === 'send_now' && renderSendNowView()}
-          {actionView === 'schedule_promise' && renderPromiseView()}
-          {actionView === 'schedule_reminder' && renderScheduleReminderView()}
-        </>
-      )}
+      {actionView === 'main' && renderMainView()}
+      {actionView === 'send_now' && renderSendNowView()}
+      {actionView === 'schedule_promise' && renderPromiseView()}
+      {actionView === 'schedule_reminder' && renderScheduleReminderView()}
 
       {/* ──────────── No Phone Fallback Sheet ──────────── */}
       {showNoPhoneSheet && invoice && (
@@ -1353,7 +1429,7 @@ export default function InvoiceSendPage() {
 
             <div className="space-y-2">
               <button
-                onClick={() => { setShowNoPhoneSheet(false); setShowMessagePreview(true); setActionView('send_now') }}
+                onClick={shareViaOwnWhatsApp}
                 className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
               >
                 <Send size={18} className="text-primary shrink-0" />
@@ -1364,7 +1440,7 @@ export default function InvoiceSendPage() {
               </button>
 
               <button
-                onClick={() => { setShowNoPhoneSheet(false) }}
+                onClick={() => { setShowNoPhoneSheet(false); setActionView('main') }}
                 className="w-full flex items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-muted transition-all"
               >
                 <Phone size={18} className="text-muted-foreground shrink-0" />
@@ -1376,8 +1452,7 @@ export default function InvoiceSendPage() {
 
               <button
                 onClick={() => {
-                  const msg = getDefaultMessage
-                  navigator.clipboard.writeText(msg)
+                  navigator.clipboard.writeText(messageToSend)
                   setShowNoPhoneSheet(false)
                   toast.success('Invoice message copied')
                 }}
@@ -1426,5 +1501,3 @@ export default function InvoiceSendPage() {
     </div>
   )
 }
-
-

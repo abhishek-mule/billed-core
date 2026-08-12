@@ -10,26 +10,16 @@ import { PLAN_LIMITS } from "@/lib/billzo/plan-limits"
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Starter",
-  pro: "Starter",
-  growth: "Growth",
+  pro: "Pro",
   business: "Business",
   enterprise: "Enterprise",
 }
 
 const PLAN_PRICES: Record<string, string> = {
-  starter: "₹299",
+  starter: "₹0",
   pro: "₹299",
-  growth: "₹499",
-  business: "₹1,499",
+  business: "Custom",
   enterprise: "Custom",
-}
-
-const RECOVERY_LIMITS: Record<string, number> = {
-  starter: 100,
-  pro: 100,
-  growth: 250,
-  business: 1000,
-  enterprise: -1,
 }
 
 export default function BillingPage() {
@@ -39,6 +29,7 @@ export default function BillingPage() {
   const [planLabel, setPlanLabel] = useState("Starter")
   const [recovered, setRecovered] = useState<number | null>(null)
   const [usageCount, setUsageCount] = useState(0)
+  const [usageLimit, setUsageLimit] = useState<number>(PLAN_LIMITS.starter.reminders)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [nextBilling, setNextBilling] = useState<string>("")
 
@@ -61,11 +52,9 @@ export default function BillingPage() {
             setRecovered(amt)
           }).catch(() => {}),
 
-          db().invoices?.toArray().then(invoices => {
-            const count = (invoices || []).filter((i: any) =>
-              i.status === "sent" || i.status === "overdue"
-            ).length
-            setUsageCount(count)
+          fetch("/api/billing/usage").then(r => r.json()).then(d => {
+            if (typeof d.used === "number") setUsageCount(d.used)
+            if (typeof d.limit === "number") setUsageLimit(d.limit)
           }).catch(() => {}),
         ])
       } catch {} finally {
@@ -75,7 +64,7 @@ export default function BillingPage() {
     load()
   }, [router])
 
-  const limit = RECOVERY_LIMITS[plan] ?? 100
+  const limit = usageLimit
   const pct = limit > 0 ? Math.min(100, Math.round((usageCount / limit) * 100)) : 0
   const remaining = limit > 0 ? Math.max(0, limit - usageCount) : -1
 
@@ -141,9 +130,9 @@ export default function BillingPage() {
             <p className="text-[11px] text-muted-foreground mt-0.5">this month</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-4">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Active Recovery</p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Reminders</p>
             <p className="text-2xl font-bold text-foreground mt-1">{usageCount}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">invoices under follow-up</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">sent this month</p>
           </div>
         </div>
 
@@ -168,10 +157,10 @@ export default function BillingPage() {
           </div>
           <p className="text-xs text-muted-foreground">
             {remaining > 0
-              ? `${remaining} remaining this billing period`
+              ? `${remaining} reminders left this month`
               : remaining === 0
               ? "Limit reached — upgrade for more capacity"
-              : "Unlimited recoveries"}
+              : "Unlimited reminders"}
           </p>
         </div>
 

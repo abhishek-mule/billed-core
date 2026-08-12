@@ -70,9 +70,9 @@ describe('plan-limits', () => {
   })
 
   describe('PLAN_LIMITS', () => {
-    it('starter allows 3 reminders, business/pro unlimited', () => {
-      expect(PLAN_LIMITS.starter.reminders).toBe(3)
-      expect(PLAN_LIMITS.pro.reminders).toBe(UNLIMITED)
+    it('starter allows 5 reminders, pro 500, business/enterprise unlimited', () => {
+      expect(PLAN_LIMITS.starter.reminders).toBe(5)
+      expect(PLAN_LIMITS.pro.reminders).toBe(500)
       expect(PLAN_LIMITS.business.reminders).toBe(UNLIMITED)
     })
 
@@ -94,11 +94,11 @@ describe('plan-limits', () => {
       expect(remaining(1000, UNLIMITED)).toBe(UNLIMITED)
     })
 
-    it('starter blocks beyond 3 reminders', () => {
-      expect(withinLimit(2, 3)).toBe(true)
-      expect(withinLimit(3, 3)).toBe(false)
-      expect(remaining(2, 3)).toBe(1)
-      expect(remaining(3, 3)).toBe(0)
+    it('starter blocks beyond 5 reminders', () => {
+      expect(withinLimit(4, 5)).toBe(true)
+      expect(withinLimit(5, 5)).toBe(false)
+      expect(remaining(4, 5)).toBe(1)
+      expect(remaining(5, 5)).toBe(0)
     })
   })
 })

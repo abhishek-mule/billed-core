@@ -450,24 +450,27 @@ export async function downloadInvoicePDF(data: InvoiceData) {
   doc.save(`${data.invoiceNumber}.pdf`)
 }
 
-export function getWhatsAppShareLink(data: InvoiceData): string {
+export function getWhatsAppShareLink(data: InvoiceData, paymentUrl?: string | null, overrideMessage?: string | null): string {
   const isBill = data.documentType === 'bill'
   const taxBreakup = !isBill && data.items.some(i => i.gstRate && i.gstRate > 0)
     ? `CGST ${data.items[0]?.gstRate ? data.items[0].gstRate / 2 : 0}% + SGST ${data.items[0]?.gstRate ? data.items[0].gstRate / 2 : 0}%`
     : ''
 
-  const message = `*${isBill ? 'BILL' : 'TAX INVOICE'}*\n\n`
-    + `${isBill ? 'Bill' : 'Invoice'} #: ${data.invoiceNumber}\n`
-    + `Date: ${data.date}\n\n`
-    + `*Items:*\n`
-    + data.items.map(item => {
-      const gstNote = !isBill && item.gstRate ? ` @ ${item.gstRate}% GST` : ''
-      return `${item.name} x${item.qty} = ₹${(item.price * item.qty).toFixed(0)}${gstNote}`
-    }).join('\n') + `\n\n`
-    + `${taxBreakup ? `Tax: ${taxBreakup}\n` : ''}`
-    + `*Total: ₹${data.total.toFixed(0)}*\n\n`
-    + `From: ${data.businessName}`
-    + (data.businessGstin ? ` | GSTIN: ${data.businessGstin}` : '')
+  const message = overrideMessage?.trim()
+    ? overrideMessage.trim()
+    : `*${isBill ? 'BILL' : 'TAX INVOICE'}*\n\n`
+      + `${isBill ? 'Bill' : 'Invoice'} #: ${data.invoiceNumber}\n`
+      + `Date: ${data.date}\n\n`
+      + `*Items:*\n`
+      + data.items.map(item => {
+        const gstNote = !isBill && item.gstRate ? ` @ ${item.gstRate}% GST` : ''
+        return `${item.name} x${item.qty} = ₹${(item.price * item.qty).toFixed(0)}${gstNote}`
+      }).join('\n') + `\n\n`
+      + `${taxBreakup ? `Tax: ${taxBreakup}\n` : ''}`
+      + `*Total: ₹${data.total.toFixed(0)}*`
+      + (paymentUrl ? `\n\n*Pay here:* ${paymentUrl}` : '')
+      + `\n\nFrom: ${data.businessName}`
+      + (data.businessGstin ? ` | GSTIN: ${data.businessGstin}` : '')
 
   const encodedMessage = encodeURIComponent(message)
 

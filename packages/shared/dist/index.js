@@ -29,6 +29,7 @@ __exportStar(require("./authority-config/index"), exports);
 __exportStar(require("./authority-transport/index"), exports);
 __exportStar(require("./sovereignty/classifications"), exports);
 __exportStar(require("./decision-engine-types"), exports);
+__exportStar(require("./plan-limits"), exports);
 __exportStar(require("./payment-types"), exports);
 __exportStar(require("./merchant-language/index"), exports);
 __exportStar(require("./work-engine/index"), exports);

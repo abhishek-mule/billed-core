@@ -8,6 +8,7 @@ import { signUpiToken } from '@/lib/billzo/crypto'
 import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
 import { requireFeature } from '@/lib/auth/feature-gate'
 import { getEntitlement, emitUsageEvent } from '@/lib/billzo/feature-flags'
+import { getReminderQuota } from '@/lib/billzo/reminder-quota'
 import { planPromiseFollowup } from '@/lib/recovery/planner'
 import { EventType, PAYMENT_SOURCES } from '@billzo/shared'
 import type { PaymentSource } from '@billzo/shared'
@@ -145,7 +146,7 @@ async function sendReminderForCase(ctx: {
   const { PLAN_LIMITS } = await import('@/lib/billzo/plan-limits')
   const { checkQuota, emitUsageEvent } = await import('@/lib/billzo/feature-flags')
   const ent = await getEntitlement(tid)
-  const limit = ent ? PLAN_LIMITS[ent.planCode].reminders : 3
+  const limit = ent ? PLAN_LIMITS[ent.planCode].reminders : 5
   const quota = await checkQuota(tid, 'reminders_sent', limit)
   if (limit > 0 && (quota.used / limit) * 100 >= 110) {
     return {
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
 
     // schedule_reminder resolves case by customerId (send page may not have caseId yet)
     let recoveryCase: any = null
-    if (action === 'schedule_reminder') {
+    if (action === 'schedule_reminder' || action === 'mark_promise') {
       if (!customerId) {
         const invoiceId = body.invoiceId || payload?.invoiceId
         if (invoiceId) {
@@ -356,6 +357,21 @@ export async function POST(request: NextRequest) {
           .limit(1)
           .maybeSingle()
         recoveryCase = existingCase
+      }
+      if (!recoveryCase && customerId) {
+        const { data: cust } = await supabase
+          .from('customers')
+          .select('id, customer_name, phone')
+          .eq('id', customerId)
+          .eq('tenant_id', tid)
+          .maybeSingle()
+        if (cust) {
+          recoveryCase = {
+            id: null,
+            customer_id: cust.id,
+            customers: { customer_name: cust.customer_name, phone: cust.phone },
+          }
+        }
       }
     } else {
       // Bulk send paths resolve each case inside sendReminderForCase, so a bare
@@ -537,6 +553,19 @@ export async function POST(request: NextRequest) {
     // executes. invoice.next_recovery_at is convenience metadata for UI/reporting,
     // updated AFTER the action is created and cleared when the action completes.
     if (action === 'schedule_reminder') {
+      // Quota gate: cannot schedule reminders when the monthly allowance is
+      // hard-exceeded (worker re-checks at dispatch time as a backstop).
+      const quota = await getReminderQuota(tid)
+      if (quota.exceeded) {
+        return NextResponse.json({
+          error: 'QUOTA_EXCEEDED',
+          feature: 'reminders',
+          limit: quota.limit,
+          used: quota.used,
+          upgradeTo: 'pro',
+        }, { status: 402 })
+      }
+
       let dueDate = payload?.dueDate
       if (!dueDate && payload?.delayDays) {
         const d = new Date()

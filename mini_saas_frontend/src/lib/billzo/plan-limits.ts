@@ -1,4 +1,6 @@
-export type PlanType = 'starter' | 'pro' | 'business' | 'enterprise'
+import { billzoPlanOf, reminderMonthlyAllowance, type BillzoPlan } from '@billzo/shared'
+
+export type PlanType = BillzoPlan
 
 export type Feature =
   | 'manual_reminders'
@@ -18,10 +20,10 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
-  starter: { reminders: 3, branches: 1, api: false },
-  pro: { reminders: -1, branches: 1, api: false },
-  business: { reminders: -1, branches: 5, api: true },
-  enterprise: { reminders: -1, branches: -1, api: true },
+  starter: { reminders: reminderMonthlyAllowance('starter'), branches: 1, api: false },
+  pro: { reminders: reminderMonthlyAllowance('pro'), branches: 1, api: false },
+  business: { reminders: reminderMonthlyAllowance('business'), branches: 5, api: true },
+  enterprise: { reminders: reminderMonthlyAllowance('enterprise'), branches: -1, api: true },
 }
 
 export const FEATURES: Record<PlanType, readonly Feature[]> = {
@@ -56,8 +58,7 @@ export function hasFeature(plan: PlanType, feature: Feature): boolean {
 }
 
 export function getPlan(plan?: string): PlanType {
-  if (plan === 'pro' || plan === 'business' || plan === 'enterprise') return plan
-  return 'starter'
+  return billzoPlanOf(plan)
 }
 
 export const UNLIMITED = -1

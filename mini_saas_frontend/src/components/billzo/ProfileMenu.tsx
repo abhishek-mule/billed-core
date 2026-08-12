@@ -59,7 +59,7 @@ export function ProfileMenu({ onClose, onLogout }: ProfileMenuProps) {
       .catch(() => {})
   }, [])
 
-  const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.reminders ?? 3
+  const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS]?.reminders ?? 5
   const planLabel = PLAN_LABELS[plan] ?? 'Starter Plan'
   const daysLeft = 23
 

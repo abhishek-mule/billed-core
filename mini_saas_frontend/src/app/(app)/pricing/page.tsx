@@ -5,8 +5,18 @@ import { useRouter } from "next/navigation"
 import { Loader2, Check, ArrowUpRight, X, ChevronDown } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { Modal } from "@/components/billzo/Modal"
+import { PLAN_LIMITS, isUnlimited } from "@/lib/billzo/plan-limits"
 
 type InterestPlan = 'growth' | 'business' | 'enterprise' | null
+
+// Single source of truth: reminder counts come from plan-limits so the
+// advertised allowance can never drift from what the worker enforces.
+const reminderFeature = (planCode: keyof typeof PLAN_LIMITS): string => {
+  const limit = PLAN_LIMITS[planCode].reminders
+  return isUnlimited(limit)
+    ? 'Unlimited recovery reminders'
+    : `${limit} recovery reminders / month`
+}
 
 const PLANS = [
   {
@@ -15,7 +25,7 @@ const PLANS = [
     price: 0,
     desc: 'Everything you need to start recovering money today.',
     features: [
-      '5 recovery reminders / month',
+      reminderFeature('starter'),
       'Unlimited invoices & customers',
       'UPI payment links & QR codes',
       'Manual recovery queue',
@@ -30,7 +40,7 @@ const PLANS = [
     price: 299,
     desc: 'Automate collections and recover money 3x faster.',
     features: [
-      '500 recovery reminders / month',
+      reminderFeature('pro'),
       'Automated WhatsApp payment reminders',
       'Smart Recovery Queue & Priority engine',
       'WhatsApp delivery & read receipts',
@@ -337,17 +347,17 @@ export default function PricingPage() {
             </summary>
             <p className="mt-2 text-sm text-muted-foreground">
               An overdue recovery is when BillZo automatically follows up with a customer who
-              hasn&apos;t paid on time. Each overdue invoice under recovery counts as one
-              recovery — whether it takes 1 reminder or 5 to collect.
+              hasn&apos;t paid on time. Each reminder you send counts toward your monthly
+              reminder capacity — one invoice might need 1 reminder or 5 to collect.
             </p>
           </details>
           <details className="group rounded-xl border border-border bg-card p-4">
             <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-foreground">
-              Do unused recoveries roll over?
+              Do unused reminders roll over?
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
             </summary>
             <p className="mt-2 text-sm text-muted-foreground">
-              No. Recovery capacity resets at the start of each billing cycle. Upgrade to a
+              No. Reminder capacity resets at the start of each billing cycle. Upgrade to a
               higher plan if you regularly need more.
             </p>
           </details>
@@ -375,7 +385,7 @@ export default function PricingPage() {
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        Prices shown in INR, excluding GST. Recovery capacity resets monthly.
+        Prices shown in INR, excluding GST. Reminder capacity resets monthly.
       </p>
 
       <Modal
