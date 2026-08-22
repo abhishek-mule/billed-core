@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { TrendingUp, TrendingDown, Send, AlertCircle, CheckCircle2, PieChart as PieIcon } from 'lucide-react'
 import type { RecoveryMetrics, PlanType } from '@/lib/billzo/report-engine'
+import { PRO_MONTHLY_PRICE } from '@/lib/billzo/plan-limits'
 import { formatINR } from '@/lib/utils'
 import { PaywallTeaser } from './MetricCard'
 import {
@@ -23,7 +24,7 @@ interface RecoveryTabProps {
 
 export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
   const router = useRouter()
-  const roiMultiple = recovery.totalRecovered / 299
+  const roiMultiple = recovery.totalRecovered / PRO_MONTHLY_PRICE
 
   const pieData = [
     { name: 'Paid', value: recovery.invoicesRecovered, color: '#10b981' },

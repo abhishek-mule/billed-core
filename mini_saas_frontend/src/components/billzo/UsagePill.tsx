@@ -39,7 +39,7 @@ export function UsagePill() {
       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/5 border border-primary/20">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-xs font-bold text-primary uppercase tracking-wide">
-          {plan === 'growth' ? 'Growth' : 'Pro'} Plan
+          {plan === 'business' ? 'Business' : 'Pro'} Plan
         </span>
         <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">Unlimited</span>
       </div>
@@ -56,7 +56,7 @@ export function UsagePill() {
         <span className="text-foreground">Free Plan</span>
       </div>
       <div className="h-4 w-px bg-border" />
-      <span className="text-[11px] font-medium text-muted-foreground">Unlimited invoices &amp; reminders</span>
+      <span className="text-[11px] font-medium text-muted-foreground">5 recovery actions / month</span>
       <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
     </div>
   );

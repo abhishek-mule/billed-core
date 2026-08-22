@@ -17,7 +17,11 @@ const razorpay = process.env.RAZORPAY_KEY_ID
     })
   : null
 
-const PLAN_PRICE_PAISE: Record<string, number> = { pro: 29900, business: 59900 }
+// Phase-1 pricing: Pro is ONE flat subscription (₹599/month) — no per-recovery
+// commission, no separate WhatsApp bill. The recurring Razorpay plan referenced
+// by RAZORPAY_PLAN_ID is configured in the Razorpay dashboard and MUST match
+// this amount; the one-time order fallback below charges it directly.
+const PLAN_PRICE_PAISE: Record<string, number> = { pro: 59900, business: 59900 }
 
 /**
  * Create a RECURRING Razorpay Subscription for the authenticated tenant.

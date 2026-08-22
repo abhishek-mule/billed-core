@@ -7,6 +7,7 @@ import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
+import { PRO_MONTHLY_PRICE } from "@/lib/billzo/plan-limits"
 
 interface PaywallModalProps {
   type: "invoice" | "reminder"
@@ -60,7 +61,8 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
 
   if (!open) return null
 
-  const handleUpgrade = async (plan: 'pro' | 'growth') => {
+  const handleUpgrade = async () => {
+    const plan = 'pro' as const
     setLoading(true)
     try {
       const tenantId = getCookie('bz_tenant')
@@ -102,7 +104,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
           amount: data.amount,
           order_id: data.orderId,
           name: 'BillZo',
-          description: plan === 'growth' ? 'BillZo Growth Plan' : 'BillZo Pro Plan',
+          description: 'BillZo Pro Plan',
           handler: async () => {
             await fetch("/api/payment/upgrade", {
               method: "POST",
@@ -141,7 +143,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
     }
   }
 
-  const proPrice = 299
+  const proPrice = PRO_MONTHLY_PRICE
   const roiMultiple = recoveredAmount >= proPrice ? Math.floor(recoveredAmount / proPrice) : 0
   const limitLabel = type === 'invoice' ? 'invoices' : 'reminders'
 
@@ -184,26 +186,26 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
                     That&apos;s <span className="font-bold text-primary">{roiMultiple}x</span> what Pro costs.
-                    Unlock unlimited potential.
+                    Unlock automated recovery.
                   </p>
 
                   <div className="mt-8 space-y-3 text-left bg-muted/40 rounded-xl p-5 border border-border">
                     <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Unlimited invoices &amp; reminders</span>
+                      <span>Automated WhatsApp recovery on autopilot</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Automated recovery workflow</span>
+                      <span>Smart queue, promise tracking &amp; auto-stop after payment</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Priority support & insights</span>
+                      <span>One flat subscription — no cut of recovered money</span>
                     </div>
                   </div>
 
                   <button
-                    onClick={() => handleUpgrade('pro')}
+                    onClick={() => handleUpgrade()}
                     disabled={loading}
                     className="mt-6 w-full py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
@@ -212,17 +214,9 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                     ) : (
                       <>
                         <Lock className="h-4 w-4" />
-                        Unlock Pro • ₹299/mo
+                        Unlock Pro • ₹{PRO_MONTHLY_PRICE}/mo
                       </>
                     )}
-                  </button>
-
-                  <button
-                    onClick={() => handleUpgrade('growth')}
-                    disabled={loading}
-                    className="mt-3 w-full py-2.5 text-xs font-bold text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors"
-                  >
-                    Switch to Growth • ₹599/mo
                   </button>
                 </>
               ) : (
@@ -242,11 +236,11 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                   <div className="mt-8 space-y-3 text-left bg-muted/40 rounded-xl p-5 border border-border">
                     <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Unlimited invoices &amp; reminders</span>
+                      <span>Automated recovery on your existing WhatsApp number</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
                       <Zap className="h-4 w-4 text-primary" />
-                      <span>Automated recovery reminders</span>
+                      <span>Smart queue, promise tracking &amp; auto-stop after payment</span>
                     </div>
                     {pendingAmount > 0 && (
                       <div className="flex items-center gap-3 text-xs font-semibold text-foreground">
@@ -257,7 +251,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                   </div>
 
                   <button
-                    onClick={() => handleUpgrade('pro')}
+                    onClick={() => handleUpgrade()}
                     disabled={loading}
                     className="mt-6 w-full py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
@@ -266,7 +260,7 @@ export function PaywallModal({ type, open, onClose, currentCount, limit }: Paywa
                     ) : (
                       <>
                         <Lock className="h-4 w-4" />
-                        Unlock Pro • ₹299/mo
+                        Unlock Pro • ₹{PRO_MONTHLY_PRICE}/mo
                       </>
                     )}
                   </button>

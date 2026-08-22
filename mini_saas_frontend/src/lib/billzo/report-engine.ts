@@ -3,6 +3,7 @@
 import type { Invoice, Payment, WhatsAppEvent, RecoveryAttempt, InvoiceItem, Product, Customer } from './types'
 import { formatINR } from '@/lib/utils'
 import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from './recovery-risk'
+import { PRO_MONTHLY_PRICE } from './plan-limits'
 
 export type PlanType = 'starter' | 'pro' | 'growth'
 
@@ -205,7 +206,7 @@ export function computeRecoveryMetrics(
     ? Math.round(recoveryDays.reduce((s, d) => s + d, 0) / recoveryDays.length)
     : 0
 
-  const roiMultiple = 299 > 0 ? Math.round(totalRecovered / 299) : 0
+  const roiMultiple = PRO_MONTHLY_PRICE > 0 ? Math.round(totalRecovered / PRO_MONTHLY_PRICE) : 0
 
   const pendingBreakdown: PendingInvoice[] = unpaidInvoices.map(inv => ({
     id: inv.id,

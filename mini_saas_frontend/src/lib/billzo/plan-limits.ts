@@ -26,6 +26,14 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   enterprise: { reminders: reminderMonthlyAllowance('enterprise'), branches: -1, api: true },
 }
 
+/**
+ * Pro is one flat subscription — the merchant's entire mental model in a
+ * sentence: "₹599/month, and BillZo handles recovery." No per-recovery
+ * commission, no cut of recovered money, no separate WhatsApp bill.
+ * Single source of truth so UI copy, ROI math and Razorpay stay in sync.
+ */
+export const PRO_MONTHLY_PRICE = 599
+
 export const FEATURES: Record<PlanType, readonly Feature[]> = {
   starter: ['manual_reminders'],
   pro: ['manual_reminders', 'auto_recovery', 'recovery_queue', 'promise_tracking', 'cashflow_forecast'],

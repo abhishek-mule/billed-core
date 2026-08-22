@@ -11,12 +11,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await validateJsonBody<{ plan: string }>(request, {
-      fields: { plan: { required: true, type: 'string', message: 'Plan is required (pro or growth)' } },
+      fields: { plan: { required: true, type: 'string', message: 'Plan is required (pro)' } },
     })
     if (body.response) return body.response
     const { plan } = body.data!
 
-    if (!['pro', 'growth'].includes(plan)) {
+    if (plan !== 'pro') {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 

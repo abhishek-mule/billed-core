@@ -89,8 +89,8 @@ export function Settings() {
             </div>
             <div className="p-3 rounded-xl bg-muted/40 border border-border/60">
               <p className="text-[11px] font-medium text-muted-foreground">Monthly Software Cost</p>
-              <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">₹299</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">₹299 / month</p>
+              <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">₹599</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">₹599 / month</p>
             </div>
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
               <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Return on Investment</p>

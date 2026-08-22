@@ -2,22 +2,32 @@
 
 ## Philosophy
 
-> BillZo becomes the memory of your business, and you pay when it starts bringing your money back.
+> One sentence, one bill: **"₹599/month, and BillZo handles recovery."**
 
-Free tier is designed to build habit (unlimited invoices + unlimited manual reminders), not to cap usage. The paid upgrade sells relief from the daily pain of overdue money — not "more software access."
+The paid plan is a single flat subscription (Pro, ₹599/month). There is **no per-recovery
+commission, no percentage of recovered money, no separate WhatsApp/message bill** — attribution
+of "who caused the recovery" is messy and creates pricing disputes. Usage tracking exists only
+as fair-use visibility, never as a variable bill.
+
+Free tier is designed to build habit (5 recovery actions/month), not to cap usage. The paid upgrade sells relief from the daily pain of overdue money — not "more software access."
 
 ## Plan Features
 
-| Feature | Starter | Pro (₹299) | Growth (₹599) |
+| Feature | Starter (Free) | Pro (₹599) | Business (Custom) |
 |---|---|---|---|
 | Invoices | Unlimited | Unlimited | Unlimited |
-| Manual reminders | Unlimited | Unlimited | Unlimited |
+| Recovery actions | 5 / month | Generous fair-use allowance | Generous fair-use allowance |
 | Auto recovery | — | ✅ | ✅ |
 | Recovery queue | Preview only | Full | Full |
 | Promise tracking | — | ✅ | ✅ |
 | Cashflow forecast | — | ✅ | ✅ |
 | Advanced analytics | — | — | ✅ |
 | Exports | — | — | ✅ |
+
+Pricing constants live in `src/lib/billzo/plan-limits.ts` (`PRO_MONTHLY_PRICE`) and
+`packages/shared/src/plan-limits.ts` (`REMINDER_MONTHLY_ALLOWANCE`). Razorpay's recurring plan
+(`RAZORPAY_PLAN_ID`, configured in the dashboard) must match `PLAN_PRICE_PAISE` in
+`/api/payment/create-subscription`.
 
 Promotions (like `free_recovery_trial`) are **not** in the permanent feature map. They are checked separately via `feature-gate.ts`.
 

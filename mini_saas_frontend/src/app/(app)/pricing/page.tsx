@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Loader2, Check, ArrowUpRight, X, ChevronDown } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { Modal } from "@/components/billzo/Modal"
-import { PLAN_LIMITS, isUnlimited } from "@/lib/billzo/plan-limits"
+import { PLAN_LIMITS, isUnlimited, PRO_MONTHLY_PRICE } from "@/lib/billzo/plan-limits"
 
 type InterestPlan = 'growth' | 'business' | 'enterprise' | null
 
@@ -14,8 +14,8 @@ type InterestPlan = 'growth' | 'business' | 'enterprise' | null
 const reminderFeature = (planCode: keyof typeof PLAN_LIMITS): string => {
   const limit = PLAN_LIMITS[planCode].reminders
   return isUnlimited(limit)
-    ? 'Unlimited recovery reminders'
-    : `${limit} recovery reminders / month`
+    ? 'Unlimited recovery actions'
+    : `${limit} recovery actions / month`
 }
 
 const PLANS = [
@@ -37,16 +37,16 @@ const PLANS = [
   {
     code: 'pro',
     name: 'Pro',
-    price: 299,
-    desc: 'Automate collections and recover money 3x faster.',
+    price: PRO_MONTHLY_PRICE,
+    desc: 'Automate collections and recover money faster.',
     features: [
-      reminderFeature('pro'),
-      'Automated WhatsApp payment reminders',
+      'Automated recovery on your existing WhatsApp number',
       'Smart Recovery Queue & Priority engine',
       'WhatsApp delivery & read receipts',
       'Payment promise tracking & broken promise alerts',
+      'Auto-stop after payment — never chase a paid customer',
     ],
-    cta: 'Upgrade to Pro (₹299/mo)',
+    cta: `Upgrade to Pro (₹${PRO_MONTHLY_PRICE}/mo)`,
     highlight: true,
   },
 ]
@@ -273,7 +273,7 @@ export default function PricingPage() {
               {plan.code === 'pro' && (
                 <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-700 dark:text-emerald-300 space-y-1">
                   <p className="font-bold">⚡ Average merchant recovers ₹15,000–₹50,000/month</p>
-                  <p className="text-[11px] opacity-90 font-normal">BillZo costs only ₹299/month (~₹10/day)</p>
+                  <p className="text-[11px] opacity-90 font-normal">One flat ₹{PRO_MONTHLY_PRICE}/month · WhatsApp automation included · No cut of recovered money</p>
                 </div>
               )}
 
@@ -332,7 +332,7 @@ export default function PricingPage() {
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> No setup fees</li>
           <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Cancel anytime</li>
-          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Annual billing saves ~20%</li>
+          <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> No percentage of recovered money</li>
           <li className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-success" /> Data export always yours</li>
         </ul>
       </div>

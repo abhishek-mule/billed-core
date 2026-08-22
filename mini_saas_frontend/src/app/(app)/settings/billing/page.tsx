@@ -6,7 +6,7 @@ import Link from "next/link"
 import { ChevronLeft, Crown, IndianRupee, TrendingUp, ArrowUpRight, CheckCircle2, AlertCircle, Loader2 } from "lucide-react"
 import { db } from "@/lib/billzo/db"
 import { getCookie } from "@/lib/cookies"
-import { PLAN_LIMITS } from "@/lib/billzo/plan-limits"
+import { PLAN_LIMITS, PRO_MONTHLY_PRICE } from "@/lib/billzo/plan-limits"
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Starter",
@@ -17,7 +17,7 @@ const PLAN_LABELS: Record<string, string> = {
 
 const PLAN_PRICES: Record<string, string> = {
   starter: "₹0",
-  pro: "₹299",
+  pro: `₹${PRO_MONTHLY_PRICE}`,
   business: "Custom",
   enterprise: "Custom",
 }
@@ -115,6 +115,10 @@ export default function BillingPage() {
             <IndianRupee className="w-3 h-3" />
             Next billing: {nextBilling}
           </div>
+          <div className="flex items-center gap-2 text-xs text-success border-t border-border pt-3">
+            <CheckCircle2 className="w-3 h-3 shrink-0" />
+            One flat subscription — WhatsApp automation included, no per-recovery commission, no percentage of recovered money
+          </div>
         </div>
 
         {/* Recovery Impact */}
@@ -190,14 +194,14 @@ export default function BillingPage() {
                 <span className="text-sm text-foreground">July 2026</span>
                 <CheckCircle2 className="w-3.5 h-3.5 text-success" />
               </div>
-              <span className="text-sm font-medium text-foreground">₹299</span>
+              <span className="text-sm font-medium text-foreground">₹{PRO_MONTHLY_PRICE}</span>
             </div>
             <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/30">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-foreground">June 2026</span>
                 <CheckCircle2 className="w-3.5 h-3.5 text-success" />
               </div>
-              <span className="text-sm font-medium text-foreground">₹299</span>
+              <span className="text-sm font-medium text-foreground">₹{PRO_MONTHLY_PRICE}</span>
             </div>
           </div>
         </div>

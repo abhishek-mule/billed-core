@@ -15,7 +15,7 @@ import { PLAN_LIMITS } from '@/lib/billzo/plan-limits'
 
 const PLAN_LABELS: Record<string, string> = {
   starter: 'Starter Plan',
-  pro: 'Growth Plan',
+  pro: 'Pro Plan',
   business: 'Business Plan',
   enterprise: 'Enterprise',
 }

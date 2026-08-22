@@ -1,4 +1,5 @@
 import type { PlanType } from '@/lib/billzo/report-engine'
+import { PRO_MONTHLY_PRICE } from '@/lib/billzo/plan-limits'
 
 interface MetricCardProps {
   label: string
@@ -64,7 +65,7 @@ export function PaywallTeaser({ plan }: PaywallTeaserProps) {
         Upgrade to Pro to see full history &amp; advanced analytics
       </p>
       <button className="mt-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2 text-sm font-bold text-white">
-        Upgrade to Pro ₹299/mo
+        Upgrade to Pro ₹{PRO_MONTHLY_PRICE}/mo
       </button>
     </div>
   )
