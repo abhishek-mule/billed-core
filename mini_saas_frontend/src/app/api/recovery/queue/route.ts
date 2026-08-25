@@ -5,6 +5,7 @@ import { buildQueueItems } from '@/lib/recovery/queue-service'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { fetchPriorityCases } from '@/lib/recovery/priority-query'
 import { requireFeature } from '@/lib/auth/feature-gate'
+import { calculateDaysOverdue } from '@/lib/billzo/days-overdue'
 
 export const dynamic = 'force-dynamic'
 
@@ -401,10 +402,19 @@ export async function GET(request: NextRequest) {
     // Re-sort so most important cases come first regardless of origin
     priorityCases.sort((a, b) => b.attentionScore - a.attentionScore)
 
-    // Override priority-case totals with invoice-derived amounts (single source of truth)
+    // Override priority-case totals with invoice-derived amounts (single source of truth).
+    // oldestOverdueDays is ALSO re-derived from invoices — the recovery_cases row can be
+    // stale (updated only on case events), which caused 48-vs-55-day discrepancies
+    // between the queue and the customer workspace.
     for (const pc of priorityCases) {
       const { out } = invAmounts(pc.customerId)
       pc.totalOverdue = out
+      const invDays = (groupedInvoices.get(pc.customerId) || [])
+        .filter((i: any) => i.due_date)
+        .map((i: any) => calculateDaysOverdue(i.due_date))
+      if (invDays.length > 0) {
+        pc.oldestOverdueDays = Math.max(...invDays)
+      }
     }
 
     // Delivery status per customer (from the joined customers.row), used

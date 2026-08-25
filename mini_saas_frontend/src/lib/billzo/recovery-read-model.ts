@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { calculateDaysOverdue } from '@/lib/billzo/days-overdue'
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
@@ -436,7 +437,7 @@ export async function getRecoveryReadModel(tenantId: string): Promise<RecoveryRe
     const out = invs.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
     const overdueInvs = invs.filter((i: any) => i.due_date && new Date(i.due_date) < now)
     const ovd = overdueInvs.length > 0
-      ? Math.max(...overdueInvs.map((i: any) => Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000)))
+      ? Math.max(...overdueInvs.map((i: any) => calculateDaysOverdue(i.due_date)))
       : 0
     const firstInv = invs[0]
     return { out, ovd, invoiceNumber: firstInv?.invoice_number || null }
@@ -590,7 +591,7 @@ export async function getQueueProjection(tenantId: string): Promise<QueueProject
     const out = invs.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
     const overdueInvs = invs.filter((i: any) => i.due_date && new Date(i.due_date) < now)
     const ovd = overdueInvs.length > 0
-      ? Math.max(...overdueInvs.map((i: any) => Math.floor((now.getTime() - new Date(i.due_date).getTime()) / 86400000)))
+      ? Math.max(...overdueInvs.map((i: any) => calculateDaysOverdue(i.due_date)))
       : 0
     return { out, ovd }
   }
