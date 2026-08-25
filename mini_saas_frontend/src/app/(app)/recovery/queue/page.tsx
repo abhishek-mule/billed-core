@@ -24,6 +24,8 @@ import {
   deriveWhyLines, dominantAction, type DominantActionInput,
 } from "@/lib/billzo/reminder-state"
 import { AutoRecoverySheet } from "@/components/billzo/AutoRecoverySheet"
+import { getRecommendedAction, getActionColorClasses } from "@/lib/billzo/recommended-action"
+import { UserPlus } from "lucide-react"
 
 interface PriorityCase {
   caseId: string
@@ -820,22 +822,37 @@ export default function RecoveryQueuePage() {
   )
 }
 
-// ── Customer Card ──
+function getRecommendedActionForCard(c: PriorityCase) {
+  return getRecommendedAction({
+    overdueDays: c.oldestOverdueDays,
+    brokenPromises: c.brokenPromises,
+    ignoredReminders: c.ignoredReminders,
+    hasActivePromise: !!c.promiseToPayDate,
+    promiseDueDays: c.promiseToPayDate
+      ? Math.ceil((new Date(c.promiseToPayDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      : undefined,
+    hasPhone: !!c.phone,
+    maxDeliveryStatus: c.lastDeliveryStatus === 'read' ? 'read' :
+                       c.lastDeliveryStatus === 'delivered' ? 'delivered' :
+                       c.lastDeliveryStatus === 'sent' ? 'sent' : null,
+    isPaid: c.totalOverdue <= 0,
+    lastPaymentAt: c.lastActivityAt,
+    hasActivePromiseDate: !!c.promiseToPayDate,
+    promiseToPayDate: c.promiseToPayDate,
+    customerTier: null,
+    overdueAmount: c.totalOverdue,
+  })
+}
 
-function getLikelihoodBadge(c: PriorityCase) {
-  if (c.brokenPromises > 0) {
-    return { label: "Low Chance (Broken)", cls: "bg-danger-soft text-danger border-danger/30" }
+function getActionIcon(action: string) {
+  switch (action) {
+    case 'call': return <Phone size={14} className="fill-current" />
+    case 'whatsapp': return <Send size={14} className="fill-current" />
+    case 'record_payment': return <CheckCircle2 size={14} className="fill-current" />
+    case 'promise': return <Clock size={14} className="fill-current" />
+    case 'open_customer': return <UserPlus size={14} className="fill-current" />
+    default: return <Target size={14} className="fill-current" />
   }
-  if (c.promiseToPayDate) {
-    return { label: "High Chance Today", cls: "bg-success-soft text-success border-success/30" }
-  }
-  if (c.attentionScore >= 70) {
-    return { label: "High Chance Today", cls: "bg-success-soft text-success border-success/30" }
-  }
-  if (c.attentionScore >= 40) {
-    return { label: "Medium Chance", cls: "bg-warning-soft text-warning border-warning/30" }
-  }
-  return { label: "Follow-up Needed", cls: "bg-muted text-muted-foreground border-border" }
 }
 
 function CustomerCard({
@@ -867,7 +884,8 @@ function CustomerCard({
   const stateInput = cardStateInput(c)
   const whyLines = deriveWhyLines(stateInput)
   const dominant = dominantAction(stateInput)
-  const likelihood = getLikelihoodBadge(c)
+  const recommended = getRecommendedActionForCard(c)
+  const actionColors = getActionColorClasses(recommended.color)
 
   // Prefetch timeline data when card mounts so History drawer opens instantly
   useEffect(() => { prefetchCustomerTimeline(c.customerId) }, [c.customerId])
@@ -902,9 +920,6 @@ function CustomerCard({
             >
               {c.customerName}
             </Link>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${likelihood.cls}`}>
-              {likelihood.label}
-            </span>
           </div>
           <div className="flex items-baseline gap-3 mt-1">
             <span className="text-2xl font-bold text-foreground tabular-nums">
@@ -971,18 +986,83 @@ function CustomerCard({
         </div>
       )}
 
-      {/* Phone missing — red, impossible to miss */}
+      {/* Phone missing — actionable */}
       {!c.phone && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 py-2 text-[11px] font-semibold text-danger">
-          <PhoneOff size={12} />
-          <span>Phone missing — cannot send WhatsApp</span>
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-danger-soft border border-danger/20 px-3 py-2">
+          <PhoneOff size={14} className="text-danger flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-danger">Phone number missing</p>
+            <p className="text-[11px] text-danger/80 mt-0.5">Add a phone number to enable WhatsApp automation</p>
+          </div>
+          <a
+            href={`/parties/${c.customerId}`}
+            className="flex-shrink-0 inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold text-danger bg-danger-soft rounded-lg hover:bg-danger/10 transition-colors"
+          >
+            Add Number
+          </a>
         </div>
       )}
 
-      {/* Fixed action sheet + history */}
+      {/* Recommended Action — clear, with why */}
+      {recommended.action !== 'none' && (
+        <div className="mt-3 rounded-xl p-3 border border-border/50 bg-card">
+          <div className="flex items-start gap-2.5">
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${actionColors.badge}`}>
+              <div className="fill-current">{getActionIcon(recommended.action)}</div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-foreground">{recommended.label}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${actionColors.badge}`}>
+                  {recommended.urgency.toUpperCase()}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">{recommended.reason}</p>
+              {recommended.alternative && (
+                <button
+onClick={() => {
+                    if (recommended.alternative?.action === 'call' && c.phone) {
+                      window.location.href = `tel:${c.phone}`
+                    } else if (recommended.alternative?.action === 'whatsapp') {
+                      onSend(c)
+                    }
+                  }}
+                  className="mt-1.5 text-[11px] font-medium text-primary hover:underline"
+                >
+                  Or {recommended.alternative.label}
+                </button>
+              )}
+            </div>
+            <div className="flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (recommended.action === 'call' && c.phone) {
+                    window.location.href = `tel:${c.phone}`
+                  } else if (recommended.action === 'whatsapp') {
+                    onSend(c)
+                  } else if (recommended.action === 'record_payment') {
+                    onPayment(c)
+                  } else if (recommended.action === 'promise') {
+                    onPromise(c)
+                  } else if (recommended.action === 'open_customer') {
+                    window.location.href = `/parties/${c.customerId}`
+                  }
+                }}
+                disabled={isSending}
+                className={`flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all active:scale-[0.98] ${actionColors.button}`}
+              >
+                {isSending ? <Loader2 size={13} className="animate-spin" /> : getActionIcon(recommended.action)}
+                {recommended.label}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action sheet + history */}
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
         <CustomerActionSheet
-          dominant={dominant}
+          dominant={dominantAction(stateInput)}
           busy={isSending}
           canWhatsApp={!!c.phone}
           onWhatsApp={() => onSend(c)}

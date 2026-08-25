@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
 import { ReminderStateBadge } from '@/components/billzo/ReminderStateBadge'
+import { calculateDaysOverdue } from '@/lib/billzo/days-overdue'
+import { getRecommendedAction } from '@/lib/billzo/recommended-action'
 
 type Customer = {
   id: string; name: string; phone: string; email: string | null; tier: string | null; gstin: string | null
@@ -52,8 +54,7 @@ function actionLabel(a: string) {
 
 function overdueDays(dueDate: string | null): number | null {
   if (!dueDate) return null
-  const diff = Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000)
-  return diff > 0 ? diff : 0
+  return calculateDaysOverdue(dueDate)
 }
 
 function recoveryScore(rc: CaseInfo | null): { score: number; label: string; color: string } {
@@ -197,13 +198,27 @@ export default function CustomerWorkspacePage() {
     maxDeliveryStatus,
   }
 
+  const recommended = rc ? getRecommendedAction({
+    overdueDays: overdueDaysValue ?? 0,
+    brokenPromises: rc.brokenPromises ?? 0,
+    ignoredReminders: 0,
+    hasActivePromise: !!(rc?.promiseDate && new Date(rc.promiseDate) >= new Date()),
+    promiseToPayDate: rc?.promiseDate ?? null,
+    hasPhone: !!c?.phone,
+    maxDeliveryStatus,
+    isPaid: (rc?.outstanding ?? 0) <= 0,
+  }) : null
+
   const nextAction = (() => {
-    if (rc?.nextAction === 'call') return { icon: <Phone size={15} />, label: 'Call Today', reason: 'Needs direct conversation', action: 'call' }
+    if (recommended && recommended.action !== 'none') {
+      const icon = recommended.action === 'call' ? <Phone size={15} />
+        : recommended.action === 'open_customer' ? <Phone size={15} />
+        : <Bell size={15} />
+      return { icon, label: recommended.label, reason: recommended.reason, action: recommended.action }
+    }
     if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed', action: 'visit' }
     if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid', action: 'record_payment' }
-    if (overdueDaysValue && overdueDaysValue > 7) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue, ${rc?.brokenPromises ? 'promises broken, ' : ''}ignored previous reminders`, action: 'send_reminder' }
-    if (overdueDaysValue && overdueDaysValue > 0) return { icon: <Bell size={15} />, label: 'Send Reminder', reason: `${overdueDaysValue} days overdue`, action: 'send_reminder' }
-    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: 'Customer balance', action: 'send_reminder' }
+    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: overdueDaysValue ? `${overdueDaysValue} days overdue` : 'Customer balance', action: 'send_reminder' }
   })()
 
   const actionColor = nextAction.action === 'call' ? 'red' : nextAction.action === 'visit' ? 'orange' : 'blue'
