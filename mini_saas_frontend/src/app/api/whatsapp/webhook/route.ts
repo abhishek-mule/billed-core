@@ -69,7 +69,15 @@ interface NormalizedMessage {
   to?: string
   timestamp?: string
   type?: string
-  text?: string
+  text?: string | { body?: string }
+}
+
+/** Meta sends text as { body: "..." }, Gupshup sends it as a plain string. */
+function textBody(text: NormalizedMessage['text']): string | null {
+  if (!text) return null
+  if (typeof text === 'string') return text
+  if (typeof text === 'object' && typeof text.body === 'string') return text.body
+  return null
 }
 interface NormalizedStatus {
   id?: string
@@ -198,8 +206,9 @@ async function processEvent(ev: NormalizedEvent, rawPayload: any) {
         direction: 'inbound',
         providerMessageId: msg.id ?? null,
         providerEventType: 'message',
+        providerStatus: 'received',
         attributionResult: customerId ? 'resolved' : 'customer_unmatched',
-        stateAfter: { from: msg.from, type: msg.type, text: msg.text?.slice(0, 300) },
+        stateAfter: { from: msg.from, type: msg.type, text: textBody(msg.text)?.slice(0, 300) },
         rawPayload: sanitizeRaw(msg),
         occurredAt: tsToIso(msg.timestamp),
       })
@@ -219,8 +228,9 @@ async function processEvent(ev: NormalizedEvent, rawPayload: any) {
         direction: 'outbound',
         providerMessageId: msg.id ?? null,
         providerEventType: 'smb_message_echoes',
+        providerStatus: 'sent',
         attributionResult: customerId ? 'resolved' : 'customer_unmatched',
-        stateAfter: { to: msg.to, type: msg.type, text: msg.text?.slice(0, 300) },
+        stateAfter: { to: msg.to, type: msg.type, text: textBody(msg.text)?.slice(0, 300) },
         rawPayload: sanitizeRaw(msg),
         occurredAt: tsToIso(msg.timestamp),
       })
@@ -297,7 +307,7 @@ async function persistInboundWhatsAppEvent(
     provider_message_id: msg.id ?? null,
     status: 'received',
     occurred_at: tsToIso(msg.timestamp) ?? new Date().toISOString(),
-    metadata: { type: msg.type, text: msg.text?.slice(0, 500) },
+    metadata: { type: msg.type, text: textBody(msg.text)?.slice(0, 500) },
   })
 }
 
@@ -332,7 +342,7 @@ async function persistEchoWhatsAppEvent(
     provider_message_id: msg.id ?? null,
     status: 'sent',
     occurred_at: tsToIso(msg.timestamp) ?? new Date().toISOString(),
-    metadata: { type: msg.type, text: msg.text?.slice(0, 500) },
+    metadata: { type: msg.type, text: textBody(msg.text)?.slice(0, 500) },
   })
 }
 
