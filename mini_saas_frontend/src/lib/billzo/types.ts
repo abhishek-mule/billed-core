@@ -167,6 +167,8 @@ export type Customer = {
   notes?: string
   automationMode?: AutomationMode
   lastUsedAt: string
+  lastInteractionAt?: string
+  lastMessageAt?: string
   invoiceCount: number
   createdAt: string
   updatedAt: string
@@ -350,8 +352,11 @@ export type WhatsAppEvent = {
   invoiceId?: string
   customerId?: string
   phone?: string
+  phoneNumberId?: string
   direction?: 'outbound' | 'inbound'
   messageType?: string
+  messageType_?: string
+  content?: string
   failureReason?: string
   error?: string
   recoveryAttemptId?: string
@@ -370,6 +375,24 @@ export type WhatsAppEvent = {
   timeToClickSeconds?: number
   occurredAt: string
   createdAt: string
+}
+
+export type WhatsAppConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+export type WhatsAppConnection = {
+  id: string
+  tenantId: string
+  wabaId: string
+  phoneNumberId: string
+  displayName: string
+  provider: 'gupshup'
+  connectionStatus: WhatsAppConnectionStatus
+  errorMessage?: string
+  accessToken?: string
+  expiresAt?: string
+  createdAt: string
+  updatedAt: string
+  lastTestAt?: string
 }
 
 export type RecoveryAttempt = {

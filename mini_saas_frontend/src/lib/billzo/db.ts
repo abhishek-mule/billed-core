@@ -19,6 +19,7 @@ import type {
   RecoveryAttribution,
   Tenant,
   WhatsAppEvent,
+  WhatsAppConnection,
 } from './types'
 
 export interface User {
@@ -41,6 +42,7 @@ class BillzoDB extends Dexie {
   inventoryMovements!: Table<InventoryMovement, string>
   payments!: Table<Payment, string>
   whatsappEvents!: Table<WhatsAppEvent, string>
+  whatsappConnections!: Table<WhatsAppConnection, string>
   recoveryAttempts!: Table<RecoveryAttempt, string>
   recoveryCases!: Table<RecoveryCase, string>
   recoveryAttributions!: Table<RecoveryAttribution, string>
@@ -94,10 +96,17 @@ class BillzoDB extends Dexie {
     this.version(8).stores({
       invoices: 'id, tenantId, customerId, status, customerName, dueAt, nextRecoveryAt, lastWhatsAppStatus, lastReminderAt, isSnoozed, updatedAt, syncStatus',
     })
-    this.version(9).stores({
-      recoveryActivities: 'id, tenantId, invoiceId, customerId, type, actor, createdAt',
-    })
-  }
+this.version(9).stores({
+    recoveryActivities: 'id, tenantId, invoiceId, customerId, type, actor, createdAt',
+  })
+  this.version(10).stores({
+    whatsappConnections: 'id, tenantId, wabaId, phoneNumberId, provider, connectionStatus, updatedAt',
+  })
+  this.version(11).stores({
+    // Webhook idempotency: dedup + status lookup by provider message id.
+    whatsappEvents: 'id, tenantId, invoiceId, recoveryAttemptId, status, occurredAt, providerMessageId, [phoneNumberId+providerMessageId]',
+  })
+}
 }
 
 let instance: BillzoDB | null = null

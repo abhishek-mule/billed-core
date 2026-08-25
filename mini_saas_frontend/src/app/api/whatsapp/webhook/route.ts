@@ -1,151 +1,215 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { emitWhatsAppStatusUpdated } from '@/lib/billzo/events'
-import { generateEventSequence } from '@billzo/shared'
-import type { WhatsAppStatus } from '@/lib/billzo/types'
+import { getWhatsAppConnectionByPhoneNumberId, updateWhatsAppConnection } from '@/lib/billzo/whatsapp-connection'
+import { uuid } from '@/lib/billzo/db'
+import { db } from '@/lib/billzo/db'
 
-export const dynamic = 'force-dynamic'
+const WEBHOOK_SECRET = process.env.GUPSHUP_WEBHOOK_SECRET
 
-function parseGupshupStatus(status: string): WhatsAppStatus {
-  switch (status?.toLowerCase()) {
-    case 'delivered': return 'delivered'
-    case 'read': return 'read'
-    case 'sent': return 'sent'
-    case 'failed': return 'failed'
-    default: return 'sent'
-  }
+function verifySignature(payload: string, signature: string): boolean {
+  if (!WEBHOOK_SECRET) return true
+  const expected = crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(payload)
+    .digest('hex')
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+}
+
+async function isDuplicateEvent(phoneNumberId: string, messageId: string): Promise<boolean> {
+  if (!messageId) return false
+  const existing = await db().whatsappEvents
+    .where('[phoneNumberId+providerMessageId]')
+    .equals([phoneNumberId, messageId])
+    .first()
+  return !!existing
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const signature256 = request.headers.get('x-hub-signature-256')
-    const bodyText = await request.text()
+    const rawBody = await request.text()
+    const signature = request.headers.get('x-gupshup-signature') || request.headers.get('x-hub-signature-256')
 
-    const appSecret = process.env.META_APP_SECRET
-    if (appSecret && signature256) {
-      let signature = signature256
-      if (signature.startsWith('sha256=')) {
-        signature = signature.substring(7)
-      }
-      const { validateWebhookSignature } = await import('@/lib/billzo/api-middleware')
-      if (!validateWebhookSignature(bodyText, signature, appSecret)) {
-        console.error('[WhatsAppWebhook] Invalid signature')
-        return new Response('Invalid signature', { status: 401 })
-      }
+    if (WEBHOOK_SECRET && signature && !verifySignature(rawBody, signature.replace('sha256=', ''))) {
+      console.warn('[WhatsAppWebhook] Invalid signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
-    let body: any
+    let payload: any
     try {
-      body = JSON.parse(bodyText)
+      payload = JSON.parse(rawBody)
     } catch {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
-    const { phone, status: rawStatus, messageId, error, id } = body
-    const providerMessageId = messageId || id
+    const { event, timestamp, data } = payload
 
-    if (!providerMessageId) {
-      return NextResponse.json({ status: 'ok' })
+    console.log('[WhatsAppWebhook] Event:', event, 'PhoneNumberId:', data?.phone_number_id)
+
+    const phoneNumberId = data?.phone_number_id
+    if (!phoneNumberId) {
+      console.warn('[WhatsAppWebhook] No phone_number_id in payload')
+      return NextResponse.json({ received: true })
     }
 
-    // Sanitize: only allow safe characters to prevent filter injection
-    const safeId = String(providerMessageId).replace(/[^a-zA-Z0-9_\-\.]/g, '')
+    const connection = await (await import('@/lib/billzo/whatsapp-connection')).getWhatsAppConnectionByPhoneNumberId(phoneNumberId)
+    if (!connection) {
+      console.warn('[WhatsAppWebhook] No connection found for phoneNumberId:', phoneNumberId)
+      return NextResponse.json({ received: true })
+    }
 
-    const parsedStatus = parseGupshupStatus(rawStatus || '')
+    const tenantId = connection.tenantId
     const now = new Date().toISOString()
 
-    // Find the canonical billzo_message_id for this message
-    const { data: existing } = await supabaseAdmin
-      .from('whatsapp_events')
-      .select('billzo_message_id, invoice_id, tenant_id')
-      .or(`provider_message_id.eq.${safeId},id.eq.${safeId}`)
-      .limit(1)
-    // Note: safeId is sanitized to [a-zA-Z0-9_\-\.] above — prevents Supabase filter injection
+    switch (event) {
+      case 'message':
+      case 'messages': {
+        const messages = Array.isArray(data.messages) ? data.messages : [data.messages]
+        for (const msg of messages) {
+          if (await isDuplicateEvent(phoneNumberId, msg.id)) {
+            console.log('[WhatsAppWebhook] Duplicate event skipped:', msg.id)
+            continue
+          }
+          await db().whatsappEvents.add({
+            id: uuid(),
+            tenantId,
+            phoneNumberId,
+            direction: 'inbound',
+            messageType: 'customer',
+            providerMessageId: msg.id,
+            content: msg.text?.body || msg.body,
+            messageType_: msg.type,
+            status: 'received',
+            occurredAt: new Date(parseInt(msg.timestamp) * 1000).toISOString(),
+            createdAt: new Date().toISOString(),
+            metadata: { from: msg.from, timestamp: msg.timestamp },
+          })
 
-    if (!existing || existing.length === 0) {
-      console.log('[WhatsAppWebhook] No existing event found, storing as new message')
-      // Store a new message row with the webhook status
-      const billzoMessageId = `webhook_${providerMessageId}`
-      const { data: newEvent } = await supabaseAdmin
-        .from('whatsapp_events')
-        .insert({
-          id: crypto.randomUUID(),
-          billzo_message_id: billzoMessageId,
-          event_sequence: Number(generateEventSequence()),
-          status: parsedStatus,
-          occurred_at: now,
-          created_at: now,
-          provider_message_id: safeId,
-          provider: 'gupshup',
-          direction: 'inbound',
-          event_layer: 'transport',
-          sync_status: 'synced',
-          error: error || null,
-        })
-        .select('id, invoice_id, tenant_id')
-        .single()
-
-      if (newEvent) {
-        await emitWhatsAppStatusUpdated({
-          eventId: newEvent.id,
-          billzoMessageId,
-          invoiceId: newEvent.invoice_id,
-          tenantId: newEvent.tenant_id,
-          status: parsedStatus,
-          provider: 'gupshup',
-          providerMessageId,
-          timestamp: now,
-        })
+          await handleCustomerMessage(tenantId, msg)
+        }
+        break
       }
 
-      return NextResponse.json({ status: 'ok' })
+      case 'smb_message_echoes': {
+        const messages = Array.isArray(data.messages) ? data.messages : [data.messages]
+        for (const msg of messages) {
+          if (await isDuplicateEvent(phoneNumberId, msg.id)) {
+            console.log('[WhatsAppWebhook] Duplicate echo event skipped:', msg.id)
+            continue
+          }
+          await db().whatsappEvents.add({
+            id: uuid(),
+            tenantId,
+            phoneNumberId,
+            direction: 'outbound',
+            messageType: 'merchant_app_reply',
+            providerMessageId: msg.id,
+            content: msg.text?.body || msg.body,
+            messageType_: msg.type,
+            status: 'sent',
+            occurredAt: new Date(parseInt(msg.timestamp) * 1000).toISOString(),
+            createdAt: new Date().toISOString(),
+            metadata: { from: msg.from, to: msg.to, timestamp: msg.timestamp },
+          })
+
+          await handleMerchantAppReply(tenantId, msg)
+        }
+        break
+      }
+
+      case 'message_status':
+      case 'statuses': {
+        const statuses = Array.isArray(data.statuses) ? data.statuses : [data.statuses]
+        for (const status of statuses) {
+          if (await isDuplicateEvent(phoneNumberId, status.id)) {
+            console.log('[WhatsAppWebhook] Duplicate status event skipped:', status.id)
+            continue
+          }
+          await db().whatsappEvents.add({
+            id: uuid(),
+            tenantId,
+            phoneNumberId,
+            direction: 'outbound',
+            messageType: 'status',
+            providerMessageId: status.id,
+            status: status.status,
+            occurredAt: new Date(parseInt(status.timestamp) * 1000).toISOString(),
+            createdAt: new Date().toISOString(),
+            metadata: { recipient: status.recipient_id, conversation: status.conversation },
+          })
+
+          await updateMessageStatus(connection.tenantId, status)
+        }
+        break
+      }
+
+      case 'template_status':
+      case 'template': {
+        const templateId = data.id || data.template_id
+        await db().whatsappEvents.add({
+          id: uuid(),
+          tenantId,
+          phoneNumberId,
+          messageType: 'template_status',
+          providerMessageId: templateId,
+          status: data.status,
+          occurredAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          metadata: { template_name: data.name, language: data.language, reason: data.reason },
+        })
+        break
+      }
+
+      case 'template_category_update': {
+        break
+      }
+
+      default:
+        console.log('[WhatsAppWebhook] Unhandled event:', event)
     }
 
-    const { billzo_message_id, invoice_id, tenant_id } = existing[0]
-
-    // Insert a new event row (append-only)
-    const { data: newEvent } = await supabaseAdmin
-      .from('whatsapp_events')
-      .insert({
-        id: crypto.randomUUID(),
-        billzo_message_id,
-        event_sequence: Number(generateEventSequence()),
-        status: parsedStatus,
-        occurred_at: now,
-        created_at: now,
-        invoice_id,
-        tenant_id,
-        provider: 'gupshup',
-        provider_message_id: providerMessageId,
-        direction: 'outbound',
-        event_layer: 'transport',
-        sync_status: 'synced',
-        error: error || null,
-      })
-      .select('id')
-      .single()
-
-    if (newEvent) {
-      await emitWhatsAppStatusUpdated({
-        eventId: newEvent.id,
-        billzoMessageId: billzo_message_id,
-        invoiceId: invoice_id,
-        tenantId: tenant_id,
-        status: parsedStatus,
-        provider: 'gupshup',
-        providerMessageId,
-        timestamp: now,
-      })
-    }
-
-    return NextResponse.json({ status: 'ok' })
-  } catch (err: any) {
-    console.error('[WhatsAppWebhook] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ received: true })
+  } catch (error: any) {
+    console.error('[WhatsAppWebhook] Error:', error)
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
 }
 
-export async function GET() {
-  return NextResponse.json({ status: 'Webhook active' })
+async function handleCustomerMessage(tenantId: string, msg: any) {
+  const customerPhone = msg.from
+  if (!customerPhone) return
+
+  const customer = await (await import('@/lib/billzo/db')).db().customers
+    .where('tenantId').equals(tenantId)
+    .filter(c => c.phone === customerPhone || c.whatsapp_number === customerPhone)
+    .first()
+
+  if (customer) {
+    const now = new Date().toISOString()
+    await (await import('@/lib/billzo/db')).db().customers.update(customer.id, {
+      lastInteractionAt: new Date().toISOString(),
+      lastMessageAt: new Date().toISOString(),
+    })
+  }
+}
+
+async function handleMerchantAppReply(tenantId: string, msg: any) {
+  // Merchant manually replied from WhatsApp Business App
+  // Could pause automation for this customer
+}
+
+async function updateMessageStatus(tenantId: string, status: any) {
+  const providerMessageId = status.id
+  if (!providerMessageId) return
+
+  const event = await (await import('@/lib/billzo/db')).db().whatsappEvents
+    .where('providerMessageId').equals(providerMessageId)
+    .first()
+
+  if (event) {
+    await (await import('@/lib/billzo/db')).db().whatsappEvents.update(event.id, {
+      status: status.status,
+      deliveredAt: status.status === 'delivered' ? new Date().toISOString() : event.deliveredAt,
+      readAt: status.status === 'read' ? new Date().toISOString() : event.readAt,
+    })
+  }
 }
