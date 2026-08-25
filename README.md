@@ -3,8 +3,8 @@
 BillZo is a **reconstructive financial recovery engine** designed to synchronize truth between merchants, customers, and payment rails.
 
 ## Documentation Entry Points
-*   **[System Constitution](ARCHITECTURE_TRUTH.md):** The core architectural invariants and dimensional truth model.
-*   **[Implementation Plan](IMPLEMENTATION_PLAN.md):** The 45-day roadmap to the First Rupee Recovery Loop.
+*   **[System Constitution](docs/architecture/ARCHITECTURE_TRUTH.md):** The core architectural invariants and dimensional truth model.
+*   **[Implementation Plan](docs/development/IMPLEMENTATION_PLAN.md):** The 45-day roadmap to the First Rupee Recovery Loop.
 
 ## Core Pillars
 1.  **Money Truth:** Immutable event ledger + pure reducer projection.

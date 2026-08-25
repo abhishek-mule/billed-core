@@ -81,5 +81,5 @@ You are working on **BillZo**, a WhatsApp-native recovery platform for Indian me
 
 ## Context Preservation Strategy
 *   Update `AGENT.md` after every session with a fix log.
-*   Log architectural shifts in `ARCHITECTURE_TRUTH.md`.
+*   Log architectural shifts in `docs/architecture/ARCHITECTURE_TRUTH.md`.
 *   Keep discipline rules in this `AGENT.md` "Frontend Discipline" section.
