@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCookie } from '@/lib/cookies'
-import { createWhatsAppConnection, setWhatsAppConnectionStatus } from '@/lib/billzo/whatsapp-connection'
-import { uuid } from '@/lib/billzo/db'
+import { upsertWhatsAppConnection, recordPilotEvent } from '@/lib/billzo/whatsapp-server'
+
+export const dynamic = 'force-dynamic'
 
 const GUPSHUP_TOKEN_URL = process.env.GUPSHUP_TOKEN_URL || 'https://api.gupshup.io/partner/app/onboarding/token'
-const GUPSHUP_API_URL = process.env.GUPSHUP_API_URL || 'https://api.gupshup.io'
 const GUPSHUP_PARTNER_ID = process.env.GUPSHUP_PARTNER_ID
 const GUPSHUP_API_KEY = process.env.GUPSHUP_API_KEY
 
+/**
+ * Gupshup Embedded Signup callback (migration 090).
+ *
+ * Exchanges the OAuth code, then persists the connection SERVER-SIDE in
+ * whatsapp_connections — the only tenant <-> phone mapping the webhook trusts.
+ * Dexie is UI cache only and is never written here.
+ *
+ * No access tokens are persisted: sending uses partner-level auth + the
+ * stored phone_number_id. If a per-tenant token is ever required, it must be
+ * encrypted at rest — that decision is deliberately deferred.
+ */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
@@ -26,18 +36,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Missing code or state')}`)
   }
 
-  const stateParts = state.split(':')
-  if (stateParts[0] !== 'tenant' || !stateParts[1]) {
+  // state carries tenantId through the provider round-trip. It is bound to the
+  // connect flow (not to inbound events) — inbound events NEVER trust it.
+  const [stateKind, tenantId] = state.split(':')
+  if (stateKind !== 'tenant' || !tenantId) {
     return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Invalid state')}`)
   }
-  const tenantId = stateParts[1]
 
   try {
     const tokenResponse = await fetch(GUPSHUP_TOKEN_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         partner_id: GUPSHUP_PARTNER_ID,
         partner_api_key: GUPSHUP_API_KEY,
@@ -48,38 +57,58 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json().catch(() => ({}))
       console.error('[WhatsAppCallback] Token exchange failed:', errorData)
+      await recordPilotEvent({
+        tenantId,
+        eventKind: 'webhook_error',
+        providerEventType: 'connect_token_exchange',
+        providerErrorCode: String(tokenResponse.status),
+        providerErrorMessage: String(errorData?.message || 'token exchange failed').slice(0, 500),
+      })
       return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Failed to exchange code for token')}`)
     }
 
     const tokenData = await tokenResponse.json()
-    const { access_token, expires_in, waba_id, phone_number_id, display_name, phone_number } = tokenData
+    const { waba_id, phone_number_id, display_name, phone_number } = tokenData
 
     if (!waba_id || !phone_number_id) {
-      console.error('[WhatsAppCallback] Missing WABA ID or Phone Number ID:', tokenData)
+      console.error('[WhatsAppCallback] Missing WABA/phone ids in provider response')
+      await recordPilotEvent({
+        tenantId,
+        eventKind: 'webhook_error',
+        providerEventType: 'connect_missing_identifiers',
+        providerErrorMessage: 'provider response missing waba_id or phone_number_id',
+        rawPayload: { keys: Object.keys(tokenData || {}) },
+      })
       return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Invalid response from Gupshup')}`)
     }
 
-    const { createWhatsAppConnection, setWhatsAppConnectionStatus } = await import('@/lib/billzo/whatsapp-connection')
+    const connection = await upsertWhatsAppConnection({
+      tenantId,
+      wabaId: waba_id,
+      phoneNumberId: phone_number_id,
+      displayName: display_name || phone_number || null,
+      status: 'connected',
+    })
 
-    const existing = await (await import('@/lib/billzo/whatsapp-connection')).getWhatsAppConnectionByPhoneNumberId(phone_number_id)
-    if (existing) {
-      await (await import('@/lib/billzo/whatsapp-connection')).updateWhatsAppConnection(existing.id, {
-        wabaId: waba_id,
-        displayName: display_name || '',
-        connectionStatus: 'connected',
-        accessToken: access_token,
-        expiresAt: expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : undefined,
+    if (!connection) {
+      await recordPilotEvent({
+        tenantId,
+        eventKind: 'webhook_error',
+        providerEventType: 'connect_persist_failed',
+        providerErrorMessage: 'whatsapp_connections upsert failed',
       })
-    } else {
-      await createWhatsAppConnection({
-        tenantId: stateParts[1],
-        wabaId: waba_id,
-        phoneNumberId: phone_number_id,
-        displayName: display_name || '',
-        accessToken: access_token,
-        expiresAt: expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : undefined,
-      })
+      return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Could not save connection')}`)
     }
+
+    await recordPilotEvent({
+      tenantId,
+      phoneNumberId: phone_number_id,
+      eventKind: 'connect',
+      direction: 'internal',
+      providerEventType: 'embedded_signup',
+      attributionResult: 'resolved',
+      stateAfter: { status: 'connected', wabaId: waba_id, displayName: display_name || null },
+    })
 
     return NextResponse.redirect(`${redirectBase}?connected=true&phone=${encodeURIComponent(phone_number || '')}`)
   } catch (error: any) {
