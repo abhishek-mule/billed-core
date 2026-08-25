@@ -115,7 +115,7 @@ pipeline. There is no migration runner — each file is applied once.
 | 086_business_identity.sql | Applied | |
 | 087_fix_collection_actions_fk_types.sql | Applied | |
 | 088_auto_recovery_toggle.sql | Applied | Applied to production 2026-08-08; gate verified live (ON/pro→unblocked, OFF→system cancelled, manual bypass). |
-| 090_whatsapp_server_authority.sql | Pending | Server-authoritative `whatsapp_connections` (webhook tenant resolution) + append-only `pilot_events` forensic trace + `whatsapp_events.phone_number_id`. Apply before Merchant #1. Latest migration |
+| 090_whatsapp_server_authority.sql | Applied | Applied to production 2026-08-25. Server-authoritative `whatsapp_connections` (webhook tenant resolution) + append-only `pilot_events` forensic trace + `whatsapp_events.phone_number_id`. Latest migration |
 | verify_schema.sql | — | Helper script, not a migration |
 
 ## Duplicate migration numbers
