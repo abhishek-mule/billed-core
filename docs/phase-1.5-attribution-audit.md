@@ -426,6 +426,112 @@ This is the correct outcome: pre-Phase-1.5 data carries no provable attempt iden
 | Payment thread + hostile null on the record path | `mini_saas_frontend/src/lib/billzo/__tests__/record-payment.test.ts` |
 | Reply path: identity-only resolution, unknown fallback, per-message idempotency | `mini_saas_frontend/src/lib/billzo/__tests__/attribution-chain.test.ts` |
 
+## Data-Collection Phase — Operational Integrity Dashboard
+
+Phase 1.5 is an architectural baseline, not an ongoing feature project. The next
+period is evidence accumulation: **Observe → Attempt → Act → Receive evidence →
+Attribute → Record outcome → Decide**. Before adding any "intelligence", track
+operational integrity only. Re-run these read-only measurements to watch the
+longitudinal dataset grow:
+
+```sql
+-- 1. % recovery attempts with canonical IDs / API surface
+SELECT
+  COUNT(*)                                   AS total_attempts,
+  COUNT(*) FILTER (WHERE status IN ('completed','in_progress')) AS executed,
+  COUNT(*) FILTER (WHERE id IS NOT NULL)     AS with_canonical_id
+FROM collection_actions;
+
+-- 2. % WhatsApp events linked to attempts (vs unknown)
+SELECT
+  COUNT(*) FILTER (WHERE direction='outbound')                        AS total_outbound,
+  COUNT(*) FILTER (WHERE direction='outbound' AND recovery_attempt_id IS NOT NULL) AS linked,
+  COUNT(*) FILTER (WHERE direction='outbound' AND recovery_attempt_id IS NULL)     AS unlinked_unknown
+FROM whatsapp_events;
+
+-- 3. Outcomes: verified vs unknown, plus attribution rate by type
+SELECT
+  outcome_type,
+  COUNT(*)                                                          AS total,
+  COUNT(*) FILTER (WHERE attribution_status='verified')            AS verified,
+  COUNT(*) FILTER (WHERE attribution_status='unknown')             AS unknown,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE attribution_status='verified') / NULLIF(COUNT(*),0), 1) AS verified_pct
+FROM recovery_outcomes
+GROUP BY outcome_type
+ORDER BY total DESC;
+
+-- 4. Delivery / read / reply attribution rate (attempt-level)
+SELECT
+  COUNT(*)                                          AS attempts,
+  COUNT(*) FILTER (WHERE delivered_at IS NOT NULL OR last_delivery_status='delivered') AS delivered,
+  COUNT(*) FILTER (WHERE read_at IS NOT NULL)       AS read,
+  COUNT(*) FILTER (WHERE failed_at IS NOT NULL OR last_delivery_status='failed') AS failed
+FROM collection_actions
+WHERE status IN ('completed','in_progress');
+
+-- 5. Promise attribution rate
+SELECT
+  COUNT(*) AS promises,
+  COUNT(*) FILTER (WHERE triggered_by_action_id IS NOT NULL) AS attributed_to_attempt
+FROM payment_promises;
+
+-- 6. Payment attribution rate
+SELECT
+  COUNT(*) AS payments,
+  COUNT(*) FILTER (WHERE recovery_attempt_id IS NOT NULL) AS attributed_to_attempt
+FROM recovery_outcomes
+WHERE outcome_type = 'payment';
+
+-- 7. Duplicate / replayed event rate (same provider receipt on same attempt)
+SELECT COUNT(*) AS duplicate_receipts
+FROM (
+  SELECT recovery_attempt_id, outcome_type, provider_message_id
+  FROM recovery_outcomes
+  WHERE provider_message_id IS NOT NULL AND recovery_attempt_id IS NOT NULL
+  GROUP BY recovery_attempt_id, outcome_type, provider_message_id
+  HAVING COUNT(*) > 1
+) d;
+
+-- 8. Orphaned events (link points at no real attempt — FK makes this 0; guard it)
+SELECT COUNT(*) AS orphaned_events
+FROM whatsapp_events
+WHERE recovery_attempt_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM collection_actions WHERE id = whatsapp_events.recovery_attempt_id);
+
+-- 9. Failed transport attempts that remain visible (not silently dropped)
+SELECT
+  COUNT(*) FILTER (WHERE status='failed' OR failed_at IS NOT NULL OR last_delivery_status='failed') AS failed_attempts
+FROM collection_actions;
+
+-- 10. Recovery cycles completed (invoice reached a resolved outcome)
+SELECT
+  COUNT(DISTINCT invoice_id) AS distinct_invoices_with_outcome
+FROM recovery_outcomes;
+```
+
+**Reading these honestly:** a large `unknown` or `unlinked` share early on is
+expected (pre-Phase-1.5 history is untrustworthy by design). The goal is that
+**the verified/linked share rises over time as new, properly-attributed cycles
+accumulate** — not that historical rows get retroactively re-attributed (they
+must not; that was decided and frozen at 093).
+
+**v0 baseline (2026-09-02, production):**
+- collection_actions: 1348 total / 3 executed / 1348 canonical IDs.
+- outbound whatsapp_events: 67 total, 0 linked, 67 unknown (empty ledger — no post-Phase-1.5 cycles yet).
+- recovery_outcomes: 0 rows (all outcome types). payment_promises: 4, all unattributed.
+- executed attempts breakdown: 3 attempts, 0 delivered / 0 read / 0 failed.
+- duplicates: 0. orphaned events: 0.
+
+All metrics are v0 floor values — meaningful movement requires new, properly
+attributed recovery cycles to accumulate over time.
+
+Precise claims we are allowed to make now:
+> "BillZo records recovery attempts and their verified outcomes, creating the
+> evidence foundation for behavioral learning."
+
+Not: "BillZo has learned from historical recovery data." The moat starts
+accumulating from this point forward.
+
 ## Success Criteria
 
 Phase 1.5 is complete when we can answer these questions for EVERY recovery attempt:
