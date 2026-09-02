@@ -36,6 +36,7 @@ function mockChain(terminal: Record<string, any> = {}) {
     order: vi.fn(() => chain),
     limit: vi.fn(() => chain),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     insert: vi.fn().mockResolvedValue({ error: null }),
     update: vi.fn(() => chain),
     ...terminal,
@@ -43,7 +44,7 @@ function mockChain(terminal: Record<string, any> = {}) {
   return chain
 }
 
-describe('sendDirectWhatsApp — Meta fallback via shared TransportRegistry', () => {
+describe('sendDirectWhatsApp — Meta via shared TransportRegistry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.META_ACCESS_TOKEN = 'test-meta-token'
@@ -58,8 +59,18 @@ describe('sendDirectWhatsApp — Meta fallback via shared TransportRegistry', ()
     delete process.env.META_WABA_ID
   })
 
-  it('falls back to Meta provider and sends when no channel configured', async () => {
-    ;(supabaseAdmin.from as any).mockReturnValue(mockChain())
+  it('resolves Meta provider from whatsapp_connections and sends', async () => {
+    ;(supabaseAdmin.from as any).mockImplementation((table: string) => {
+      if (table === 'whatsapp_connections') {
+        return mockChain({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { provider: 'meta', phone_number_id: '1229387453587153', status: 'connected' },
+            error: null,
+          }),
+        })
+      }
+      return mockChain()
+    })
 
     const result = await sendDirectWhatsApp(
       'tenant_1',
@@ -91,12 +102,22 @@ describe('sendDirectWhatsApp — Meta fallback via shared TransportRegistry', ()
     )
 
     expect(result.success).toBe(false)
-    expect((result as any).error).toContain('No active messaging channel')
+    expect((result as any).error).toContain('No active WhatsApp connection')
     expect(sendMock).not.toHaveBeenCalled()
   })
 
   it('propagates Meta API errors as failures', async () => {
-    ;(supabaseAdmin.from as any).mockReturnValue(mockChain())
+    ;(supabaseAdmin.from as any).mockImplementation((table: string) => {
+      if (table === 'whatsapp_connections') {
+        return mockChain({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { provider: 'meta', phone_number_id: '1229387453587153', status: 'connected' },
+            error: null,
+          }),
+        })
+      }
+      return mockChain()
+    })
     sendMock.mockResolvedValueOnce({
       success: false,
       providerMessageId: null,

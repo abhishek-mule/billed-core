@@ -140,6 +140,8 @@ export async function POST(request: NextRequest) {
         gstin: gstin?.trim() || null,
         billing_address: address?.trim() || null,
         automation_mode: 'full_auto',
+        opt_in: opt_in === true,
+        opt_in_at: opt_in === true ? now : null,
         created_at: now,
         updated_at: now,
       })
@@ -188,6 +190,10 @@ export async function PATCH(request: NextRequest) {
     if (updates.gstin) dbUpdates.gstin = updates.gstin
     if (updates.address) dbUpdates.billing_address = updates.address
     if (updates.automationMode) dbUpdates.automation_mode = updates.automationMode
+    if (typeof updates.opt_in === 'boolean') {
+      dbUpdates.opt_in = updates.opt_in
+      dbUpdates.opt_in_at = updates.opt_in ? new Date().toISOString() : null
+    }
 
     const { data, error } = await supabaseAdmin
       .from('customers')

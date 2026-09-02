@@ -34,6 +34,7 @@ function makeInput(overrides?: MakeInputOverrides): CanSendReminderInput {
       automationMode: 'full_auto',
       phoneVerification: 'unknown',
       reputationScore: 50,
+      messagingConsent: true,
       ...overrides?.customer,
     },
     activePromiseDate: overrides?.activePromiseDate,
@@ -50,7 +51,7 @@ describe('canSendReminder', () => {
     expect(result.reason).toBe('All checks passed')
     expect(result.reasons).toEqual([])
     expect(result.overridden).toBe(false)
-    expect(result.rules).toHaveLength(15)
+    expect(result.rules).toHaveLength(16)
     expect(result.rules.every(r => r.passed)).toBe(true)
   })
 
@@ -129,7 +130,7 @@ describe('canSendReminder', () => {
       invoice: { manualInteractionAt: '2026-06-09T12:00:00.000Z' }, // 24h ago
     }))
     expect(result.allowed).toBe(false)
-    expect(result.rules[6].passed).toBe(false)
+    expect(result.rules.find(r => r.rule === 'no_recent_manual_contact')?.passed).toBe(false)
     expect(result.reason).toContain('manual')
   })
 
@@ -146,7 +147,7 @@ describe('canSendReminder', () => {
       invoice: { recoveryStage: 't5_warning' },
     }))
     expect(result.allowed).toBe(false)
-    expect(result.rules[7].passed).toBe(false)
+    expect(result.rules.find(r => r.rule === 'tier_permits_escalation')?.passed).toBe(false)
     expect(result.reason).toContain('Tier')
   })
 
@@ -158,15 +159,15 @@ describe('canSendReminder', () => {
     expect(result.rules[7].passed).toBe(true)
   })
 
-  it('returns pending_approval when automationMode is manual', () => {
+  it('returns pending_approval when automationMode is manual, even when checks pass', () => {
     const result = canSendReminder(makeInput({
       customer: { automationMode: 'manual' },
-      invoice: { outstanding: 0 },
     }))
     expect(result.decision).toBe('pending_approval')
+    expect(result.allowed).toBe(false)
   })
 
-  it('logs all 15 rules in output', () => {
+  it('logs all 16 rules in output', () => {
     const result = canSendReminder(makeInput())
     expect(result.rules.map(r => r.rule)).toEqual([
       'outstanding_positive',
@@ -175,6 +176,7 @@ describe('canSendReminder', () => {
       'not_snoozed',
       'cooldown_expired',
       'customer_reachable',
+      'messaging_consent',
       'no_recent_manual_contact',
       'tier_permits_escalation',
       'not_in_silence_period',
@@ -193,6 +195,7 @@ describe('canSendReminder', () => {
       not_snoozed: true,
       cooldown_expired: true,
       customer_reachable: true,
+      messaging_consent: true,
       no_recent_manual_contact: true,
       tier_permits_escalation: true,
       not_in_silence_period: true,
@@ -245,15 +248,13 @@ describe('canSendReminder', () => {
     expect(result.allowed).toBe(true)
     expect(result.decision).toBe('send')
     expect(result.overridden).toBe(true)
-    expect(result.rules).toHaveLength(15)
+    expect(result.rules).toHaveLength(16)
     expect(result.reasons).toEqual([])
   })
 
-  it('overrides sets allowed even with blocking conditions and reports reasons', () => {
+  it('overrides cadence blocks but preserves the blocking reasons', () => {
     const result = canSendReminder(makeInput({
       invoice: {
-        outstanding: 0,
-        isDisputed: true,
         isSnoozed: true,
         overrideSend: true,
         overrideAt: '2026-06-10T10:00:00.000Z',
@@ -279,7 +280,7 @@ describe('canSendReminder', () => {
         overrideReason: 'Old override',
       },
     }))
-    expect(result.rules.length).toBe(15)
+    expect(result.rules.length).toBe(16)
     expect(result.rules[0].rule).toBe('outstanding_positive')
     expect(result.overridden).toBe(false)
   })
@@ -287,5 +288,25 @@ describe('canSendReminder', () => {
   it('passes reminderId through to output', () => {
     const result = canSendReminder(makeInput({}), { reminderId: 'R-001' })
     expect(result.reminderId).toBe('R-001')
+  })
+
+  it('blocks unattended sends without recorded consent', () => {
+    const result = canSendReminder(makeInput({ customer: { messagingConsent: false } }))
+    expect(result.allowed).toBe(false)
+    expect(result.rules.find(r => r.rule === 'messaging_consent')?.hardBlock).toBe(true)
+  })
+
+  it('does not let an override send a paid or disputed invoice', () => {
+    const result = canSendReminder(makeInput({
+      invoice: { outstanding: 0, isDisputed: true, overrideSend: true, overrideAt: '2026-06-10T10:00:00.000Z' },
+    }))
+    expect(result.allowed).toBe(false)
+    expect(result.overridden).toBe(false)
+  })
+
+  it('blocks unknown recovery stages rather than treating them as safe', () => {
+    const result = canSendReminder(makeInput({ invoice: { recoveryStage: 't100_legal' } }))
+    expect(result.allowed).toBe(false)
+    expect(result.rules.find(r => r.rule === 'tier_permits_escalation')?.passed).toBe(false)
   })
 })

@@ -1060,7 +1060,6 @@
 .cfa-btn--red { background: hsl(var(--destructive)); color: white; }
 .cfa-btn--orange { background: hsl(var(--warning)); color: white; }
 .cfa-btn--blue { background: hsl(210 70% 40%); color: white; }
-.cfa-btn--red { background: hsl(var(--destructive)); color: white; }
 
 /* ─── Page bottom padding for fixed first-action ────────────────────── */
 .rc-page { padding-bottom: max(100px, env(safe-area-inset-bottom)); }
@@ -1170,5 +1169,393 @@
 .rc-insights[open] .rc-insights-chevron {
   transform: rotate(90deg);
 }
+
+/* ─── Customer workspace (simplified hierarchy) ────────────────────────── */
+.cw-phone-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: hsl(var(--warning-soft, var(--muted)) / 0.5);
+  border: 1px solid hsl(var(--warning) / 0.3);
+  border-radius: 12px;
+  padding: 12px;
+}
+.cw-phone-missing-icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
+.cw-phone-missing-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cw-phone-missing-title { font-size: 14px; font-weight: 700; margin: 0; }
+.cw-phone-missing-sub { font-size: 12.5px; color: hsl(var(--muted-foreground)); line-height: 1.4; margin: 0; }
+
+.cw-record-payment {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: hsl(var(--success, var(--recovery)));
+  color: hsl(var(--background, white));
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .15s ease;
+}
+.cw-record-payment:hover { opacity: 0.9; }
+.cw-record-payment:active { transform: scale(0.99); }
+.cw-record-payment--phone {
+  background: hsl(var(--info, var(--recovery)));
+  color: hsl(var(--foreground));
+}
+.cw-record-payment--danger {
+  background: hsl(var(--danger));
+  color: #fff;
+}
+
+/* ─── Customer workspace: single next-action banner ─────────────────── */
+.cw-next {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 13px 14px;
+  border: 1px solid transparent;
+}
+.cw-next--red    { background: hsl(var(--destructive) / 0.08); border-color: hsl(var(--destructive) / 0.3); }
+.cw-next--orange { background: hsl(var(--warning) / 0.08);    border-color: hsl(var(--warning) / 0.35); }
+.cw-next--blue   { background: hsl(var(--info, var(--recovery)) / 0.08); border-color: hsl(var(--info, var(--recovery)) / 0.3); }
+.cw-next--green  { background: hsl(var(--success) / 0.08);    border-color: hsl(var(--success) / 0.3); }
+.cw-next-icon {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cw-next--red .cw-next-icon    { background: hsl(var(--destructive) / 0.14); color: hsl(var(--destructive)); }
+.cw-next--orange .cw-next-icon { background: hsl(var(--warning) / 0.14);     color: hsl(var(--warning)); }
+.cw-next--blue .cw-next-icon   { background: hsl(var(--info, var(--recovery)) / 0.14); color: hsl(var(--info, var(--recovery))); }
+.cw-next--green .cw-next-icon  { background: hsl(var(--success) / 0.14);     color: hsl(var(--success)); }
+.cw-next-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cw-next-tag {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+}
+.cw-next--red .cw-next-tag    { color: hsl(var(--destructive)); }
+.cw-next--orange .cw-next-tag { color: hsl(var(--warning)); }
+.cw-next--blue .cw-next-tag   { color: hsl(var(--info, var(--recovery))); }
+.cw-next--green .cw-next-tag  { color: hsl(var(--success)); }
+.cw-next-title { font-size: 14.5px; font-weight: 700; line-height: 1.3; }
+.cw-next-sub { font-size: 12.5px; color: hsl(var(--muted-foreground)); line-height: 1.4; }
+
+/* ─── Customer workspace: bills (collapsible) ──────────────────────── */
+.cw-bills-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+.cw-bills-head > span:first-child { display: inline-flex; align-items: center; gap: 7px; }
+.cw-bills-ic { color: hsl(var(--muted-foreground)); }
+.cw-bills-meta {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: hsl(var(--muted-foreground)); font-weight: 600;
+}
+.cw-bills-chev { transition: transform .15s ease; }
+.cw-bills-chev--open { transform: rotate(180deg); }
+.cw-bills-list { margin-top: 8px; }
+
+/* ─── Recovery Command Center: master-detail ─────────────────────────────── */
+.rc-dot--yellow { background: hsl(var(--warning)); }
+
+.rc-md {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 6px;
+}
+@media (min-width: 900px) {
+  .rc-md {
+    grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.rc-md-master { display: flex; flex-direction: column; gap: 12px; }
+.rc-md-detail { min-width: 0; }
+
+.rc-md-card {
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.rc-md-card:hover { border-color: hsl(var(--primary) / 0.5); }
+.rc-md-card--active {
+  border-color: hsl(var(--primary) / 0.6);
+  background: hsl(var(--primary) / 0.06);
+}
+
+.rc-md-badge { color: #fff; }
+.rc-md-badge--now { background: hsl(var(--destructive)); }
+.rc-md-badge--next { background: hsl(var(--warning)); }
+.rc-md-badge--then { background: hsl(var(--muted-foreground)); }
+
+.rc-md-amount {
+  font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  flex-shrink: 0;
+}
+
+/* ─── Command center modal (add phone) ───────────────────────────────────── */
+.rc-modal {
+  position: fixed; inset: 0; z-index: 80;
+  background: hsl(0 0% 0% / 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.rc-modal-card {
+  width: 100%; max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 12px 32px hsl(0 0% 0% / 0.25);
+}
+.rc-modal-head {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 14px;
+}
+.rc-modal-close {
+  margin-left: auto; background: transparent; border: none;
+  color: hsl(var(--muted-foreground)); cursor: pointer;
+}
+.rc-modal-sub { font-size: 12.5px; color: hsl(var(--muted-foreground)); margin: 10px 0; line-height: 1.5; }
+.rc-modal-input {
+  width: 100%; padding: 10px 12px;
+  border: 1px solid var(--bd); border-radius: 10px;
+  background: var(--surface); color: var(--foreground);
+  font-size: 14px;
+}
+.rc-modal-input:focus { outline: none; border-color: hsl(var(--primary) / 0.6); }
+.rc-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.rc-modal-body { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+
+/* ─── Command center: automation chip ────────────────────────────────────── */
+.rc-auto-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--bd); background: var(--surface);
+  cursor: pointer; color: var(--foreground); line-height: 1;
+}
+.rc-auto-chip--on { border-color: hsl(var(--success) / 0.4); background: hsl(var(--success) / 0.1); color: hsl(var(--success)); }
+.rc-auto-chip--off { border-color: hsl(var(--muted-foreground) / 0.4); background: hsl(var(--muted-foreground) / 0.08); color: hsl(var(--muted-foreground)); }
+.rc-auto-chip:disabled { cursor: default; opacity: 0.8; }
+.rc-auto-dot { width: 8px; height: 8px; border-radius: 50%; }
+.rc-auto-dot--on { background: hsl(var(--success)); box-shadow: 0 0 0 3px hsl(var(--success) / 0.2); }
+.rc-auto-dot--off { background: hsl(var(--muted-foreground)); }
+
+/* ─── Command center: today's actions ────────────────────────────────────── */
+.rc-today-icon--reminder { background: hsl(var(--recovery)); color: #fff; }
+.rc-today-icon--call { background: hsl(var(--destructive)); color: #fff; }
+.rc-today-icon--promise { background: hsl(var(--info, var(--recovery))); color: #fff; }
+.rc-today-icon--scheduled { background: hsl(var(--muted-foreground)); color: #fff; }
+
+/* ─── Command center: evidence line (master card sub) ────────────────────── */
+.rc-evidence { display: flex; flex-wrap: wrap; gap: 5px 9px; margin-top: 4px; }
+.rc-ev-item {
+  font-size: 11px; color: hsl(var(--muted-foreground));
+  border: 1px solid var(--bd); border-radius: 6px; padding: 1.5px 6px;
+  background: var(--surface);
+}
+.rc-ev-item--read { color: hsl(var(--success)); border-color: hsl(var(--success) / 0.4); }
+.rc-ev-item--delivered { color: hsl(var(--info, var(--recovery))); border-color: hsl(var(--info, var(--recovery)) / 0.4); }
+.rc-ev-item--failed { color: hsl(var(--destructive)); border-color: hsl(var(--destructive) / 0.4); }
+.rc-ev-item--replied { color: hsl(var(--success)); border-color: hsl(var(--success) / 0.4); }
+
+/* ─── Command center: evidence grid (detail panel) ───────────────────────── */
+.rc-ev-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rc-ev-card {
+  border: 1px solid var(--bd); border-radius: 10px;
+  padding: 9px 10px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface);
+}
+.rc-ev-card-label { font-size: 10px; font-weight: 700; letter-spacing: 0.6px; color: hsl(var(--muted-foreground)); }
+.rc-ev-card-value { font-size: 13px; font-weight: 700; text-transform: capitalize; }
+.rc-ev-card-value--read { color: hsl(var(--success)); }
+.rc-ev-card-value--delivered { color: hsl(var(--info, var(--recovery))); }
+.rc-ev-card-value--failed { color: hsl(var(--destructive)); }
+.rc-ev-card-sub { font-size: 11px; color: hsl(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 480px) {
+  .rc-ev-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── Command center: settings rows ──────────────────────────────────────── */
+.rc-set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rc-set-label { font-size: 13px; color: hsl(var(--muted-foreground)); }
+.rc-set-value { font-size: 13px; font-weight: 600; text-align: right; }
+
+/* ─── Command center: activity feed ──────────────────────────────────────── */
+.rc-tl-dot--system { background: hsl(var(--muted-foreground)); }
+.rc-tl-open {
+  align-self: flex-start; margin-top: 2px;
+  background: transparent; border: none; padding: 0;
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+  color: hsl(var(--primary)); text-align: left;
+}
+.rc-tl-open:hover { text-decoration: underline; }
+
+/* ─── Flat recovery cards (why → action) ─────────────────────────────────── */
+.rc-section-desc {
+  margin-left: auto;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  text-align: right;
+}
+
+.rc-card--red { border-left: 3px solid hsl(var(--destructive)); }
+.rc-card--orange { border-left: 3px solid hsl(var(--warning)); }
+.rc-card--blue { border-left: 3px solid hsl(var(--info)); }
+.rc-card--green { border-left: 3px solid hsl(var(--success)); }
+
+.rc-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.rc-owner--merchant {
+  background: hsl(var(--warning) / 0.15);
+  color: hsl(var(--warning));
+}
+.rc-owner--billzo {
+  background: hsl(var(--info) / 0.14);
+  color: hsl(var(--info));
+}
+
+.rc-card-amount {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.rc-card-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 10px 0 2px;
+}
+.rc-card-sub {
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 12px;
+}
+
+.rc-facts {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--bd);
+  padding-top: 10px;
+}
+.rc-fact { display: flex; flex-direction: column; gap: 1px; }
+.rc-fact dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+}
+.rc-fact dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+.rc-fact dd:last-child { color: hsl(var(--recovery)); }
+
+.rc-card-foot {
+  margin-top: 14px;
+  border-top: 1px solid var(--bd);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rc-card-cta .cw-record-payment { width: 100%; }
+
+.cw-record-payment--ghost {
+  background: hsl(var(--muted) / 0.4);
+  color: var(--foreground);
+  border: 1px solid var(--bd);
+}
+.cw-record-payment--ghost:hover { opacity: 1; }
+
+.rc-card-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  cursor: pointer;
+}
+.rc-card-open:hover { color: hsl(var(--recovery)); }
+
+/* ─── Recovery Command Center: summary bar ──────────────────────────────────── */
+.rc-summary-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+}
+
+.rc-summary-item {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rc-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rc-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+
 
 

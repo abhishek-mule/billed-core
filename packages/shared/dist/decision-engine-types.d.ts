@@ -7,6 +7,8 @@ export interface DecisionRuleResult {
     rule: string;
     passed: boolean;
     detail: string;
+    /** A hard block protects customer rights or invoice truth and cannot be overridden. */
+    hardBlock?: boolean;
     override?: boolean;
     overrideReason?: string;
 }
@@ -60,6 +62,8 @@ export interface CanSendReminderInput {
         phoneVerification: PhoneVerificationStatus;
         reputationScore: number;
         engagementState?: string;
+        /** Explicit, recorded permission to receive WhatsApp recovery messages. */
+        messagingConsent: boolean;
     };
     activePromiseDate?: string | null;
     reminderHistory?: {
@@ -70,6 +74,7 @@ export interface CanSendReminderInput {
         lastReadAt: string | null;
         linkClicked: boolean;
         hoursSinceLastCustomerReminder: number;
+        lastCustomerReminderAt?: string | null;
     };
     behaviorMetrics?: {
         readRate: number;

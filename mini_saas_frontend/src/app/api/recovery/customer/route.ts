@@ -4,6 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { estimateRecoverable } from '@/lib/billzo/recovery-read-model'
+import { buildRecoveryDecision } from '@/lib/billzo/recovery-decision'
+
+function arr_push(map: Map<string, any[]>, key: string, value: any) {
+  const arr = map.get(key) || []
+  arr.push(value)
+  map.set(key, arr)
+}
 
 /**
  * Customer Workspace — the place a merchant actually works a single customer.
@@ -149,7 +156,47 @@ export async function GET(request: NextRequest) {
       Number(i.outstanding_amount) > 0
         ? Number(i.outstanding_amount)
         : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
-    const openInvoices = (invoices || []).filter((i: any) => invoiceOutstanding(i) > 0)
+    const openInvoicesFor = (invoices || []).filter((i: any) => invoiceOutstanding(i) > 0)
+
+    // ── Single authoritative decision, built once from recorded events ──
+    // Build per-action delivery telemetry from whatsapp_events rows (statuses +
+    // timestamps). Each action's evidence is grounded in real recorded events,
+    // so the decision never claims a reminder was sent when it wasn't.
+    const deliveryByAction: Record<string, any> = {}
+    for (const [actionId, rows] of waByAction) {
+      const sent = rows.filter((r: any) => r.status === 'sent').map((r: any) => r.occurred_at)
+      const delivered = rows.filter((r: any) => r.delivered_at).map((r: any) => r.delivered_at)
+      const read = rows.filter((r: any) => r.read_at).map((r: any) => r.read_at)
+      const failed = rows.filter((r: any) => r.status === 'failed').map((r: any) => r.occurred_at)
+      deliveryByAction[actionId] = {
+        sentAt: sent.length ? sent[sent.length - 1] : undefined,
+        deliveredAt: delivered.length ? delivered[delivered.length - 1] : undefined,
+        readAt: read.length ? read[read.length - 1] : undefined,
+        failedAt: failed.length ? failed[failed.length - 1] : undefined,
+      }
+    }
+
+    const decision = buildRecoveryDecision({
+      customerPhone: cust?.phone ?? null,
+      invoices: (invoices || []).map((i: any) => ({
+        id: i.id,
+        number: i.invoice_number,
+        outstanding: invoiceOutstanding(i),
+        dueDate: i.due_date,
+        status: i.status,
+        createdAt: i.created_at,
+      })),
+      actions: actionRows.map((a: any) => ({
+        id: a.id,
+        actionType: a.actionType,
+        status: a.status,
+        invoiceIds: a.invoiceIds,
+        completedAt: a.completedAt,
+      })),
+      deliveryByAction,
+    })
+
+    const openInvoices = openInvoicesFor
     const outstanding = openInvoices.reduce((s: number, i: any) => s + invoiceOutstanding(i), 0)
     const overdueInvs = openInvoices.filter(
       (i: any) => i.due_date && new Date(i.due_date) < now,
@@ -235,15 +282,10 @@ export async function GET(request: NextRequest) {
         detail: c.detail || '',
         actionId: c.actionId,
       })),
+      decision,
     })
   } catch (err: any) {
     console.error('[CustomerWorkspace] failed', err)
     return NextResponse.json({ error: err?.message ?? 'unknown' }, { status: 500 })
   }
-}
-
-function arr_push(map: Map<string, any[]>, key: string, value: any) {
-  const arr = map.get(key) || []
-  arr.push(value)
-  map.set(key, arr)
 }

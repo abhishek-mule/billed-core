@@ -206,35 +206,102 @@ const JOURNEY_STAGE_DEFS = [
     { key: 'payment_received', label: 'Payment Received' },
     { key: 'case_closed', label: 'Case Closed' },
 ];
-function buildJourney(events, invoiceStatus) {
+const STAGE_EVENT_MAP = {
+    invoice_created: 'invoice_created',
+    reminder_sent: 'reminder_sent',
+    customer_read: 'reminder_read',
+    payment_link_clicked: 'payment_link_clicked',
+    payment_received: 'payment_received',
+    case_closed: 'case_closed',
+};
+function buildJourney(events, invoiceStatus, opts = {}) {
     const hasEvent = (type) => events.some(e => e.type === type);
     const isPaid = invoiceStatus === 'paid' || invoiceStatus === 'reconciled';
     const stages = [];
     let foundCurrent = false;
+    let blockedReminder = false;
     for (const def of JOURNEY_STAGE_DEFS) {
-        const type = def.key;
-        const completed = hasEvent(type);
-        const event = events.find(e => e.type === type);
-        if (def.key === 'payment_received' && isPaid) {
-            stages.push({ key: def.key, label: def.label, status: 'completed', timestamp: event?.timestamp });
+        const eventType = STAGE_EVENT_MAP[def.key] || def.key;
+        const event = events.find(e => e.type === eventType);
+        if (def.key === 'invoice_created') {
+            stages.push({
+                key: def.key,
+                label: def.label,
+                status: 'completed',
+                timestamp: event?.timestamp,
+                note: event ? undefined : 'Invoice recorded',
+            });
             continue;
         }
         if (def.key === 'case_closed' && isPaid) {
-            stages.push({ key: def.key, label: def.label, status: 'completed' });
+            stages.push({ key: def.key, label: def.label, status: 'completed', note: 'Closed on payment' });
             continue;
         }
-        if (completed) {
-            stages.push({ key: def.key, label: def.label, status: 'completed', timestamp: event?.timestamp });
+        if (def.key === 'payment_received' && isPaid) {
+            stages.push({ key: def.key, label: def.label, status: 'completed', timestamp: event?.timestamp, note: 'Payment received' });
+            continue;
         }
-        else if (!foundCurrent) {
-            stages.push({ key: def.key, label: def.label, status: 'current' });
+        if (def.key === 'awaiting_payment' && isPaid) {
+            stages.push({ key: def.key, label: def.label, status: 'completed', note: 'Awaiting payment resolved' });
+            continue;
+        }
+        if (event) {
+            stages.push({
+                key: def.key,
+                label: def.label,
+                status: 'completed',
+                timestamp: event.timestamp,
+                note: completedStageNote(def.key),
+            });
+            continue;
+        }
+        // No recorded evidence for this stage — state its real ground truth.
+        const note = pendingStageNote(def.key, hasEvent, opts);
+        if (def.key === 'reminder_sent' && opts.customerPhoneMissing) {
+            // Cannot be sent — not an active in-flight step, do not mark it current.
+            stages.push({ key: def.key, label: def.label, status: 'skipped', note });
+            blockedReminder = true;
+            continue;
+        }
+        const reminderBlockedOrFailed = blockedReminder || hasEvent('reminder_failed');
+        if (!foundCurrent && !reminderBlockedOrFailed && def.key !== 'awaiting_payment' && def.key !== 'payment_received' && def.key !== 'case_closed') {
+            // First not-yet-reached actionable stage is the next step, but only when a
+            // reminder was actually sendable. Never imply forward progress on the
+            // payment funnel just because earlier milestones are absent.
+            stages.push({ key: def.key, label: def.label, status: 'current', note });
             foundCurrent = true;
         }
         else {
-            stages.push({ key: def.key, label: def.label, status: 'pending' });
+            stages.push({ key: def.key, label: def.label, status: 'pending', note });
         }
     }
     return { stages };
+}
+function completedStageNote(_key) {
+    // Completed stages already show their timestamp via the stepper dot; no note needed.
+    return undefined;
+}
+function pendingStageNote(key, hasEvent, opts) {
+    switch (key) {
+        case 'reminder_sent':
+            return opts.customerPhoneMissing
+                ? 'Not sent — customer phone number missing'
+                : hasEvent('reminder_failed')
+                    ? 'Not sent — delivery failed'
+                    : 'Not sent yet';
+        case 'customer_read':
+            return !hasEvent('reminder_sent') ? 'Not started' : 'Delivered but not read';
+        case 'payment_link_clicked':
+            return 'Not started';
+        case 'awaiting_payment':
+            return 'Not started';
+        case 'payment_received':
+            return 'Not received';
+        case 'case_closed':
+            return 'Open';
+        default:
+            return 'Not started';
+    }
 }
 // ============================================================
 // INSIGHT BUILDER
@@ -346,7 +413,9 @@ function buildRecoveryTimeline(input) {
     // Sort by timestamp ascending
     events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const groups = groupEvents(events);
-    const journey = buildJourney(events, invoiceStatus);
+    const journey = buildJourney(events, invoiceStatus, {
+        customerPhoneMissing: input.customerPhoneMissing,
+    });
     const insights = buildInsights(events);
     return {
         invoiceId: input.invoice.id,

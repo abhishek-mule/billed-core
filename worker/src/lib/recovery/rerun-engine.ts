@@ -4,15 +4,21 @@ import { canSendReminder } from './decision-engine'
 import { EventType } from '@billzo/shared'
 
 export async function rerunDecisionEngine(invoiceId: string, tenantId: string): Promise<void> {
-  const [invoiceResult, customerResult] = await Promise.all([
-    supabaseAdmin.from('invoices').select('*').eq('id', invoiceId).single(),
-    supabaseAdmin.from('customers').select('*').eq('tenant_id', tenantId).maybeSingle(),
-  ])
+  const invoiceResult = await supabaseAdmin
+    .from('invoices')
+    .select('*')
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .single()
 
   if (invoiceResult.error || !invoiceResult.data) return
 
   const invoice = invoiceResult.data
-  const customer = customerResult.data
+  // The customer query depends on invoice.customer_id; fetch it after the
+  // invoice is known so a payment on one customer can never affect another.
+  const { data: customer } = invoice.customer_id
+    ? await supabaseAdmin.from('customers').select('*').eq('id', invoice.customer_id).maybeSingle()
+    : { data: null }
 
   // Fetch active promise if any
   const { data: activePromise } = await supabaseAdmin
@@ -41,11 +47,12 @@ export async function rerunDecisionEngine(invoiceId: string, tenantId: string): 
     },
     customer: {
       id: customer?.id || '',
-      phone: customer?.phone || null,
+      phone: customer?.whatsapp_number || customer?.phone || null,
       customerTier: customer?.customer_tier || 'regular',
       automationMode: customer?.automation_mode || 'full_auto',
       phoneVerification: customer?.phone_verification || 'unknown',
       reputationScore: customer?.reputation_score ?? 50,
+      messagingConsent: customer?.opt_in === true,
     },
     activePromiseDate: activePromise?.promise_date || null,
   })

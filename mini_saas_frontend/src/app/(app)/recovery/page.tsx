@@ -1,187 +1,205 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import '@/styles/recovery-center.css'
-import { formatScheduledSlot } from '@/lib/recovery/business-hours'
 import {
-  Phone, MessageSquare, Clock, CheckCircle2, ArrowRight, TrendingUp,
-  AlertTriangle, HeartHandshake, RotateCcw, Bell, Loader2, ChevronRight,
+  Phone, MessageSquare, Send, UserPlus, Loader2,
+  CheckCircle2, Clock, ArrowRight, X, RotateCcw,
+  UserX, Zap, Target, AlertTriangle,
 } from 'lucide-react'
+import { formatINR } from '@/lib/utils'
 
-type NeedsActionItem = {
-  caseId: string
+type SectionKey = 'needs_you' | 'automated' | 'monitoring'
+
+type RecoveryCard = {
   customerId: string
   customerName: string
-  phone: string
-  tier: string
+  phone: string | null
   outstanding: number
-  recoverableAmount: number
-  recoveryConfidence: number
-  overdue: number
-  state: string
-  promiseDate: string | null
-  promiseBrokenDays: number | null
-  recommendedAction: string
-  reminderCount: number
-  brokenPromises: number
+  invoiceCount: number
+  maxOverdueDays: number
+  section: SectionKey
+  state: 'blocked_phone' | 'recovered' | 'call' | 'remind' | 'waiting' | 'none'
+  headline: string
+  reason: string
+  targetInvoiceId: string | null
+  evidence: {
+    lastDelivery: { status: 'read' | 'delivered' | 'sent' | 'failed' | null; at: string | null }
+    replied: boolean
+    replyPreview: string | null
+    promiseDate: string | null
+  }
+  cta: {
+    type: 'add_phone' | 'call' | 'send_reminder' | 'view_details' | 'view_payment'
+    label: string
+    href?: string
+  }
 }
 
-type ScheduledItem = {
-  actionId: string
-  customerId: string | null
-  customerName: string
-  actionType: string
-  channel: string | null
-  templateName: string | null
-  scheduledAt: string
-  invoiceIds: string[]
-}
-
-type RecoveredItem = {
-  caseId: string
-  customerId: string
-  customerName: string
-  recoveredAt: string
-}
-
-type TimelineEvent = {
-  eventType: string
-  toStatus: string | null
-  at: string
-  detail: string
-}
-
-type CenterData = {
+type RecoveryCommandCenter = {
+  summary: {
+    totalCases: number
+    needsYou: number
+    automated: number
+    monitoring: number
+    totalOutstanding: number
+  }
+  needsYou: RecoveryCard[]
+  billzoIsHandling: RecoveryCard[]
+  monitoring: RecoveryCard[]
   generatedAt: string
-  needsAction: NeedsActionItem[]
-  scheduledToday: ScheduledItem[]
-  counts: { reminders: number; promiseFollowups: number; calls: number }
-  underFollowUp: number
-  recentlyRecovered: RecoveredItem[]
-  timeline: TimelineEvent[]
 }
 
-const fmt = (n: number) =>
-  '₹' + Math.round(n).toLocaleString('en-IN')
-
-const fmtTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
-
-const greeting = () => {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good Morning'
-  if (h < 17) return 'Good Afternoon'
-  return 'Good Evening'
+type FeedItem = {
+  id: string
+  type: string
+  actor: 'merchant' | 'customer' | 'system'
+  title: string
+  timestamp: string
+  customerId: string | null
+  customerName: string | null
+  amount: number | null
+  detail: string | null
 }
 
-function actionLabel(a: string) {
-  switch (a) {
-    case 'call': return 'Call'
-    case 'send_reminder': return 'Send Reminder'
-    case 'visit': return 'Visit'
-    case 'escalate': return 'Escalate'
-    case 'pause': return 'Pause'
-    case 'record_payment': return 'Record Payment'
-    default: return a.replace(/_/g, ' ')
-  }
+const SECTION_META: Record<SectionKey, { label: string; icon: React.ReactNode; description: string; dot: string }> = {
+  needs_you: {
+    label: 'NEEDS YOU',
+    icon: <UserX size={16} />,
+    description: 'Cases BillZo cannot safely handle — your action required',
+    dot: 'rc-dot--red',
+  },
+  automated: {
+    label: 'BILLZO IS HANDLING',
+    icon: <Zap size={16} />,
+    description: 'Automated recovery currently running',
+    dot: 'rc-dot--blue',
+  },
+  monitoring: {
+    label: 'MONITORING',
+    icon: <Clock size={16} />,
+    description: 'Customer has been contacted — BillZo is waiting for evidence',
+    dot: 'rc-dot--green',
+  },
 }
 
-function whyReasons(item: NeedsActionItem): string[] {
-  const reasons: string[] = []
-  if (item.brokenPromises > 0) reasons.push('Promised payment last week but didn\'t follow through')
-  if (item.promiseBrokenDays != null) reasons.push(`Promise broken ${item.promiseBrokenDays}d ago`)
-  if (item.reminderCount > 0) reasons.push(`Ignored ${item.reminderCount} reminder${item.reminderCount > 1 ? 's' : ''}`)
-  if (item.overdue > 0) reasons.push(`${item.overdue} days overdue`)
-  if (item.tier === 'vip') reasons.push('High value customer — usually pays after calls')
-  if (item.tier === 'risky') reasons.push('At-risk customer — needs personal attention')
-  if (reasons.length === 0) reasons.push('Customer balance needs attention')
-  return reasons
-}
+const fmt = (n: number) => formatINR(n)
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
 
-function planIcon(action: string) {
-  switch (action) {
-    case 'call': return <Phone size={16} />
-    case 'record_payment': return <HeartHandshake size={16} />
-    default: return <Bell size={16} />
-  }
-}
-
-function planLabel(action: string) {
-  switch (action) {
-    case 'call': return 'Call Today'
-    case 'record_payment': return 'Record Payment'
-    case 'visit': return 'Visit'
-    default: return 'Send Reminder'
-  }
-}
-
-function planColor(action: string) {
-  switch (action) {
-    case 'call': return 'rp--call'
-    case 'record_payment': return 'rp--payment'
-    case 'visit': return 'rp--visit'
-    default: return 'rp--remind'
-  }
-}
-
-export default function RecoveryCenterPage() {
-  const [data, setData] = useState<CenterData | null>(null)
-  const [name, setName] = useState<string | null>(null)
+export default function RecoveryCommandCenterPage() {
+  const router = useRouter()
+  const [data, setData] = useState<RecoveryCommandCenter | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
+  const [phoneModal, setPhoneModal] = useState(false)
+  const [phoneCase, setPhoneCase] = useState<RecoveryCard | null>(null)
+  const [phoneDraft, setPhoneDraft] = useState('')
+  const [savingPhone, setSavingPhone] = useState(false)
 
-  useEffect(() => {
-    let active = true
-    ;(async () => {
-      try {
-        const [queueRes, me] = await Promise.all([
-          fetch('/api/recovery/queue-projection', { credentials: 'include' }),
-          fetch('/api/me', { credentials: 'include' }),
-        ])
-        if (queueRes.ok) {
-          const json = await queueRes.json()
-          if (active) setData(json)
-        } else if (active) {
-          setError('Could not load queue')
-        }
-        if (me.ok) {
-          const m = await me.json()
-          if (active) setName(m.businessName)
-        }
-      } catch {
-        if (active) setError('Network error')
-      } finally {
-        if (active) setLoading(false)
-      }
-    })()
-    return () => { active = false }
-  }, [])
+  const [feed, setFeed] = useState<FeedItem[]>([])
+  const [feedLoading, setFeedLoading] = useState(false)
 
-
-  const refresh = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/recovery/queue-projection', { credentials: 'include' })
-      if (res.ok) {
-        setData(await res.json())
-      } else {
-        setError('Could not load queue')
-      }
-    } catch {
-      setError('Network error')
+      const res = await fetch('/api/recovery/command-center', { credentials: 'include' })
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const json = await res.json()
+      setData(json)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load')
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  const loadFeed = useCallback(async () => {
+    setFeedLoading(true)
+    try {
+      const res = await fetch('/api/recovery/feed?limit=25', { credentials: 'include' })
+      if (res.ok) {
+        const json = await res.json()
+        setFeed(json.feed ?? [])
+      }
+    } catch {
+      /* non-fatal */
+    } finally {
+      setFeedLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { void loadFeed() }, [loadFeed])
+
+  const handleSend = async (customerId: string) => {
+    setSending(customerId)
+    try {
+      const res = await fetch('/api/recovery/queue/actions', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caseId: customerId,
+          action: 'send_reminder',
+          customerId,
+          payload: { origin: 'recovery_command_center' },
+        }),
+      })
+      if (res.ok) {
+        await loadData()
+        void loadFeed()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert((data as any).error || data?.message || 'Could not send reminder')
+      }
+    } catch {
+      alert('Network error — could not send reminder')
+    } finally {
+      setSending(null)
+    }
   }
 
+  const openPhoneModal = (c: RecoveryCard) => {
+    setPhoneCase(c)
+    setPhoneDraft('')
+    setPhoneModal(true)
+  }
+
+  const savePhone = async () => {
+    if (!phoneCase?.customerId || !phoneDraft.trim()) return
+    setSavingPhone(true)
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: phoneCase.customerId, phone: phoneDraft.trim() }),
+      })
+      if (res.ok) {
+        setPhoneModal(false)
+        setPhoneCase(null)
+        setPhoneDraft('')
+        await loadData()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert((data as any).error || 'Could not save phone number')
+      }
+    } catch {
+      alert('Network error — could not save phone number')
+    } finally {
+      setSavingPhone(false)
+    }
+  }
 
   if (loading) {
     return (
       <div className="rc-loading">
         <Loader2 className="spin" size={22} />
-        <span>Loading your day…</span>
+        <span>Loading your recovery command center…</span>
       </div>
     )
   }
@@ -190,307 +208,282 @@ export default function RecoveryCenterPage() {
     return (
       <div className="rc-loading">
         <span>{error ?? 'Something went wrong'}</span>
-        <button className="rc-btn" onClick={refresh}>Retry</button>
+        <button className="rc-btn" onClick={() => loadData()}>Retry</button>
       </div>
     )
   }
 
-  const needsAction = data.needsAction
-  const totalExpected = needsAction.reduce((s, i) => s + i.recoverableAmount, 0)
-  const totalOutstanding = needsAction.reduce((s, i) => s + i.outstanding, 0)
-  const highConfItems = needsAction.filter(i => i.recoveryConfidence >= 70).slice(0, 3)
-
-  // Group by recommended action
-  const callItems = needsAction.filter(i => i.recommendedAction === 'call')
-  const remindItems = needsAction.filter(i => i.recommendedAction === 'send_reminder' || i.recommendedAction === 'reminder')
-  const paymentItems = needsAction.filter(i => i.recommendedAction === 'record_payment')
-  const otherItems = needsAction.filter(i =>
-    i.recommendedAction !== 'call' &&
-    i.recommendedAction !== 'send_reminder' &&
-    i.recommendedAction !== 'reminder' &&
-    i.recommendedAction !== 'record_payment'
-  )
-
-  const PlanSection = ({ items, icon, label, color, emptyText }: {
-    items: NeedsActionItem[]
-    icon: React.ReactNode
-    label: string
-    color: string
-    emptyText: string
-  }) => {
-    if (items.length === 0) return null
-    return (
-      <div className={`rp-group ${color}`}>
-        <div className="rp-group-head">
-          {icon}
-          <span className="rp-group-label">{label}</span>
-          <span className="rp-count">{items.length}</span>
-        </div>
-        <div className="rp-list">
-          {items.map((item, idx) => {
-            const reasons = whyReasons(item)
-            return (
-              <Link key={item.caseId} href={`/recovery/case/${item.caseId}`} className="rp-item">
-                  <div className="rp-item-head">
-                    <span className="rp-item-num">{idx + 1}</span>
-                    <span className={`rp-conf rp-conf--${item.recoveryConfidence >= 80 ? 'high' : item.recoveryConfidence >= 50 ? 'med' : 'low'}`}>
-                      {item.recoveryConfidence}%
-                    </span>
-                    <span className="rp-item-name">{item.customerName}</span>
-                    <span className="rp-item-amount">{fmt(item.outstanding)}</span>
-                  </div>
-                <div className="rp-item-days">
-                  {item.overdue > 0 ? (
-                    <span className="rp-item-overdue">{item.overdue} days overdue</span>
-                  ) : item.promiseBrokenDays != null ? (
-                    <span className="rp-item-overdue">Promise broken {item.promiseBrokenDays}d ago</span>
-                  ) : null}
-                </div>
-                <div className="rp-item-why">
-                  {reasons.map((r, ri) => (
-                    <span key={ri} className="rp-item-reason">• {r}</span>
-                  ))}
-                </div>
-                <div className="rp-item-action">
-                  {item.recommendedAction === 'call' ? (
-                    <span className="rp-btn rp-btn--call" onClick={(e) => { if (item.phone) { e.stopPropagation(); window.location.href = `tel:${item.phone}` } }}>
-                      <Phone size={13} /> Call Now
-                    </span>
-                  ) : item.recommendedAction === 'record_payment' ? (
-                    <span className="rp-btn rp-btn--payment"><HeartHandshake size={13} /> Record</span>
-                  ) : (
-                    <span className="rp-btn rp-btn--remind"><MessageSquare size={13} /> Send WhatsApp</span>
-                  )}
-                  <span className="rp-item-open">Open →</span>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
-
-  const now = new Date()
-  const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  const yesterdayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterdayRecovered = data.recentlyRecovered
-    .filter(r => new Date(r.recoveredAt) >= yesterdayStart && new Date(r.recoveredAt) < yesterdayEnd)
-    .length
+  const summary = data.summary
+  const sections = [
+    { key: 'needs_you' as SectionKey, items: data.needsYou, meta: SECTION_META.needs_you },
+    { key: 'automated' as SectionKey, items: data.billzoIsHandling, meta: SECTION_META.automated },
+    { key: 'monitoring' as SectionKey, items: data.monitoring, meta: SECTION_META.monitoring },
+  ].filter(s => s.items.length > 0)
 
   return (
     <div className="rc-page">
-      {/* Above-fold hero */}
-      <div className="rc-hero">
-        {/* Greeting */}
-        <header className="rc-header">
-          <div>
-            <h1 className="rc-greeting">
-              {greeting()}{name ? ` ${name}!` : '!'}
-            </h1>
-          </div>
-          <button className="rc-refresh" onClick={refresh} aria-label="Refresh">
-            <RotateCcw size={16} />
-          </button>
-        </header>
-
-        {/* Two key numbers */}
-        <div className="rc-metrics">
-          <div className="rc-metric">
-            <span className="rc-metric-label">Outstanding</span>
-            <span className="rc-metric-value">{fmt(totalOutstanding)}</span>
-          </div>
-          <div className="rc-metric-divider" />
-          <div className="rc-metric">
-            <span className="rc-metric-label">Recover today</span>
-            <span className="rc-metric-value rc-metric-value--accent">{fmt(totalExpected)}</span>
-          </div>
-        </div>
-
-        {/* Single CTA */}
-        <Link href="/recovery/queue" className="rc-cta">
-          {needsAction.length > 0 ? 'Start Recovery' : 'Review Queue'}
-          <ArrowRight size={16} />
-        </Link>
-
-        {/* Yesterday line */}
-        {yesterdayRecovered > 0 && (
-          <p className="rc-yesterday">
-            Yesterday — recovered from {yesterdayRecovered} customer{yesterdayRecovered > 1 ? 's' : ''}
+      {/* Header */}
+      <header className="rc-header" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h1 className="rc-greeting">Recovery</h1>
+          <p className="rc-yesterday" style={{ marginTop: 4, fontSize: 13 }}>
+            <strong>{fmt(summary.totalOutstanding)}</strong> outstanding across <strong>{summary.totalCases}</strong> customer{summary.totalCases !== 1 ? 's' : ''}
+            {' · '}
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              {summary.needsYou} need you
+            </span>
+            {' · '}
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              {summary.automated} automated
+            </span>
+            {' · '}
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              {summary.monitoring} monitoring
+            </span>
           </p>
-        )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <button className="rc-refresh" onClick={() => { void loadData(); void loadFeed(); }} aria-label="Refresh">
+            <RotateCcw size={16} className={loading ? 'spin' : ''} />
+          </button>
+        </div>
+      </header>
+
+      {/* Summary bar */}
+      <div className="rc-summary-bar" style={{ display: 'flex', gap: 12, padding: '12px 0', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
+        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
+          <span className="rc-summary-label">Total Outstanding</span>
+          <span className="rc-summary-value">{fmt(summary.totalOutstanding)}</span>
+        </div>
+        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
+          <span className="rc-summary-label">Active Cases</span>
+          <span className="rc-summary-value">{summary.totalCases}</span>
+        </div>
+        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
+          <span className="rc-summary-label">Need You</span>
+          <span className="rc-summary-value" style={{ color: 'var(--danger)' }}>{summary.needsYou}</span>
+        </div>
+        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
+          <span className="rc-summary-label">Automated</span>
+          <span className="rc-summary-value" style={{ color: 'var(--primary)' }}>{summary.automated}</span>
+        </div>
+        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
+          <span className="rc-summary-label">Monitoring</span>
+          <span className="rc-summary-value" style={{ color: 'var(--success)' }}>{summary.monitoring}</span>
+        </div>
       </div>
 
-      {/* Insights (collapsed by default) */}
-      <details className="rc-insights">
-        <summary className="rc-insights-toggle">
-          View Insights <ChevronRight size={14} className="rc-insights-chevron" />
-        </summary>
-
-        {/* Today's Recovery Plan */}
-        <section className="rc-block">
-          <div className="rc-block-head">
-            <span className="rc-dot rc-dot--red" />
-            <h2>Today&apos;s Recovery Plan</h2>
-          </div>
-
-          {needsAction.length === 0 ? (
-            <div className="rc-empty">
-              <CheckCircle2 size={18} />
-              <span>No customers need action today.</span>
+      {/* Sections */}
+      {sections.length === 0 ? (
+        <div className="rc-empty" style={{ padding: 48, textAlign: 'center' }}>
+          <CheckCircle2 size={32} style={{ color: 'var(--success)', marginBottom: 12 }} />
+          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>All caught up</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>No customers need recovery action right now.</div>
+        </div>
+      ) : (
+        sections.map(({ key, items, meta }) => (
+          <section key={key} className="rc-block" style={{ padding: 12 }}>
+            <div className="rc-block-head">
+              <span className={`rc-dot ${meta.dot}`} />
+              <h2>{meta.label}</h2>
+              <span className="rc-count">{items.length}</span>
+              <span className="rc-section-desc">{meta.description}</span>
             </div>
-          ) : (
-            <div className="rp-container">
-              <PlanSection
-                items={callItems}
-                icon={<Phone size={16} />}
-                label="Call Today"
-                color="rp--call"
-                emptyText="No calls needed"
-              />
-              <PlanSection
-                items={remindItems}
-                icon={<Bell size={16} />}
-                label="Send Reminder"
-                color="rp--remind"
-                emptyText="No reminders needed"
-              />
-              <PlanSection
-                items={paymentItems}
-                icon={<HeartHandshake size={16} />}
-                label="Record Payment"
-                color="rp--payment"
-                emptyText="No payments to record"
-              />
-              <PlanSection
-                items={otherItems}
-                icon={<Clock size={16} />}
-                label="Other Actions"
-                color="rp--other"
-                emptyText=""
-              />
-            </div>
-          )}
-        </section>
-
-        {/* Scheduled Today */}
-        <section className="rc-block">
-          <div className="rc-block-head">
-            <span className="rc-dot rc-dot--orange" />
-            <h2>Scheduled Today</h2>
-            <span className="rc-count">{data.scheduledToday.length}</span>
-          </div>
-
-          {data.scheduledToday.length === 0 ? (
-            <div className="rc-empty">
-              <Clock size={18} />
-              <span>No follow-ups scheduled today.</span>
-            </div>
-          ) : (
-            <div className="rc-summary">
-              <div className="rc-summary-item">
-                <span className="rc-summary-num">{data.counts.reminders}</span>
-                <span className="rc-summary-lbl">Reminders</span>
-              </div>
-              <div className="rc-summary-item">
-                <span className="rc-summary-num">{data.counts.promiseFollowups}</span>
-                <span className="rc-summary-lbl">Promise Follow-ups</span>
-              </div>
-              <div className="rc-summary-item">
-                <span className="rc-summary-num">{data.counts.calls}</span>
-                <span className="rc-summary-lbl">Calls</span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Recently Recovered */}
-        <section className="rc-block">
-          <div className="rc-block-head">
-            <span className="rc-dot rc-dot--green" />
-            <h2>Recently Recovered</h2>
-            <span className="rc-count">{data.recentlyRecovered.length}</span>
-          </div>
-
-          {data.recentlyRecovered.length === 0 ? (
-            <div className="rc-empty">
-              <CheckCircle2 size={18} />
-              <span>No recoveries recorded this week.</span>
-            </div>
-          ) : (
             <div className="rc-list rc-list--tight">
-              {data.recentlyRecovered.map((r) => (
-                <div key={r.caseId} className="rc-row rc-row--green">
-                  <div className="rc-row-icon rc-row-icon--green">
-                    <CheckCircle2 size={15} />
-                  </div>
-                  <div className="rc-row-main">
-                    <span className="rc-row-title">{r.customerName}</span>
-                    <span className="rc-row-sub">{timeAgo(r.recoveredAt)}</span>
-                  </div>
-                </div>
+              {items.map((c) => (
+                <RecoveryCard
+                  key={c.customerId}
+                  c={c}
+                  sending={sending === c.customerId}
+                  onSend={() => handleSend(c.customerId)}
+                  onAddPhone={() => openPhoneModal(c)}
+                  onOpen={() => router.push(`/recovery/customer/${encodeURIComponent(c.customerId)}`)}
+                />
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        ))
+      )}
 
-        {/* Activity Timeline */}
-        <section className="rc-block">
-          <div className="rc-block-head">
-            <span className="rc-dot rc-dot--blue" />
-            <h2>Activity</h2>
-            <span className="rc-count rc-count--muted">24h</span>
+      {/* Activity feed */}
+      <section className="rc-block" style={{ padding: 12, marginTop: 12 }}>
+        <div className="rc-block-head">
+          <h2>Recovery activity</h2>
+          <Link href="/recovery/timeline" className="cw-link">Full activity →</Link>
+        </div>
+        {feedLoading && feed.length === 0 ? (
+          <div className="rc-empty"><Loader2 className="spin" size={18} /><span>Loading activity…</span></div>
+        ) : feed.length === 0 ? (
+          <div className="rc-empty"><MessageSquare size={18} /><span>No recovery activity recorded yet.</span></div>
+        ) : (
+          <div className="rc-timeline">
+            {feed.slice(0, 10).map((it) => (
+              <div key={it.id} className="rc-tl-item">
+                <div className={`rc-tl-dot ${it.actor === 'customer' ? 'rc-tl-dot--read' : it.actor === 'system' ? 'rc-tl-dot--system' : 'rc-tl-dot--delivered'}`} />
+                <div className="rc-tl-body">
+                  <span className="rc-tl-text">
+                    {it.title}{it.customerName ? ` · ${it.customerName}` : ''}
+                    {it.amount != null ? ` · ${fmt(it.amount)}` : ''}
+                  </span>
+                  {it.detail ? <span className="rc-tl-detail">{it.detail}</span> : null}
+                  {it.customerId ? (
+                    <button className="rc-tl-open" onClick={() => router.push(`/recovery/customer/${encodeURIComponent(it.customerId!)}`)}>open →</button>
+                  ) : null}
+                </div>
+                <div className="rc-tl-time">{fmtTime(it.timestamp)} {fmtDate(it.timestamp)}</div>
+              </div>
+            ))}
           </div>
+        )}
+      </section>
 
-          {data.timeline.length === 0 ? (
-            <div className="rc-empty">
-              <Clock size={18} />
-              <span>No activity in the last 24 hours.</span>
+      {/* Add phone modal */}
+      {phoneModal && phoneCase && (
+        <div className="rc-modal">
+          <div className="rc-modal-card">
+            <div className="rc-modal-head">
+              <UserPlus size={16} />
+              <span>WhatsApp number</span>
+              <button className="rc-modal-close" onClick={() => setPhoneModal(false)}><X size={15} /></button>
             </div>
-          ) : (
-            <div className="rc-timeline">
-              {data.timeline.map((e, i) => (
-                <div key={i} className="rc-tl-item">
-                  <div className="rc-tl-dot" />
-                  <div className="rc-tl-body">
-                    <span className="rc-tl-text">{timelineLabel(e)}</span>
-                    {e.detail ? <span className="rc-tl-detail">{e.detail}</span> : null}
-                  </div>
-                  <div className="rc-tl-time">{fmtTime(e.at)}</div>
-                </div>
-              ))}
+            <p className="rc-modal-sub">
+              Recovery for <strong>{phoneCase.customerName}</strong> cannot start without a customer number.
+            </p>
+            <input
+              className="rc-modal-input"
+              placeholder="+91 XXXXX XXXXX"
+              value={phoneDraft}
+              onChange={(e) => setPhoneDraft(e.target.value)}
+              inputMode="tel"
+              autoFocus
+            />
+            <div className="rc-modal-actions">
+              <button className="rc-btn rc-btn--ghost" onClick={() => setPhoneModal(false)}>Cancel</button>
+              <button className="rc-btn rc-btn--primary" onClick={savePhone} disabled={savingPhone || !phoneDraft.trim()}>
+                {savingPhone ? <Loader2 className="spin" size={14} /> : null} Save number
+              </button>
             </div>
-          )}
-        </section>
-      </details>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const min = Math.floor(diff / 60000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min} min ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h ago`
-  return `${Math.floor(hr / 24)}d ago`
+// ── Card state → STATUS / NEXT ACTION / ownership ──────────────────────────
+type CardState = 'blocked_phone' | 'call' | 'remind' | 'waiting' | 'recovered' | 'blocked_transport'
+
+function cardMeta(state: CardState, c: RecoveryCard): { statusLabel: string; nextAction: string; ownedBy: 'merchant' | 'billzo'; tone: 'red' | 'blue' | 'green' | 'orange' } {
+  switch (state) {
+    case 'blocked_phone':
+      return { statusLabel: 'Blocked — phone number missing', nextAction: 'Add phone number', ownedBy: 'merchant', tone: 'red' }
+    case 'blocked_transport':
+      return { statusLabel: 'Blocked — WhatsApp delivery failing', nextAction: 'Fix WhatsApp delivery', ownedBy: 'merchant', tone: 'red' }
+    case 'call':
+      return { statusLabel: 'Phone call needed', nextAction: 'Call customer', ownedBy: 'merchant', tone: 'orange' }
+    case 'remind':
+      return { statusLabel: 'Due for a reminder', nextAction: 'Send reminder', ownedBy: 'billzo', tone: 'blue' }
+    case 'waiting': {
+      if (c.evidence.replied) return { statusLabel: 'Customer replied', nextAction: 'View details', ownedBy: 'billzo', tone: 'green' }
+      if (c.evidence.lastDelivery.status) return { statusLabel: `Reminder ${c.evidence.lastDelivery.status} — awaiting response`, nextAction: 'View details', ownedBy: 'billzo', tone: 'green' }
+      return { statusLabel: 'Awaiting response', nextAction: 'View details', ownedBy: 'billzo', tone: 'green' }
+    }
+    case 'recovered':
+      return { statusLabel: 'Recovered', nextAction: 'View payment', ownedBy: 'billzo', tone: 'green' }
+    default:
+      return { statusLabel: 'Review', nextAction: 'View details', ownedBy: 'merchant', tone: 'blue' }
+  }
 }
 
-function timelineLabel(e: TimelineEvent) {
-  const map: Record<string, string> = {
-    scheduled: 'Action scheduled',
-    started: 'Action started',
-    sent: 'Reminder sent',
-    delivered: 'Delivered',
-    failed: 'Failed',
-    completed: 'Completed',
-    cancelled: 'Cancelled',
-    expired: 'Expired',
-    promise_made: 'Promise received',
-    payment_received: 'Payment received',
-    state_changed: 'Case state changed',
+function RecoveryCard({ c, sending, onSend, onAddPhone, onOpen }: {
+  c: RecoveryCard
+  sending: boolean
+  onSend: () => void
+  onAddPhone: () => void
+  onOpen: () => void
+}) {
+  const meta = cardMeta(c.state as CardState, c)
+  const overdue = c.maxOverdueDays
+  const { cta } = c
+
+  const renderCTA = () => {
+    if (cta.type === 'add_phone') {
+      return (
+        <button className="cw-record-payment cw-record-payment--danger" onClick={onAddPhone}>
+          <UserPlus size={18} /> Add phone number
+        </button>
+      )
+    }
+    if (cta.type === 'call') {
+      if (cta.href) {
+        return (
+          <a className="cw-record-payment cw-record-payment--phone" style={{ textDecoration: 'none' }} href={cta.href}>
+            <Phone size={18} /> Call customer
+          </a>
+        )
+      }
+      return (
+        <button className="cw-record-payment cw-record-payment--phone" onClick={onAddPhone}>
+          <UserPlus size={18} /> Add phone number
+        </button>
+      )
+    }
+    if (cta.type === 'send_reminder') {
+      return (
+        <button className="cw-record-payment" disabled={sending} onClick={onSend}>
+          {sending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
+          {sending ? 'Sending…' : 'Send reminder'}
+        </button>
+      )
+    }
+    // view_details or view_payment
+    return (
+      <button className="cw-record-payment cw-record-payment--ghost" onClick={onOpen}>
+        {cta.type === 'view_payment' ? <CheckCircle2 size={18} /> : <Clock size={18} />}
+        {cta.label}
+      </button>
+    )
   }
-  const base = map[e.eventType] ?? e.eventType.replace(/_/g, ' ')
-  return e.toStatus ? `${base} → ${e.toStatus}` : base
+
+  return (
+    <div className={`rc-card rc-card--${meta.tone}`}>
+      <div className="rc-card-top">
+        <span className={`rc-owner rc-owner--${meta.ownedBy}`}>
+          {meta.ownedBy === 'billzo' ? <><Zap size={12} /> BILLZO</> : <><UserX size={12} /> YOU</>}
+        </span>
+        <span className="rc-card-amount">{fmt(c.outstanding)}</span>
+      </div>
+
+      <div className="rc-card-name">{c.customerName}</div>
+      <div className="rc-card-sub">
+        {overdue > 0 ? `${overdue} days overdue` : 'Current'}
+        {c.invoiceCount > 1 ? ` · ${c.invoiceCount} invoices` : ''}
+      </div>
+
+      <dl className="rc-facts">
+        <div className="rc-fact">
+          <dt>STATUS</dt>
+          <dd>{meta.statusLabel}</dd>
+        </div>
+        <div className="rc-fact">
+          <dt>WHY</dt>
+          <dd>{c.reason}</dd>
+        </div>
+        <div className="rc-fact">
+          <dt>NEXT ACTION</dt>
+          <dd>{meta.nextAction}</dd>
+        </div>
+      </dl>
+
+      <div className="rc-card-foot">
+        <div className="rc-card-cta">{renderCTA()}</div>
+        <button className="rc-card-open" onClick={onOpen}>
+          Open <ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  )
 }

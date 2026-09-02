@@ -109,7 +109,18 @@ export async function getCaseProjection(tenantId: string, caseId: string): Promi
     throw new Error('Case not found')
   }
   const overdueDays = invoices.length > 0 ? Math.max(...invoices.map((i) => i.overdueDays)) : 0
-  const caseWithOverdue = { ...caseInfo, overdueDays }
+  const caseWithOverdue = {
+    ...caseInfo,
+    overdueDays,
+    // Truthful priority derived from actual severity (overdue age + amount),
+    // not a hardcoded guess. A call escalation is inherently high.
+    priority:
+      caseInfo.priority === 'high' || overdueDays > 45 || Number(caseInfo.outstandingAmount || 0) >= 10000
+        ? 'high'
+        : overdueDays >= 15
+          ? 'medium'
+          : 'low',
+  }
   const summary = buildSummary(caseWithOverdue, invoices)
   const timeline = buildTimeline(activities)
   const metrics = buildMetrics(collectionActions, promises)

@@ -27,6 +27,34 @@ export async function GET(
 
     const now = new Date().toISOString()
 
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('customer_id')
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle()
+    const customerId = invoice?.customer_id || null
+
+    // Canonical recovery attempt — created BEFORE the behavior event so the
+    // causal spine is intact regardless of downstream consumers. The click is
+    // a recovery attempt by the customer against this invoice.
+    const attemptId = `CA_${crypto.randomUUID()}`
+    await supabaseAdmin.from('collection_actions').insert({
+      id: attemptId,
+      tenant_id: tenantId,
+      customer_id: customerId,
+      invoice_ids: [invoiceId],
+      action_type: 'payment_request',
+      status: 'in_progress',
+      source: 'customer',
+      provider: 'upi',
+      amount,
+      reason: 'Customer clicked UPI payment link',
+      priority: 5,
+      created_at: now,
+      updated_at: now,
+    }).maybeSingle()
+
     const { data: latest } = await supabaseAdmin
       .from('whatsapp_events')
       .select('billzo_message_id')
@@ -49,6 +77,8 @@ export async function GET(
         status: 'clicked_upi',
         invoice_id: invoiceId,
         tenant_id: tenantId,
+        customer_id: customerId,
+        recovery_attempt_id: attemptId,
         provider: 'upi',
         direction: 'outbound',
         event_layer: 'behavioral',
@@ -68,28 +98,12 @@ export async function GET(
       timestamp: now,
     })
 
-    const { data: invoice } = await supabaseAdmin
-      .from('invoices')
-      .select('customer_id')
-      .eq('id', invoiceId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle()
-
-    await supabaseAdmin.from('collection_actions').insert({
-      id: `CA_${crypto.randomUUID()}`,
-      tenant_id: tenantId,
-      customer_id: invoice?.customer_id || null,
-      invoice_ids: [invoiceId],
-      action_type: 'payment_request',
+    // The click itself is now recorded — finalize the attempt.
+    await supabaseAdmin.from('collection_actions').update({
       status: 'completed',
-      source: 'customer',
-      provider: 'upi',
-      amount,
       completed_at: now,
-      reason: 'Customer clicked UPI payment link',
-      priority: 5,
-      metadata: { billzoMessageId, whatsappEventId: eventId },
-    }).maybeSingle()
+      updated_at: now,
+    }).eq('id', attemptId)
 
     return NextResponse.redirect(new URL(`/pay/checkout?token=${token}`, _request.url), 302)
   } catch (err) {

@@ -31,6 +31,7 @@ import {
 } from '@billzo/shared'
 import { canSendReminder } from '../src/lib/recovery/decision-engine'
 import { getAutoRecoveryGate } from '../src/lib/recovery/enforcement'
+import { buildAttemptHistory, isExecutedAttempt, attemptMoment } from '../src/lib/recovery/attempt-history'
 
 const logger = createQueueLogger('reminders')
 
@@ -257,7 +258,12 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
       // Jitter ±15 min on next reminder time to avoid burst collisions
       const jitter = () => (Math.random() - 0.5) * 30 * 60 * 1000
 
-      const lockKey = `reminder:${invoiceId}:${stage}`
+      // Customer-wide serialization makes the 24-hour customer cap real when
+      // several overdue invoices are scheduled concurrently.  Legacy jobs
+      // without customerId retain the invoice lock and are verified after load.
+      const lockKey = customerId
+        ? `reminder:customer:${tenantId}:${customerId}`
+        : `reminder:${invoiceId}:${stage}`
       const result = await withLock(lockKey, 60000, async () => {
         logger.info({ invoiceId, stage }, 'Sending reminder')
 
@@ -333,49 +339,66 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           .limit(1)
           .maybeSingle()
 
-        // ── Reminder history for new decision rules ──
-        const [reminderEventsResult, customerRemindersResult] = await Promise.all([
+        // ── Reminder history from canonical attempts + outcomes ──
+        // C1: history is projected from finalized collection_actions plus
+        // explicit recovery_outcomes (delivery/reply/promise/payment evidence),
+        // never from raw whatsapp_events row counts.
+        const [attemptRowsResult, customerAttemptRowsResult] = await Promise.all([
           supabaseAdmin
-            .from('whatsapp_events')
-            .select('status, created_at')
-            .eq('invoice_id', invoiceId)
+            .from('collection_actions')
+            .select('id, action_type, status, executed_at, created_at, delivered_at, read_at, last_delivery_status')
             .eq('tenant_id', tenantId)
-            .eq('direction', 'outbound')
-            .order('created_at', { ascending: false }),
+            .contains('invoice_ids', [invoiceId]),
           supabaseAdmin
-            .from('whatsapp_events')
-            .select('created_at')
+            .from('collection_actions')
+            .select('status, executed_at, created_at')
+            .eq('tenant_id', tenantId)
             .eq('customer_id', customer?.id || '')
-            .eq('tenant_id', tenantId)
-            .eq('direction', 'outbound')
-            .in('status', ['sent', 'delivered', 'read'])
             .order('created_at', { ascending: false })
-            .limit(1),
+            .limit(20),
         ])
 
-        const reminderEvents = reminderEventsResult.data
-        const customerReminders = customerRemindersResult.data
+        const attemptRows = attemptRowsResult.data || []
+        const executedAttemptIds = attemptRows
+          .filter((a: any) => isExecutedAttempt(a.status))
+          .map((a: any) => a.id)
 
-        const totalSent = reminderEvents?.length ?? 0
-        const monthStart = new Date()
-        monthStart.setDate(1)
-        monthStart.setHours(0, 0, 0, 0)
-        const sentThisMonth = reminderEvents?.filter(
-          (e: any) => new Date(e.created_at) >= monthStart,
-        ).length ?? 0
-        // Consecutive ignores: most recent outbound events that were not read
-        let consecutiveIgnores = 0
-        if (reminderEvents) {
-          for (const e of reminderEvents) {
-            if (e.status === 'read') break
-            if (e.status === 'sent' || e.status === 'queued') consecutiveIgnores++
+        let outcomesByAttempt: Record<string, Array<{ outcome_type: string; outcome_at: string }>> = {}
+        if (executedAttemptIds.length > 0) {
+          const { data: outcomeRows } = await supabaseAdmin
+            .from('recovery_outcomes')
+            .select('recovery_attempt_id, outcome_type, outcome_at')
+            .in('recovery_attempt_id', executedAttemptIds)
+          for (const row of outcomeRows || []) {
+            if (!row.recovery_attempt_id) continue
+            if (!outcomesByAttempt[row.recovery_attempt_id]) outcomesByAttempt[row.recovery_attempt_id] = []
+            outcomesByAttempt[row.recovery_attempt_id].push({ outcome_type: row.outcome_type, outcome_at: row.outcome_at })
           }
         }
-        const lastReminderAt = reminderEvents?.[0]?.created_at || null
-        const lastCustomerReminderAt = customerReminders?.[0]?.created_at || null
-        const hoursSinceLastCustomerReminder = lastCustomerReminderAt
-          ? (Date.now() - new Date(lastCustomerReminderAt).getTime()) / 3600000
-          : 99
+
+        // Most recent executed attempt across this customer (any invoice).
+        const lastCustomerAttemptAt = (customerAttemptRowsResult.data || []).reduce<string | null>(
+          (latest: string | null, a: any) => {
+            if (!isExecutedAttempt(a.status)) return latest
+            return attemptMoment(a) && (latest === null || new Date(attemptMoment(a)).getTime() > new Date(latest).getTime())
+              ? attemptMoment(a)
+              : latest
+          },
+          null,
+        )
+
+        const reminderHistory = buildAttemptHistory({
+          attempts: attemptRows,
+          outcomesByAttempt,
+          customerLastAttemptAt: lastCustomerAttemptAt,
+        })
+
+        const totalSent = reminderHistory.totalSent
+        const sentThisMonth = reminderHistory.sentThisMonth
+        const consecutiveIgnores = reminderHistory.consecutiveIgnores
+        const lastReminderAt = reminderHistory.lastReminderAt
+        const lastCustomerReminderAt = reminderHistory.lastCustomerReminderAt
+        const hoursSinceLastCustomerReminder = reminderHistory.hoursSinceLastCustomerReminder
 
         logger.info({ invoiceId, stage }, 'Running decision engine')
         const decisionResult = canSendReminder({
@@ -397,12 +420,15 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           },
           customer: {
             id: customer?.id || '',
-            phone: customer?.phone || null,
+            // Evaluate the same endpoint that the sender will use; otherwise
+            // the audit can say "allowed" and the delivery path can still fail.
+            phone: customer?.whatsapp_number || customer?.phone || null,
             customerTier: customer?.customer_tier || 'regular',
             automationMode,
             phoneVerification: customer?.phone_verification || 'unknown',
             reputationScore: customer?.reputation_score ?? 50,
             engagementState: customer?.engagement_state || 'unseen',
+            messagingConsent: customer?.opt_in === true,
           },
           activePromiseDate: activePromise?.promise_date || null,
           timezone: 'Asia/Kolkata',
@@ -414,6 +440,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             lastReadAt: null,
             linkClicked: false,
             hoursSinceLastCustomerReminder,
+            lastCustomerReminderAt,
           },
         }, { override: override === true, reminderId: reminderId || undefined })
 
@@ -441,7 +468,24 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           confidence: decisionResult.confidence,
           rules_checked: decisionResult.rules,
           rules_snapshot: decisionResult.rulesSnapshot,
-          context_snapshot: { stage, recoveryStage: invoice.recovery_stage },
+          context_snapshot: {
+            stage,
+            recoveryStage: invoice.recovery_stage,
+            history: {
+              totalAttempts: reminderHistory.totalSent,
+              sentThisMonth: reminderHistory.sentThisMonth,
+              consecutiveIgnores: reminderHistory.consecutiveIgnores,
+              lastReminderAt: reminderHistory.lastReminderAt,
+              attempts: reminderHistory.attempts.map((p: any) => ({
+                id: p.id,
+                actionType: p.actionType,
+                status: p.status,
+                delivered: p.delivered,
+                read: p.read,
+                outcomes: p.outcomes,
+              })),
+            },
+          },
           next_review_at: decisionResult.nextReviewAt,
         }).maybeSingle()
 
@@ -575,6 +619,32 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           return { skipped: true, reason: 'invoice_paid_or_zero', invoiceId, stage }
         }
 
+        // Canonical recovery attempt. This is deliberately created before any
+        // transport call: a failed send is still a real recovery attempt and
+        // must remain available for audit and future history derivation.
+        const recoveryAttemptId = `CA_${crypto.randomUUID()}`
+        const attemptStartedAt = new Date().toISOString()
+        const { error: attemptCreateError } = await supabaseAdmin
+          .from('collection_actions')
+          .insert({
+            id: recoveryAttemptId,
+            tenant_id: tenantId,
+            customer_id: customer.id,
+            invoice_ids: [invoiceId],
+            action_type: 'reminder',
+            status: 'in_progress',
+            source: 'worker',
+            provider: effectiveProvider,
+            amount: invoice.outstanding_amount ?? invoice.total ?? 0,
+            executed_at: attemptStartedAt,
+            reason: `Recovery attempt started — stage: ${stage}`,
+            priority: 5,
+            metadata: { stage, trigger: trigger || 'unknown' },
+          })
+        if (attemptCreateError) {
+          throw new Error(`Failed to create recovery attempt: ${attemptCreateError.message}`)
+        }
+
         if (effectiveProvider === 'baileys' && !isBaileysConnected(tenantId)) {
           logger.info({ tenantId }, 'Starting Baileys socket')
           startBaileysSocket(tenantId).catch((err) =>
@@ -588,6 +658,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           reminderStage: stage,
           attemptNumber: 1,
           amount: invoice.total || 0,
+          recoveryAttemptId,
         })
 
         if (sendResult.error) {
@@ -612,6 +683,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             attemptNumber: identity.attemptNumber,
             reminderStage: identity.reminderStage,
             customerId: customer?.id || null,
+            recoveryAttemptId,
             phone: `+${cleanPhone}`,
             status: eventStatus,
             messageType,
@@ -631,6 +703,27 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           idempotencyKey: `whatsapp:sent:${identity.billzoMessageId}`,
           retentionDays: 90,
         })
+
+        // Complete the pre-created attempt on every transport result.  Do not
+        // delete or replace it: the row is the causal anchor for provider
+        // receipts and later outcomes.
+        await supabaseAdmin
+          .from('collection_actions')
+          .update({
+            status: sendResult.error ? 'failed' : 'completed',
+            completed_at: new Date().toISOString(),
+            provider: sendResult.provider || effectiveProvider,
+            billzo_message_id: identity.billzoMessageId,
+            last_attempt_at: attemptStartedAt,
+            attempt_count: 1,
+            metadata: {
+              stage,
+              trigger: trigger || 'unknown',
+              provider_message_id: sendResult.messageId || null,
+              transport_error: sendResult.error || null,
+            },
+          })
+          .eq('id', recoveryAttemptId)
 
         const nextStage = getNextStage(stage as ReminderStage)
         const maxStageReached = nextStage === stage
@@ -682,6 +775,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
             stage,
             channel: 'whatsapp',
             messageId: identity.billzoMessageId,
+            recoveryAttemptId,
           })
 
           logger.info('recovery_send', {
@@ -866,30 +960,7 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
           await clearOverride(invoiceId).catch(() => {})
         }
 
-        // Dual-write: log to collection_actions
-        // authority:exempt append_only_observability — collection_actions is append-only audit log, not business state
-        try {
-          await supabaseAdmin.from('collection_actions').insert({
-            id: `CA_${crypto.randomUUID()}`,
-            tenant_id: tenantId,
-            customer_id: customer?.id || null,
-            invoice_ids: [invoiceId],
-            action_type: 'reminder',
-            status: 'completed',
-            source: 'worker',
-            provider: sendResult.provider || 'whatsapp',
-            amount: invoice.outstanding_amount ?? invoice.total ?? 0,
-            executed_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-            reason: `Reminder sent — stage: ${stage}`,
-            priority: 5,
-            metadata: { billzoMessageId: identity.billzoMessageId, stage },
-          }).maybeSingle()
-        } catch (err) {
-          logger.error({ invoiceId, err }, 'Failed to log collection_action')
-        }
-
-        return { sent: true, invoiceId, stage, status: eventStatus, messageId: identity.billzoMessageId, provider: sendResult.provider }
+        return { sent: true, invoiceId, stage, status: eventStatus, messageId: identity.billzoMessageId, recoveryAttemptId, provider: sendResult.provider }
       })
 
       if (!result) {

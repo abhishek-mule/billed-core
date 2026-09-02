@@ -6,13 +6,13 @@ import Link from "next/link"
 import {
   Store, Crown, MessageCircle, Users, Shield, ChevronRight, LogOut,
   Search, Clock, Download, Trash2, Zap, CheckCircle2, AlertCircle, XCircle,
-  Wifi, Sun, Moon, Bug, IndianRupee,
+  Wifi, Sun, Moon, Bug, IndianRupee, Bell,
 } from "lucide-react"
 import { useTheme } from "@/lib/billzo/theme"
 import { Button } from "@/components/billzo/Button"
 import { db } from "@/lib/billzo/db"
 import { clearAuthCookies } from "@/lib/cookies"
-import { getTenantId } from "@/lib/billzo/tenant"
+import { getTenantId, clearSession } from "@/lib/billzo/tenant"
 import { PageShell } from "@/components/billzo/PageShell"
 
 
@@ -57,7 +57,7 @@ export default function SettingsPage() {
       }
     }
     load()
-  }, [router])
+  }, [])
 
   // Keyboard shortcut: / to focus search
   useEffect(() => {
@@ -73,8 +73,14 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     await clearAuthCookies()
+    clearSession()
+    try {
+      await db().delete()
+    } catch {
+      // best effort
+    }
     localStorage.clear()
-    router.push('/auth')
+    window.location.href = '/auth'
   }
 
   const categories: Category[] = useMemo(() => [
@@ -116,16 +122,16 @@ export default function SettingsPage() {
       description: 'Reminder timing, tone, business hours',
     },
     {
-      id: 'automation',
-      href: '/settings/recovery',
-      icon: <Zap className={ICON_CLASS} />,
-      title: 'Automation',
-      description: 'Auto-reminders, scheduling, quiet hours, per-customer settings',
+      id: 'team',
+      href: '/settings/team',
+      icon: <Users className={ICON_CLASS} />,
+      title: 'Team & Staff',
+      description: 'Manage staff access, permissions, and roles',
     },
     {
       id: 'notifications',
-      href: '/settings/developer',
-      icon: <Bug className={ICON_CLASS} />,
+      href: '/settings/network',
+      icon: <Bell className={ICON_CLASS} />,
       title: 'Push Notifications',
       description: 'Enable FCM device alerts for payment received & broken promises',
       status: 'connected' as CategoryStatus,
@@ -259,7 +265,7 @@ export default function SettingsPage() {
                         {cat.title}
                       </p>
                       {cat.statusLabel && (
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-medium border ${STATUS_STYLES[cat.status!]}`}>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[cat.status!]}`}>
                           {cat.statusLabel}
                         </span>
                       )}

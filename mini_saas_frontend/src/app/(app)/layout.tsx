@@ -11,14 +11,15 @@ import { syncPendingQueue, reconcileFromServer } from '@/lib/billzo/sync'
 export default function BillzoLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleOnline = () => scheduleBackgroundSync()
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('billzo:sync', () => {
+    const handleSync = () => {
       syncPendingQueue().then(() => reconcileFromServer())
-    })
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('billzo:sync', handleSync)
 
     return () => {
       window.removeEventListener('online', handleOnline)
-      window.removeEventListener('billzo:sync', handleOnline)
+      window.removeEventListener('billzo:sync', handleSync)
     }
   }, [])
 

@@ -4,40 +4,44 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Phone, MessageSquare, CheckCircle2, ArrowLeft,
-  HeartHandshake, Bell, FileText,
-  Loader2, CircleDashed, Pin, PenLine, X,
+  Phone, MessageSquare, ArrowLeft, ChevronDown,
+  FileText, CheckCircle2, Send, Banknote, UserPlus, Loader2, Pin, PenLine, X, Clock,
 } from 'lucide-react'
 import '@/styles/recovery-center.css'
-import { ReminderStateBadge } from '@/components/billzo/ReminderStateBadge'
 import { calculateDaysOverdue } from '@/lib/billzo/days-overdue'
-import { getRecommendedAction } from '@/lib/billzo/recommended-action'
 
 type Customer = {
-  id: string; name: string; phone: string; email: string | null; tier: string | null; gstin: string | null
+  id: string; name: string; phone: string | null; email: string | null; tier: string | null; gstin: string | null
 }
 type CaseInfo = {
   id: string; outstanding: number; overdue: number; state: string
   promiseDate: string | null; brokenPromises: number; lastPaymentAt: string | null; nextAction: string | null
-  recoverableAmount?: number; recoveryConfidence?: number
 }
 type Invoice = { id: string; number: string | null; total: number; status: string; dueDate: string | null; createdAt: string }
-type ActionRow = {
-  id: string; actionType: string; channel: string | null; templateName: string | null; status: string
-  triggerType: string | null; scheduledAt: string; completedAt: string | null; invoiceIds: string[]
-  events: { type: string; toStatus: string | null; at: string; detail: string }[]
-  delivery: { deliveredAt: string | null; readAt: string | null; opens: number }
+
+type RecoveryDecision = {
+  state: 'blocked_phone' | 'recovered' | 'call' | 'remind' | 'waiting' | 'none'
+  headline: string
+  reason: string
+  targetInvoiceId: string | null
+  invoices: {
+    invoiceId: string
+    number: string
+    amount: number
+    overdueDays: number
+    state: 'remind' | 'call' | 'waiting' | 'recovered'
+    delivery: 'read' | 'delivered' | 'sent' | null
+    lastEvidenceAt: string | null
+  }[]
+  generatedAt: string
 }
-type PromiseRow = { id: string; promiseDate: string | null; amount: number; status: string; createdAt: string; note: string | null }
-type Comm = { at: string; kind: string; text: string; detail: string; actionId: string | null }
 
 type Workspace = {
   customer: Customer | null
   case: CaseInfo | null
   invoices: Invoice[]
-  actions: ActionRow[]
-  promises: PromiseRow[]
-  communication: Comm[]
+  communication: { at: string; kind: string; text: string; detail: string }[]
+  decision: RecoveryDecision | null
 }
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
@@ -45,82 +49,34 @@ const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
 
-function actionLabel(a: string) {
-  return (
-    { call: 'Call', send_reminder: 'Send Reminder', reminder: 'Reminder', promise_followup: 'Promise Follow-up',
-      visit: 'Visit', escalate: 'Escalate', payment_request: 'Payment Request', wait: 'Wait', record_payment: 'Record Payment' } as any
-  )[a] || a.replace(/_/g, ' ')
-}
-
 function overdueDays(dueDate: string | null): number | null {
   if (!dueDate) return null
   return calculateDaysOverdue(dueDate)
 }
 
-function recoveryScore(rc: CaseInfo | null): { score: number; label: string; color: string } {
-  if (!rc || rc.outstanding === 0) return { score: 100, label: 'Cleared', color: 'green' }
-
-  let score = 65
-
-  const tierMap: Record<string, number> = { vip: 15, regular: 5, standard: 0, risky: -15 }
-  score += tierMap[(rc as any).tier] || 0
-
-  score -= (rc.brokenPromises || 0) * 12
-
-  if (rc.overdue > 0) {
-    if (rc.overdue <= 7) score += 5
-    else if (rc.overdue > 60) score -= 15
-  }
-
-  if (rc.promiseDate) {
-    const daysPast = Math.floor((Date.now() - new Date(rc.promiseDate).getTime()) / 86400000)
-    if (daysPast > 0) score -= Math.min(daysPast * 3, 20)
-    else score += 10
-  }
-
-  if (rc.state === 'promised' || rc.state === 'partial_payment') score += 10
-  if (rc.state === 'disputed') score -= 25
-
-  score = Math.max(5, Math.min(100, score))
-
-  const label = score >= 75 ? 'Likely to recover' : score >= 45 ? 'Needs attention' : 'At risk'
-  const color = score >= 75 ? 'green' : score >= 45 ? 'orange' : 'red'
-  return { score, label, color }
-}
-
-function expectationReasons(rc: CaseInfo, tier: string | null): string[] {
-  const r: string[] = []
-  const tierLabel: Record<string, string> = { vip: 'VIP customer', regular: 'Regular customer', standard: 'Standard tier', risky: 'Risky tier' }
-  if (tier) r.push(tierLabel[tier] ?? `${tier} tier`)
-  if (rc.brokenPromises > 0) r.push(`${rc.brokenPromises} broken promise${rc.brokenPromises !== 1 ? 's' : ''}`)
-  if (rc.overdue > 0) {
-    if (rc.overdue > 60) r.push('very overdue')
-    else if (rc.overdue > 30) r.push('over 30 days overdue')
-    else r.push(`${rc.overdue} days overdue`)
-  }
-  if (rc.promiseDate) {
-    const daysPast = Math.floor((Date.now() - new Date(rc.promiseDate).getTime()) / 86400000)
-    r.push(daysPast > 0 ? 'promise date passed' : 'promise coming up')
-  }
-  if (rc.state === 'promised' || rc.state === 'partial_payment') r.push('recently paid / promised')
-  if (rc.state === 'disputed') r.push('disputed')
-  if (r.length === 0) r.push('standard recovery confidence')
-  return r
+const decisionTone: Record<string, string> = {
+  blocked_phone: 'red',
+  recovered: 'green',
+  call: 'red',
+  remind: 'blue',
+  waiting: 'blue',
+  none: 'green',
 }
 
 export default function CustomerWorkspacePage() {
   const params = useParams()
   const router = useRouter()
-  const customerId = decodeURIComponent(String(params.customerId))
+  const customerId = params.customerId ? decodeURIComponent(String(params.customerId)) : ''
   const [data, setData] = useState<Workspace | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState<any[]>([])
   const [draft, setDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
-  const [hideFirstAction, setHideFirstAction] = useState(false)
+  const [invoicesOpen, setInvoicesOpen] = useState(false)
 
   useEffect(() => {
+    if (!customerId) return
     let active = true
     ;(async () => {
       try {
@@ -175,53 +131,39 @@ export default function CustomerWorkspacePage() {
     await reloadNotes()
   }
 
-  if (loading) return <div className="rc-loading"><Loader2 className="spin" size={22} /><span>Loading workspace…</span></div>
+  if (loading) return <div className="rc-loading"><Loader2 className="spin" size={22} /><span>Loading…</span></div>
   if (error || !data) return <div className="rc-loading"><span>{error ?? 'Not found'}</span><button className="rc-btn" onClick={() => router.back()}>Back</button></div>
 
   const c = data.customer
   const rc = data.case
-  const rs = recoveryScore(rc)
   const overdueDaysValue = rc && rc.overdue > 0 ? rc.overdue : null
+  const outstanding = rc?.outstanding ?? 0
+  const invoiceCount = data.invoices.length
+  const decision = data.decision
+  const tone = (decision && decisionTone[decision.state]) || 'blue'
 
-  const maxDeliveryStatus = (() => {
-    const seen = data.communication.filter(x => x.kind === 'wa').map(x => x.text)
-    if (seen.includes('read')) return 'read'
-    if (seen.includes('delivered')) return 'delivered'
-    if (seen.some(x => /sent/i.test(x))) return 'sent'
-    return null
-  })() as 'read' | 'delivered' | 'sent' | null
+  const openInvoices = data.invoices.filter((i) => i.total > 0)
+  const targetInvoice = openInvoices.find((i) => i.id === decision?.targetInvoiceId) || openInvoices[0] || null
 
-  const stateBadgeInput = {
-    hasPhone: !!c?.phone,
-    isPaid: rc ? rc.outstanding <= 0 : false,
-    hasActivePromise: !!(rc?.promiseDate && new Date(rc.promiseDate) >= new Date()),
-    maxDeliveryStatus,
+  const openTarget = () => {
+    if (targetInvoice) router.push(`/invoices/${targetInvoice.id}`)
   }
 
-  const recommended = rc ? getRecommendedAction({
-    overdueDays: overdueDaysValue ?? 0,
-    brokenPromises: rc.brokenPromises ?? 0,
-    ignoredReminders: 0,
-    hasActivePromise: !!(rc?.promiseDate && new Date(rc.promiseDate) >= new Date()),
-    promiseToPayDate: rc?.promiseDate ?? null,
-    hasPhone: !!c?.phone,
-    maxDeliveryStatus,
-    isPaid: (rc?.outstanding ?? 0) <= 0,
-  }) : null
+  const bannerIcon =
+    decision?.state === 'blocked_phone' ? <UserPlus size={18} />
+      : decision?.state === 'call' ? <Phone size={18} />
+      : decision?.state === 'recovered' ? <CheckCircle2 size={18} />
+      : decision?.state === 'waiting' ? <Clock size={18} />
+      : <Send size={18} />
 
-  const nextAction = (() => {
-    if (recommended && recommended.action !== 'none') {
-      const icon = recommended.action === 'call' ? <Phone size={15} />
-        : recommended.action === 'open_customer' ? <Phone size={15} />
-        : <Bell size={15} />
-      return { icon, label: recommended.label, reason: recommended.reason, action: recommended.action }
-    }
-    if (rc?.nextAction === 'visit') return { icon: <Phone size={15} />, label: 'Visit', reason: 'In-person follow-up needed', action: 'visit' }
-    if (rc?.nextAction === 'record_payment') return { icon: <HeartHandshake size={15} />, label: 'Record Payment', reason: 'Customer may have paid', action: 'record_payment' }
-    return { icon: <Bell size={15} />, label: 'Send Reminder', reason: overdueDaysValue ? `${overdueDaysValue} days overdue` : 'Customer balance', action: 'send_reminder' }
-  })()
+  const bannerTag =
+    decision?.state === 'blocked_phone' ? 'Action needed'
+      : decision?.state === 'recovered' ? 'Recovered'
+      : decision?.state === 'waiting' ? 'Await customer'
+      : 'Recommended action'
 
-  const actionColor = nextAction.action === 'call' ? 'red' : nextAction.action === 'visit' ? 'orange' : 'blue'
+  const bannerTitle = decision?.headline ?? '—'
+  const bannerReason = decision?.reason ?? ''
 
   return (
     <div className="rc-page">
@@ -232,17 +174,16 @@ export default function CustomerWorkspacePage() {
         <div className="cw-head-main">
           <h1 className="cw-name">{c?.name ?? 'Customer'}</h1>
           {c?.phone ? <a className="cw-phone" href={`tel:${c.phone}`}>{c.phone}</a> : null}
-          {rc ? <ReminderStateBadge input={stateBadgeInput} size="sm" showIcon className="mt-0.5" /> : null}
         </div>
       </header>
 
-      {/* Outstanding summary */}
+      {/* Summary — amount + count + overdue + promise */}
       <section className="cw-hero">
         <div className="cw-hero-item">
-          <span className="cw-hero-lbl">Customer Balance</span>
-          <span className="cw-hero-num">{rc ? fmt(rc.outstanding) : fmt(0)}</span>
-          {data.invoices.length > 1 ? (
-            <span className="cw-hero-sub">Across {data.invoices.length} invoices</span>
+          <span className="cw-hero-lbl">Outstanding</span>
+          <span className="cw-hero-num">{fmt(outstanding)}</span>
+          {invoiceCount > 0 ? (
+            <span className="cw-hero-sub">Across {invoiceCount} invoice{invoiceCount > 1 ? 's' : ''}</span>
           ) : null}
         </div>
         <div className="cw-hero-item">
@@ -257,96 +198,72 @@ export default function CustomerWorkspacePage() {
         ) : null}
       </section>
 
-      {/* Expected today breakdown — traceable to the dashboard target */}
-      {rc && rc.outstanding > 0 ? (
-        <section className="cw-expect">
-          <div className="cw-expect-row">
-            <span className="cw-expect-lbl">Expected today</span>
-            <span className="cw-expect-num">{fmt(rc.recoverableAmount ?? 0)}</span>
+      {/* Single authoritative next action — rendered from server decision */}
+      {decision ? (
+        <section className={`cw-next cw-next--${tone}`}>
+          <div className="cw-next-icon">{bannerIcon}</div>
+          <div className="cw-next-body">
+            <span className="cw-next-tag">{bannerTag}</span>
+            <span className="cw-next-title">{bannerTitle}</span>
+            <span className="cw-next-sub">{bannerReason}</span>
           </div>
-          <div className="cw-expect-row">
-            <span className="cw-expect-lbl">Remaining later</span>
-            <span className="cw-expect-num cw-expect-num--dim">{fmt(Math.max(0, rc.outstanding - (rc.recoverableAmount ?? 0)))}</span>
-          </div>
-          {rc.recoveryConfidence != null ? (
-            <p className="cw-expect-why">
-              Why {rc.recoveryConfidence}%? {expectationReasons(rc, c?.tier ?? null).join(' · ')}
-            </p>
-          ) : null}
+          {decision.state === 'blocked_phone' ? (
+            <Link href={`/parties/${customerId}`} className="rc-btn rc-btn--sm rc-btn--primary">Add phone number</Link>
+          ) : decision.state === 'call' && c?.phone ? (
+            <a href={`tel:${c.phone}`} className="rc-btn rc-btn--sm rc-btn--primary">Call customer</a>
+          ) : decision.state === 'recovered' ? null : (
+            <button className="rc-btn rc-btn--sm rc-btn--primary" onClick={openTarget}>Open invoice</button>
+          )}
         </section>
       ) : null}
 
-      {/* Chance of recovery */}
-      {rc && rc.outstanding > 0 ? (
-        <section className="rc-block">
-          <div className="rc-block-head"><h2>Chance of payment</h2></div>
-          <div className={`rs-card rs--${rs.color}`}>
-            <div className="rs-bar-wrap">
-              <div className="rs-bar">
-                <div className="rs-fill" style={{ width: `${rs.score}%` }} />
-              </div>
-              <span className="rs-pct">{rs.score}%</span>
-            </div>
-            <span className="rs-label">{rs.label}</span>
-            {rc.lastPaymentAt ? (
-              <span className="rs-meta">Last payment: {fmtDate(rc.lastPaymentAt)}</span>
-            ) : null}
-            {overdueDaysValue ? (
-              <span className="rs-meta">Last activity: {overdueDaysValue}d overdue</span>
-            ) : null}
-            <span className="rs-meta">Next: {nextAction.label}</span>
-          </div>
-        </section>
-      ) : null}
-
-      {/* Next Best Action */}
-      <section className={`rc-block rc-block--action rc-block--${actionColor}`}>
-        <div className="rc-block-head"><h2>Recommended Action</h2></div>
-        <div className="cw-action-card">
-          <div className="cw-action-icon">{nextAction.icon}</div>
-          <div className="cw-action-body">
-            <span className="cw-action-label">{nextAction.label}</span>
-            <span className="cw-action-reason">{nextAction.reason}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Invoices with age */}
+      {/* Bills — total + expandable individual invoices */}
       <section className="rc-block">
-        <div className="rc-block-head"><h2>Invoices</h2><span className="rc-count">{data.invoices.length}</span></div>
-        {data.invoices.length === 0 ? (
-          <div className="rc-empty"><FileText size={18} /><span>No invoices.</span></div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {data.invoices.map((inv) => {
-              const od = overdueDays(inv.dueDate)
-              return (
-                <Link key={inv.id} href={`/invoices/${inv.id}`} className="rc-row">
-                  <div className="rc-row-icon"><FileText size={15} /></div>
-                  <div className="rc-row-main">
-                    <span className="rc-row-title">{inv.number ?? 'Invoice'} · {fmt(inv.total)}</span>
-                    <span className="rc-row-sub">
-                      {od != null ? (
-                        od > 0
-                          ? <span className="rc-age rc-age--overdue">{od} days overdue</span>
-                          : <span className="rc-age rc-age--current">Due today</span>
-                      ) : null}
-                      <span>{inv.status}</span>
-                    </span>
-                    <span className="rc-row-date">Issued {fmtDate(inv.createdAt)}</span>
-                  </div>
-                  <div className="rc-row-time">{fmt(inv.total)}</div>
-                </Link>
-              )
-            })}
+        <button className="cw-bills-head" onClick={() => setInvoicesOpen((v) => !v)}>
+          <span>
+            <FileText size={15} className="cw-bills-ic" />
+            Bills
+          </span>
+          <span className="cw-bills-meta">
+            {fmt(outstanding)} across {invoiceCount} bill{invoiceCount !== 1 ? 's' : ''}
+            <ChevronDown size={16} className={`cw-bills-chev ${invoicesOpen ? 'cw-bills-chev--open' : ''}`} />
+          </span>
+        </button>
+        {invoicesOpen && (
+          <div className="rc-list rc-list--tight cw-bills-list">
+            {data.invoices.length === 0 ? (
+              <div className="rc-empty"><FileText size={18} /><span>No bills.</span></div>
+            ) : (
+              data.invoices.map((inv) => {
+                const od = overdueDays(inv.dueDate)
+                return (
+                  <Link key={inv.id} href={`/invoices/${inv.id}`} className="rc-row">
+                    <div className="rc-row-icon"><FileText size={15} /></div>
+                    <div className="rc-row-main">
+                      <span className="rc-row-title">{inv.number ?? 'Invoice'}</span>
+                      <span className="rc-row-sub">
+                        {od != null ? (
+                          od > 0
+                            ? <span className="rc-age rc-age--overdue">{od} days overdue</span>
+                            : <span className="rc-age rc-age--current">Due today</span>
+                        ) : null}
+                        <span>{inv.status}</span>
+                      </span>
+                      <span className="rc-row-date">Issued {fmtDate(inv.createdAt)}</span>
+                    </div>
+                    <div className="rc-row-time">{fmt(inv.total)}</div>
+                  </Link>
+                )
+              })
+            )}
           </div>
         )}
       </section>
 
-      {/* Activity */}
+      {/* Recent activity */}
       <section className="rc-block">
         <div className="rc-block-head">
-          <h2>Activity</h2>
+          <h2>Recent activity</h2>
           <Link href={`/recovery/timeline?customerId=${encodeURIComponent(customerId)}`} className="cw-link">Full activity →</Link>
         </div>
         {data.communication.length === 0 ? (
@@ -366,57 +283,15 @@ export default function CustomerWorkspacePage() {
         )}
       </section>
 
-      {/* Promises */}
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Promises</h2><span className="rc-count">{data.promises.length}</span></div>
-        {data.promises.length === 0 ? (
-          <div className="rc-empty"><HeartHandshake size={18} /><span>No promises made.</span></div>
-        ) : (
-          <div className="rc-list rc-list--tight">
-            {data.promises.map((p) => (
-              <div key={p.id} className="rc-row">
-                <div className="rc-row-icon"><HeartHandshake size={15} /></div>
-                <div className="rc-row-main">
-                  <span className="rc-row-title">{fmtDate(p.promiseDate)}</span>
-                  <span className="rc-row-sub">{p.status}{p.note ? ` · ${p.note}` : ''}</span>
-                </div>
-                <div className="rc-row-time">{p.amount ? fmt(p.amount) : ''}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Recovery Plan */}
-      <section className="rc-block">
-        <div className="rc-block-head"><h2>Recovery Plan</h2><span className="rc-count">{data.actions.length}</span></div>
-        {data.actions.length === 0 ? (
-          <div className="rc-empty"><CircleDashed size={18} /><span>No actions scheduled.</span></div>
-        ) : (
-          <div className="rc-list">
-            {data.actions.map((a) => (
-              <div key={a.id} className={`rc-card ${a.status === 'scheduled' ? '' : 'rc-card--done'}`}>
-                <div className="rc-card-top">
-                  <span className="rc-cust">
-                    {a.actionType === 'call' ? <Phone size={13} /> : <MessageSquare size={13} />}
-                    {' '}{actionLabel(a.actionType)}
-                  </span>
-                  <span className={`tag ${a.status === 'completed' ? 'tag--success' : a.status === 'failed' || a.status === 'cancelled' ? 'tag--warning' : a.status === 'scheduled' ? 'tag--info' : ''}`}>
-                    {a.status}
-                  </span>
-                </div>
-                <div className="rc-meta">
-                  {a.channel ? <span>{a.channel}</span> : null}
-                  {a.templateName ? <span>· {a.templateName}</span> : null}
-                  {a.delivery.readAt ? <span className="rc-meta-warn" style={{ color: 'hsl(var(--success))' }}><CheckCircle2 size={12} /> Read</span> : null}
-                  {a.delivery.deliveredAt && !a.delivery.readAt ? <span><CheckCircle2 size={12} /> Delivered</span> : null}
-                </div>
-                <div className="rc-meta">{fmtDate(a.scheduledAt)}{a.completedAt ? ` · done ${fmtDate(a.completedAt)}` : ''}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Record payment */}
+      {outstanding > 0 ? (
+        <section className="rc-block">
+          <button className="cw-record-payment" onClick={openTarget}>
+            <Banknote size={18} />
+            Record Payment
+          </button>
+        </section>
+      ) : null}
 
       {/* Customer Notes */}
       <section className="rc-block">
@@ -449,29 +324,6 @@ export default function CustomerWorkspacePage() {
           </button>
         </div>
       </section>
-
-      {/* Today's First Action — replaces floating CTA */}
-      {rc && rc.outstanding > 0 && !hideFirstAction ? (
-        <div className="cw-first-action">
-          <div className="cfa-head">
-            <span className="cfa-label">Today&apos;s First Action</span>
-            <button className="cfa-close" onClick={() => setHideFirstAction(true)}><X size={16} /></button>
-          </div>
-          <div className={`cfa-card cfa--${actionColor}`}>
-            <div className="cfa-icon">{nextAction.icon}</div>
-            <div className="cfa-body">
-              <span className="cfa-action">{nextAction.label}</span>
-              <span className="cfa-customer">{c?.name ?? 'Customer'}</span>
-              <span className="cfa-amount">{rc ? fmt(rc.outstanding) : ''}</span>
-            </div>
-            {c?.phone ? (
-              <a href={`tel:${c.phone}`} className={`cfa-btn cfa-btn--${actionColor}`}>
-                <Phone size={15} /> {nextAction.action === 'call' ? 'Call Now' : 'Action'}
-              </a>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

@@ -1,78 +1,53 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react"
-import { toast } from "sonner"
+import Link from "next/link"
+import {
+  AlertTriangle, RefreshCw, Phone, Send, UserPlus,
+  ChevronRight, ArrowRight, Banknote, Receipt, TrendingUp, Zap,
+  CheckCircle2, X, Clock, Users, Target,
+} from "lucide-react"
 import { PageShell } from "@/components/billzo/PageShell"
 import { Skeleton } from "@/components/billzo/Skeleton"
-import { MorningBrief } from "@/components/billzo/MorningBrief"
-import { MissionHeader } from "@/components/billzo/MissionHeader"
-import { PriorityAlert } from "@/components/billzo/PriorityAlert"
-import { RecoveryQueue } from "@/components/billzo/RecoveryQueue"
-import { RecoveryScoreCard } from "@/components/billzo/RecoveryScoreCard"
-import { PromiseModal } from "@/components/billzo/PromiseModal"
-import { PaymentModal } from "@/components/billzo/PaymentModal"
-import type { CustomerCardItem } from "@/components/billzo/CustomerCard"
+import { formatINR } from "@/lib/utils"
 
-type ActionItem = {
-  caseId: string
-  customerId: string
-  customerName: string
-  phone: string | null
-  invoiceNumber?: string | null
-  invoiceCount: number
-  amount: number
-  recoverableAmount: number
-  overdue: number
-  actionType: string
-  state: string
-  reasons: { type: string; impact: string }[]
-  promiseToPayDate?: string | null
-  maxDeliveryStatus?: "sent" | "delivered" | "read" | null
-  ignoredReminders?: number
-  brokenPromises?: number
-}
-
-type HealthDriver = {
-  title: string
-  status: "good" | "warning" | "critical"
-  impact: "high" | "medium" | "low"
-}
-
-type DashboardData = {
-  hero: {
-    outstanding: number
+type HomeData = {
+  financial: {
+    totalOutstanding: number
+    inRecovery: number
+    recoveredThisMonth: number
+  }
+  recoveryFocus: {
+    amount: number
     customerCount: number
-    invoiceCount: number
-    bestOpportunity: {
-      customerId: string
-      caseId: string
-      customerName: string
-      amount: number
-      actionType: string
-      phone: string | null
-    } | null
   }
-  todayPlan: ActionItem[]
-  attention: ActionItem[]
-  upcoming: { id: string; actionType: string; customerName: string; scheduledAt: string }[]
-  health: {
-    score: number
-    drivers: HealthDriver[]
+  recoveryPerformance: {
+    recovered: number
+    totalOutstanding: number
+    rate: number
   }
+  sections: {
+    needsYou: number
+    automated: number
+    monitoring: number
+  }
+  exceptions: {
+    missingPhone: number
+    brokenPromises: number
+    failedReminders: number
+    paymentToReview: number
+  }
+  generatedAt: string
 }
 
 function LoadingSkeleton() {
   return (
     <PageShell>
       <div className="space-y-4 animate-pulse">
-        <Skeleton className="h-36 rounded-2xl" />
-        <Skeleton className="h-32 rounded-2xl" />
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="h-24 rounded-2xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
       </div>
     </PageShell>
   )
@@ -85,8 +60,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
         <div className="mx-auto h-12 w-12 rounded-full bg-danger-soft flex items-center justify-center">
           <AlertTriangle className="h-6 w-6 text-danger" />
         </div>
-        <p className="mt-4 text-sm text-foreground font-medium">Could not load your dashboard</p>
-        <p className="text-xs text-muted-foreground mt-1">Check your connection and try again.</p>
+        <p className="mt-4 text-sm text-foreground font-medium">Could not load your business summary</p>
         <button
           onClick={onRetry}
           className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-all"
@@ -98,45 +72,16 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   )
 }
 
-function QueueComplete() {
-  return (
-    <div className="bg-card border border-border rounded-2xl p-6 text-center space-y-2">
-      <div className="text-2xl"><CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" /></div>
-      <p className="text-sm font-semibold text-foreground">Today&apos;s queue complete</p>
-      <p className="text-xs text-muted-foreground">Today&apos;s target achieved</p>
-    </div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <PageShell>
-      <MorningBrief customerCount={0} expectedToday={0} />
-      <div className="bg-card border border-border rounded-2xl p-8 text-center">
-        <div className="mx-auto h-12 w-12 rounded-full bg-recovery-soft flex items-center justify-center mb-3">
-          <AlertTriangle className="h-6 w-6 text-recovery" />
-        </div>
-        <p className="text-base font-semibold text-foreground">No outstanding invoices</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          BillZo will monitor future invoices automatically.
-        </p>
-      </div>
-    </PageShell>
-  )
-}
-
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [data, setData] = useState<HomeData | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [sendingFor, setSendingFor] = useState<string | null>(null)
-  const [promiseFor, setPromiseFor] = useState<CustomerCardItem | null>(null)
-  const [paymentFor, setPaymentFor] = useState<CustomerCardItem | null>(null)
+  const [autoEnabled, setAutoEnabled] = useState<boolean | null>(null)
 
   const load = () => {
     setLoading(true)
     setError(false)
-    fetch("/api/recovery/workspace", { credentials: "include" })
+    fetch("/api/recovery/home", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => {
         setData(d)
@@ -150,127 +95,216 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load()
+    fetch("/api/settings/auto-recovery", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && typeof d.enabled === "boolean") setAutoEnabled(d.enabled) })
+      .catch(() => {})
   }, [])
 
   if (error) return <ErrorState onRetry={load} />
   if (loading) return <LoadingSkeleton />
-  if (!data || (data.hero.outstanding === 0 && data.todayPlan.length === 0)) return <EmptyState />
 
-  const { hero, todayPlan, health } = data
-  const expectedToday = todayPlan.reduce((s, i) => s + i.recoverableAmount, 0)
+  const financial = data?.financial ?? { totalOutstanding: 0, inRecovery: 0, recoveredThisMonth: 0 }
+  const recoveryFocus = data?.recoveryFocus ?? { amount: 0, customerCount: 0 }
+  const recoveryPerformance = data?.recoveryPerformance ?? { recovered: 0, totalOutstanding: 0, rate: 0 }
+  const sections = data?.sections ?? { needsYou: 0, automated: 0, monitoring: 0 }
+  const exceptions = data?.exceptions ?? { missingPhone: 0, brokenPromises: 0, failedReminders: 0, paymentToReview: 0 }
 
-  const priorityItem = (() => {
-    if (todayPlan.length === 0) return null
-    const first = todayPlan[0]
-    const isUrgent =
-      first.overdue > 30 ||
-      first.reasons.some((r) => r.type === "promise_broken") ||
-      first.actionType === "call"
-    return isUrgent ? first : null
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return "Good morning"
+    if (h < 17) return "Good afternoon"
+    return "Good evening"
   })()
 
-  const sendReminder = async (item: CustomerCardItem) => {
-    setSendingFor(item.caseId)
-    try {
-      const res = await fetch("/api/recovery/queue/actions", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          caseId: item.caseId,
-          action: "send_reminder",
-          customerId: item.customerId,
-          payload: { origin: "dashboard" },
-        }),
-      })
-      if (res.ok) {
-        toast.success("Reminder sent")
-        load()
-      } else {
-        const data = await res.json().catch(() => ({}))
-        if (data.error === "FEATURE_LOCKED" || data.code === "FEATURE_LOCKED") {
-          toast.error("Upgrade to Pro to send reminders")
-        } else if (data.error === "TENANT_NOT_FOUND" || data.code === "TENANT_NOT_FOUND") {
-          toast.error("Session expired — please sign in again")
-        } else {
-          toast.error(data.error || data.message || "Failed to send reminder")
-        }
-      }
-    } catch {
-      toast.error("Network error — could not send reminder")
-    } finally {
-      setSendingFor(null)
-    }
-  }
-
-  const callCustomer = (item: CustomerCardItem) => {
-    if (item.phone) window.location.href = `tel:${item.phone}`
-  }
+  const totalExceptions = exceptions.missingPhone + exceptions.brokenPromises + exceptions.failedReminders + exceptions.paymentToReview
 
   return (
     <PageShell>
-      <div className="space-y-4 pb-8">
-        <MorningBrief
-          customerCount={hero.customerCount}
-          expectedToday={expectedToday}
-          bestFirstAction={hero.bestOpportunity}
-        />
+      <div className="space-y-6 pb-8">
+        {/* Business overview header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">
+              {greeting}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Here's how your money is doing
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/recovery"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold bg-card hover:bg-muted"
+            >
+              <Zap className={`h-3.5 w-3.5 ${autoEnabled ? "text-emerald-500" : "text-muted-foreground"}`} />
+              Recovery
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${autoEnabled ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+              {autoEnabled === null ? "..." : autoEnabled ? "On" : "Off"}
+            </Link>
+            <button
+              onClick={load}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
 
-        <MissionHeader
-          outstanding={hero.outstanding}
-          expectedToday={expectedToday}
-          customerCount={hero.customerCount}
-          breakdown={todayPlan.map((i) => ({
-            customerId: i.customerId,
-            customerName: i.customerName,
-            amount: i.amount,
-            recoverableAmount: i.recoverableAmount,
-            overdue: i.overdue,
-          }))}
-        />
+        {/* Financial overview cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <Banknote size={14} />
+              <span className="uppercase tracking-wider font-semibold">Outstanding</span>
+            </div>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
+              {formatINR(financial.totalOutstanding)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Total unpaid</p>
+          </div>
 
-        {priorityItem && <PriorityAlert item={priorityItem} />}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <Send size={14} />
+              <span className="uppercase tracking-wider font-semibold">Recovery Focus</span>
+            </div>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
+              {formatINR(recoveryFocus.amount)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">{recoveryFocus.customerCount} customer{recoveryFocus.customerCount !== 1 ? 's' : ''} need action</p>
+          </div>
 
-        {todayPlan.length === 0 ? (
-          <QueueComplete />
-        ) : (
-          <RecoveryQueue
-            items={todayPlan as CustomerCardItem[]}
-            sendingFor={sendingFor}
-            onSend={sendReminder}
-            onCall={callCustomer}
-            onPayment={(i) => setPaymentFor(i)}
-            onPromise={(i) => setPromiseFor(i)}
-            onOpenCustomer={(i) => (window.location.href = `/parties/${i.customerId}`)}
-          />
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <TrendingUp size={14} />
+              <span className="uppercase tracking-wider font-semibold">Recovered</span>
+            </div>
+            <p className="text-2xl font-bold tabular-nums tracking-tight text-success">
+              {formatINR(financial.recoveredThisMonth)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">This month</p>
+          </div>
+        </div>
+
+        {/* Recovery performance */}
+        {recoveryFocus.customerCount > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+              <Zap size={14} />
+              <span className="uppercase tracking-wider font-semibold">Recovery Performance</span>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-lg font-bold text-foreground">{formatINR(recoveryPerformance.recovered)}</span>
+                  <span className="text-xs text-muted-foreground">recovered this month</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-success rounded-full transition-all"
+                    style={{ width: `${recoveryPerformance.rate}%` }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm pt-2 border-t border-border">
+                <span className="text-muted-foreground">{recoveryFocus.customerCount} customers in recovery</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    {sections.automated} automated
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    {sections.monitoring} monitoring
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    {sections.needsYou} need you
+                  </span>
+                </div>
+              </div>
+              <Link
+                href="/recovery"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity w-full justify-center"
+              >
+                View Recovery Command Center <ArrowRight size={15} />
+              </Link>
+            </div>
+          </div>
         )}
 
-        {todayPlan.length <= 15 && todayPlan.length > 0 && (
-          <RecoveryScoreCard score={health.score} drivers={health.drivers} />
+        {/* Needs attention - exceptions */}
+        {totalExceptions > 0 && (
+          <div className="bg-danger-soft border border-danger/20 rounded-2xl p-5">
+            <div className="flex items-center gap-2 text-xs text-danger mb-3">
+              <AlertTriangle size={14} />
+              <span className="uppercase tracking-wider font-semibold">Needs Your Attention</span>
+            </div>
+            <div className="space-y-2">
+              {exceptions.missingPhone > 0 && (
+                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
+                  <UserPlus size={14} className="text-danger flex-shrink-0" />
+                  <span>{exceptions.missingPhone} customer{exceptions.missingPhone > 1 ? "s" : ""} missing phone number</span>
+                </Link>
+              )}
+              {exceptions.brokenPromises > 0 && (
+                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
+                  <X size={14} className="text-danger flex-shrink-0" />
+                  <span>{exceptions.brokenPromises} payment promise{exceptions.brokenPromises > 1 ? "s" : ""} broken</span>
+                </Link>
+              )}
+              {exceptions.failedReminders > 0 && (
+                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
+                  <Phone size={14} className="text-danger flex-shrink-0" />
+                  <span>{exceptions.failedReminders} reminder{exceptions.failedReminders > 1 ? "s" : ""} failed to deliver</span>
+                </Link>
+              )}
+              {exceptions.paymentToReview > 0 && (
+                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
+                  <Target size={14} className="text-danger flex-shrink-0" />
+                  <span>{exceptions.paymentToReview} possible payment{exceptions.paymentToReview > 1 ? "s" : ""} to review</span>
+                </Link>
+              )}
+            </div>
+          </div>
         )}
+
+        {/* Quick links */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Link href="/invoices" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Receipt size={14} />
+              <span className="uppercase tracking-wider font-semibold">Invoices</span>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-sm font-semibold text-foreground">View invoices</span>
+              <ChevronRight size={15} className="text-muted-foreground" />
+            </div>
+          </Link>
+          <Link href="/cashflow" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Banknote size={14} />
+              <span className="uppercase tracking-wider font-semibold">Cashflow</span>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-sm font-semibold text-foreground">Understand business finances</span>
+              <ChevronRight size={15} className="text-muted-foreground" />
+            </div>
+          </Link>
+          <Link href="/parties" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Users size={14} />
+              <span className="uppercase tracking-wider font-semibold">Customers</span>
+            </div>
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-sm font-semibold text-foreground">Manage customers</span>
+              <ChevronRight size={15} className="text-muted-foreground" />
+            </div>
+          </Link>
+        </div>
       </div>
-
-      {promiseFor && (
-        <PromiseModal
-          customerId={promiseFor.customerId}
-          customerName={promiseFor.customerName}
-          amount={promiseFor.amount}
-          caseId={promiseFor.caseId}
-          onClose={() => setPromiseFor(null)}
-          onSuccess={() => { setPromiseFor(null); load() }}
-        />
-      )}
-      {paymentFor && (
-        <PaymentModal
-          customerId={paymentFor.customerId}
-          customerName={paymentFor.customerName}
-          amount={paymentFor.amount}
-          openInvoiceCount={paymentFor.invoiceCount}
-          caseId={paymentFor.caseId}
-          onClose={() => setPaymentFor(null)}
-          onSuccess={() => { setPaymentFor(null); load() }}
-        />
-      )}
     </PageShell>
   )
 }

@@ -5,7 +5,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-6 bg-white">
       <Image
-        src="/error_page.png"
+        src="/cute-doggie.gif"
         alt="404 Not Found"
         width={320}
         height={320}

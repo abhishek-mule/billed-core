@@ -294,6 +294,7 @@ export async function sendWhatsAppMessage(
     conversationId?: string | null
     messageOrigin?: MessageOrigin
     amount?: number
+    recoveryAttemptId?: string
   },
 ): Promise<{
   messageId: string

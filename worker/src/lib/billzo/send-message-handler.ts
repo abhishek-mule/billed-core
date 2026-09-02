@@ -25,7 +25,7 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
   const tenantId = event.tenantId
   const invoiceId = event.entityId
   const payload = event.payload || {}
-  const { customerId, templateKey, vars, personalNote, messageType } = payload
+  const { customerId, templateKey, vars, personalNote, messageType, recoveryAttemptId, collectionActionId } = payload
 
   if (!tenantId || !customerId) return
 
@@ -198,6 +198,7 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
     transport_message_hash: sendResult.identity?.transportMessageHash || '',
     message_origin: 'manual',
     attempt_number: sendResult.identity?.attemptNumber || 1,
+    recovery_attempt_id: recoveryAttemptId || collectionActionId || null,
     tenant_id: tenantId,
     invoice_id: invoiceId || null,
     customer_id: customerId,

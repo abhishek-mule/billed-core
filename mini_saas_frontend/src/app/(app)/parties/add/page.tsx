@@ -37,6 +37,7 @@ export default function AddCustomerPage() {
   const [apiError, setApiError] = useState('')
   const [success, setSuccess] = useState(false)
   const [whatsappTouched, setWhatsappTouched] = useState(false)
+  const [messagingConsent, setMessagingConsent] = useState(false)
 
   const pickContact = async () => {
     if (!('contacts' in navigator)) {
@@ -87,6 +88,7 @@ export default function AddCustomerPage() {
           email: form.email?.trim() || undefined,
           address: form.address?.trim() || undefined,
           notes: form.notes?.trim() || undefined,
+          opt_in: messagingConsent,
         }),
       })
 
@@ -116,7 +118,8 @@ export default function AddCustomerPage() {
         notes: form.notes?.trim() || undefined,
         automationMode: apiCustomer.automation_mode || 'full_auto',
         defaultTone: 'english',
-        opt_in: true,
+        opt_in: apiCustomer.opt_in === true,
+        opt_in_at: apiCustomer.opt_in_at || undefined,
         lastUsedAt: now,
         invoiceCount: 0,
         createdAt: now,
@@ -267,9 +270,15 @@ export default function AddCustomerPage() {
         </div>
 
         <div className="rounded-xl border p-4 bg-warning-soft border-warning">
-          <p className="text-xs text-warning">
-            By adding this customer, you confirm you have their consent to send WhatsApp messages. Opt-in status can be updated later.
-          </p>
+          <label className="flex items-start gap-3 text-xs text-warning cursor-pointer">
+            <input
+              type="checkbox"
+              checked={messagingConsent}
+              onChange={(event) => setMessagingConsent(event.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>I have recorded this customer’s consent to receive WhatsApp payment reminders. Without consent, recovery remains manual.</span>
+          </label>
         </div>
 
         <div className="flex gap-3">

@@ -10,7 +10,6 @@ import { sendPushNotification } from '../src/lib/billzo/notifications'
 import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
 import { interpretProjectionDelta } from '../src/lib/billzo/observation-interpreter'
 import { materializeObservation } from '../src/lib/billzo/behavioral-materializer'
-import { attributeRecovery } from '../src/lib/billzo/attribution'
 import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
@@ -22,6 +21,10 @@ import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import { ShadowProjection, initializeShadowProjection } from '../src/lib/recovery/shadow-projection'
 import { planRecoveryActions, computeTriggerType } from '../src/lib/recovery/recovery-planner'
 import type { PolicyStep } from '../src/lib/recovery/recovery-planner'
+import { attributabilityOf } from '../src/lib/recovery/attribution-truth'
+import { recordPromiseKeepIfHonored, recordBrokenPromisesLedger } from '../src/lib/recovery/promise-outcome-ledger'
+import { recordCallOutcome } from '../src/lib/recovery/call-outcome-ledger'
+import { recordPaymentOutcome } from '../src/lib/recovery/payment-outcome-ledger'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
@@ -160,6 +163,7 @@ const HANDLER_LANES: LaneHandler[] = [
   // ATTRIBUTION LANE — Economic causality
   { lane: 'attribution', priority: 1, name: 'tryHandleAttribution', handle: tryHandleAttribution },
   { lane: 'attribution', priority: 2, name: 'tryHandleEscalation', handle: tryHandleEscalation },
+  { lane: 'attribution', priority: 3, name: 'tryHandleCallOutcome', handle: tryHandleCallOutcome },
 
   // NOTIFICATION LANE — Presentation layer
   { lane: 'notification', priority: 1, name: 'tryHandleNotifications', handle: tryHandleNotifications },
@@ -375,6 +379,31 @@ async function tryHandleAttribution(event: any): Promise<void> {
   if (event.type === 'payment.completed' || event.type === 'payment.reconciled') {
     await handlePaymentEvent(event)
   }
+}
+
+async function tryHandleCallOutcome(event: any): Promise<void> {
+  if (event.type === 'customer.called') {
+    await handleCallCompletedEvent(event)
+  }
+}
+
+async function handleCallCompletedEvent(event: any): Promise<void> {
+  const tenantId = event.tenantId
+  if (!tenantId) return
+
+  // A completed call is valid evidence even without an explicit attempt; its
+  // causality is unknown unless the caller named the attempt it responded to.
+  await recordCallOutcome({
+    tenantId,
+    attemptId:
+      typeof event.payload?.actionId === 'string' && event.payload?.actionId
+        ? event.payload.actionId
+        : null,
+    customerId: event.payload?.customerId || null,
+    invoiceId: event.payload?.invoiceId || null,
+    occurredAt: event.createdAt || new Date().toISOString(),
+    evidenceId: event.id || null,
+  })
 }
 
 // ============================================================
@@ -621,20 +650,32 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
 
   // 9. Write to payment_promises table for decision engine visibility
   if (event.type === 'promise.made' && result.promiseToPayDate) {
+    // The attempt that prompted this promise, when the origin is known
+    // explicitly. Missing => untracked, never guessed from timestamps.
+    const triggeredByActionId = event.payload?.actionId || event.payload?.triggeredByActionId || null
     await supabaseAdmin
       .from('payment_promises')
       .upsert({
         tenant_id: tenantId,
         customer_id: customerId,
-        invoice_id: invoiceId,
+        invoice_id: event.payload?.invoiceId || invoiceId,
         promise_date: result.promiseToPayDate,
         amount: signal.amount || 0,
         status: 'active',
         notes: event.payload?.notes || null,
+        triggered_by_action_id: triggeredByActionId,
       }, { onConflict: undefined, ignoreDuplicates: false })
       .then(() => {}, () => {})
   }
   if (event.type === 'promise.broken') {
+    // Record promise_broken outcomes against the causal spine for every active
+    // promise (attempt unknown => UNKNOWN attribution, never timestamp-guessed).
+    await recordBrokenPromisesLedger({
+      tenantId,
+      customerId,
+      occurredAt: new Date().toISOString(),
+    })
+
     await supabaseAdmin
       .from('payment_promises')
       .update({ status: 'broken' })
@@ -759,12 +800,27 @@ async function handlePaymentEvent(event: any): Promise<void> {
 
   if (!invoiceId || !tenantId) return
 
-  await attributeRecovery({
-    invoiceId,
+  if (event.payload?.paymentId) {
+    await recordPaymentOutcome({
+      tenantId,
+      invoiceId,
+      paymentId: event.payload.paymentId,
+      amount: event.payload.amount || null,
+      recoveryAttemptId: event.payload?.recoveryAttemptId || null,
+      customerId: event.payload?.customerId || null,
+      occurredAt: event.createdAt || new Date().toISOString(),
+      source: event.payload?.source || null,
+    })
+  }
+
+  // If an active promise exists for this invoice and was honored on/before its
+  // date, record promise_kept against the attempt that prompted the promise.
+  await recordPromiseKeepIfHonored({
     tenantId,
-    customerId: event.payload?.customerId,
-    paymentId: event.payload?.paymentId,
-    paymentTimestamp: event.createdAt,
+    invoiceId,
+    customerId: event.payload?.customerId || null,
+    paymentAmount: event.payload?.amount || null,
+    occurredAt: event.createdAt || new Date().toISOString(),
   })
 
   // Re-run decision engine with fresh outstanding
@@ -896,7 +952,7 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
   if (resolvedBillzoMessageId) {
     const { data: latest } = await supabaseAdmin
       .from('whatsapp_events')
-      .select('id, invoice_id, tenant_id')
+      .select('id, invoice_id, tenant_id, customer_id, recovery_attempt_id')
       .eq('billzo_message_id', resolvedBillzoMessageId)
       .order('event_sequence', { ascending: false })
       .limit(1)
@@ -916,6 +972,8 @@ async function handleWhatsAppStatusUpdated(event: any): Promise<MessageProjectio
           created_at: now,
           invoice_id: latest.invoice_id || null,
           tenant_id: latest.tenant_id || tenantId,
+          customer_id: latest.customer_id || null,
+          recovery_attempt_id: latest.recovery_attempt_id || null,
           provider: provider || 'baileys',
           provider_message_id: providerMessageId,
           direction: 'outbound',

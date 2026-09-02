@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     if (!tenantId) return errorResponse('Unauthorized', 401)
 
     const body = await request.json()
-    const { invoiceId, customerId, amount, dueDate, note } = body
+    const { invoiceId, customerId, amount, dueDate, note, actionId } = body
 
     if (!invoiceId || !dueDate) {
       return errorResponse('invoiceId and dueDate required', 400)
@@ -29,15 +29,20 @@ export async function POST(request: NextRequest) {
 
     if (invoice.tenant_id !== tenantId) return errorResponse('Unauthorized', 401)
 
+    // The originating recovery attempt is attached ONLY when the caller can
+    // name it explicitly. Missing => untracked (NULL), never timestamp-guessed.
+    const triggeredByActionId = typeof actionId === 'string' && actionId ? actionId : null
+
     const promise = {
       id: uuid(),
       tenant_id: invoice.tenant_id,
       customer_id: customerId || invoice.customer_id,
-      invoice_ids: [invoiceId],
+      invoice_id: invoiceId,
+      promise_date: dueDate,
       amount: amount || 0,
-      due_date: dueDate,
       status: 'active',
-      note: note || null,
+      notes: note || null,
+      triggered_by_action_id: triggeredByActionId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

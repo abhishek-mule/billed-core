@@ -114,7 +114,18 @@ export default function POSPage() {
   const addToCart = (p: Product) => {
     setCart((c) => {
       const ex = c.find((i) => i.id === p.id);
-      if (ex) return c.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
+      if (ex) {
+        // Stock check: don't exceed available stock
+        if (ex.qty >= p.stock) {
+          toast.error(`Only ${p.stock} units of "${p.name}" in stock`, { duration: 2500 });
+          return c;
+        }
+        return c.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i));
+      }
+      if (p.stock <= 0) {
+        toast.error(`"${p.name}" is out of stock`);
+        return c;
+      }
       return [...c, { ...p, qty: 1 }];
     });
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(20);
@@ -126,9 +137,16 @@ export default function POSPage() {
 
   const updateQty = (id: string, delta: number) => {
     setCart((c) =>
-      c.flatMap((i) =>
-        i.id === id ? (i.qty + delta <= 0 ? [] : [{ ...i, qty: i.qty + delta }]) : [i],
-      ),
+      c.flatMap((i) => {
+        if (i.id !== id) return [i];
+        const newQty = i.qty + delta;
+        if (newQty <= 0) return [];
+        if (newQty > i.stock) {
+          toast.error(`Only ${i.stock} units of "${i.name}" in stock`, { duration: 2000 });
+          return [i];
+        }
+        return [{ ...i, qty: newQty }];
+      }),
     );
   };
 
@@ -449,8 +467,8 @@ export default function POSPage() {
                   <div className="font-medium text-sm">{p.name}</div>
                   <div className="text-xs text-muted-foreground">{p.whatsapp_number || p.phone || "No phone"}</div>
                 </div>
-                {p.pending > 0 && (
-                  <span className="text-xs font-semibold text-warning">{formatINR(p.pending)} due</span>
+                {(p as any).pending > 0 && (
+                  <span className="text-xs font-semibold text-warning">{formatINR((p as any).pending)} due</span>
                 )}
               </button>
             ))}

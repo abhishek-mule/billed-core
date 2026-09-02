@@ -165,6 +165,7 @@ export async function emitRecoveryReminderSent(params: {
   stage: string
   channel: string
   messageId?: string
+  recoveryAttemptId?: string
   causationId?: string | null
 }): Promise<string> {
   const correlationId = generateCorrelationId(params.invoiceId)
@@ -178,6 +179,7 @@ export async function emitRecoveryReminderSent(params: {
       stage: params.stage,
       channel: params.channel,
       messageId: params.messageId,
+      recoveryAttemptId: params.recoveryAttemptId,
     },
     causationId: params.causationId || null,
     correlationId,

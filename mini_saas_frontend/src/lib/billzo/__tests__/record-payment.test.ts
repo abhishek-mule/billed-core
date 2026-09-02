@@ -77,4 +77,39 @@ describe('recordPayment — payment.completed outbox + cancelFutureActions chain
     expect(writeOutboxEvent).not.toHaveBeenCalled()
     expect(cancelFutureActions).not.toHaveBeenCalled()
   })
+
+  it('B3 — threads recoveryAttemptId into payment.completed when known', async () => {
+    ;(supabaseAdmin.from as any).mockReturnValue(mockChain({ error: null }))
+
+    await recordPayment({
+      tenantId: 'tenant_1',
+      invoiceId: 'inv_1',
+      customerId: 'cust_1',
+      amount: 5000,
+      source: 'upi',
+      actor: 'customer',
+      recoveryAttemptId: 'CA_attempt_1',
+    })
+
+    const event = vi.mocked(writeOutboxEvent).mock.calls[0][0] as any
+    expect(event.type).toBe('payment.completed')
+    expect(event.payload.recoveryAttemptId).toBe('CA_attempt_1')
+  })
+
+  it('B3 — hostile case preserved: no explicit attempt ⇒ payload carries null, never guessed', async () => {
+    ;(supabaseAdmin.from as any).mockReturnValue(mockChain({ error: null }))
+
+    await recordPayment({
+      tenantId: 'tenant_1',
+      invoiceId: 'inv_1',
+      customerId: 'cust_1',
+      amount: 5000,
+      source: 'upi',
+      actor: 'customer',
+    })
+
+    const event = vi.mocked(writeOutboxEvent).mock.calls[0][0] as any
+    expect(event.payload.recoveryAttemptId).toBeNull()
+    expect(event.payload.recoveryAttemptId).not.toBe('CA_attempt_1')
+  })
 })

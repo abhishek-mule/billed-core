@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote, Copy, Check, Link2, QrCode, Download } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, Receipt, Loader2, MessageCircle, Loader, AlertCircle, CheckCircle2, ExternalLink, Banknote, Copy, Check, Link2, QrCode, Download, ChevronDown } from "lucide-react";
 import QRCode from "qrcode";
 import { Button } from "@/components/billzo/Button";
 import { db } from "@/lib/billzo/db";
@@ -53,6 +53,7 @@ export default function InvoiceDetailPage() {
   const [recordPaymentError, setRecordPaymentError] = useState('');
   const [recordPaymentSuccess, setRecordPaymentSuccess] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const id = params.id as string;
 
@@ -81,6 +82,7 @@ export default function InvoiceDetailPage() {
             invoiceData = {
               id: remoteData.id,
               invoiceNumber: remoteData.invoice_number || remoteData.id.slice(0, 8),
+              customerId: remoteData.customer_id || remoteData.customerId || '',
               customerName: remoteData.customer_name || 'Walk-In Customer',
               customerPhone: remoteData.customer_phone || remoteData.phone || '',
               total: Number(remoteData.total || remoteData.grand_total || 0),
@@ -378,6 +380,13 @@ export default function InvoiceDetailPage() {
   const total = invoiceTotal;
   const paid = invoice.status === "paid";
   const partial = invoice.status === "partial";
+  const overdueDays = (() => {
+    const due = invoice.dueAt || invoice.due_date;
+    if (!due || paid) return null;
+    const diffDays = Math.floor((Date.now() - new Date(due).getTime()) / 86400000);
+    return diffDays > 0 ? diffDays : 0;
+  })();
+  const hasPhone = !!(invoice.customerPhone || invoice.phone);
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-5">
@@ -412,6 +421,13 @@ export default function InvoiceDetailPage() {
                   confidenceScore={recoveryAttribution.confidenceScore}
                 />
               )}
+              {!paid && overdueDays != null && (
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                  overdueDays > 0 ? "bg-danger-soft text-danger" : "bg-muted text-muted-foreground"
+                }`}>
+                  {overdueDays > 0 ? `${overdueDays} days overdue` : "Due today"}
+                </span>
+              )}
             </div>
           </div>
           <div className="text-right text-xs text-muted-foreground hidden sm:block">
@@ -439,9 +455,9 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      {/* Invoice Actions */}
+      {/* Invoice Actions — primary / secondary / more hierarchy */}
       <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
-        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">Invoice Actions</p>
+        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider px-1">Actions</p>
         {paid ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div className="flex items-center justify-center gap-2 rounded-xl bg-success-soft text-success px-3 py-3 text-xs font-bold border border-success/30">
@@ -466,39 +482,55 @@ export default function InvoiceDetailPage() {
             </a>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <>
+            {/* Primary — the single recovery action */}
             <button
               onClick={() => setShowWAModal(true)}
-              className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-3 py-3 text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-4 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
             >
-              {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-              Send WhatsApp
+              {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : hasPhone ? <MessageCircle className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+              {hasPhone ? 'Send payment reminder' : 'Add phone number to send reminder'}
             </button>
+
+            {/* Secondary — payment link */}
             <button
               onClick={generatePaymentLink}
               disabled={genLinkLoading}
-              className="flex items-center justify-center gap-2 rounded-xl bg-foreground text-background px-3 py-3 text-xs font-bold hover:bg-foreground/90 transition-colors disabled:opacity-50 shadow-sm active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-foreground text-background px-4 py-3 text-xs font-bold hover:bg-foreground/90 transition-colors disabled:opacity-50 shadow-sm active:scale-[0.98]"
             >
               {genLinkLoading ? <Loader className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
               {paymentLink ? 'Payment Link Ready' : 'Get Payment Link'}
             </button>
+
+            {/* More — record payment / download */}
             <button
-              onClick={() => setShowRecordPaymentModal(true)}
-              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors active:scale-[0.98]"
+              onClick={() => setMoreOpen((v) => !v)}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-4 py-2.5 text-xs font-semibold hover:bg-muted transition-colors"
             >
-              <Banknote className="h-4 w-4 text-emerald-600" />
-              Record Payment
+              <ChevronDown size={14} className={moreOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+              More
             </button>
-            <a
-              href={`/api/invoices/${id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors shadow-sm active:scale-[0.98]"
-            >
-              <Download className="h-4 w-4 text-primary" />
-              Download PDF
-            </a>
-          </div>
+            {moreOpen && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  onClick={() => setShowRecordPaymentModal(true)}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors active:scale-[0.98]"
+                >
+                  <Banknote className="h-4 w-4 text-emerald-600" />
+                  Record Payment
+                </button>
+                <a
+                  href={`/api/invoices/${id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card text-foreground px-3 py-3 text-xs font-bold hover:bg-muted transition-colors shadow-sm active:scale-[0.98]"
+                >
+                  <Download className="h-4 w-4 text-primary" />
+                  Download PDF
+                </a>
+              </div>
+            )}
+          </>
         )}
       </div>
 

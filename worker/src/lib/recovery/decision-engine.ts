@@ -38,6 +38,12 @@ function stageIndex(stage: string): number {
   return REMINDER_STAGE_ORDER.indexOf(stage)
 }
 
+function validDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 // ============================================================
 // canSendReminder — Evaluate all pre-send rules
 // ============================================================
@@ -65,6 +71,7 @@ export function canSendReminder(
   const r1: DecisionRuleResult = {
     rule: 'outstanding_positive',
     passed: input.invoice.outstanding > 0,
+    hardBlock: true,
     detail: input.invoice.outstanding > 0
       ? `Outstanding: ${input.invoice.outstanding}`
       : `Outstanding is zero (total=${input.invoice.total})`,
@@ -75,6 +82,7 @@ export function canSendReminder(
   const r2: DecisionRuleResult = {
     rule: 'not_disputed',
     passed: !input.invoice.isDisputed,
+    hardBlock: true,
     detail: input.invoice.isDisputed ? 'Invoice is marked as disputed' : 'Not disputed',
   }
   rules.push(r2)
@@ -82,8 +90,8 @@ export function canSendReminder(
   // ── Rule 3: No active promise ──
   let activePromise = false
   if (input.activePromiseDate) {
-    const promiseDate = new Date(input.activePromiseDate)
-    activePromise = promiseDate > new Date(now)
+    const promiseDate = validDate(input.activePromiseDate)
+    activePromise = promiseDate !== null && promiseDate > new Date(now)
   }
   const r3: DecisionRuleResult = {
     rule: 'no_active_promise',
@@ -125,7 +133,9 @@ export function canSendReminder(
   // ── Rule 6: Customer reachable ──
   const rawPhone = input.customer.phone || ''
   const cleanPhone = rawPhone.replace(/\D/g, '')
-  const hasValidPhone = cleanPhone.length >= 10
+  // This product currently sends Indian recovery messages.  Do not treat an
+  // arbitrary 10+ digit string as a deliverable Indian WhatsApp endpoint.
+  const hasValidPhone = /^(?:91)?[6-9]\d{9}$/.test(cleanPhone)
   const deliveryRate = input.behaviorMetrics?.deliveryRate ?? 1
   const reachable = hasValidPhone && deliveryRate >= 0.3
   const r6: DecisionRuleResult = {
@@ -140,6 +150,20 @@ export function canSendReminder(
           : `Phone valid, delivery rate ${(deliveryRate * 100).toFixed(0)}%`,
   }
   rules.push(r6)
+
+  // ── Rule 6b: Explicit messaging consent ──
+  // A payment reminder is commercial communication.  A recorded opt-in is
+  // required for unattended WhatsApp sends; merchant approval is handled
+  // separately and is not a substitute for consent.
+  const r6b: DecisionRuleResult = {
+    rule: 'messaging_consent',
+    passed: input.customer.messagingConsent === true,
+    hardBlock: true,
+    detail: input.customer.messagingConsent
+      ? 'Recorded WhatsApp messaging consent'
+      : 'No recorded WhatsApp messaging consent',
+  }
+  rules.push(r6b)
 
   // ── Rule 7: No recent manual contact (48h window) ──
   let recentManual = false
@@ -160,12 +184,15 @@ export function canSendReminder(
   const maxStage = TIER_MAX_STAGE[input.customer.customerTier] || 't5_warning'
   const currentStageIdx = stageIndex(input.invoice.recoveryStage)
   const maxStageIdx = stageIndex(maxStage)
-  const tierPermits = currentStageIdx <= maxStageIdx
+  const stageKnown = currentStageIdx >= 0
+  const tierPermits = stageKnown && currentStageIdx <= maxStageIdx
   const r8: DecisionRuleResult = {
     rule: 'tier_permits_escalation',
     passed: tierPermits,
     detail: tierPermits
       ? `Tier ${input.customer.customerTier} permits up to ${maxStage} (current: ${input.invoice.recoveryStage})`
+      : !stageKnown
+        ? `Unknown recovery stage: ${input.invoice.recoveryStage}`
       : `Tier ${input.customer.customerTier} max stage is ${maxStage}, but current is ${input.invoice.recoveryStage}`,
   }
   rules.push(r8)
@@ -287,14 +314,12 @@ export function canSendReminder(
   let decision: Decision = 'send'
   let reason = 'All checks passed'
 
-  if (!allPassed && blockedBy) {
-    if (input.customer.automationMode === 'manual') {
-      decision = 'pending_approval'
-      reason = blockedBy.detail
-    } else {
-      decision = 'block'
-      reason = blockedBy.detail
-    }
+  if (input.customer.automationMode === 'manual') {
+    decision = 'pending_approval'
+    reason = allPassed ? 'Manual approval required before sending' : blockedBy?.detail || 'Manual approval required'
+  } else if (!allPassed && blockedBy) {
+    decision = 'block'
+    reason = blockedBy.detail
   }
 
   // Collect ALL failing reasons (not just the first)
@@ -325,11 +350,13 @@ export function canSendReminder(
       case 'not_in_silence_period':
         nextReviewAt = silenceEndAt
         break
-      case 'customer_cooldown':
-        if (lastReminderAt) {
-          nextReviewAt = new Date(new Date(lastReminderAt).getTime() + 24 * 3600000).toISOString()
+      case 'customer_cooldown': {
+        const lastCustomerReminderAt = input.reminderHistory?.lastCustomerReminderAt
+        if (lastCustomerReminderAt) {
+          nextReviewAt = new Date(new Date(lastCustomerReminderAt).getTime() + 24 * 3600000).toISOString()
         }
         break
+      }
       case 'engagement_cooldown':
         if (lastReminderAt) {
           nextReviewAt = new Date(new Date(lastReminderAt).getTime() + T.annoyanceCooldownDays * 86400000).toISOString()
@@ -346,7 +373,11 @@ export function canSendReminder(
   }
 
   // When override is active, allow send but preserve full audit trail
-  if (overrideActive) {
+  const hardFailures = failingRules.filter(rule => rule.hardBlock)
+  // Overrides may bypass cadence and relationship preferences, never invoice
+  // truth, a dispute, or consent. A manual-mode approval is represented by an
+  // explicit override from the approved action, not by merely queueing a job.
+  if (overrideActive && hardFailures.length === 0) {
     return {
       allowed: true,
       decision: 'send',
@@ -357,7 +388,7 @@ export function canSendReminder(
       confidence: 1.0,
       rules,
       rulesSnapshot,
-      checksPassed: totalCount,
+      checksPassed: passedCount,
       totalChecks: totalCount,
       nextReviewAt,
       merchantInterventionTriggered,
@@ -366,7 +397,7 @@ export function canSendReminder(
   }
 
   return {
-    allowed: allPassed,
+    allowed: allPassed && input.customer.automationMode !== 'manual',
     decision,
     reason,
     reasons,

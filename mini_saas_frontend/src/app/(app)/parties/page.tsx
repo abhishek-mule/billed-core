@@ -14,6 +14,7 @@ import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
+import { toast } from "sonner"
 
 type Customer = {
   id: string
@@ -96,9 +97,9 @@ const STATUS_LABELS: Record<string, string> = {
   clear: 'Clear',
 }
 
-function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
+function FinancialHero({ totalReceivables, overdueAmount, activeParties }: {
   totalReceivables: number
-  totalPayables: number
+  overdueAmount: number
   activeParties: number
 }) {
   return (
@@ -111,9 +112,9 @@ function FinancialHero({ totalReceivables, totalPayables, activeParties }: {
           </p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.totalPayables}</p>
-          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
-            {formatINR(totalPayables)}
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Overdue Amount</p>
+          <p className="text-xl lg:text-2xl font-semibold text-danger tabular-nums">
+            {formatINR(overdueAmount)}
           </p>
         </div>
         <div>
@@ -298,7 +299,28 @@ function PartyDetail({ party, onBack }: {
                   </div>
                   <div className="flex gap-1.5 ml-3 flex-shrink-0">
                     <button
-                      onClick={() => router.push(`/parties/${party.id}`)}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/recovery/queue/actions', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              customerId: party.id,
+                              action: 'send_reminder',
+                              payload: { origin: 'parties' },
+                            }),
+                          })
+                          if (res.ok) {
+                            toast.success('Reminder sent to ' + party.name)
+                          } else {
+                            const d = await res.json().catch(() => ({}))
+                            toast.error(d.error || 'Failed to send reminder')
+                          }
+                        } catch {
+                          toast.error('Network error — could not send reminder')
+                        }
+                      }}
                       className="text-xs px-2.5 py-1.5 rounded bg-muted border border-border text-muted-foreground hover:bg-muted font-medium"
                     >
                       Remind
@@ -529,7 +551,7 @@ export default function PartiesPage() {
         {/* Financial Hero */}
         <FinancialHero
           totalReceivables={totalReceivables}
-          totalPayables={totalPayables}
+          overdueAmount={totalPayables}
           activeParties={activeParties}
         />
 
@@ -630,7 +652,7 @@ export default function PartiesPage() {
       </div>
 
       {/* Mobile FAB */}
-      <div className="lg:hidden fixed bottom-20 right-4 z-10">
+      <div className="lg:hidden fixed bottom-32 right-4 z-10">
         <button
           onClick={() => router.push('/parties/add')}
           className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"

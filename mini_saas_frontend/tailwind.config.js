@@ -56,11 +56,6 @@ module.exports = {
           foreground: "hsl(var(--overdue-foreground))",
           soft: "hsl(var(--overdue-soft))",
         },
-        success: {
-          DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
-          soft: "hsl(var(--success-soft))",
-        },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",

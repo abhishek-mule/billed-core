@@ -59,6 +59,12 @@ export interface RecoveryJourneyStage {
   label: string
   status: 'completed' | 'current' | 'pending' | 'skipped'
   timestamp?: string
+  /**
+   * Audit-trail descriptor stating the REAL ground truth for this stage,
+   * e.g. "Not sent — customer phone number missing", "Not started",
+   * "Delivered 28 Jul · 2:42 PM". Never a prediction of the future.
+   */
+  note?: string
 }
 
 export interface RecoveryJourney {

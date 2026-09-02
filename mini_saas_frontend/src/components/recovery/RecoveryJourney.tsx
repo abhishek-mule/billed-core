@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CheckCircle2, Clock, AlertCircle, MessageCircle, CreditCard, FileText, Loader2, AlertTriangle, Banknote } from 'lucide-react'
-import type { RecoveryTimelineData, RecoveryTimelineEvent, RecoveryJourneyStage } from '@billzo/shared'
+import {
+  CheckCircle2, Clock, AlertCircle, MessageCircle, CreditCard, FileText,
+  Loader2, AlertTriangle, Banknote, Phone, XCircle,
+} from 'lucide-react'
+import type { RecoveryTimelineData, RecoveryTimelineEvent } from '@billzo/shared'
 
 // ── Props ──
 
@@ -36,26 +39,6 @@ const severityBg: Record<string, string> = {
   future: 'bg-muted text-muted-foreground',
 }
 
-// ── Stage icon ──
-
-function stageIcon(status: string) {
-  switch (status) {
-    case 'completed': return <CheckCircle2 className="h-5 w-5 text-green-600" />
-    case 'current': return <div className="h-5 w-5 rounded-full border-2 border-blue-500 bg-blue-50 flex items-center justify-center"><div className="h-2 w-2 rounded-full bg-blue-500" /></div>
-    case 'pending': return <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
-    default: return <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />
-  }
-}
-
-function stageColor(status: string): string {
-  switch (status) {
-    case 'completed': return 'text-green-700'
-    case 'current': return 'text-blue-700 font-semibold'
-    case 'pending': return 'text-muted-foreground/50'
-    default: return 'text-muted-foreground/50'
-  }
-}
-
 // ── Timestamp formatting ──
 
 function formatTime(ts: string): string {
@@ -71,8 +54,7 @@ function formatTime(ts: string): string {
 }
 
 function formatTimeShort(ts: string): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return new Date(ts).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 // ── Main component ──
@@ -117,110 +99,88 @@ export default function RecoveryJourney({ invoiceId }: RecoveryJourneyProps) {
     )
   }
 
-  const isPaid = data.events.some(e => e.type === 'payment_received' || e.type === 'case_closed')
+  const events = data.events
+  const isPaid = events.some(e => e.type === 'payment_received' || e.type === 'case_closed')
+  const reminder = data.journey.stages.find(s => s.key === 'reminder_sent')
+  const read = data.journey.stages.find(s => s.key === 'customer_read')
+  const payment = data.journey.stages.find(s => s.key === 'payment_received')
+
+  // Current state — derived only from recorded evidence (never predicted).
+  const blocked = reminder?.status === 'skipped' || events.some(e => e.type === 'reminder_failed')
+  const delivered = events.some(e => e.type === 'reminder_delivered')
+  const readEvent = events.some(e => e.type === 'reminder_read')
+  const escalated = events.some(e => e.type === 'escalated')
+
+  // Most recent actionable event with a timestamp — the honest "last action".
+  const lastEvent = [...events]
+    .filter(e => e.timestamp)
+    .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))[0]
+
+  let stateTitle = 'Follow-up required'
+  let stateTone = 'bg-amber-100 text-amber-800'
+  if (isPaid) { stateTitle = 'Recovered'; stateTone = 'bg-green-100 text-green-700' }
+  else if (blocked) { stateTitle = 'Blocked'; stateTone = 'bg-red-100 text-red-700' }
+  else if (readEvent) { stateTitle = 'Read, awaiting response'; stateTone = 'bg-blue-100 text-blue-700' }
+  else if (delivered) { stateTitle = 'Delivered, awaiting read'; stateTone = 'bg-blue-100 text-blue-700' }
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="px-5 pt-5 pb-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Recovery Journey</h3>
-          {isPaid && (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-              Recovered
+      <div className="px-5 pt-5 pb-4">
+        <h3 className="font-semibold text-sm">Recovery</h3>
+
+        {/* Current state */}
+        <div className={`mt-3 rounded-xl px-4 py-3 flex items-center gap-2.5 ${stateTone}`}>
+          {isPaid ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+            : blocked ? <XCircle className="h-4 w-4 shrink-0" />
+            : escalated ? <AlertTriangle className="h-4 w-4 shrink-0" />
+            : <Clock className="h-4 w-4 shrink-0" />}
+          <div>
+            <div className="text-sm font-bold uppercase tracking-wide">{stateTitle}</div>
+            <div className="text-xs opacity-80">{blocked ? reminder?.note : `Invoice ${isPaid ? 'paid' : 'unpaid'}`}</div>
+          </div>
+        </div>
+
+        {/* Last action — the actual most recent recorded event */}
+        {lastEvent && (
+          <div className="mt-3 rounded-xl border border-border p-3">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Last action</div>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-sm font-medium capitalize">{lastEvent.title}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{formatTime(lastEvent.timestamp)}</span>
+            </div>
+            {lastEvent.description && (
+              <div className="text-xs text-muted-foreground mt-0.5">{lastEvent.description}</div>
+            )}
+          </div>
+        )}
+
+        {/* Reminder status — strict vocabulary */}
+        <div className="mt-3 rounded-xl border border-border p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Reminder</div>
+          <div className="mt-1 flex items-center gap-2 text-sm">
+            <StatusMarker ok={delivered || readEvent || isPaid} bad={blocked} />
+            <span className="font-medium">
+              {isPaid ? 'Sent' : blocked ? 'Not sent' : readEvent ? 'Read' : delivered ? 'Delivered' : reminder ? reminder.note : 'Not started'}
             </span>
-          )}
-          {!isPaid && data.events.some(e => e.type === 'escalated') && (
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-              Escalated
-            </span>
-          )}
+          </div>
+          {blocked && <div className="text-xs text-red-600 mt-0.5">{reminder?.note}</div>}
+        </div>
+
+        {/* Payment status — only recorded evidence */}
+        <div className="mt-3 rounded-xl border border-border p-3">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payment</div>
+          <div className="mt-1 flex items-center gap-2 text-sm">
+            <StatusMarker ok={isPaid} bad={false} />
+            <span className="font-medium">{isPaid ? 'Received' : 'Not received'}</span>
+          </div>
         </div>
       </div>
 
-      {/* Progress Stepper */}
-      <div className="px-5 pb-4">
-        <div className="relative">
-          {/* Vertical line */}
-          <div className="absolute left-[10px] top-2 bottom-2 w-0.5 bg-border" />
-
-          {data.journey.stages.map((stage, idx) => (
-            <div key={stage.key} className="flex items-start gap-3 relative pb-4 last:pb-0">
-              <div className="relative z-10 bg-card shrink-0">
-                {stageIcon(stage.status)}
-              </div>
-              <div className="flex-1 min-w-0 pt-0.5">
-                <div className={`text-sm ${stageColor(stage.status)}`}>
-                  {stage.label}
-                </div>
-                {stage.timestamp && (
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {formatTime(stage.timestamp)}
-                  </div>
-                )}
-                {stage.status === 'current' && !isPaid && (
-                  <div className="text-xs text-muted-foreground mt-0.5 font-medium">
-                    {stage.key === 'reminder_sent' ? 'Awaiting Dispatch' : 'In progress'}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Intelligence Insights */}
-      {data.insights && data.insights.length > 0 && (
-        <div className="px-5 pb-3 space-y-2">
-          {data.insights.map(insight => (
-            <div
-              key={insight.id}
-              className={`rounded-xl p-3 text-xs ${
-                insight.severity === 'positive' ? 'bg-green-50 border border-green-200' :
-                insight.severity === 'negative' ? 'bg-red-50 border border-red-200' :
-                'bg-blue-50 border border-blue-200'
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                {insight.severity === 'positive' ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mt-0.5 shrink-0" />
-                ) : insight.severity === 'negative' ? (
-                  <AlertCircle className="h-3.5 w-3.5 text-red-600 mt-0.5 shrink-0" />
-                ) : (
-                  <Clock className="h-3.5 w-3.5 text-blue-600 mt-0.5 shrink-0" />
-                )}
-                <div>
-                  <div className={`font-semibold ${
-                    insight.severity === 'positive' ? 'text-green-800' :
-                    insight.severity === 'negative' ? 'text-red-800' :
-                    'text-blue-800'
-                  }`}>
-                    {insight.title}
-                  </div>
-                  <div className={
-                    insight.severity === 'positive' ? 'text-green-700' :
-                    insight.severity === 'negative' ? 'text-red-700' :
-                    'text-blue-700'
-                  }>
-                    {insight.description}
-                    {insight.confidence !== undefined && (
-                      <span className="ml-1 opacity-70">
-                        ({Math.round(insight.confidence * 100)}% confidence)
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Event Log */}
+      {/* Factual event history — no invented future milestones */}
       {data.groups.length > 0 && (
         <div className="border-t border-border">
           <div className="px-5 py-3">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Event History</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Activity</h4>
           </div>
           <div className="px-5 pb-5 space-y-4">
             {data.groups.map(group => (
@@ -240,6 +200,14 @@ export default function RecoveryJourney({ invoiceId }: RecoveryJourneyProps) {
   )
 }
 
+// ── Status marker ──
+
+function StatusMarker({ ok, bad }: { ok: boolean; bad: boolean }) {
+  if (bad) return <XCircle className="h-4 w-4 text-red-600" />
+  if (ok) return <CheckCircle2 className="h-4 w-4 text-green-600" />
+  return <Clock className="h-4 w-4 text-muted-foreground" />
+}
+
 // ── Event Row ──
 
 function EventRow({ event }: { event: RecoveryTimelineEvent }) {
@@ -248,9 +216,7 @@ function EventRow({ event }: { event: RecoveryTimelineEvent }) {
 
   return (
     <div className="flex items-start gap-3 py-1.5">
-      <div className={`p-1.5 rounded-full shrink-0 ${bg}`}>
-        {icon}
-      </div>
+      <div className={`p-1.5 rounded-full shrink-0 ${bg}`}>{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium">{event.title}</span>

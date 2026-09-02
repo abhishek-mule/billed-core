@@ -75,15 +75,17 @@ const bucketDot: Record<AgingBucket, string> = {
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24))
+function daysSince(dateStr?: string | null): number {
+  if (!dateStr) return 0
+  const t = new Date(dateStr).getTime()
+  if (isNaN(t)) return 0
+  return Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24))
 }
 
 function getAgingBucket(days: number): AgingBucket {
-  const risk = getCollectionRisk({ overdueDays: days })
-  if (risk.rank <= 1) return "1-7"
-  if (risk.rank <= 2) return "8-15"
-  if (risk.rank <= 3) return "16-30"
+  if (days <= 7) return "1-7"
+  if (days <= 15) return "8-15"
+  if (days <= 30) return "16-30"
   return "30+"
 }
 

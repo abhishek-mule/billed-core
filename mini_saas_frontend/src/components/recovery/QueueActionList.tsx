@@ -219,10 +219,10 @@ export function QueueActionList() {
   if (!data || data.items.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="flex flex-col items-center justify-center py-12 text-center bg-green-50 rounded-xl border border-green-200">
-          <CheckCircle2 className="h-10 w-10 text-green-500 mb-3" />
-          <p className="text-lg font-semibold text-green-700">All caught up!</p>
-          <p className="text-sm text-green-600 mt-1">No outstanding cases. You&apos;re on top of your receivables.</p>
+        <div className="flex flex-col items-center justify-center py-12 text-center bg-success-soft rounded-xl border border-success/30">
+          <CheckCircle2 className="h-10 w-10 text-success mb-3" />
+          <p className="text-lg font-semibold text-success">All caught up!</p>
+          <p className="text-sm text-success mt-1">No outstanding cases. You&apos;re on top of your receivables.</p>
         </div>
         <InsightsAccordion show={showInsights} onToggle={() => setShowInsights(!showInsights)} />
       </div>
@@ -296,13 +296,13 @@ export function QueueActionList() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-sm font-bold text-foreground">{formatINR(item.amount)}</span>
                     {item.overdue > 0 && (
-                      <span className="text-xs text-red-600 font-medium">{formatINR(item.overdue)} overdue</span>
+                      <span className="text-xs text-danger font-medium">{formatINR(item.overdue)} overdue</span>
                     )}
                     {item.promiseStatus === 'broken' && (
-                      <span className="text-xs text-red-500">Promise broken</span>
+                      <span className="text-xs text-danger">Promise broken</span>
                     )}
                     {item.engagementState === 'ghosting' && (
-                      <span className="text-xs text-orange-500">Ghosting</span>
+                      <span className="text-xs text-warning">Ghosting</span>
                     )}
                   </div>
                 </div>
@@ -380,7 +380,7 @@ export function QueueActionList() {
                     <select
                       value={paymentMethod}
                       onChange={e => setPaymentMethod(e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                      className="px-2 py-1.5 text-sm border border-border rounded-lg bg-card focus:outline-none focus:ring-1 focus:ring-primary"
                     >
                       <option value="cash">Cash</option>
                       <option value="upi">UPI</option>
@@ -392,7 +392,7 @@ export function QueueActionList() {
                     <button
                       onClick={() => handleRecordPayment(item.caseId, item.customerId)}
                       disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || actingCase === item.caseId}
-                      className="flex-1 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      className="flex-1 py-1.5 bg-success text-success-foreground text-xs font-medium rounded-lg hover:opacity-90 disabled:opacity-50"
                     >
                       {actingCase === item.caseId ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : 'Record Payment'}
                     </button>

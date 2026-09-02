@@ -6,6 +6,7 @@ import { recordPayment } from '@/lib/billzo/record-payment'
 import { verifyRequest, validateJsonBody, validateRequired, errorResponse, logApiAccess } from '@/lib/billzo/api-middleware'
 import { signUpiToken } from '@/lib/billzo/crypto'
 import { sendDirectWhatsApp } from '@/lib/billzo/whatsapp-send-direct'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { requireFeature } from '@/lib/auth/feature-gate'
 import { getEntitlement, emitUsageEvent } from '@/lib/billzo/feature-flags'
 import { getReminderQuota } from '@/lib/billzo/reminder-quota'
@@ -198,9 +199,30 @@ async function sendReminderForCase(ctx: {
     personalNote: payload.personalNote || payload.notes || null,
   })
 
+  // ── Create recovery attempt before transport ──
+  // The attempt ID is the causal spine; every send (success or failure) is
+  // recorded against it.  A failed transport is still an attempt.
+  const attemptId = `CA_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  await supabaseAdmin.from('collection_actions').insert({
+    id: attemptId,
+    tenant_id: tid,
+    customer_id: recoveryCase.customer_id,
+    invoice_ids: [oldestInvoice.id],
+    action_type: 'reminder',
+    status: 'in_progress',
+    source: 'merchant',
+    provider: 'whatsapp',
+    amount: totalOverdue,
+    reason: 'Manual recovery reminder',
+    metadata: { origin: payload.origin || 'manual_recovery_queue' },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+
   const directResult = await sendDirectWhatsApp(tid, recoveryCase.customer_id, message, {
     invoiceId: oldestInvoice.id,
     origin: payload.origin || 'manual_recovery_queue',
+    recoveryAttemptId: attemptId,
   })
 
   const commonRefresh = ['recovery_queue', 'dashboard', 'invoice', 'customer']
@@ -227,6 +249,7 @@ async function sendReminderForCase(ctx: {
     quotaWarning: 'none' as const,
     nextReminderAt: nextAction?.scheduled_at || null,
     nextReminderStage: nextAction?.template_name || nextAction?.action_type || null,
+    actionId: attemptId,
   }
 
   if (directResult.sentVia === 'baileys') {
@@ -248,6 +271,7 @@ async function sendReminderForCase(ctx: {
         messageType: 'reminder',
         trigger: 'manual',
         override: true,
+        collectionActionId: attemptId,
       },
       correlationId: `recovery:${caseId}`,
       idempotencyKey: payload.clientCorrelationId || `recovery:send:${caseId}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`,
@@ -271,6 +295,14 @@ async function sendReminderForCase(ctx: {
     })
     await markCaseActivity(supabase, caseId)
     await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+    // Attempt was created before transport; mark as in_progress since delivery
+    // will be handled by the Baileys worker via the outbox events above.
+    await supabaseAdmin.from('collection_actions').update({
+      status: 'in_progress',
+      last_attempt_at: new Date().toISOString(),
+      attempt_count: 1,
+      updated_at: new Date().toISOString(),
+    }).eq('id', attemptId)
     return { status: 200, body: { success: true, ...ok, eventId, message: 'Reminder queued for delivery via WhatsApp' } }
   }
 
@@ -278,14 +310,29 @@ async function sendReminderForCase(ctx: {
     await markCaseActivity(supabase, caseId)
     if (directResult.success) {
       await emitUsageEvent(tid, 'reminders_sent', 1).catch(() => {})
+      // Attempt completed successfully
+      await supabaseAdmin.from('collection_actions').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        provider: directResult.sentVia,
+        billzo_message_id: directResult.messageId,
+        updated_at: new Date().toISOString(),
+      }).eq('id', attemptId)
       return { status: 200, body: { success: true, ...ok } }
     }
     return { status: 500, body: { success: false, error: directResult.error || 'WhatsApp send failed', ...ok } }
   }
 
   if (directResult.success === false) {
-    return { status: 500, body: { success: false, error: directResult.error || 'WhatsApp send failed', ...ok } }
-  }
+      // Attempt failed — transport error
+      await supabaseAdmin.from('collection_actions').update({
+        status: 'failed',
+        failed_at: new Date().toISOString(),
+        error: directResult.error || 'WhatsApp send failed',
+        updated_at: new Date().toISOString(),
+      }).eq('id', attemptId)
+      return { status: 500, body: { success: false, error: directResult.error || 'WhatsApp send failed', ...ok } }
+    }
 
   return { status: 400, body: { success: false, error: 'No WhatsApp channel configured' } }
 }
@@ -442,6 +489,8 @@ export async function POST(request: NextRequest) {
         actor: 'merchant',
         evidence: { notes: payload?.notes || 'Recorded from recovery queue' },
         notes: payload?.notes,
+        // Only when the merchant names the originating attempt explicitly.
+        recoveryAttemptId: typeof payload?.actionId === 'string' && payload.actionId ? payload.actionId : undefined,
       })
 
       if ('error' in pmtResult) {
@@ -727,6 +776,13 @@ export async function POST(request: NextRequest) {
 
       if (action === 'mark_promise') {
         outboxPayload.due_date = payload?.dueDate || null
+        // The originating recovery attempt, when the caller names it explicitly.
+        if (typeof payload?.actionId === 'string' && payload.actionId) {
+          outboxPayload.actionId = payload.actionId
+        }
+        // Carry the real invoice id (promise.made's event.entityId is the case
+        // id, which would otherwise corrupt payment_promises.invoice_id).
+        outboxPayload.invoiceId = payload?.invoiceId || await resolveInvoiceIdForCase(supabase, tid, recoveryCase)
         // Promise made → schedule a promise follow-up action automatically.
         if (payload?.dueDate && recoveryCase?.customer_id) {
           await planPromiseFollowup({

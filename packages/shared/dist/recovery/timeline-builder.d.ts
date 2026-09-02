@@ -38,8 +38,12 @@ export interface TimelineBuilderInput {
     invoice: RawInvoice;
     collectionActions: RawCollectionAction[];
     whatsappEvents: RawWhatsAppEvent[];
+    /** True when the customer has no usable WhatsApp number (grounds the "Not sent" note). */
+    customerPhoneMissing?: boolean;
 }
-declare function buildJourney(events: RecoveryTimelineEvent[], invoiceStatus: string): RecoveryJourney;
+declare function buildJourney(events: RecoveryTimelineEvent[], invoiceStatus: string, opts?: {
+    customerPhoneMissing?: boolean;
+}): RecoveryJourney;
 declare function buildInsights(events: RecoveryTimelineEvent[]): IntelligenceInsight[];
 export declare function buildRecoveryTimeline(input: TimelineBuilderInput): RecoveryTimelineData;
 export { buildJourney, buildInsights };

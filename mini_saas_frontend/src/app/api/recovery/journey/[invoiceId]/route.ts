@@ -29,15 +29,17 @@ export async function GET(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Fetch customer name
+    // Fetch customer name + phone (phone grounds "Not sent — phone missing")
     let customerName: string | undefined
+    let customerPhoneMissing = false
     if (invoice.customer_id) {
       const { data: cust } = await supabaseAdmin
         .from('customers')
-        .select('customer_name')
+        .select('customer_name, phone')
         .eq('id', invoice.customer_id)
         .maybeSingle()
       customerName = cust?.customer_name
+      customerPhoneMissing = !cust?.phone
     }
 
     // Fetch collection actions
@@ -60,6 +62,7 @@ export async function GET(
       invoice: invoice as RawInvoice,
       collectionActions: (collectionActions || []) as RawCollectionAction[],
       whatsappEvents: (whatsappEvents || []) as RawWhatsAppEvent[],
+      customerPhoneMissing,
     }
 
     const timeline = buildRecoveryTimeline(input)

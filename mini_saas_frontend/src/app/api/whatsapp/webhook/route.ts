@@ -70,6 +70,10 @@ interface NormalizedMessage {
   timestamp?: string
   type?: string
   text?: string | { body?: string }
+  /** Provider-parent identity: the message this inbound reply references
+   *  (Meta: context.id; Gupshup: context.id). Resolves the recovery attempt
+   *  this reply belongs to — never by timestamp proximity. */
+  contextId?: string
 }
 
 /** Meta sends text as { body: "..." }, Gupshup sends it as a plain string. */
@@ -197,7 +201,9 @@ async function processEvent(ev: NormalizedEvent, rawPayload: any) {
   if (ev.eventType === 'customer_message') {
     for (const msg of ev.messages ?? []) {
       const customerId = await matchCustomer(tenantId, msg.from)
-      await persistInboundWhatsAppEvent(tenantId, connection, msg, customerId)
+      // Normalize provider parent identity (Meta: message.context.id; Gupshup: contextId).
+      const normalized = { ...msg, contextId: (msg as any).context?.id ?? msg.contextId ?? null }
+      await persistInboundWhatsAppEvent(tenantId, connection, normalized, customerId)
       await recordPilotEvent({
         tenantId,
         customerId,
@@ -208,7 +214,7 @@ async function processEvent(ev: NormalizedEvent, rawPayload: any) {
         providerEventType: 'message',
         providerStatus: 'received',
         attributionResult: customerId ? 'resolved' : 'customer_unmatched',
-        stateAfter: { from: msg.from, type: msg.type, text: textBody(msg.text)?.slice(0, 300) },
+        stateAfter: { from: msg.from, type: msg.type, text: textBody(msg.text)?.slice(0, 300), repliedTo: normalized.contextId ?? null },
         rawPayload: sanitizeRaw(msg),
         occurredAt: tsToIso(msg.timestamp),
       })
@@ -275,7 +281,7 @@ function tsToIso(ts?: string): string | undefined {
   return Number.isFinite(n) ? new Date(n * 1000).toISOString() : undefined
 }
 
-async function persistInboundWhatsAppEvent(
+export async function persistInboundWhatsAppEvent(
   tenantId: string,
   connection: { phone_number_id: string },
   msg: NormalizedMessage,
@@ -293,6 +299,13 @@ async function persistInboundWhatsAppEvent(
     if (existing) return
   }
 
+  // A reply is attributed to an attempt ONLY through provider parent identity.
+  // No parent / unresolvable parent ⇒ unknown causality, never a timestamp guess.
+  const contextId = msg.contextId || null
+  const resolved = contextId ? await resolveReplyContext(contextId) : null
+  const recoveryAttemptId = resolved?.recovery_attempt_id ?? null
+  const occurredAt = tsToIso(msg.timestamp) ?? new Date().toISOString()
+
   await supabaseAdmin.from('whatsapp_events').insert({
     id: crypto.randomUUID(),
     billzo_message_id: msg.id ?? crypto.randomUUID(),
@@ -305,13 +318,87 @@ async function persistInboundWhatsAppEvent(
     event_layer: 'transport',
     message_origin: 'inbound_webhook',
     provider_message_id: msg.id ?? null,
+    recovery_attempt_id: recoveryAttemptId,
     status: 'received',
-    occurred_at: tsToIso(msg.timestamp) ?? new Date().toISOString(),
-    metadata: { type: msg.type, text: textBody(msg.text)?.slice(0, 500) },
+    occurred_at: occurredAt,
+    metadata: {
+      type: msg.type,
+      text: textBody(msg.text)?.slice(0, 500),
+      context_id: contextId,
+      replied_to_attempt: recoveryAttemptId ?? null,
+    },
   })
+
+  // Record the reply outcome: VERIFIED only when the parent identity resolves,
+  // otherwise UNKNOWN — the honest ledger entry for an unattributed reply.
+  const outcome = {
+    tenant_id: tenantId,
+    recovery_attempt_id: recoveryAttemptId,
+    outcome_type: 'customer_replied',
+    outcome_at: occurredAt,
+    invoice_id: resolved?.invoice_id ?? null,
+    customer_id: customerId ?? resolved?.customer_id ?? null,
+    attribution_status: recoveryAttemptId ? 'verified' : 'unknown',
+    attribution_method: recoveryAttemptId ? 'explicit' : null,
+    confidence_score: recoveryAttemptId ? 1 : null,
+    provider_message_id: msg.id ?? null,
+    metadata: { replied_to: contextId, type: msg.type },
+  }
+
+  if (recoveryAttemptId) {
+    await supabaseAdmin.from('recovery_outcomes').upsert(outcome, {
+      onConflict: 'recovery_attempt_id,outcome_type,provider_message_id',
+    })
+  } else {
+    await supabaseAdmin.from('recovery_outcomes').insert(outcome)
+  }
 }
 
-async function persistEchoWhatsAppEvent(
+/**
+ * Resolve the recovery attempt + invoice context from a provider parent id
+ * (the outbound message this reply references). Identity only:
+ * whatsapp_events.provider_message_id, preferring rows that already carry the
+ * attempt id, falling back to collection_actions linkage. Returns null when
+ * no attempt is provable — the caller records UNKNOWN causality.
+ */
+async function resolveReplyContext(contextId: string): Promise<{
+  recovery_attempt_id: string | null
+  invoice_id: string | null
+  customer_id: string | null
+} | null> {
+  const { data: withAttempt } = await supabaseAdmin
+    .from('whatsapp_events')
+    .select('recovery_attempt_id, invoice_id, customer_id')
+    .eq('provider_message_id', contextId)
+    .not('recovery_attempt_id', 'is', null)
+    .limit(1)
+    .maybeSingle()
+  if (withAttempt?.recovery_attempt_id) {
+    return {
+      recovery_attempt_id: withAttempt.recovery_attempt_id,
+      invoice_id: withAttempt.invoice_id ?? null,
+      customer_id: withAttempt.customer_id ?? null,
+    }
+  }
+
+  const { data: anyRow } = await supabaseAdmin
+    .from('whatsapp_events')
+    .select('recovery_attempt_id, invoice_id, customer_id')
+    .eq('provider_message_id', contextId)
+    .limit(1)
+    .maybeSingle()
+
+  const attemptId = anyRow?.recovery_attempt_id ?? (await resolveAttemptForMessageId(contextId))
+  return attemptId
+    ? {
+        recovery_attempt_id: attemptId,
+        invoice_id: anyRow?.invoice_id ?? null,
+        customer_id: anyRow?.customer_id ?? null,
+      }
+    : null
+}
+
+export async function persistEchoWhatsAppEvent(
   tenantId: string,
   connection: { phone_number_id: string },
   msg: NormalizedMessage,
@@ -328,6 +415,12 @@ async function persistEchoWhatsAppEvent(
     if (existing) return
   }
 
+  // The provider echo reflects an outbound message we sent. Resolve the
+  // attempt from provider identity (billzo_message_id or the provider receipt
+  // stored in action metadata) so the append-only outbound row carries the
+  // causal spine. No match => unknown, not guessed.
+  const recoveryAttemptId = msg.id ? await resolveAttemptForMessageId(msg.id) : null
+
   await supabaseAdmin.from('whatsapp_events').insert({
     id: crypto.randomUUID(),
     billzo_message_id: msg.id ?? crypto.randomUUID(),
@@ -340,13 +433,39 @@ async function persistEchoWhatsAppEvent(
     event_layer: 'transport',
     message_origin: 'merchant_app',
     provider_message_id: msg.id ?? null,
+    recovery_attempt_id: recoveryAttemptId,
     status: 'sent',
     occurred_at: tsToIso(msg.timestamp) ?? new Date().toISOString(),
     metadata: { type: msg.type, text: textBody(msg.text)?.slice(0, 500) },
   })
 }
 
-async function updateDeliveryStatus(tenantId: string, st: NormalizedStatus) {
+/**
+ * Resolve the recovery attempt (collection_actions.id) that produced a
+ * provided message. Tries the billzo id first, then the raw provider receipt
+ * stored on the attempt. Returns null when no attempt matches — the caller
+ * records an unlinked (unknown) event rather than guessing causality.
+ */
+export async function resolveAttemptForMessageId(msgId: string): Promise<string | null> {
+  const { data: byBillzoId } = await supabaseAdmin
+    .from('collection_actions')
+    .select('id')
+    .eq('billzo_message_id', msgId)
+    .limit(1)
+    .maybeSingle()
+  if (byBillzoId?.id) return byBillzoId.id
+
+  const { data: byProviderReceipt } = await supabaseAdmin
+    .from('collection_actions')
+    .select('id')
+    .filter('metadata->>provider_message_id', 'eq', msgId)
+    .limit(1)
+    .maybeSingle()
+
+  return byProviderReceipt?.id ?? null
+}
+
+export async function updateDeliveryStatus(tenantId: string, st: NormalizedStatus) {
   if (!st.id) return
   const patch: Record<string, unknown> = {}
   if (st.status === 'delivered') patch.delivered_at = tsToIso(st.timestamp) ?? new Date().toISOString()
@@ -354,9 +473,58 @@ async function updateDeliveryStatus(tenantId: string, st: NormalizedStatus) {
   if (st.status) patch.status = st.status
   if (Object.keys(patch).length === 0) return
 
+  // Provider identity, not temporal proximity, resolves the attempt.
+  // Prefer a row carrying the attempt id; fall back to any row so status
+  // patches never depend on a specific event row.
+  const { data: withAttempt } = await supabaseAdmin
+    .from('whatsapp_events')
+    .select('recovery_attempt_id, invoice_id, customer_id')
+    .eq('tenant_id', tenantId)
+    .eq('provider_message_id', st.id)
+    .not('recovery_attempt_id', 'is', null)
+    .limit(1)
+    .maybeSingle()
+
+  let message: { recovery_attempt_id: string | null; invoice_id: string | null; customer_id: string | null } | null =
+    withAttempt ?? null
+  if (!message) {
+    const { data: anyRow } = await supabaseAdmin
+      .from('whatsapp_events')
+      .select('recovery_attempt_id, invoice_id, customer_id')
+      .eq('tenant_id', tenantId)
+      .eq('provider_message_id', st.id)
+      .limit(1)
+      .maybeSingle()
+    message = anyRow ?? null
+  }
+
   await supabaseAdmin
     .from('whatsapp_events')
     .update(patch)
     .eq('tenant_id', tenantId)
     .eq('provider_message_id', st.id)
+
+  const outcomeType = st.status === 'delivered'
+    ? 'delivered'
+    : st.status === 'read'
+      ? 'customer_read'
+      : null
+  if (!outcomeType || !message?.recovery_attempt_id) return
+
+  const outcomeAt = tsToIso(st.timestamp) ?? new Date().toISOString()
+  await supabaseAdmin
+    .from('recovery_outcomes')
+    .upsert({
+      tenant_id: tenantId,
+      recovery_attempt_id: message.recovery_attempt_id,
+      outcome_type: outcomeType,
+      outcome_at: outcomeAt,
+      invoice_id: message.invoice_id,
+      customer_id: message.customer_id,
+      attribution_method: 'explicit',
+      attribution_status: 'verified',
+      confidence_score: 1,
+      provider_message_id: st.id,
+      metadata: { provider_status: st.status },
+    }, { onConflict: 'recovery_attempt_id,outcome_type,provider_message_id' })
 }

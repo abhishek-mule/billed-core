@@ -18,8 +18,11 @@ import { getCollectionRisk, COLLECTION_RISK_TONE_CLASSES } from "@/lib/billzo/re
 import { getErrorMessage } from "@/lib/billzo/ui-errors"
 
 // ── helpers ──
-function daysSince(s: string): number {
-  return Math.floor((Date.now() - new Date(s).getTime()) / (1000 * 60 * 60 * 24))
+function daysSince(s?: string | null): number {
+  if (!s) return 0
+  const t = new Date(s).getTime()
+  if (isNaN(t)) return 0
+  return Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24))
 }
 
 function getOutstanding(inv: Invoice): number {
@@ -103,20 +106,27 @@ export default function InvoicesPage() {
     }
   }
 
+  const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'unpaid' | 'paid'>('all')
+
   const filtered = useMemo(() => {
     const query = q.toLowerCase().trim()
-    if (!query) return invoices
-    return invoices.filter(i =>
-      i.customerName?.toLowerCase().includes(query) ||
-      i.invoiceNumber?.toLowerCase().includes(query) ||
-      i.id?.toLowerCase().includes(query)
-    )
-  }, [invoices, q])
+    return invoices.filter(i => {
+      if (statusFilter === 'overdue' && i.status !== 'overdue') return false
+      if (statusFilter === 'paid' && i.status !== 'paid') return false
+      if (statusFilter === 'unpaid' && i.status === 'paid') return false
+      if (!query) return true
+      return (
+        i.customerName?.toLowerCase().includes(query) ||
+        i.invoiceNumber?.toLowerCase().includes(query) ||
+        i.id?.toLowerCase().includes(query)
+      )
+    })
+  }, [invoices, q, statusFilter])
 
   const visible = filtered.slice(0, visibleCount)
   const hasMore = visibleCount < filtered.length
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q])
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q, statusFilter])
 
   // ── revenue dashboard metrics ──
   const todaySales = useMemo(() => {
@@ -342,53 +352,75 @@ export default function InvoicesPage() {
         </div>
 
         {/* ═══════════════════════════
-           TOOLBAR
+           TOOLBAR & FILTERS
            ═══════════════════════════ */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              placeholder="Search by party or invoice #"
-              className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Search by party or invoice #"
+                className="w-full h-10 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={exportCSV}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
+                title="Download all invoices as CSV"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                CSV
+              </button>
+              <button
+                onClick={exportPDF}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
+                title="Download summary PDF report"
+              >
+                <FileText className="h-4 w-4 text-primary" />
+                PDF
+              </button>
+            </div>
+            <div className="relative lg:hidden" ref={actionsRef}>
+              <button
+                onClick={() => setActionsOpen(!actionsOpen)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
+              >
+                <Download className="h-3.5 w-3.5" /> Actions
+              </button>
+              {actionsOpen && (
+                <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] z-20 py-1">
+                  <button onClick={exportCSV} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export CSV
+                  </button>
+                  <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
+                    <FileText className="h-3.5 w-3.5 text-primary" /> Export PDF
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={exportCSV}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
-              title="Download all invoices as CSV"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              CSV
-            </button>
-            <button
-              onClick={exportPDF}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-bold text-foreground bg-card hover:bg-muted transition-colors shadow-sm"
-              title="Download summary PDF report"
-            >
-              <FileText className="h-4 w-4 text-primary" />
-              PDF
-            </button>
-          </div>
-          <div className="relative lg:hidden" ref={actionsRef}>
-            <button
-              onClick={() => setActionsOpen(!actionsOpen)}
-              className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
-            >
-              <Download className="h-3.5 w-3.5" /> Actions
-            </button>
-            {actionsOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 bg-card border border-border rounded-lg shadow-sm dark:shadow-[0_1px_3px_rgba(0,0,0,0.25)] z-20 py-1">
-                <button onClick={exportCSV} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export CSV
-                </button>
-                <button onClick={exportPDF} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted">
-                  <FileText className="h-3.5 w-3.5 text-primary" /> Export PDF
-                </button>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            {[
+              { id: 'all', label: 'All Invoices' },
+              { id: 'overdue', label: 'Overdue' },
+              { id: 'unpaid', label: 'Unpaid / Partial' },
+              { id: 'paid', label: 'Paid' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg border font-medium whitespace-nowrap transition-colors ${
+                  statusFilter === tab.id
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -425,7 +457,7 @@ export default function InvoicesPage() {
                     <Link
                       key={inv.id}
                       href={`/invoices/${inv.id}`}
-                      className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-border transition-colors group"
+                      className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-primary/30 transition-colors group"
                     >
                       <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
                         {displayName.charAt(0)}
@@ -452,7 +484,7 @@ export default function InvoicesPage() {
                         {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <span className="text-[10px] text-muted-foreground/40">&middot;</span>
-                      <span className="text-[11px] text-muted-foreground">Due {new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                      <span className="text-[11px] text-muted-foreground">Due {inv.dueAt ? new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : '—'}</span>
                       {inv.paymentMode && (inv.status === "paid" || inv.status === "partial") && (
                         <>
                           <span className="text-[10px] text-muted-foreground/40">&middot;</span>
@@ -503,7 +535,7 @@ export default function InvoicesPage() {
            ═══════════════════════════ */}
         <Link
           href="/pos"
-          className="fixed bottom-24 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          className="fixed bottom-32 right-5 lg:hidden z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Create invoice"
         >
           <Plus className="h-6 w-6" />

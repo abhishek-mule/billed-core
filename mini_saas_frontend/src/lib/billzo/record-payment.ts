@@ -14,6 +14,9 @@ export interface RecordPaymentInput {
   actor: PaymentActor
   evidence?: PaymentEvidence
   notes?: string
+  /** The recovery attempt that produced this payment, when known explicitly.
+   *  Missing => the worker records UNKNOWN attribution (hostile case preserved). */
+  recoveryAttemptId?: string
 }
 
 export async function recordPayment(input: RecordPaymentInput): Promise<{ paymentId: string } | { error: string }> {
@@ -54,6 +57,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{ paymen
       actor: input.actor,
       evidence: input.evidence || {},
       paymentId,
+      recoveryAttemptId: input.recoveryAttemptId || null,
     },
     correlationId: `payment:${input.invoiceId}`,
   })
@@ -106,6 +110,7 @@ export async function syncPayment(input: RecordPaymentInput & { paymentId: strin
       actor: input.actor,
       evidence: input.evidence || {},
       paymentId: input.paymentId,
+      recoveryAttemptId: input.recoveryAttemptId || null,
     },
     correlationId: `payment:${input.invoiceId}:sync:${input.paymentId}`,
   })

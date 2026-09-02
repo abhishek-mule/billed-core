@@ -120,6 +120,7 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
         attemptNumber: action.attempt_count + 1,
         reminderStage: action.template_name,
         amount: Number(invoice.total || 0),
+        recoveryAttemptId: action.id,
       },
     )
 
@@ -172,6 +173,7 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
         messageId: sendResult.messageId,
         billzoMessageId: sendResult.messageId,
         actionId: action.id,
+        recoveryAttemptId: action.id,
       } as Record<string, unknown>,
       causationId: null,
       correlationId: '',
