@@ -79,7 +79,7 @@ export default function InvoicesPage() {
   // ── server-side sales data for fallback ──
   const [serverTodaySales, setServerTodaySales] = useState(0)
   useEffect(() => {
-    fetch("/api/recovery/queue", { credentials: "include" })
+    fetch("/api/recovery/summary", { credentials: "include" })
       .then(async r => {
         if (!r.ok) return
         const data = await r.json()

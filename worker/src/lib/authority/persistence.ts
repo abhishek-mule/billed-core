@@ -39,13 +39,13 @@ export class AuthorityPersistence {
         INSERT INTO authority_intents (
           intent_id, intent_type, intent_version, tenant_id, actor, source,
           payload, canonical_payload_hash, semantic_payload_hash,
-          causation_id, correlation_id, created_at
+          causation_id, correlation_id, nonce, created_at
         ) VALUES (
           ${intent.intentId}, ${intent.intentType}, ${intent.intentVersion},
           ${intent.tenantId}, ${intent.actor}, ${intent.source},
           ${this.sql.json(toJsonValue(intent.payload) as any)},
           ${canonicalPayloadHash}, ${semanticPayloadHash},
-          ${intent.causationId}, ${intent.correlationId},
+          ${intent.causationId}, ${intent.correlationId}, ${intent.nonce},
           ${this.sql`NOW()`}
         )
       `
@@ -108,14 +108,14 @@ export class AuthorityPersistence {
         INSERT INTO authority_intents (
           intent_id, intent_type, intent_version, tenant_id, actor, source,
           payload, canonical_payload_hash, semantic_payload_hash,
-          causation_id, correlation_id, created_at
+          causation_id, correlation_id, nonce, created_at
         ) VALUES (
           ${intent.intentId}, ${intent.intentType}, ${intent.intentVersion},
           ${intent.tenantId}, ${intent.actor}, ${intent.source},
           ${this.sql.json(toJsonValue(intent.payload) as any)},
           ${canonicalPayloadHash},
           ${canonicalPayloadHash},
-          ${intent.causationId}, ${intent.correlationId},
+          ${intent.causationId}, ${intent.correlationId}, ${intent.nonce},
           ${this.sql`NOW()`}
         )
       `

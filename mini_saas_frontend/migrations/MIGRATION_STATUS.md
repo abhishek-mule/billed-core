@@ -118,6 +118,7 @@ pipeline. There is no migration runner — each file is applied once.
 | 090_whatsapp_server_authority.sql | Applied | Applied to production 2026-08-25. Server-authoritative `whatsapp_connections` (webhook tenant resolution) + append-only `pilot_events` forensic trace + `whatsapp_events.phone_number_id`. Latest migration |
 | 091_recovery_outcomes.sql | Applied | Applied during Phase 1.5 gate: creates `recovery_outcomes`, `payment_promises.triggered_by_action_id`, `whatsapp_events.recovery_attempt_id` FK, `invoices.last_recovery_action_id`. Foundation for behavioral learning. |
 | 093_controlled_attribution_backfill.sql | Applied | Applied during Phase 1.5 backfill (D-gate PASS). Read-only audit + controlled exact-identity link backfill. Result: 0 provable links (no `collection_actions` historically stored `billzo_message_id`), so 67 historical outbound events correctly left as `unknown` (NULL link) — nothing fabricated. |
+| 094_authority_runtime_schema.sql | Pending | B-01: reconcile authority_* tables to the committed executor/dispatcher/persistence write contract. Adds `authority_intents.nonce`; recreates `authority_execution_leases`, `authority_executions` (summary-row), `authority_queue_dispatch_attempts` to the code's exact schema. Deferred to production (authority tables dormant — local dev DB applied 2026-09-09). |
 | verify_schema.sql | — | Helper script, not a migration |
 
 ## Duplicate migration numbers

@@ -19,11 +19,11 @@ function mockUnauthedRequest(url: string, opts?: RequestInit): NextRequest {
   return new NextRequest(url, opts)
 }
 
-// ── Recovery Queue API ──
-describe('GET /api/recovery/queue', () => {
+// ── Recovery Summary API ──
+describe('GET /api/recovery/summary', () => {
   it('returns 401 without auth', async () => {
-    const req = mockUnauthedRequest('http://localhost/api/recovery/queue')
-    const { GET } = await import('@/app/api/recovery/queue/route')
+    const req = mockUnauthedRequest('http://localhost/api/recovery/summary')
+    const { GET } = await import('@/app/api/recovery/summary/route')
     const res = await GET(req)
     expect(res.status).toBe(401)
     const body = await res.json()

@@ -7,6 +7,7 @@ const withPWA = require('next-pwa')({
   clientsClaim: true,
   disable: process.env.NODE_ENV === 'development',
   reloadOnOnline: true,
+  buildExcludes: [/app-build-manifest\.json$/],
 })
 
 const nextConfig = {

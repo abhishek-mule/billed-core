@@ -10,7 +10,16 @@ const STATIC_CACHE = 'billzo-static-v5'
 const IMAGE_CACHE = 'billzo-images-v1'
 const API_CACHE = 'billzo-api-v1'
 
-self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('install', () => {
+  self.skipWaiting()
+  // Prewarm the /offline page into PAGE_CACHE so a first-time offline
+  // navigation can be served it. The activate handler below deletes every
+  // cache outside the four named ones, so warming into PAGE_CACHE (not
+  // workbox-precache) guarantees the fallback survives activation.
+  caches.open(PAGE_CACHE).then((cache) => {
+    cache.add('/offline').catch(() => {})
+  })
+})
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -24,14 +33,26 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
+const pageHandler = new NetworkFirst({
+  cacheName: PAGE_CACHE,
+  plugins: [
+    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 }),
+  ],
+})
+
 registerRoute(
   ({ request }) => request.mode === 'navigate',
-  new NetworkFirst({
-    cacheName: PAGE_CACHE,
-    plugins: [
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 60 * 60 }),
-    ],
-  })
+  async ({ event, request }) => {
+    try {
+      return await pageHandler.handle({ event, request })
+    } catch (error) {
+      // Offline + nothing cached for this navigation: serve the prewarmed
+      // /offline page instead of a browser network error.
+      const offline = await caches.match('/offline', { cacheName: PAGE_CACHE })
+      if (offline) return offline
+      return Response.error()
+    }
+  }
 )
 
 registerRoute(

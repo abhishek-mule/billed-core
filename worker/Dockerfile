@@ -33,4 +33,4 @@ COPY --from=build /app/worker/node_modules /app/worker/node_modules
 EXPOSE 10000
 
 WORKDIR /app/worker
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]

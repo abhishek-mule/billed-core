@@ -5,10 +5,10 @@
   "description": "BillZo background worker service for recovery automation",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "build": "tsc && pnpm run lint:mutations",
     "lint:mutations": "node scripts/check-ungoverned-mutations.mjs",
-    "dev": "ts-node-dev -r dotenv/config --respawn index.ts",
+    "dev": "ts-node-dev -r dotenv/config --respawn src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "recovery:trace": "ts-node --transpile-only -r dotenv/config src/lib/recovery/audit/trace.ts",
