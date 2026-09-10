@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { buildRecoveryDecision, type RecoveryDecision } from './recovery-decision'
+import { computeAutomationState, type AutomationState } from './recovery-evaluation'
 
 /**
  * Recovery Card — flat card for the Recovery Command Center
@@ -25,6 +26,7 @@ export type RecoveryCard = {
     replyPreview: string | null
     promiseDate: string | null
   }
+  automation: AutomationState
   cta: {
     type: 'add_phone' | 'call' | 'send_reminder' | 'view_details' | 'view_payment'
     label: string
@@ -39,6 +41,12 @@ export type RecoveryCommandCenter = {
     automated: number
     monitoring: number
     totalOutstanding: number
+  }
+  automation: {
+    scheduledActions: number
+    awaitingEvaluation: number
+    pausedByReply: number
+    pausedByPromise: number
   }
   needsYou: RecoveryCard[]
   billzoIsHandling: RecoveryCard[]
@@ -101,6 +109,7 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
   if (customerIds.length === 0) {
     return {
       summary: { totalCases: 0, needsYou: 0, automated: 0, monitoring: 0, totalOutstanding: 0 },
+      automation: { scheduledActions: 0, awaitingEvaluation: 0, pausedByReply: 0, pausedByPromise: 0 },
       needsYou: [],
       billzoIsHandling: [],
       monitoring: [],
@@ -115,13 +124,13 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
       .in('id', customerIds),
     supabaseAdmin
       .from('invoices')
-      .select('id, customer_id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, created_at')
+      .select('id, customer_id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, created_at, recovery_stage, next_recovery_at, last_whatsapp_at')
       .eq('tenant_id', tenantId)
       .in('customer_id', customerIds)
       .limit(500),
     supabaseAdmin
       .from('collection_actions')
-      .select('id, customer_id, action_type, status, completed_at, invoice_ids')
+      .select('id, customer_id, action_type, status, scheduled_at, completed_at, invoice_ids, reason')
       .eq('tenant_id', tenantId)
       .in('customer_id', customerIds)
       .limit(500),
@@ -294,6 +303,14 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
         replyPreview: latestInbound?.message_preview ?? null,
         promiseDate: activePromise?.promise_date ?? null,
       },
+      automation: computeAutomationState({
+        custInvoices,
+        custActions,
+        activePromiseDate: activePromise?.promise_date ?? null,
+        latestInbound,
+        outstanding,
+        now,
+      }),
       cta: buildCTA(decision, cust.phone || null, custId),
     })
   }
@@ -317,6 +334,12 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
       automated: billzoIsHandling.length,
       monitoring: monitoring.length,
       totalOutstanding,
+    },
+    automation: {
+      scheduledActions: cards.reduce((s, c) => s + c.automation.scheduledActions.length, 0),
+      awaitingEvaluation: cards.filter((c) => c.automation.evaluationOverdue).length,
+      pausedByReply: cards.filter((c) => c.automation.stopCondition.kind === 'replied').length,
+      pausedByPromise: cards.filter((c) => c.automation.stopCondition.kind === 'promise').length,
     },
     needsYou,
     billzoIsHandling,

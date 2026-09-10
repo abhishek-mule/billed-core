@@ -38,6 +38,7 @@ const DEFAULT_BATCH_SIZE = 10
 
 export class AuthorityOutboxDispatcher {
   private _running = false
+  private _polling = false
   private _timer: ReturnType<typeof setInterval> | null = null
 
   constructor(
@@ -62,7 +63,8 @@ export class AuthorityOutboxDispatcher {
   }
 
   private async poll(): Promise<void> {
-    if (!this._running) return
+    if (!this._running || this._polling) return
+    this._polling = true
     try {
       const entries = await this.fetchPendingEntries()
       for (const entry of entries) {
@@ -71,6 +73,8 @@ export class AuthorityOutboxDispatcher {
       }
     } catch (err) {
       console.error('[AuthorityOutboxDispatcher] Poll error:', err)
+    } finally {
+      this._polling = false
     }
   }
 
@@ -154,7 +158,7 @@ export class AuthorityOutboxDispatcher {
           SET status = ${allSuccess ? 'completed' : 'failed'},
               completed_at = NOW(),
               result = ${this.sql.json(results.map(r => ({ success: r.success, error: r.error })))}
-          WHERE attempt_id = ${attempt.attempt_id}
+          WHERE id = ${attempt.attempt_id}
         `
       } catch (err: any) {
         await this.markFailed(attempt.attempt_id, err.message ?? 'unknown_error')
@@ -169,10 +173,10 @@ export class AuthorityOutboxDispatcher {
       await this.sql`
         UPDATE authority_queue_dispatch_attempts
         SET status = 'failed', completed_at = NOW(), error = ${error}
-        WHERE attempt_id = ${attemptId}
+        WHERE id = ${attemptId}
       `
-    } catch {
-      // table may not exist — skip
+    } catch (err: any) {
+      console.warn('[AuthorityOutboxDispatcher] markFailed failed to persist:', err.message ?? 'unknown_error')
     }
   }
 }

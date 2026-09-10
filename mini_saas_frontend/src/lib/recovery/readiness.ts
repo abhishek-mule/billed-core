@@ -86,7 +86,7 @@ export function evaluateReadiness(c: ReadinessCounts): Readiness {
       kind: 'send_reminder',
       title: `You have ${c.overdueInvoices} customer${c.overdueInvoices === 1 ? '' : 's'} waiting.`,
       cta: 'Send your first reminder',
-      href: '/recovery/work',
+      href: '/recovery',
       overdueCount: c.overdueInvoices,
     }
   } else {

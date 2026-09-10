@@ -1348,6 +1348,18 @@
 .rc-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .rc-modal-body { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
 
+/* ─── Start Recovery confirmation panel ─────────────────────────────────── */
+.rc-startrow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 8px;
+  background: hsl(var(--muted) / 0.35); color: var(--foreground);
+  font-size: 13px;
+}
+.rc-startrow .rc-startlbl {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-weight: 500;
+}
+
 /* ─── Command center: automation chip ────────────────────────────────────── */
 .rc-auto-chip {
   display: inline-flex; align-items: center; gap: 7px;

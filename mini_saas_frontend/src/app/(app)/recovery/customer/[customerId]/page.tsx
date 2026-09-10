@@ -42,6 +42,14 @@ type Workspace = {
   invoices: Invoice[]
   communication: { at: string; kind: string; text: string; detail: string }[]
   decision: RecoveryDecision | null
+  automation: {
+    stage: string
+    nextEvaluationAt: string | null
+    evaluationOverdue: boolean
+    scheduledActions: { id: string; actionType: string; scheduledAt: string; reason: string | null }[]
+    stopCondition: { kind: 'replied' | 'promise' | 'payment' | 'none'; note: string | null }
+    lastWhatsAppAt: string | null
+  } | null
 }
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
@@ -95,7 +103,25 @@ export default function CustomerWorkspacePage() {
         if (active) setLoading(false)
       }
     })()
-    return () => { active = false }
+    const handler = () => {
+      if (!active) return
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/recovery/customer?customerId=${encodeURIComponent(customerId)}`, { credentials: 'include' })
+          if (res.ok) {
+            const json = await res.json()
+            setData(json)
+          }
+          const nres = await fetch(`/api/recovery/memory?customerId=${encodeURIComponent(customerId)}`, { credentials: 'include' })
+          if (nres.ok) {
+            const nj = await nres.json()
+            setNotes(nj.notes || [])
+          }
+        } catch {}
+      })()
+    }
+    window.addEventListener('billzo:changed', handler)
+    return () => { active = false; window.removeEventListener('billzo:changed', handler) }
   }, [customerId])
 
   const reloadNotes = async () => {
@@ -194,6 +220,23 @@ export default function CustomerWorkspacePage() {
           <div className="cw-hero-item">
             <span className="cw-hero-lbl">Promise</span>
             <span className="cw-hero-num">{fmtDate(rc.promiseDate)}</span>
+          </div>
+        ) : null}
+        {data.automation ? (
+          <div className="cw-hero-item">
+            <span className="cw-hero-lbl">Next evaluation</span>
+            <span className="cw-hero-num">
+              {data.automation.evaluationOverdue ? 'Overdue' : data.automation.nextEvaluationAt ? fmtDate(data.automation.nextEvaluationAt) : 'None'}
+            </span>
+            <span className="cw-hero-sub">
+              {data.automation.evaluationOverdue
+                ? 'BillZo has not re-evaluated yet'
+                : data.automation.stopCondition.kind === 'promise' ? 'Paused until promise date'
+                : data.automation.stopCondition.kind === 'replied' ? 'Paused — customer replied'
+                : data.automation.stopCondition.kind === 'payment' ? 'Automation stopped'
+                : data.automation.scheduledActions.length > 0 ? `${data.automation.scheduledActions.length} scheduled`
+                : data.automation.nextEvaluationAt ? 'BillZo will re-evaluate' : 'No automation scheduled'}
+            </span>
           </div>
         ) : null}
       </section>

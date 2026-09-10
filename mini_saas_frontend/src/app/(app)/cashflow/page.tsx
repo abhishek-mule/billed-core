@@ -138,7 +138,7 @@ export default function CashflowPage() {
 
       const [invData, recoveryRes, upcomingRes] = await Promise.all([
         db().invoices.where("tenantId").equals(tenantId).toArray(),
-        fetch("/api/recovery/queue", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+        fetch("/api/recovery/summary", { credentials: "include" }).then(r => r.ok ? r.json() : null),
         fetch("/api/recovery/upcoming", { credentials: "include" }).then(r => r.ok ? r.json() : { reminders: [] }),
       ])
 
