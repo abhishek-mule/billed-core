@@ -24,7 +24,7 @@ const WEBHOOK_SECRET = process.env.GUPSHUP_WEBHOOK_SECRET
  */
 
 function verifySignature(payload: string, signature: string | null): boolean {
-  if (!WEBHOOK_SECRET) return true
+  if (!WEBHOOK_SECRET) return false
   if (!signature) return false
   const expected = crypto
     .createHmac('sha256', WEBHOOK_SECRET)
@@ -136,6 +136,14 @@ function normalizePayload(payload: any): NormalizedEvent[] {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text()
   const signature = request.headers.get('x-gupshup-signature') || request.headers.get('x-hub-signature-256')
+
+  // Fail closed: without a configured webhook secret no signature can be
+  // verified, so the endpoint rejects every payload instead of accepting
+  // unsigned events.
+  if (!WEBHOOK_SECRET) {
+    console.warn('[WhatsAppWebhook] GUPSHUP_WEBHOOK_SECRET not configured — rejecting webhook')
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
+  }
 
   if (!verifySignature(rawBody, signature)) {
     console.warn('[WhatsAppWebhook] Invalid signature')
