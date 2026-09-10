@@ -18,7 +18,17 @@ function appendWebhookLog(line: string) {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qdnmuoyqpqdewepzuezp.supabase.co'
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
-const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN || 'billzo_meta_verify_2024'
+// Fail closed: no committed fallback token. If unconfigured the verification
+// endpoints reject every request (B-02: no hardcoded secret).
+const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN
+
+function safeTokenEqual(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false
+  const ba = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ba.length !== bb.length) return false
+  return crypto.timingSafeEqual(ba, bb)
+}
 
 async function supabaseFetch(path: string, options: RequestInit = {}) {
   const url = `${SUPABASE_URL}/rest/v1/${path}`
@@ -85,13 +95,22 @@ function buildMetadata(opts: {
 
 // GET — Webhook verification (Meta sends this during setup)
 export async function GET(request: NextRequest) {
+  // Fail closed when the verify token is not configured.
+  if (!VERIFY_TOKEN) {
+    return new Response('Webhook verification not configured', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
+  }
+
   const mode = request.nextUrl.searchParams.get('hub.mode')
   const token = request.nextUrl.searchParams.get('hub.verify_token')
   const challenge = request.nextUrl.searchParams.get('hub.challenge')
 
-  appendWebhookLog(`GET verification mode=${mode} token=${token} challenge=${challenge}`)
+  // Never log the verification token (B-03). Challenge is public/echo-safe.
+  appendWebhookLog(`GET verification mode=${mode}`)
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+  if (mode === 'subscribe' && safeTokenEqual(token, VERIFY_TOKEN)) {
     appendWebhookLog('GET verification SUCCESS - echoing challenge')
     return new Response(challenge, {
       status: 200,
@@ -99,8 +118,9 @@ export async function GET(request: NextRequest) {
     })
   }
 
+  // Never echo the provided token back to the caller (B-02).
   return new Response(
-    `Verification failed. mode=${mode} token=${token}`,
+    'Verification failed',
     { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
   )
 }
@@ -112,16 +132,21 @@ export async function POST(request: NextRequest) {
   const bodyText = await request.text()
 
   const appSecret = process.env.META_APP_SECRET
-  if (appSecret) {
-    let signature = signature256
-    if (signature?.startsWith('sha256=')) {
-      signature = signature.substring(7)
-    }
-    const { validateWebhookSignature } = await import('@/lib/billzo/api-middleware')
-    if (!signature || !validateWebhookSignature(bodyText, signature, appSecret)) {
-      appendWebhookLog('POST signature verification failed')
-      return new Response('Invalid signature', { status: 401 })
-    }
+  // Fail closed: without a configured app secret no signature can be
+  // verified, so the webhook rejects every payload instead of accepting
+  // unsigned events.
+  if (!appSecret) {
+    appendWebhookLog('POST rejected: META_APP_SECRET not configured')
+    return new Response('Webhook not configured', { status: 503 })
+  }
+  let signature = signature256
+  if (signature?.startsWith('sha256=')) {
+    signature = signature.substring(7)
+  }
+  const { validateWebhookSignature } = await import('@/lib/billzo/api-middleware')
+  if (!signature || !validateWebhookSignature(bodyText, signature, appSecret)) {
+    appendWebhookLog('POST signature verification failed')
+    return new Response('Invalid signature', { status: 401 })
   }
 
   // Form-encoded verification (some Meta flows use this)
@@ -131,7 +156,7 @@ export async function POST(request: NextRequest) {
     const token = params.get('hub.verify_token')
     const challenge = params.get('hub.challenge')
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    if (mode === 'subscribe' && VERIFY_TOKEN && safeTokenEqual(token, VERIFY_TOKEN)) {
       return new Response(challenge as string, {
         status: 200,
         headers: { 'Content-Type': 'text/plain' },
@@ -139,7 +164,7 @@ export async function POST(request: NextRequest) {
     }
 
     return new Response(
-      `Verification failed (POST form). mode=${mode}`,
+      'Verification failed',
       { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
     )
   }
@@ -156,7 +181,11 @@ export async function POST(request: NextRequest) {
   appendWebhookLog(`POST received object=${body?.object} entry_count=${Array.isArray(body?.entry) ? body.entry.length : '?'}`)
 
   // JSON-based verification
-  if (body?.hub?.mode === 'subscribe' && body?.hub?.verify_token === VERIFY_TOKEN) {
+  if (
+    VERIFY_TOKEN &&
+    body?.hub?.mode === 'subscribe' &&
+    safeTokenEqual(body?.hub?.verify_token ?? null, VERIFY_TOKEN)
+  ) {
     const challenge = body?.hub?.challenge
     if (challenge) {
       return new Response(String(challenge), { status: 200, headers: { 'Content-Type': 'text/plain' } })
