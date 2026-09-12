@@ -3,27 +3,20 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Clock } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import '@/styles/recovery-center.css'
 import { RecoveryEventTimeline } from '@/components/billzo/RecoveryEventTimeline'
+import { GlobalActivityFeed } from '@/components/billzo/GlobalActivityFeed'
 
 export default function TimelinePage() {
   const router = useRouter()
   const [caseId, setCaseId] = useState<string | null>(null)
   const [customerId, setCustomerId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const cid = params.get('caseId')
-    const custId = params.get('customerId')
-    setCaseId(cid)
-    setCustomerId(custId)
-    if (!cid && !custId) {
-      setLoading(false)
-    } else {
-      setLoading(false)
-    }
+    setCaseId(params.get('caseId'))
+    setCustomerId(params.get('customerId'))
   }, [])
 
   const hasParam = caseId || customerId
@@ -43,7 +36,7 @@ export default function TimelinePage() {
       </header>
 
       {!hasParam ? (
-        <div className="rc-empty"><Clock size={18} /><span>No case or customer selected.</span></div>
+        <GlobalActivityFeed />
       ) : (
         <RecoveryEventTimeline
           caseId={caseId || undefined}

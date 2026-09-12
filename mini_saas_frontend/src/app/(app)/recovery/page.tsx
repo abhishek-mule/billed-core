@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import '@/styles/recovery-center.css'
 import {
   Phone, MessageSquare, Send, UserPlus, Loader2,
   CheckCircle2, Clock, ArrowRight, X, RotateCcw,
-  UserX, Zap, Target, AlertTriangle, Play,
+  UserX, Zap, AlertTriangle, Bot, Banknote,
+  IndianRupee, Activity, RefreshCw,
 } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 
@@ -31,14 +33,6 @@ type RecoveryCard = {
     replyPreview: string | null
     promiseDate: string | null
   }
-  automation: {
-    stage: string
-    nextEvaluationAt: string | null
-    evaluationOverdue: boolean
-    scheduledActions: { id: string; actionType: string; scheduledAt: string; reason: string | null }[]
-    stopCondition: { kind: 'replied' | 'promise' | 'payment' | 'none'; note: string | null }
-    lastWhatsAppAt: string | null
-  }
   cta: {
     type: 'add_phone' | 'call' | 'send_reminder' | 'view_details' | 'view_payment'
     label: string
@@ -53,12 +47,6 @@ type RecoveryCommandCenter = {
     automated: number
     monitoring: number
     totalOutstanding: number
-  }
-  automation: {
-    scheduledActions: number
-    awaitingEvaluation: number
-    pausedByReply: number
-    pausedByPromise: number
   }
   needsYou: RecoveryCard[]
   billzoIsHandling: RecoveryCard[]
@@ -76,17 +64,6 @@ type FeedItem = {
   customerName: string | null
   amount: number | null
   detail: string | null
-}
-
-type StartPreview = {
-  generatedAt: string
-  eligible: { customerId: string; name: string; outstanding: number; invoiceIds: string[] }[]
-  needsAttention: { customerId: string; name: string; state: string; reason: string }[]
-  blocked: { customerId: string; name: string; reason: string }[]
-  paused: { customerId: string; name: string; stopCondition: { kind: string; note: string | null } }[]
-  policy: { policyId: string; steps: number } | null
-  estimatedActions: number
-  totalOutstanding: number
 }
 
 const SECTION_META: Record<SectionKey, { label: string; icon: React.ReactNode; description: string; dot: string }> = {
@@ -115,26 +92,29 @@ const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
 
-/**
- * What BillZo will do automatically — derived purely from persisted worker
- * state, never predicted beyond evidence.
- */
-function automationLine(c: RecoveryCard): string {
-  const a = c.automation
-  if (a.stopCondition.kind === 'payment') return 'Recovered — automation stopped'
-  if (a.stopCondition.kind === 'promise') return 'Paused until promise date'
-  if (a.stopCondition.kind === 'replied') return 'Paused — customer replied'
-  if (c.state === 'blocked_phone') return 'Blocked — add a phone number to enable automation'
-  if (a.scheduledActions.length > 0) {
-    const next = a.scheduledActions[0]
-    return `${next.actionType.replace(/_/g, ' ')} ${next.scheduledAt ? `· ${fmtDate(next.scheduledAt)}` : ''}${next.reason ? ` — ${next.reason}` : ''}`
-  }
-  if (a.nextEvaluationAt && !a.evaluationOverdue) {
-    return `Re-evaluate ${fmtDate(a.nextEvaluationAt)}`
-  }
-  if (a.evaluationOverdue) return 'Evaluation overdue — awaiting BillZo'
-  return 'No automation scheduled'
+function relativeTime(iso: string | null): string {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 30_000) return 'just now'
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('') || '?'
+}
+
+const FEED_ACTOR = {
+  icon: { merchant: Banknote, system: Bot, customer: MessageSquare },
+  cls: { merchant: 'rc-tl-ic--merchant', system: 'rc-tl-ic--system', customer: 'rc-tl-ic--customer' },
+} as const
 
 export default function RecoveryCommandCenterPage() {
   const router = useRouter()
@@ -142,6 +122,7 @@ export default function RecoveryCommandCenterPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [phoneModal, setPhoneModal] = useState(false)
   const [phoneCase, setPhoneCase] = useState<RecoveryCard | null>(null)
   const [phoneDraft, setPhoneDraft] = useState('')
@@ -149,12 +130,6 @@ export default function RecoveryCommandCenterPage() {
 
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [feedLoading, setFeedLoading] = useState(false)
-
-  const [startOpen, setStartOpen] = useState(false)
-  const [startPreview, setStartPreview] = useState<StartPreview | null>(null)
-  const [startLoading, setStartLoading] = useState(false)
-  const [startPhase, setStartPhase] = useState<'sending' | 'done' | 'error' | null>(null)
-  const [startResult, setStartResult] = useState<{ queued: number; totalActionsCreated: number } | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -168,6 +143,7 @@ export default function RecoveryCommandCenterPage() {
       setError(e?.message || 'Failed to load')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
@@ -186,11 +162,13 @@ export default function RecoveryCommandCenterPage() {
     }
   }, [])
 
-  useEffect(() => { void loadData(); void loadFeed() }, [loadData, loadFeed])
-  useEffect(() => {
-    const handler = () => { void loadData(); void loadFeed() }
-    window.addEventListener('billzo:changed', handler)
-    return () => window.removeEventListener('billzo:changed', handler)
+  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { void loadFeed() }, [loadFeed])
+
+  const refresh = useCallback(() => {
+    setRefreshing(true)
+    void loadData()
+    void loadFeed()
   }, [loadData, loadFeed])
 
   const handleSend = async (customerId: string) => {
@@ -207,14 +185,15 @@ export default function RecoveryCommandCenterPage() {
         }),
       })
       if (res.ok) {
-        await loadData()
+        toast.success('Reminder sent')
+        void loadData()
         void loadFeed()
       } else {
         const data = await res.json().catch(() => ({}))
-        alert((data as any).error || data?.message || 'Could not send reminder')
+        toast.error((data as any).error || data?.message || 'Could not send reminder')
       }
     } catch {
-      alert('Network error — could not send reminder')
+      toast.error('Network error — could not send reminder')
     } finally {
       setSending(null)
     }
@@ -239,83 +218,58 @@ export default function RecoveryCommandCenterPage() {
         setPhoneModal(false)
         setPhoneCase(null)
         setPhoneDraft('')
-        await loadData()
+        toast.success('Phone number saved')
+        void loadData()
       } else {
         const data = await res.json().catch(() => ({}))
-        alert((data as any).error || 'Could not save phone number')
+        toast.error((data as any).error || 'Could not save phone number')
       }
     } catch {
-      alert('Network error — could not save phone number')
+      toast.error('Network error — could not save phone number')
     } finally {
       setSavingPhone(false)
     }
   }
 
-  const openStart = async () => {
-    setStartOpen(true)
-    setStartPhase(null)
-    setStartResult(null)
-    setStartPreview(null)
-    setStartLoading(true)
-    try {
-      const res = await fetch('/api/recovery/start/preview', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const json = await res.json()
-      if (res.ok) setStartPreview(json)
-      else throw new Error(json?.error || `API ${res.status}`)
-    } catch (e: any) {
-      setStartPhase('error')
-      setStartResult({ queued: 0, totalActionsCreated: 0 })
-      alert(e?.message || 'Could not build Start Recovery preview')
-    } finally {
-      setStartLoading(false)
-    }
-  }
-
-  const confirmStart = async () => {
-    if (!startPreview || startPhase === 'sending') return
-    setStartPhase('sending')
-    try {
-      const res = await fetch('/api/recovery/start/confirm', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const json = await res.json()
-      if (res.ok && json.success) {
-        setStartPhase('done')
-        setStartResult({ queued: json.queued ?? 0, totalActionsCreated: json.totalActionsCreated ?? 0 })
-        await loadData()
-        void loadFeed()
-      } else {
-        setStartPhase('error')
-        setStartResult({ queued: 0, totalActionsCreated: 0 })
-        alert(json?.error || json?.message || 'Could not start recovery')
-      }
-    } catch {
-      setStartPhase('error')
-      setStartResult({ queued: 0, totalActionsCreated: 0 })
-      alert('Network error — could not start recovery')
-    }
-  }
-
   if (loading) {
     return (
-      <div className="rc-loading">
-        <Loader2 className="spin" size={22} />
-        <span>Loading your recovery command center…</span>
+      <div className="rc-page" aria-busy="true">
+        <div>
+          <div className="rc-skeleton" style={{ height: 28, width: '45%', marginBottom: 10 }} />
+          <div className="rc-skeleton" style={{ height: 14, width: '64%' }} />
+        </div>
+        <div className="rc-stat-grid">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rc-skeleton" style={{ height: 88 }} />
+          ))}
+        </div>
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rc-block">
+            <div className="rc-skeleton" style={{ height: 18, width: '38%' }} />
+            {Array.from({ length: 2 }).map((__, j) => (
+              <div key={j} className="rc-skeleton" style={{ height: 128 }} />
+            ))}
+          </div>
+        ))}
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="rc-loading">
-        <span>{error ?? 'Something went wrong'}</span>
-        <button className="rc-btn" onClick={() => loadData()}>Retry</button>
+      <div className="rc-page">
+        <div className="rc-error" role="alert">
+          <span className="rc-error-ic"><AlertTriangle size={22} /></span>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Couldn&apos;t load recovery</div>
+            <div style={{ fontSize: 13, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
+              {error ?? 'Something went wrong'}
+            </div>
+          </div>
+          <button className="rc-btn rc-btn--primary rc-retry" onClick={() => refresh()}>
+            <RefreshCw size={15} /> Try again
+          </button>
+        </div>
       </div>
     )
   }
@@ -327,106 +281,59 @@ export default function RecoveryCommandCenterPage() {
     { key: 'monitoring' as SectionKey, items: data.monitoring, meta: SECTION_META.monitoring },
   ].filter(s => s.items.length > 0)
 
+  const stats = [
+    { id: 'outstanding', label: 'Total Outstanding', value: fmt(summary.totalOutstanding), ic: <IndianRupee size={16} />, tone: 'recovery', span2: true },
+    { id: 'cases', label: 'Active Cases', value: String(summary.totalCases), ic: <Activity size={16} />, tone: 'gray', span2: false },
+    { id: 'needsYou', label: 'Need You', value: String(summary.needsYou), ic: <UserX size={16} />, tone: 'red', span2: false },
+    { id: 'automated', label: 'Automated', value: String(summary.automated), ic: <Zap size={16} />, tone: 'blue', span2: false },
+    { id: 'monitoring', label: 'Monitoring', value: String(summary.monitoring), ic: <Clock size={16} />, tone: 'green', span2: false },
+  ]
+
   return (
     <div className="rc-page">
       {/* Header */}
-      <header className="rc-header" style={{ flexWrap: 'wrap', gap: 10 }}>
+      <header className="rc-header">
         <div>
           <h1 className="rc-greeting">Recovery</h1>
-          <p className="rc-yesterday" style={{ marginTop: 4, fontSize: 13 }}>
-            <strong>{fmt(summary.totalOutstanding)}</strong> outstanding across <strong>{summary.totalCases}</strong> customer{summary.totalCases !== 1 ? 's' : ''}
-            {' · '}
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              {summary.needsYou} need you
-            </span>
-            {' · '}
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              {summary.automated} automated
-            </span>
-            {' · '}
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              {summary.monitoring} monitoring
-            </span>
+          <p className="rc-sub" style={{ marginTop: 3 }}>
+            Your automated collection command center
           </p>
+          <span className="rc-updated">
+            <span className="rc-updated-dot" />
+            Updated {relativeTime(data.generatedAt)}
+          </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          {summary.totalCases > 0 && (
-            <button className="rc-btn rc-btn--primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={openStart}>
-              <Play size={14} /> Start Recovery
-            </button>
-          )}
-          <button className="rc-refresh" onClick={() => { void loadData(); void loadFeed(); }} aria-label="Refresh">
-            <RotateCcw size={16} className={loading ? 'spin' : ''} />
-          </button>
-        </div>
+        <button className="rc-refresh" onClick={refresh} aria-label="Refresh" title="Refresh">
+          {refreshing || loading ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} className={refreshing ? 'spin' : ''} />}
+        </button>
       </header>
 
-      {/* Summary bar */}
-      <div className="rc-summary-bar" style={{ display: 'flex', gap: 12, padding: '12px 0', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
-        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
-          <span className="rc-summary-label">Total Outstanding</span>
-          <span className="rc-summary-value">{fmt(summary.totalOutstanding)}</span>
-        </div>
-        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
-          <span className="rc-summary-label">Active Cases</span>
-          <span className="rc-summary-value">{summary.totalCases}</span>
-        </div>
-        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
-          <span className="rc-summary-label">Need You</span>
-          <span className="rc-summary-value" style={{ color: 'var(--danger)' }}>{summary.needsYou}</span>
-        </div>
-        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
-          <span className="rc-summary-label">Automated</span>
-          <span className="rc-summary-value" style={{ color: 'var(--primary)' }}>{summary.automated}</span>
-        </div>
-        <div className="rc-summary-item" style={{ flex: 1, minWidth: 140 }}>
-          <span className="rc-summary-label">Monitoring</span>
-          <span className="rc-summary-value" style={{ color: 'var(--success)' }}>{summary.monitoring}</span>
-        </div>
-      </div>
-
-      {/* Automation lifecycle bar — what BillZo will do, honestly */}
-      <div className="rc-summary-bar rc-summary-bar--auto" style={{ display: 'flex', gap: 12, padding: '10px 0', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', marginBottom: 16, alignItems: 'center' }}>
-        <span className="flex items-center gap-1" style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>
-          <Zap size={14} /> AUTOMATION LIFECYCLE
-        </span>
-        <span className="rc-auto-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          {data.automation.scheduledActions} scheduled action{data.automation.scheduledActions !== 1 ? 's' : ''}
-        </span>
-        {data.automation.awaitingEvaluation > 0 && (
-          <span className="rc-auto-chip rc-auto-chip--warn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <AlertTriangle size={13} style={{ color: 'var(--warning)' }} />
-            {data.automation.awaitingEvaluation} evaluation{data.automation.awaitingEvaluation !== 1 ? 's' : ''} overdue
-          </span>
-        )}
-        {data.automation.pausedByReply > 0 && (
-          <span className="rc-auto-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            {data.automation.pausedByReply} paused — customer replied
-          </span>
-        )}
-        {data.automation.pausedByPromise > 0 && (
-          <span className="rc-auto-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            {data.automation.pausedByPromise} paused — promise
-          </span>
-        )}
+      {/* Summary stats */}
+      <div className="rc-stat-grid">
+        {stats.map((s) => (
+          <div key={s.id} className={`rc-stat ${s.span2 ? 'rc-stat--span2' : ''}`}>
+            <div className="rc-stat-top">
+              <span className={`rc-stat-ic rc-stat-ic--${s.tone}`}>{s.ic}</span>
+              <ArrowRight size={14} style={{ color: 'hsl(var(--muted-foreground))', opacity: 0.5 }} />
+            </div>
+            <div className="rc-stat-label">{s.label}</div>
+            <div className={`rc-stat-value rc-stat-value--${s.tone}`}>{s.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Sections */}
       {sections.length === 0 ? (
-        <div className="rc-empty" style={{ padding: 48, textAlign: 'center' }}>
-          <CheckCircle2 size={32} style={{ color: 'var(--success)', marginBottom: 12 }} />
-          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>All caught up</div>
-          <div style={{ fontSize: 13, color: 'var(--muted)' }}>No customers need recovery action right now.</div>
+        <div className="rc-empty--calm">
+          <span className="rc-empty-ic"><CheckCircle2 size={26} /></span>
+          <div className="rc-empty-title">All caught up</div>
+          <div className="rc-empty-sub">
+            No customers need recovery action right now. You&apos;re on top of your receivables.
+          </div>
         </div>
       ) : (
-        sections.map(({ key, items, meta }) => (
-          <section key={key} className="rc-block" style={{ padding: 12 }}>
+        sections.map(({ key, items, meta }, idx) => (
+          <section key={key} className="rc-block rc-section">
             <div className="rc-block-head">
               <span className={`rc-dot ${meta.dot}`} />
               <h2>{meta.label}</h2>
@@ -450,10 +357,13 @@ export default function RecoveryCommandCenterPage() {
       )}
 
       {/* Activity feed */}
-      <section className="rc-block" style={{ padding: 12, marginTop: 12 }}>
-        <div className="rc-block-head">
+      <section className="rc-block rc-section" style={{ marginTop: 6 }}>
+        <div className="rc-block-head rc-feed-head">
+          <Activity size={15} style={{ color: 'hsl(var(--recovery))' }} />
           <h2>Recovery activity</h2>
-          <Link href="/recovery/timeline" className="cw-link">Full activity →</Link>
+          <Link href="/recovery/timeline" className="rc-count rc-count--muted" style={{ marginLeft: 'auto', fontWeight: 600 }}>
+            Full activity →
+          </Link>
         </div>
         {feedLoading && feed.length === 0 ? (
           <div className="rc-empty"><Loader2 className="spin" size={18} /><span>Loading activity…</span></div>
@@ -461,37 +371,47 @@ export default function RecoveryCommandCenterPage() {
           <div className="rc-empty"><MessageSquare size={18} /><span>No recovery activity recorded yet.</span></div>
         ) : (
           <div className="rc-timeline">
-            {feed.slice(0, 10).map((it) => (
-              <div key={it.id} className="rc-tl-item">
-                <div className={`rc-tl-dot ${it.actor === 'customer' ? 'rc-tl-dot--read' : it.actor === 'system' ? 'rc-tl-dot--system' : 'rc-tl-dot--delivered'}`} />
-                <div className="rc-tl-body">
-                  <span className="rc-tl-text">
-                    {it.title}{it.customerName ? ` · ${it.customerName}` : ''}
-                    {it.amount != null ? ` · ${fmt(it.amount)}` : ''}
+            {feed.slice(0, 10).map((it) => {
+              const ActorIcon = FEED_ACTOR.icon[it.actor]
+              return (
+                <div key={it.id} className="rc-tl-item">
+                  <span className={`rc-tl-ic ${FEED_ACTOR.cls[it.actor]}`}>
+                    {it.amount != null ? <Banknote size={14} /> : <ActorIcon size={14} />}
                   </span>
-                  {it.detail ? <span className="rc-tl-detail">{it.detail}</span> : null}
-                  {it.customerId ? (
-                    <button className="rc-tl-open" onClick={() => router.push(`/recovery/customer/${encodeURIComponent(it.customerId!)}`)}>open →</button>
-                  ) : null}
+                  <div className="rc-tl-body">
+                    <span className="rc-tl-text">
+                      {it.title}
+                      {it.customerName ? ` · ${it.customerName}` : ''}
+                      {it.amount != null ? (
+                        <> · <span className="rc-tl-amt">{fmt(it.amount)}</span></>
+                      ) : null}
+                    </span>
+                    {it.detail ? <span className="rc-tl-detail">{it.detail}</span> : null}
+                    {it.customerId ? (
+                      <button className="rc-tl-open" onClick={() => router.push(`/recovery/customer/${encodeURIComponent(it.customerId!)}`)}>
+                        open →
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="rc-tl-time">{fmtTime(it.timestamp)} {fmtDate(it.timestamp)}</div>
                 </div>
-                <div className="rc-tl-time">{fmtTime(it.timestamp)} {fmtDate(it.timestamp)}</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
 
       {/* Add phone modal */}
       {phoneModal && phoneCase && (
-        <div className="rc-modal">
+        <div className="rc-modal" role="dialog" aria-modal="true">
           <div className="rc-modal-card">
             <div className="rc-modal-head">
               <UserPlus size={16} />
               <span>WhatsApp number</span>
-              <button className="rc-modal-close" onClick={() => setPhoneModal(false)}><X size={15} /></button>
+              <button className="rc-modal-close" onClick={() => setPhoneModal(false)} aria-label="Close"><X size={15} /></button>
             </div>
             <p className="rc-modal-sub">
-              Recovery for <strong>{phoneCase.customerName}</strong> cannot start without a customer number.
+              Recovery for <strong>{phoneCase.customerName}</strong> can&apos;t start without a customer number.
             </p>
             <input
               className="rc-modal-input"
@@ -500,6 +420,7 @@ export default function RecoveryCommandCenterPage() {
               onChange={(e) => setPhoneDraft(e.target.value)}
               inputMode="tel"
               autoFocus
+              aria-label="Phone number"
             />
             <div className="rc-modal-actions">
               <button className="rc-btn rc-btn--ghost" onClick={() => setPhoneModal(false)}>Cancel</button>
@@ -507,72 +428,6 @@ export default function RecoveryCommandCenterPage() {
                 {savingPhone ? <Loader2 className="spin" size={14} /> : null} Save number
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Start Recovery confirmation — consumed from the decision engine */}
-      {startOpen && (
-        <div className="rc-modal">
-          <div className="rc-modal-card">
-            <div className="rc-modal-head">
-              <Zap size={16} />
-              <span>Start Recovery</span>
-              <button className="rc-modal-close" onClick={() => setStartOpen(false)} disabled={startPhase === 'sending'}><X size={15} /></button>
-            </div>
-
-            {startLoading ? (
-              <div className="rc-empty" style={{ padding: 24 }}><Loader2 className="spin" size={18} /><span>Building preview…</span></div>
-            ) : startPhase === 'done' && startResult ? (
-              <>
-                <div className="rc-modal-sub" style={{ fontSize: 14 }}>
-                  <CheckCircle2 size={16} style={{ color: 'var(--success)', verticalAlign: -2, marginRight: 6 }} />
-                  <strong>{startResult.queued} reminder{startResult.queued === 1 ? '' : 's'} queued</strong>
-                  {' · '}{startResult.totalActionsCreated} automated step{startResult.totalActionsCreated === 1 ? '' : 's'} scheduled
-                </div>
-                <div className="rc-modal-actions">
-                  <button className="rc-btn rc-btn--primary" onClick={() => setStartOpen(false)}>Done</button>
-                </div>
-              </>
-            ) : startPhase === 'error' ? (
-              <>
-                <div className="rc-modal-sub" style={{ fontSize: 14 }}>Could not start recovery. See the error shown earlier.</div>
-                <div className="rc-modal-actions">
-                  <button className="rc-btn rc-btn--ghost" onClick={() => setStartOpen(false)}>Close</button>
-                  <button className="rc-btn rc-btn--primary" onClick={openStart}>Try again</button>
-                </div>
-              </>
-            ) : startPreview ? (
-              <>
-                <p className="rc-modal-sub">
-                  <strong>Ready to send {startPreview.eligible.length} WhatsApp reminder{startPreview.eligible.length === 1 ? '' : 's'}</strong>
-                  {' '}across {startPreview.eligible.length} customer{startPreview.eligible.length === 1 ? '' : 's'} · {fmt(startPreview.totalOutstanding)}.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '14px 0' }}>
-                  <div className="rc-startrow"><span className="rc-startlbl" style={{ color: 'var(--primary)' }}><Send size={13} /> Will receive reminders</span><span>{startPreview.eligible.length}</span></div>
-                  {startPreview.needsAttention.length > 0 && (
-                    <div className="rc-startrow"><span className="rc-startlbl" style={{ color: 'var(--warning)' }}><UserX size={13} /> Need your attention</span><span>{startPreview.needsAttention.length}</span></div>
-                  )}
-                  {startPreview.paused.length > 0 && (
-                    <div className="rc-startrow"><span className="rc-startlbl" style={{ color: 'var(--success)' }}><Clock size={13} /> Paused ({startPreview.paused[0].stopCondition.kind === 'promise' ? 'promise' : 'customer replied'})</span><span>{startPreview.paused.length}</span></div>
-                  )}
-                  {startPreview.blocked.length > 0 && (
-                    <div className="rc-startrow"><span className="rc-startlbl" style={{ color: 'var(--danger)' }}><AlertTriangle size={13} /> Blocked — no phone number</span><span>{startPreview.blocked.length}</span></div>
-                  )}
-                </div>
-                <p className="rc-tl-detail">
-                  Policy {startPreview.policy ? `· ${startPreview.policy.steps} automated steps` : ''} will be queued for each
-                  eligible customer. Nothing is sent until your worker executes the scheduled action.
-                </p>
-                <div className="rc-modal-actions">
-                  <button className="rc-btn rc-btn--ghost" onClick={() => setStartOpen(false)} disabled={startPhase === 'sending'}>Cancel</button>
-                  <button className="rc-btn rc-btn--primary" onClick={confirmStart} disabled={startPhase === 'sending' || startPreview.eligible.length === 0}>
-                    {startPhase === 'sending' ? <Loader2 className="spin" size={14} /> : <Play size={14} />}
-                    {startPhase === 'sending' ? `Sending ${startPreview.eligible.length} reminder${startPreview.eligible.length === 1 ? '' : 's'}…` : 'Start Recovery'}
-                  </button>
-                </div>
-              </>
-            ) : null}
           </div>
         </div>
       )}
@@ -664,28 +519,29 @@ function RecoveryCard({ c, sending, onSend, onAddPhone, onOpen }: {
         <span className="rc-card-amount">{fmt(c.outstanding)}</span>
       </div>
 
-      <div className="rc-card-name">{c.customerName}</div>
-      <div className="rc-card-sub">
-        {overdue > 0 ? `${overdue} days overdue` : 'Current'}
-        {c.invoiceCount > 1 ? ` · ${c.invoiceCount} invoices` : ''}
+      <div className="rc-card-id-row">
+        <span className={`rc-avatar rc-avatar--${meta.tone}`}>{initials(c.customerName)}</span>
+        <div style={{ minWidth: 0 }}>
+          <div className="rc-card-name" style={{ margin: 0 }}>{c.customerName}</div>
+          <div className="rc-card-sub" style={{ margin: '1px 0 0' }}>
+            {overdue > 0 ? `${overdue} days overdue` : 'Current'}
+            {c.invoiceCount > 1 ? ` · ${c.invoiceCount} invoices` : ''}
+          </div>
+        </div>
       </div>
 
-      <dl className="rc-facts">
+      <dl className="rc-facts rc-facts--grid" style={{ marginTop: 12 }}>
         <div className="rc-fact">
           <dt>STATUS</dt>
           <dd>{meta.statusLabel}</dd>
         </div>
         <div className="rc-fact">
-          <dt>WHY</dt>
-          <dd>{c.reason}</dd>
-        </div>
-        <div className="rc-fact">
           <dt>NEXT ACTION</dt>
           <dd>{meta.nextAction}</dd>
         </div>
-        <div className="rc-fact">
-          <dt>WHAT BILLZO DOES NEXT</dt>
-          <dd>{automationLine(c)}</dd>
+        <div className="rc-fact rc-fact--wide">
+          <dt>WHY</dt>
+          <dd>{c.reason}</dd>
         </div>
       </dl>
 

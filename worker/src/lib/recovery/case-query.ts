@@ -74,7 +74,7 @@ export async function getCaseTimeline(caseId: string): Promise<RecoveryCaseEvent
     .from('recovery_case_events')
     .select('*')
     .eq('case_id', caseId)
-    .order('occurred_at', { ascending: true })
+    .order('created_at', { ascending: true })
 
   if (error) throw error
   return mapEvents(data || [])
@@ -161,12 +161,12 @@ function mapEvents(rows: any[]): RecoveryCaseEvent[] {
     id: r.id,
     caseId: r.case_id,
     eventType: r.event_type,
-    fromRecoveryState: r.from_recovery_state || null,
-    toRecoveryState: r.to_recovery_state || null,
-    fromEngagementState: r.from_engagement_state || null,
-    toEngagementState: r.to_engagement_state || null,
-    reason: r.reason,
-    trigger: r.trigger || {},
-    occurredAt: r.occurred_at,
+    fromRecoveryState: r.payload?.from_recovery_state ?? null,
+    toRecoveryState: r.payload?.to_recovery_state ?? null,
+    fromEngagementState: r.payload?.from_engagement_state ?? null,
+    toEngagementState: r.payload?.to_engagement_state ?? null,
+    reason: r.payload?.reason,
+    trigger: r.payload?.trigger || {},
+    occurredAt: r.created_at || r.payload?.occurred_at,
   }))
 }

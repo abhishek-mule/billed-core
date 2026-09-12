@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const { data: promises } = await supabaseAdmin
       .from('payment_promises')
-      .select('status, promise_date, created_at, paid_at')
+      .select('status, promise_date, created_at')
       .eq('tenant_id', tenantId)
       .gte('created_at', since)
       .limit(1000)

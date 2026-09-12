@@ -1,0 +1,230 @@
+{
+  "version": 1,
+  "status": "gated",
+  "generated_from": "production-read-only-audit",
+  "generated_at": "2026-09-11T00:00:00Z",
+  "environment": "production (supabase project ref qdnmuoyqpqdewepzuezp, db.qdnmuoyqpqdewepzuezp.supabase.co)",
+  "audit_notes": [
+    "Each stranded outbox row was classified by a read-only production audit on 2026-09-11.",
+    "An earlier draft numbered 24 slots (#1-#24) but #2 and #15 resolved to the SAME physical row (8571caaa...).",
+    "This file contains exactly 23 unique UUIDs — 8 replay + 15 discard.",
+    "recovery_outcomes and recovery_case_events are both empty (0 rows) in production, so no recovery-outcome evidence was recoverable.",
+    "message_logs does not exist in production; reminder deliveries are NOT independently provable and no delivery claim is made.",
+    "This file is IMMUTABLE AUDIT EVIDENCE. It is NOT executable and does NOT modify the production outbox."
+  ],
+  "safety_rule": "Execution requires: this manifest + CURRENT production re-validation + explicit execution flag + explicit human approval. Re-validate each row at execution time; a disposition can become obsolete after the worker deploys or other processes mutate state.",
+  "approved_dispositions": {
+    "replay": 8,
+    "discard": 15,
+    "total_unique_events": 23
+  },
+  "events": [
+    {
+      "uuid": "2c334337-6606-4d5d-99e8-8e3c8116a47a",
+      "type": "payment.completed",
+      "disposition": "replay",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-07-01T17:33:51Z",
+      "evidence": "verified",
+      "rationale": "Rs1500 cash payment d451aa0e -> invoice 69595c51 still issued/paid_amount=0. Payment never materialized; replay converts to transition + payments.projection."
+    },
+    {
+      "uuid": "8571caaa-4c39-410d-9f5e-80acc8993367",
+      "type": "payment.completed",
+      "disposition": "discard",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-25T10:21:44Z",
+      "evidence": "verified",
+      "rationale": "Rs2000 already applied to invoice 786ea2c1 (status=partial, paid_amount=2000). Replay would be a duplicative side effect. (This row was previously double-counted as #2/#15 in the draft.)"
+    },
+    {
+      "uuid": "c8ac9ab2-9604-4002-a998-6ddf878e26df",
+      "type": "recovery.recommendation",
+      "disposition": "discard",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-03T13:50:22Z",
+      "evidence": "verified",
+      "rationale": "Not in state-machine whitelist (canHandleEvent); page-truth recompute. Replay has no consumer."
+    },
+    {
+      "uuid": "51fbcfeb-0857-4e48-b350-ce33f9481fab",
+      "type": "recovery.reminder.sent",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-08-05T16:02:01Z",
+      "evidence": "not_independently_provable",
+      "rationale": "Reminder side-effect event; producer lacks idempotency. Replay safety not established; no delivery claim made (message_logs absent)."
+    },
+    {
+      "uuid": "7341625f-3c78-4cf2-9be4-6f59a2757c67",
+      "type": "recovery.reminder.sent",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-08-06T14:50:54Z",
+      "evidence": "not_independently_provable",
+      "rationale": "Reminder side-effect event; producer lacks idempotency. Replay safety not established; no delivery claim made."
+    },
+    {
+      "uuid": "7b3a892a-f9be-4332-a3fe-3cf6589f19cb",
+      "type": "recovery.reminder.sent",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-08-06T19:19:07Z",
+      "evidence": "not_independently_provable",
+      "rationale": "Reminder side-effect event; producer lacks idempotency. Replay safety not established; no delivery claim made."
+    },
+    {
+      "uuid": "f5889c1f-ad8c-41c1-848f-451ba8519585",
+      "type": "recovery.reminder.sent",
+      "disposition": "discard",
+      "tenant_id": "tenant_1787216186157_725beaff",
+      "created_at": "2026-08-20T09:00:53Z",
+      "evidence": "not_independently_provable",
+      "rationale": "Reminder side-effect event; producer lacks idempotency. Replay safety not established; delivery cannot be independently proven (message_logs does not exist). No delivery claim made."
+    },
+    {
+      "uuid": "d2008c89-2507-47ec-9ac2-ab85c6c51abc",
+      "type": "customer.update_automation",
+      "disposition": "replay",
+      "tenant_id": "tenant_1785745833970_aedf2737",
+      "created_at": "2026-08-21T03:45:30Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; automation intent stranded before any consumer."
+    },
+    {
+      "uuid": "fa4ae688-77b7-43f8-a89c-6df4f4d3dcc1",
+      "type": "customer.update_automation",
+      "disposition": "replay",
+      "tenant_id": "tenant_1785745833970_aedf2737",
+      "created_at": "2026-08-21T03:50:20Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; automation intent stranded before any consumer."
+    },
+    {
+      "uuid": "6b6540d3-0743-48c3-b532-d3d3cea07cfa",
+      "type": "customer.update_automation",
+      "disposition": "replay",
+      "tenant_id": "tenant_1785745833970_aedf2737",
+      "created_at": "2026-08-21T03:50:33Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; automation intent stranded before any consumer."
+    },
+    {
+      "uuid": "ac1daa21-bba2-4cfc-b234-5359b501a30e",
+      "type": "send_message.intended",
+      "disposition": "discard",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-25T10:13:18Z",
+      "evidence": "not_independently_provable",
+      "rationale": "No idempotency guard; replay could double-dispatch an outbound message."
+    },
+    {
+      "uuid": "e117a540-4c67-4acd-be5b-a1fe3c43e141",
+      "type": "billing.usage",
+      "disposition": "replay",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-25T10:13:19Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; never consumed (metric reminders_sent)."
+    },
+    {
+      "uuid": "0e071902-f663-45c2-ad00-fbf264fa651c",
+      "type": "send_message.intended",
+      "disposition": "discard",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-25T10:20:13Z",
+      "evidence": "not_independently_provable",
+      "rationale": "No idempotency guard; replay could double-dispatch an outbound message."
+    },
+    {
+      "uuid": "761d6f96-fbae-4dbe-a85d-9cc046e37ac2",
+      "type": "billing.usage",
+      "disposition": "replay",
+      "tenant_id": "tenant_1783968724314_fec219e1",
+      "created_at": "2026-08-25T10:20:13Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; never consumed."
+    },
+    {
+      "uuid": "953c7c09-e4c9-4866-868b-8fb6efe500a3",
+      "type": "customer.reply",
+      "disposition": "replay",
+      "tenant_id": "tenant_1781121970608_58b8e3c9",
+      "created_at": "2026-08-26T05:23:30Z",
+      "evidence": "verified",
+      "rationale": "WhatsApp reply (invoice demo_inv_1) stranded with 0 attempts; reply digest should materialize."
+    },
+    {
+      "uuid": "2b69f472-8732-4e15-9a34-8a583326e607",
+      "type": "send_message.intended",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-08-29T19:36:54Z",
+      "evidence": "not_independently_provable",
+      "rationale": "No idempotency guard; replay could double-dispatch an outbound message."
+    },
+    {
+      "uuid": "24a6da7d-fc3a-48aa-8793-c4b58208ac2d",
+      "type": "billing.usage",
+      "disposition": "replay",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-08-29T19:36:54Z",
+      "evidence": "verified",
+      "rationale": "0 attempts; never consumed."
+    },
+    {
+      "uuid": "554566fc-d46a-42a9-ac5c-e59047711d8e",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:46Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started; page-truth belongs to planner start."
+    },
+    {
+      "uuid": "6d2410ab-8fe1-461f-9f23-53abbcc2bade",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:48Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started."
+    },
+    {
+      "uuid": "095a2b24-250c-4be7-a296-081e7233c877",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:50Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started."
+    },
+    {
+      "uuid": "469b5d69-92cb-4d48-9318-3c0f1d4b9ae6",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:52Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started."
+    },
+    {
+      "uuid": "d06c487d-9578-4b0e-84fa-4d4b0ba3a316",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:54Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started."
+    },
+    {
+      "uuid": "60942bea-0e05-4804-8292-239770c6b4e2",
+      "type": "recovery.started",
+      "disposition": "discard",
+      "tenant_id": "tenant_1781848167915_2d5734bd",
+      "created_at": "2026-09-10T16:46:56Z",
+      "evidence": "verified",
+      "rationale": "No consumer handler exists for recovery.started."
+    }
+  ]
+}

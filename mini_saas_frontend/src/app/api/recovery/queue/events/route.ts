@@ -54,8 +54,10 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from('recovery_case_events').insert({
       case_id: caseId,
       event_type: eventType,
-      reason: REASON_LABELS[eventType] || `Queue event: ${eventType}`,
-      trigger: metadata || {},
+      payload: {
+        reason: REASON_LABELS[eventType] || `Queue event: ${eventType}`,
+        trigger: metadata || {},
+      },
     })
 
     if (error) {
