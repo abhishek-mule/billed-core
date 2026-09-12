@@ -359,8 +359,9 @@ export default function ReceivePaymentsPage() {
 
             {/* Live preview — mirrors real invoice */}
             <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border bg-muted/20">
+              <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Customer Preview</p>
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Demo</span>
               </div>
               <div className="p-4">
                 {preview && (
@@ -368,7 +369,7 @@ export default function ReceivePaymentsPage() {
                     {/* Invoice header */}
                     <div className="text-center">
                       <p className="text-xs font-mono text-muted-foreground">{PREVIEW_INVOICE.invoiceNumber}</p>
-                      <p className="text-2xl font-bold text-foreground mt-1">₹4,250</p>
+                      <p className="text-2xl font-bold text-foreground mt-1">{'\u20B9'}4,250</p>
                     </div>
 
                     <div className="border-t border-border" />

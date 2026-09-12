@@ -851,16 +851,33 @@ export default function PartyDetailPage() {
                     <Button variant="outline" size="sm" className="flex-1" onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }}>
                       Cancel
                     </Button>
-                    <Button size="sm" className="flex-1" onClick={async () => {
-                      const phone = missingPhone.trim()
-                      if (!phone) return
-                      await db().customers.update(customer.id, { phone, updatedAt: new Date().toISOString() })
-                      setCustomer({ ...customer, phone })
-                      scheduleBackgroundSync()
-                      sendReminder(selectedInvoiceId || undefined, phone)
-                    }} disabled={sendingWA || !missingPhone.trim()}>
-                      {sendingWA ? 'Saving & Sending...' : 'Save Phone & Send'}
-                    </Button>
+<Button size="sm" className="flex-1" onClick={async () => {
+  const phone = missingPhone.trim()
+  if (!phone) return
+  try {
+    const res = await fetch('/api/customers', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ id: customer.id, phone }),
+    })
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      setWaError(errData.error || 'Could not save phone number to your account')
+      return
+    }
+    const data = await res.json()
+    const savedPhone = data?.customer?.phone || phone
+    await db().customers.update(customer.id, { phone: savedPhone, updatedAt: new Date().toISOString() })
+    setCustomer({ ...customer, phone: savedPhone })
+    scheduleBackgroundSync()
+    sendReminder(selectedInvoiceId || undefined, savedPhone)
+  } catch {
+    setWaError('Network error — could not save phone number')
+  }
+}} disabled={sendingWA || !missingPhone.trim()}>
+  {sendingWA ? 'Saving & Sending...' : 'Save Phone & Send'}
+</Button>
                   </div>
                 </>
               )}

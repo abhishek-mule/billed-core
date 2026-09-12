@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -85,6 +85,48 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: any; label: string;
   )
 }
 
+function FlowSteps({ sent, followup, paid }: { sent: boolean; followup: boolean; paid: boolean }) {
+  const steps = [
+    { label: 'Created', done: true },
+    { label: 'Sent', done: sent },
+    { label: 'Follow-up', done: followup },
+    { label: 'Paid', done: paid },
+  ]
+  const currentIndex = steps.findIndex(s => !s.done)
+
+  return (
+    <div className="flex items-center gap-2">
+      {steps.map((step, i) => {
+        const isDone = step.done
+        const isCurrent = i === currentIndex
+        return (
+          <Fragment key={step.label}>
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                  isDone ? 'bg-success text-success-foreground'
+                  : isCurrent ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {isDone ? <Check className="w-3 h-3" /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+              </span>
+              <span className={`text-[11px] font-medium hidden sm:block ${
+                isDone ? 'text-success' : isCurrent ? 'text-primary' : 'text-muted-foreground/60'
+              }`}>
+                {step.label}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={`flex-1 h-px ${isDone ? 'bg-success/50' : 'bg-border'}`} />
+            )}
+          </Fragment>
+        )
+      })}
+    </div>
+  )
+}
+
 function getNextSunday(): string {
   const d = new Date()
   d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7))
@@ -107,6 +149,7 @@ export default function InvoiceSendPage() {
   const [invoice, setInvoice] = useState<InvoiceDataFull | null>(null)
   const [tenantData, setTenantData] = useState<Tenant | null>(null)
   const [customerPhone, setCustomerPhone_] = useState("")
+  const [phoneSaved, setPhoneSaved] = useState(false)
   const [customerOutstanding, setCustomerOutstanding] = useState(0)
 
   const [actionView, setActionView] = useState<ActionView>('main')
@@ -189,6 +232,7 @@ export default function InvoiceSendPage() {
         method: inv.paidAmount > 0 ? "cash" : "udhar",
       })
       setCustomerPhone_(inv.customerPhone || "")
+      setPhoneSaved(Boolean(inv.customerPhone))
       setCustomerOutstanding(prevOutstanding)
       setPromiseAmount(inv.total - inv.paidAmount)
       setPromiseDate(getNextSunday())
@@ -213,6 +257,19 @@ export default function InvoiceSendPage() {
   }, [invoiceId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Show a one-time "Invoice created" confirmation when arriving from POS
+  const [createdFlash, setCreatedFlash] = useState(false)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('created') === '1') {
+      setCreatedFlash(true)
+    }
+  }, [])
+  useEffect(() => {
+    if (!createdFlash) return
+    const t = setTimeout(() => setCreatedFlash(false), 8000)
+    return () => clearTimeout(t)
+  }, [createdFlash])
 
   useEffect(() => {
     const tid = getTenantId()
@@ -247,11 +304,16 @@ export default function InvoiceSendPage() {
     loadQuota()
   }, [])
 
-  const updatePhone = async (phone: string) => {
+  const updatePhone = (phone: string) => {
     setCustomerPhone_(phone)
-    if (invoice && phone) {
-      await db().invoices.update(invoiceId, { customerPhone: phone })
-    }
+    setPhoneSaved(false)
+  }
+
+  const savePhone = async (): Promise<boolean> => {
+    if (!invoice || !customerPhone) return false
+    await db().invoices.update(invoiceId, { customerPhone })
+    setPhoneSaved(true)
+    return true
   }
 
   const generatePaymentLink = async (): Promise<string | null> => {
@@ -359,6 +421,43 @@ export default function InvoiceSendPage() {
   const printPdf = async () => {
     const pdfData = await buildPdfData()
     await printInvoicePDF(pdfData)
+  }
+
+  const sendPaidReceipt = async () => {
+    if (!invoice) return
+    setSending(true)
+    setError(null)
+    try {
+      if (customerPhone) {
+        await fetch("/api/intents/send-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            customerId: invoice.customerId,
+            invoiceId: invoice.id,
+            templateKey: "receipt",
+            vars: {
+              customerName: invoice.customerName,
+              amount: formatINR(invoice.paidAmount || invoice.total),
+              invoiceNumber: invoice.invoiceNumber || invoice.id.slice(0, 8),
+            },
+          }),
+        })
+        toast.success("Receipt sent on WhatsApp")
+      } else {
+        const pdfData = await buildPdfData()
+        const doc = await generateInvoicePDF(pdfData)
+        const blob = (doc as any).output('blob')
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank')
+        toast.success("Receipt PDF ready to share")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send receipt")
+    } finally {
+      setSending(false)
+    }
   }
 
   const openUpiPayment = async () => {
@@ -652,38 +751,11 @@ export default function InvoiceSendPage() {
 
   // ──────────────────── MAIN VIEW ────────────────────
 
-  function RecoveryTimelinePreview({ alreadyPaid }: { alreadyPaid: boolean }) {
-    const steps = [
-      { label: 'Invoice created', done: true },
-      { label: 'Shared with customer', done: !!sent },
-      { label: 'Reminder scheduled', done: !!reminderScheduled },
-      { label: 'Promise recorded', done: !!promiseRecorded },
-      { label: 'Payment received', done: alreadyPaid },
-    ]
-    return (
-      <div className="space-y-2.5">
-        {steps.map((step, i) => (
-          <div key={i} className="flex items-center gap-2.5">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-              step.done ? 'bg-success' : 'bg-muted'
-            }`}>
-              {step.done && <Check className="w-3 h-3 text-success-foreground" />}
-              {!step.done && <span className="text-[10px] text-muted-foreground font-medium">{i + 1}</span>}
-            </div>
-            <span className={`text-xs ${step.done ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-              {step.label}
-            </span>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
   function renderMainView() {
     const i = invoice
     if (!i) return null
     const alreadyPaid = i.status === "paid" || i.paidAmount >= i.total
-    const phoneVerified = !!customerPhone
+    const phoneVerified = !!phoneSaved
 
     // ── State 1: Already Paid ──
     if (alreadyPaid) {
@@ -710,6 +782,33 @@ export default function InvoiceSendPage() {
             >
               View Invoice
             </Link>
+          </div>
+
+          <div className="pt-3">
+            <div className="h-px bg-border mb-4" />
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">Receipt & documents</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={sendPaidReceipt}
+                disabled={sending}
+                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {sending ? 'Sending…' : 'Send receipt'}
+              </button>
+              <button
+                onClick={downloadPdf}
+                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+              >
+                <Download className="w-4 h-4" /> Download PDF
+              </button>
+              <button
+                onClick={printPdf}
+                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 col-span-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+              >
+                <Printer className="w-4 h-4" /> Print
+              </button>
+            </div>
           </div>
         </div>
       )
@@ -763,7 +862,10 @@ export default function InvoiceSendPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-foreground text-sm truncate">{i.customerName}</p>
-              <p className="text-xs text-muted-foreground">{customerPhone || 'No phone saved'}</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                {customerPhone || 'No phone saved'}
+                {phoneVerified && customerPhone && <Check className="w-3 h-3 text-success" />}
+              </p>
             </div>
             <div className="text-right shrink-0">
               <p className="text-[11px] text-muted-foreground">#{i.invoiceNumber || i.id.slice(0, 8).toUpperCase()}</p>
@@ -795,7 +897,11 @@ export default function InvoiceSendPage() {
                 />
               </div>
               <button
-                onClick={() => customerPhone && setActionView('send_now')}
+                onClick={async () => {
+                if (!customerPhone) return
+                const saved = await savePhone()
+                if (saved) setActionView('send_now')
+              }}
                 disabled={!customerPhone}
                 className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -853,20 +959,6 @@ export default function InvoiceSendPage() {
                   <Link href="/pricing" className="font-semibold text-primary hover:underline">Upgrade to Pro →</Link>
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { setPromiseDate(getNextSunday()); setActionView('schedule_promise') }}
-                  className="py-2.5 rounded-xl border border-input text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
-                >
-                  <Hand className="w-3.5 h-3.5 inline mr-1" /> Record promise
-                </button>
-                <button
-                  onClick={() => setShowPaymentCollect(!showPaymentCollect)}
-                  className="py-2.5 rounded-xl border border-input text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
-                >
-                  <IndianRupee className="w-3.5 h-3.5 inline mr-1" /> Receive payment
-                </button>
-              </div>
             </div>
           )}
 
@@ -928,10 +1020,23 @@ export default function InvoiceSendPage() {
           </div>
         )}
 
-        {/* Recovery timeline */}
-        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-          <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider mb-3">Recovery timeline</p>
-          <RecoveryTimelinePreview alreadyPaid={alreadyPaid} />
+        {/* Progress stepper */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">Progress</p>
+            <Link href={`/invoices/${invoiceId}`} className="text-xs font-medium text-primary hover:underline">
+              View full invoice →
+            </Link>
+          </div>
+          <FlowSteps sent={sent} followup={reminderScheduled || promiseRecorded} paid={alreadyPaid} />
+          <div className="pt-3 border-t border-border/60 flex items-center justify-between">
+            <button onClick={downloadPdf} className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" /> Download PDF
+            </button>
+            <button onClick={printPdf} className="text-xs font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+              <Printer className="w-3.5 h-3.5" /> Print
+            </button>
+          </div>
         </div>
 
         {/* Items & documents */}
@@ -1006,9 +1111,6 @@ export default function InvoiceSendPage() {
                   </button>
                 </div>
               </div>
-              <Link href={`/invoices/${invoiceId}`} className="block text-center text-xs font-medium text-primary hover:underline">
-                View full invoice →
-              </Link>
             </div>
           )}
         </div>
@@ -1406,10 +1508,31 @@ export default function InvoiceSendPage() {
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold text-foreground">{pageTitle}</h1>
-        <div className="ml-auto">
-          {actionView === 'main' && <StatusBadge invoice={invoice} paidAmount={invoice.paidAmount} />}
+        <div className="ml-auto flex items-center gap-2">
+          {actionView === 'main' && invoice?.invoiceNumber && (
+            <span className="text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 tabular-nums">
+              #{invoice.invoiceNumber}
+            </span>
+          )}
+          {actionView === 'main' && invoice && <StatusBadge invoice={invoice} paidAmount={invoice.paidAmount} />}
         </div>
       </div>
+
+      {/* One-time "Invoice created" confirmation from POS */}
+      {createdFlash && actionView === 'main' && invoice && (
+        <div className="flex items-center gap-3 rounded-xl bg-success/10 border border-success/30 px-4 py-3 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Invoice created</p>
+            <p className="text-xs text-muted-foreground truncate">
+              #{invoice.invoiceNumber} · {formatINR(invoice.total)} · {invoice.customerName}
+            </p>
+          </div>
+          <button onClick={() => setCreatedFlash(false)} className="text-xs font-medium text-muted-foreground hover:text-foreground shrink-0">
+            Done
+          </button>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
