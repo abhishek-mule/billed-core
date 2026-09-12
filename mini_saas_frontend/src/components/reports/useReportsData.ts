@@ -180,7 +180,7 @@ export function useReportsData(): UseReportsDataReturn {
 
   const gst = useMemo<GSTReport>(() => {
     if (data.loading || data.invoices.length === 0) {
-      return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
+      return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, inputGstPurchaseCount: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
     }
     return computeGSTReport(data.invoices, data.invoiceItems, data.purchases, dateRange)
   }, [data.loading, data.invoices, data.invoiceItems, data.purchases, dateRange])

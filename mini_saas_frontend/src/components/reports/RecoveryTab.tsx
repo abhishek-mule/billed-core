@@ -63,7 +63,7 @@ export function RecoveryTab({ recovery, plan }: RecoveryTabProps) {
                 {[
                   { label: 'This Month', val: money(recovery.thisMonthRecovered) },
                   { label: 'Growth', val: `${recovery.trend}%`, icon: recovery.trend >= 0 ? TrendingUp : TrendingDown },
-                  { label: 'Avg Time', val: `${recovery.avgRecoveryDays} days` },
+                  { label: 'Avg Time', val: recovery.avgRecoveryDays !== null ? `${recovery.avgRecoveryDays} days` : 'N/A' },
                   { label: 'Invoices', val: recovery.invoicesRecovered },
                 ].map((stat, idx) => (
                   <div key={idx} className="p-4 rounded-2xl bg-background/5 border border-background/5">
