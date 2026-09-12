@@ -10,10 +10,12 @@ export interface InvoiceItem {
   price: number
   gstRate?: number
   hsn?: string
+  unit?: string
 }
 
 export interface BankDetailsData {
   bankName?: string
+  branch?: string
   accountNumber?: string
   ifsc?: string
   accountHolder?: string
@@ -22,6 +24,7 @@ export interface BankDetailsData {
 export interface InvoiceData {
   invoiceNumber: string
   date: string
+  createdAtIso?: string
   customerName: string
   customerPhone?: string
   customerGstin?: string
@@ -30,6 +33,10 @@ export interface InvoiceData {
   subtotal: number
   tax: number
   total: number
+  amountReceived?: number
+  discount?: number
+  description?: string
+  terms?: string
   businessName: string
   businessPhone?: string
   businessEmail?: string
@@ -44,6 +51,26 @@ export interface InvoiceData {
   documentType?: 'tax_invoice' | 'bill'
   invoiceFooter?: string
   paymentTerms?: string
+}
+
+const STATE_CODES: Record<string, string> = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
+  '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
+  '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur',
+  '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal',
+  '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '25': 'Puducherry', '26': 'Dadra & Nagar Haveli and Daman & Diu',
+  '27': 'Maharashtra', '28': 'Andhra Pradesh', '29': 'Karnataka', '30': 'Goa',
+  '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry',
+  '35': 'Andaman & Nicobar Islands', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh',
+}
+
+function formatStatePlace(s: string | undefined): string | null {
+  if (!s) return null
+  const code = s.trim().slice(0, 2)
+  const name = STATE_CODES[code]
+  if (!name) return s.trim()
+  return code === s.trim() ? `${code} - ${name}` : s.trim()
 }
 
 const NUMBER_WORDS: Record<number, string> = {
@@ -95,340 +122,462 @@ export function generateInvoiceNumber(tenantName: string, counter: number): stri
 }
 
 export async function generateInvoicePDF(data: InvoiceData): Promise<jsPDF> {
-  const doc = new jsPDF()
-  const pw = doc.internal.pageSize.getWidth()
-  const margin = 18
+  const doc = new jsPDF() // A4 portrait (210 × 297 mm)
+  const pw = 210
+  const ph = 297
+  const margin = 14
+  const rx = pw - margin
   const contentW = pw - margin * 2
-  let y = margin
 
-  const dark = [30, 41, 59] as const
-  const gray = [148, 163, 184] as const
+  const navy: [number, number, number] = [13, 34, 59]     // #0D223B
+  const teal: [number, number, number] = [41, 151, 135]   // #299787
   const midGray = [100, 116, 139] as const
-  const lightBg = [248, 250, 252] as const
-  const accent = [22, 128, 45] as const
+  const lightBg = [246, 248, 250] as const
+  const border = [214, 220, 228] as const
 
   const isBill = data.documentType === 'bill'
   const showGst = !isBill && data.items.some(i => i.gstRate && i.gstRate > 0)
 
-  // Compute everything from items — never trust passed subtotal/tax/total
+  // ── Derive line finances from items (authoritative — never trust passed totals) ──
   const derivedItems = data.items.map(item => {
     const lineTotal = Math.round(item.price * item.qty)
-    const taxable = item.gstRate ? Math.round(lineTotal * 100 / (100 + item.gstRate)) : lineTotal
+    const rate = item.gstRate || 0
+    const taxable = rate > 0 ? Math.round(lineTotal * 100 / (100 + rate)) : lineTotal
     const gstAmt = lineTotal - taxable
     const cgst = Math.round(gstAmt / 2)
     const sgst = gstAmt - cgst
     return { ...item, lineTotal, taxable, gstAmt, cgst, sgst }
   })
-  const derivedSubtotal = derivedItems.reduce((s, i) => s + i.taxable, 0)
-  const derivedTax = derivedItems.reduce((s, i) => s + i.gstAmt, 0)
-  const derivedTotal = derivedSubtotal + derivedTax
+  const grossSubtotal = derivedItems.reduce((s, i) => s + i.lineTotal, 0)
+  const taxableTotal = derivedItems.reduce((s, i) => s + i.taxable, 0)
+  const cgstTotal = derivedItems.reduce((s, i) => s + i.cgst, 0)
+  const sgstTotal = derivedItems.reduce((s, i) => s + i.sgst, 0)
+  const gstTotal = cgstTotal + sgstTotal
+  const discount = Math.max(0, data.discount || 0)
+  const invoiceTotal = Math.max(0, grossSubtotal - discount)
+  const received = Math.max(0, data.amountReceived || 0)
+  const balance = Math.max(0, invoiceTotal - received)
 
-  function num(n: number): string {
-    return n.toLocaleString('en-IN')
+  // Interstate vs intrastate classification — show IGST OR CGST+SGST, never both.
+  const merchantCode = data.businessGstin ? data.businessGstin.slice(0, 2) : undefined
+  const supplyCode = data.placeOfSupply ? data.placeOfSupply.trim().slice(0, 2) : undefined
+  const interState = showGst && Boolean(merchantCode && supplyCode && merchantCode !== supplyCode)
+
+  function money(n: number): string {
+    return `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
-  function rs(n: number): string {
-    return `Rs. ${num(n)}`
+  function fmtDate(iso?: string, fallback = ''): string {
+    if (!iso) return fallback
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return fallback
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   }
 
-  // ── Supplier Block ──
+  function fmtTime(iso?: string): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    let h = d.getHours()
+    const m = d.getMinutes().toString().padStart(2, '0')
+    const ap = h >= 12 ? 'PM' : 'AM'
+    h = h % 12 || 12
+    return `${h}:${m} ${ap}`
+  }
+
+  let y = margin
+
+  // ══ HEADER — merchant identity (left), TAX INVOICE (dominant, right) ══
   let logoRight = margin
   if (data.logo) {
     try {
-      doc.addImage(data.logo, 'PNG', margin, y - 2, 20, 20)
-      logoRight = margin + 24
-    } catch { }
+      doc.addImage(data.logo, 'PNG', margin, y - 3, 11, 11)
+      logoRight = margin + 14
+    } catch { /* logo optional */ }
   }
 
-  // Business name — large, bold, dominant
-  doc.setFontSize(18)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...dark)
-  doc.text(data.businessName, logoRight, y + 5)
+  doc.setFontSize(21)
+  doc.setTextColor(...navy)
+  doc.text(data.businessName, logoRight, y, { maxWidth: contentW * 0.53 })
 
-  // Supplier details — structured, line by line
-  y += 16
-  doc.setFontSize(7.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(28)
+  doc.setTextColor(...navy)
+  doc.text(isBill ? 'BILL' : 'TAX INVOICE', rx, y, { align: 'right' })
+
+  // Invoice metadata pod — right-aligned under the document title (strong identity)
+  const invMeta: [string, string][] = [
+    ['Invoice No.', data.invoiceNumber],
+    ['Date', fmtDate(data.createdAtIso, data.date)],
+  ]
+  if (data.createdAtIso) invMeta.push(['Time', fmtTime(data.createdAtIso)])
+  if (showGst) {
+    const code = data.placeOfSupply ? data.placeOfSupply.trim().slice(0, 2) : undefined
+    const short = code ? (STATE_CODES[code] || data.placeOfSupply!.trim()) : data.placeOfSupply
+    if (short) invMeta.push(['Place of Supply', short])
+  }
+  const metaLabelX = rx - 56
+  const podTop = y + 9
+  let podY = podTop
+  doc.setFontSize(9.5)
+  for (const [label, value] of invMeta) {
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...midGray)
+    doc.text(label, metaLabelX, podY)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text(String(value), rx, podY, { align: 'right', maxWidth: 56 })
+    podY += 6.4
+  }
+  const podBottom = invMeta.length ? podY - 6.6 : podTop - 4
+
+  // Merchant contact lines (left, under the business name)
+  const merchantMeta: string[] = []
+  if (data.businessAddress) merchantMeta.push(data.businessAddress)
+  if (data.businessPhone) merchantMeta.push(`Phone: ${data.businessPhone}`)
+  if (data.businessEmail) merchantMeta.push(`Email: ${data.businessEmail}`)
+  if (showGst) {
+    if (data.businessGstin) merchantMeta.push(`GSTIN: ${data.businessGstin}`)
+    const merchantState = formatStatePlace(merchantCode)
+    if (merchantState) merchantMeta.push(`State: ${merchantState}`)
+    if (data.businessPan) merchantMeta.push(`PAN: ${data.businessPan}`)
+  }
+  let merchantY = podTop
   doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9.5)
   doc.setTextColor(...midGray)
-  const supplierLines: string[] = []
-  if (data.businessAddress) supplierLines.push(data.businessAddress)
-  if (data.businessPhone) supplierLines.push(`Phone: ${data.businessPhone}`)
-  if (data.businessEmail) supplierLines.push(data.businessEmail)
-  for (const line of supplierLines) {
-    doc.text(line, logoRight, y)
-    y += 4.5
+  for (const line of merchantMeta) {
+    doc.text(line, logoRight, merchantY, { maxWidth: contentW * 0.5 })
+    merchantY += 5.2
   }
-  if (!isBill) {
-    if (data.businessGstin) { doc.text(`GSTIN: ${data.businessGstin}`, logoRight, y); y += 4.5 }
-    if (data.businessPan) { doc.text(`PAN: ${data.businessPan}`, logoRight, y); y += 4.5 }
-  }
-  y += 4
+  const merchantBottom = merchantMeta.length ? merchantY - 5.4 : podTop - 4
 
-  // ── Separator + Title ──
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.4)
-  doc.line(margin, y, pw - margin, y); y += 8
-  const title = isBill ? 'BILL' : 'TAX INVOICE'
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...midGray)
-  doc.text(title, pw / 2, y, { align: 'center' })
+  // Brand accent rule below the tallest of the two columns
+  y = Math.max(merchantBottom, podBottom) + 4
+  doc.setDrawColor(...teal)
+  doc.setLineWidth(0.7)
+  doc.line(margin, y, rx, y)
   y += 8
 
-  // ── Invoice Meta ──
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...midGray)
-  const today = new Date()
-  const dueDate = new Date(today)
-  dueDate.setDate(dueDate.getDate() + (isBill ? 0 : 15))
-  const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  doc.text(`Invoice No: ${data.invoiceNumber}`, margin, y)
-  doc.text(`Invoice Date: ${data.date}`, pw / 2 + 10, y)
-  if (!isBill) {
-    doc.text(`Due Date: ${fmtDate(dueDate)}`, pw - margin, y, { align: 'right' })
-  }
-  y += 5
-  if (!isBill) {
-    doc.setFontSize(7.5)
-    if (data.placeOfSupply) doc.text(`Place of Supply: ${data.placeOfSupply}`, margin, y)
-    doc.text(`Payment Terms: ${data.paymentTerms || 'Due on receipt'}`, pw - margin, y, { align: 'right' })
-    y += 5
-  }
-  y += 3
-
-  // ── Customer Block ──
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(7.5)
-  doc.setTextColor(...midGray)
-  doc.text('Bill To', margin, y)
-  y += 5
+  // ══ BILL TO — full width, prominent ══
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.setTextColor(...dark)
-  doc.text(data.customerName, margin, y)
-  y += 6
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7.5)
   doc.setTextColor(...midGray)
-  const cinfo: string[] = []
-  if (data.customerPhone) cinfo.push(`Phone: ${data.customerPhone}`)
-  if (!isBill && data.customerGstin) cinfo.push(`GSTIN: ${data.customerGstin}`)
-  if (data.customerAddress) cinfo.push(data.customerAddress)
-  if (cinfo.length) {
-    doc.text(cinfo.join('  ·  '), margin, y, { maxWidth: contentW })
+  doc.text('Bill To', margin, y)
+  y += 6
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(16)
+  doc.setTextColor(...navy)
+  doc.text(data.customerName, margin, y, { maxWidth: contentW * 0.7 })
+  y += 7
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9.5)
+  doc.setTextColor(...midGray)
+  const customerLines: string[] = []
+  if (data.customerAddress) customerLines.push(data.customerAddress)
+  if (data.customerPhone) customerLines.push(`Contact: ${data.customerPhone}`)
+  if (showGst && data.customerGstin) customerLines.push(`GSTIN: ${data.customerGstin}`)
+  for (const line of customerLines) {
+    doc.text(line, margin, y, { maxWidth: contentW * 0.7 })
     y += 5
   }
-  y += 4
+  y += 3
 
-  // ── Items Table ──
-  const si = (s: number) => ({ cellWidth: s, halign: 'right' as const })
-  const ci = (s: number) => ({ cellWidth: s, halign: 'center' as const })
-  const li = (s: number) => ({ cellWidth: s, halign: 'left' as const })
+  // ══ ITEMS TABLE — large, readable columns ══
+  const showUnit = derivedItems.some(i => i.unit)
+  const qtyIdx = showGst ? 3 : 2
+  const unitIdx = showUnit ? (showGst ? 4 : 3) : -1
+  const rateIdx = showUnit ? (showGst ? 5 : 4) : (showGst ? 4 : 3)
+  const amtIdx = rateIdx + 1
 
-  if (showGst) {
-    autoTable(doc, {
-      startY: y,
-      head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']],
-      body: derivedItems.map((item, i) => [
-        String(i + 1),
-        item.name.substring(0, 22),
-        item.hsn || '—',
-        String(item.qty),
-        rs(item.price),
-        rs(item.taxable),
-        `${item.gstRate}%\n${rs(item.gstAmt)}`,
-        rs(item.lineTotal),
-      ]),
-      theme: 'plain',
-      headStyles: {
-        fillColor: dark as any,
-        textColor: [255, 255, 255],
-        fontSize: 7,
-        fontStyle: 'bold',
-      },
-      bodyStyles: { fontSize: 7, textColor: dark as any },
-      alternateRowStyles: { fillColor: lightBg as any },
-      tableLineColor: [226, 232, 240],
-      tableLineWidth: 0.3,
-      columnStyles: {
-        0: ci(8), 1: li(42), 2: ci(14),
-        3: ci(10), 4: si(18), 5: si(18),
-        6: si(20), 7: si(20),
-      },
-      margin: { left: margin, right: margin },
-    })
-  } else {
-    autoTable(doc, {
-      startY: y,
-      head: [['#', 'Item', 'Qty', 'Rate', 'Amount']],
-      body: derivedItems.map((item, i) => [
-        String(i + 1),
-        item.name.substring(0, 28),
-        String(item.qty),
-        rs(item.price),
-        rs(item.lineTotal),
-      ]),
-      theme: 'plain',
-      headStyles: {
-        fillColor: dark as any,
-        textColor: [255, 255, 255],
-        fontSize: 7,
-        fontStyle: 'bold',
-      },
-      bodyStyles: { fontSize: 7, textColor: dark as any },
-      alternateRowStyles: { fillColor: lightBg as any },
-      tableLineColor: [226, 232, 240],
-      tableLineWidth: 0.3,
-      columnStyles: {
-        0: ci(8), 1: li(68), 2: ci(12),
-        3: si(24), 4: si(30),
-      },
-      margin: { left: margin, right: margin },
-    })
-  }
+  const tableHead = [
+    '#',
+    'Item',
+    ...(showGst ? ['HSN/SAC'] : []),
+    'Qty',
+    ...(showUnit ? ['Unit'] : []),
+    'Rate',
+    'Amount',
+  ]
+
+  const tableBody = derivedItems.map((item, i) => [
+    String(i + 1),
+    item.name.substring(0, 36),
+    ...(showGst ? [item.hsn || '—'] : []),
+    String(item.qty),
+    ...(showUnit ? [item.unit || ''] : []),
+    money(item.price),
+    money(item.lineTotal),
+  ])
+
+  const cellPad = { top: 2.5, bottom: 2.5, left: 2, right: 2 }
+  autoTable(doc, {
+    startY: y,
+    head: [tableHead],
+    body: tableBody,
+    theme: 'plain',
+    headStyles: {
+      fillColor: navy as any,
+      textColor: [255, 255, 255],
+      fontSize: 9,
+      fontStyle: 'bold',
+      halign: 'center',
+      cellPadding: cellPad as any,
+    },
+    bodyStyles: { fontSize: 9, textColor: navy as any, cellPadding: cellPad as any },
+    alternateRowStyles: { fillColor: lightBg as any },
+    tableLineColor: border as any,
+    tableLineWidth: 0.35,
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { halign: 'left' },
+      ...(showGst ? { 2: { cellWidth: 18, halign: 'center' } } : {}),
+      [qtyIdx]: { cellWidth: 15, halign: 'right' },
+      ...(showUnit ? { [unitIdx]: { cellWidth: 16, halign: 'center' } } : {}),
+      [rateIdx]: { cellWidth: 32, halign: 'right' },
+      [amtIdx]: { cellWidth: 36, halign: 'right' },
+    } as any,
+    margin: { left: margin, right: margin },
+  })
 
   // @ts-ignore
-  y = doc.lastAutoTable.finalY + 10
+  y = doc.lastAutoTable.finalY + 8
+  if (y > 254) {
+    doc.addPage()
+    y = 14
+  }
 
-  // ── Totals ──
-  const rx = pw - margin
-  const lx = rx - 55
+  // ══ DESCRIPTION (left) + TOTALS (right) ══
+  const blockStartY = y
+  const tlX = 124
+  const dX = margin
+  const dW = tlX - margin - 8
 
-  doc.setFontSize(8.5)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...midGray)
-  doc.text('Subtotal', lx, y)
-  doc.text(rs(derivedSubtotal), rx, y, { align: 'right' })
-  y += 5.5
+  let yT = blockStartY
+  const totalsRow = (label: string, value: string, opts?: { bold?: boolean; size?: number; color?: [number, number, number] }) => {
+    doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal')
+    doc.setFontSize(opts?.size || 9.5)
+    const tc = opts?.color ?? [...midGray]
+    doc.setTextColor(tc[0], tc[1], tc[2])
+    doc.text(label, tlX, yT)
+    doc.text(value, rx, yT, { align: 'right' })
+    yT += opts?.bold ? 8 : 5.6
+  }
 
+  totalsRow('Subtotal', money(grossSubtotal))
+  if (discount > 0) totalsRow('Discount', `- ${money(discount)}`)
+  if (showGst) totalsRow('Taxable Amount', money(taxableTotal))
   if (showGst) {
-    const gstRate = derivedItems[0]?.gstRate
-    const label = gstRate ? `GST (${gstRate}%)` : 'GST'
-    doc.text(label, lx, y)
-    doc.text(rs(derivedTax), rx, y, { align: 'right' })
-    y += 5.5
-  } else if (derivedTax > 0) {
-    doc.text('Tax', lx, y)
-    doc.text(rs(derivedTax), rx, y, { align: 'right' })
-    y += 5.5
+    if (interState) {
+      totalsRow('IGST', money(gstTotal))
+    } else {
+      if (cgstTotal > 0) totalsRow('CGST', money(cgstTotal))
+      if (sgstTotal > 0) totalsRow('SGST', money(sgstTotal))
+    }
+  } else if (gstTotal > 0) {
+    totalsRow('Tax', money(gstTotal))
   }
 
-  // Separator
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.5)
-  doc.line(lx, y, rx, y)
-  y += 7
+  yT += 2
+  doc.setDrawColor(...border)
+  doc.setLineWidth(0.6)
+  doc.line(tlX, yT, rx, yT)
+  yT += 8
+  totalsRow('Invoice Total', money(invoiceTotal), { bold: true, size: 16, color: navy })
+  yT += 1.5
+  totalsRow('Received', money(received))
+  totalsRow('Balance', money(balance), { bold: true, color: navy })
 
-  // Grand Total
-  doc.setFontSize(16)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...accent)
-  doc.text('Grand Total', lx, y)
-  doc.text(rs(derivedTotal), rx, y, { align: 'right' })
-  y += 20
+  let yD = blockStartY
+  if (data.description) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(...midGray)
+    doc.text('Description', dX, yD)
+    yD += 6
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...navy)
+    const descLines = doc.splitTextToSize(data.description, dW) as string[]
+    for (const line of descLines) {
+      doc.text(line, dX, yD)
+      yD += 4.4
+    }
+    yD += 4
+  }
 
-  // ── Amount in Words ──
+  y = Math.max(yT, yD) + 8
+  if (y > 254) {
+    doc.addPage()
+    y = 14
+  }
+
+  // ══ AMOUNT IN WORDS — prominent box ══
+  const wordsText = `Rupees ${numberToWords(Math.round(invoiceTotal))} Only`
   doc.setFillColor(...lightBg)
-  doc.roundedRect(margin, y - 2, contentW, 12, 2, 2, 'F')
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'italic')
+  doc.roundedRect(margin, y, contentW, 14, 2, 2, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
   doc.setTextColor(...midGray)
-  doc.text(`Amount in Words: Rupees ${numberToWords(Math.round(derivedTotal))} Only`, margin + 4, y + 4)
-  y += 16
-
-  // ── Payment ──
-  if (data.upiId) {
-    // QR dominates
-    try {
-      const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${data.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(data.invoiceNumber)}`
-      const qrDataUrl = await QRCode.toDataURL(upiQrStr, {
-        width: 160, margin: 1, color: { dark: '#1e293b', light: '#ffffff' },
-      })
-      const qrSize = 34
-      const qrX = pw / 2 - qrSize / 2
-      doc.addImage(qrDataUrl, 'PNG', qrX, y, qrSize, qrSize)
-      y += qrSize + 4
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...dark)
-      doc.text('Scan to Pay', pw / 2, y, { align: 'center' })
-      y += 6
-    } catch { }
-
-    doc.setFontSize(7.5)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...midGray)
-    doc.text(`UPI ID: ${data.upiId}`, margin, y)
-    y += 6
-  }
-
-  if (data.bankDetails) {
-    if (data.upiId) {
-      doc.setFontSize(7)
-      doc.setFont('helvetica', 'italic')
-      doc.setTextColor(...gray)
-      doc.text('or Bank Transfer', pw / 2, y, { align: 'center' })
-      y += 6
-    }
-    doc.setFontSize(7.5)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...midGray)
-    const bLines: { l: string; v: string }[] = []
-    if (data.bankDetails.accountHolder) bLines.push({ l: 'A/c Holder', v: data.bankDetails.accountHolder })
-    if (data.bankDetails.bankName) bLines.push({ l: 'Bank', v: data.bankDetails.bankName })
-    if (data.bankDetails.accountNumber) bLines.push({ l: 'A/c No.', v: data.bankDetails.accountNumber })
-    if (data.bankDetails.ifsc) bLines.push({ l: 'IFSC', v: data.bankDetails.ifsc })
-    for (const bl of bLines) {
-      doc.text(`${bl.l}: ${bl.v}`, margin, y)
-      y += 4
-    }
-    y += 4
-  }
-
-  // ── Authorized Signatory ──
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...midGray)
-  doc.text('Authorized Signatory', pw - margin, y, { align: 'right' })
-  y += 3
-  doc.setDrawColor(148, 163, 184)
-  doc.setLineWidth(0.3)
-  doc.line(pw - margin - 40, y, pw - margin, y)
-  y += 12
-
-  // ── Footer ──
-  const footerY = 272
-  doc.setDrawColor(226, 232, 240)
+  doc.text('Invoice Amount in Words', margin + 5, y + 4.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(...navy)
+  doc.text(wordsText, margin + 5, y + 10.5, { maxWidth: contentW - 10 })
+  doc.setDrawColor(...border)
   doc.setLineWidth(0.4)
-  doc.line(margin + 8, footerY, pw - margin - 8, footerY)
+  doc.roundedRect(margin, y, contentW, 14, 2, 2, 'S')
+  y += 17
+  if (y > 258) {
+    doc.addPage()
+    y = 14
+  }
+
+  // ══ PAY TO / TERMS (left) + QR / SIGNATURE (right) ══
+  const bottomTop = y
+  let yLeft = bottomTop
+  const payX = margin
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(...midGray)
+  doc.text('Pay To', payX, yLeft)
+  yLeft += 6
+
+  const bk = data.bankDetails
+  const bankRows: [string, string][] = []
+  if (bk?.accountHolder) bankRows.push(['A/c Holder', bk.accountHolder])
+  if (bk?.bankName) bankRows.push(['Bank', bk.bankName])
+  if (bk?.branch) bankRows.push(['Branch', bk.branch])
+  if (bk?.accountNumber) bankRows.push(['A/c No.', bk.accountNumber])
+  if (bk?.ifsc) bankRows.push(['IFSC', bk.ifsc])
+  doc.setFontSize(9.5)
+  for (const [label, value] of bankRows) {
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...midGray)
+    doc.text(label, payX, yLeft)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text(value, payX + 30, yLeft, { maxWidth: 60 })
+    yLeft += 5.2
+  }
+  if (data.upiId) {
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...midGray)
+    doc.text('UPI ID', payX, yLeft)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text(data.upiId, payX + 30, yLeft, { maxWidth: 60 })
+    yLeft += 5.2
+  }
+
+  yLeft = Math.max(yLeft + 3, bottomTop + 28)
+
+  const termsText = data.terms || data.paymentTerms || 'Payment is due as per agreed terms.'
+  const termsFull = `Thank you for doing business with us. ${termsText}`
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9.5)
+  doc.setTextColor(...midGray)
+  doc.text('Terms & Conditions', payX, yLeft)
+  yLeft += 6
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+  doc.setTextColor(...midGray)
+  const termsLines = doc.splitTextToSize(termsFull, 100) as string[]
+  for (const line of termsLines) {
+    doc.text(line, payX, yLeft)
+    yLeft += 3.8
+  }
+
+  // Right column — QR (only ever a real UPI payment intent) then signature
+  let yRight = bottomTop
+  if (data.upiId) {
+    try {
+      const upiQrStr = `upi://pay?pa=${encodeURIComponent(data.upiId)}&pn=${encodeURIComponent(data.businessName)}&am=${invoiceTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(data.invoiceNumber)}`
+      const qrDataUrl = await QRCode.toDataURL(upiQrStr, {
+        width: 160,
+        margin: 1,
+        color: { dark: '#0D223B', light: '#ffffff' },
+      })
+      const qrSize = 23
+      const boxX = rx - qrSize
+      doc.setFillColor(255, 255, 255)
+      doc.setDrawColor(...border)
+      doc.setLineWidth(0.5)
+      doc.roundedRect(boxX - 6, yRight - 3, qrSize + 12, qrSize + 26, 2, 2, 'S')
+      doc.addImage(qrDataUrl, 'PNG', boxX, yRight, qrSize, qrSize)
+      yRight += qrSize + 5
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.setTextColor(...navy)
+      doc.text('Scan to Pay', rx, yRight, { align: 'right' })
+      yRight += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...teal)
+      doc.text(money(invoiceTotal), rx, yRight, { align: 'right' })
+      yRight += 5.5
+      if (!data.whiteLabel) {
+        doc.setFont('helvetica', 'italic')
+        doc.setFontSize(6.5)
+        doc.setTextColor(...midGray)
+        doc.text('Payment powered by BillZo', rx, yRight, { align: 'right' })
+        yRight += 4
+      }
+      yRight += 4
+    } catch { /* QR optional */ }
+  }
+
+  yRight = Math.max(yRight + 3, bottomTop + 12)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9.5)
+  doc.setTextColor(...navy)
+  doc.text(`For ${data.businessName}`, rx, yRight, { align: 'right', maxWidth: 86 })
+  yRight += 11
+  doc.setDrawColor(...midGray)
+  doc.setLineWidth(0.4)
+  doc.line(rx - 50, yRight, rx, yRight)
+  yRight += 4
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+  doc.setTextColor(...midGray)
+  doc.text('Authorized Signatory', rx, yRight, { align: 'right' })
+
+  y = Math.max(yLeft, yRight) + 2
+  if (y > 280) {
+    doc.addPage()
+    y = 14
+  }
+
+  // ══ FOOTER — subtle BillZo branding, never a watermark ══
+  const footerY = 276
+  doc.setDrawColor(...teal)
+  doc.setLineWidth(0.4)
+  doc.line(margin + 6, footerY, rx - 6, footerY)
 
   let fy = footerY + 5
-
-  if (data.invoiceFooter) {
-    doc.setFont('helvetica', 'italic')
-    doc.setFontSize(7)
-    doc.setTextColor(...midGray)
-    doc.text(data.invoiceFooter, pw / 2, fy, { align: 'center' })
-    fy += 6
-  }
-
-  doc.setFont('helvetica', 'italic')
-  doc.setFontSize(6.5)
-  doc.setTextColor(...gray)
-  doc.text(
-    isBill
-      ? 'This is a computer-generated bill for business records.'
-      : 'This is a computer-generated tax invoice.',
-    pw / 2, fy, { align: 'center' }
-  )
-  fy += 5
   if (!data.whiteLabel) {
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(5.5)
-    doc.setTextColor(...gray)
-    doc.text('Powered by BillZo', pw / 2, fy, { align: 'center' })
+    doc.setFontSize(7)
+    doc.setTextColor(...midGray)
+    doc.text('Generated by BillZo', pw / 2, fy, { align: 'center' })
+    fy += 4
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...midGray)
+    doc.text('Simple invoicing • Smarter payment recovery', pw / 2, fy, { align: 'center' })
+    fy += 4
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.text('billzo.app', pw / 2, fy, { align: 'center' })
+    fy += 5
+  }
+  if (data.invoiceFooter) {
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(6.5)
+    doc.setTextColor(...midGray)
+    doc.text(data.invoiceFooter, pw / 2, fy, { align: 'center' })
   }
 
   return doc

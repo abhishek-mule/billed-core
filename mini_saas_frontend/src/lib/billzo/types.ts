@@ -36,6 +36,7 @@ export type ConflictPolicy = 'latest_write_wins' | 'server_authority'
 
 export type BankDetails = {
   bankName?: string
+  branch?: string
   accountNumber?: string
   ifsc?: string
   accountHolder?: string
