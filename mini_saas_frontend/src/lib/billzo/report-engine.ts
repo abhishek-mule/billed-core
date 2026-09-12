@@ -17,7 +17,7 @@ export interface RecoveryMetrics {
   pendingAmount: number
   invoicesRecovered: number
   invoicesPending: number
-  avgRecoveryDays: number
+  avgRecoveryDays: number | null
   pendingBreakdown: PendingInvoice[]
   roiMultiple: number
 }
@@ -49,6 +49,7 @@ export interface GSTReport {
   netGST: number
   cgst: number
   sgst: number
+  inputGstPurchaseCount: number
   invoiceCount: number
   hsnBreakdown: HSNItem[]
   taxableAmount: number
@@ -82,6 +83,7 @@ export interface WeeklyData {
   week: string
   sales: number
   count: number
+  range?: { start: string; end: string }
 }
 
 export interface DateRange {
@@ -124,40 +126,31 @@ export function isInDateRange(dateStr: string, start: string, end: string): bool
 }
 
 export function buildWeeklyBreakdown(invoices: Invoice[], range?: DateRange): WeeklyData[] {
-  const weeks: WeeklyData[] = []
   const now = new Date()
   const monthStart = range
     ? new Date(new Date(range.start).getFullYear(), new Date(range.start).getMonth(), 1)
     : new Date(now.getFullYear(), now.getMonth(), 1)
   const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate()
 
-  const week1End = Math.min(7, daysInMonth)
-  const week2End = Math.min(14, daysInMonth)
-  const week3End = Math.min(21, daysInMonth)
+  const weekEnds = [Math.min(7, daysInMonth), Math.min(14, daysInMonth), Math.min(21, daysInMonth), daysInMonth]
+  const weekStarts = [1, weekEnds[0] + 1, weekEnds[1] + 1, weekEnds[2] + 1]
+  const monthLabel = monthStart.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })
 
-  const week1 = invoices.filter(inv => {
-    const d = new Date(inv.createdAt).getDate()
-    return d >= 1 && d <= week1End
+  return weekStarts.map((startDay, i) => {
+    const endDay = weekEnds[i]
+    const s = new Date(monthStart.getFullYear(), monthStart.getMonth(), startDay)
+    const e = new Date(monthStart.getFullYear(), monthStart.getMonth(), endDay)
+    const inWeek = invoices.filter(inv => {
+      const d = new Date(inv.createdAt).getTime()
+      return d >= s.getTime() && d <= e.getTime()
+    })
+    return {
+      week: `${startDay}–${endDay} ${monthLabel}`,
+      sales: inWeek.reduce((sum, inv) => sum + inv.total, 0),
+      count: inWeek.length,
+      range: { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) },
+    }
   })
-  const week2 = invoices.filter(inv => {
-    const d = new Date(inv.createdAt).getDate()
-    return d >= week1End + 1 && d <= week2End
-  })
-  const week3 = invoices.filter(inv => {
-    const d = new Date(inv.createdAt).getDate()
-    return d >= week2End + 1 && d <= week3End
-  })
-  const week4 = invoices.filter(inv => {
-    const d = new Date(inv.createdAt).getDate()
-    return d >= week3End + 1 && d <= daysInMonth
-  })
-
-  return [
-    { week: 'Week 1', sales: week1.reduce((s, inv) => s + inv.total, 0), count: week1.length },
-    { week: 'Week 2', sales: week2.reduce((s, inv) => s + inv.total, 0), count: week2.length },
-    { week: 'Week 3', sales: week3.reduce((s, inv) => s + inv.total, 0), count: week3.length },
-    { week: 'Week 4', sales: week4.reduce((s, inv) => s + inv.total, 0), count: week4.length },
-  ]
 }
 
 export function computeRecoveryMetrics(
@@ -197,14 +190,26 @@ export function computeRecoveryMetrics(
   const autoRecovered = 0
   const manualRecovered = thisMonthRecovered
 
-  const recoveryDays = paidInvoices.map(inv => {
+  const paymentsByInvoice = new Map<string, Payment[]>()
+  for (const p of successfulPayments) {
+    if (!p.invoiceId) continue
+    const list = paymentsByInvoice.get(p.invoiceId)
+    if (list) list.push(p)
+    else paymentsByInvoice.set(p.invoiceId, [p])
+  }
+
+  const recoveryDays = paidInvoices.flatMap(inv => {
+    const moneyIn = paymentsByInvoice.get(inv.id)
+    if (!moneyIn || moneyIn.length === 0) return []
+    const firstReceived = moneyIn
+      .map(p => new Date(p.paidAt || p.createdAt).getTime())
+      .sort((a, b) => a - b)[0]
     const created = new Date(inv.createdAt).getTime()
-    const paid = inv.updatedAt ? new Date(inv.updatedAt).getTime() : Date.now()
-    return Math.max(0, Math.round((paid - created) / (1000 * 60 * 60 * 24)))
+    return [Math.max(0, Math.round((firstReceived - created) / (1000 * 60 * 60 * 24)))]
   })
   const avgRecoveryDays = recoveryDays.length > 0
     ? Math.round(recoveryDays.reduce((s, d) => s + d, 0) / recoveryDays.length)
-    : 0
+    : null
 
   const roiMultiple = PRO_MONTHLY_PRICE > 0 ? Math.round(totalRecovered / PRO_MONTHLY_PRICE) : 0
 
@@ -342,10 +347,44 @@ export function computeGSTReport(
     netGST: Math.round(netGST * 100) / 100,
     cgst: Math.round(cgst * 100) / 100,
     sgst: Math.round(sgst * 100) / 100,
+    inputGstPurchaseCount: purchases.length,
     invoiceCount: monthInvoices.length,
     hsnBreakdown: Array.from(hsnMap.values()),
     taxableAmount: Math.round(taxableAmount * 100) / 100,
   }
+}
+
+// Group sales by customer identity (customerId when available, then phone, then name).
+// Distinguishes anonymous customers that share the same generic name (e.g. "Walk-in Customer").
+function buildTopCustomers(invoices: Invoice[]): CustomerSales[] {
+  const customerMap = new Map<string, { name: string; phone: string; total: number; count: number }>()
+  for (const inv of invoices) {
+    const key = (inv.customerId || inv.customerPhone || inv.customerName) || 'Unknown'
+    if (!customerMap.has(key)) {
+      customerMap.set(key, { name: inv.customerName || 'Customer', phone: inv.customerPhone, total: 0, count: 0 })
+    }
+    const entry = customerMap.get(key)!
+    entry.total += inv.total
+    entry.count++
+  }
+
+  const rawCounts = new Map<string, number>()
+  for (const e of customerMap.values()) rawCounts.set(e.name, (rawCounts.get(e.name) || 0) + 1)
+
+  const seen = new Map<string, number>()
+  return Array.from(customerMap.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5)
+    .map(c => {
+      const n = (seen.get(c.name) || 0) + 1
+      seen.set(c.name, n)
+      return {
+        name: (rawCounts.get(c.name) || 0) > 1 ? `${c.name} #${n}` : c.name,
+        phone: c.phone,
+        totalAmount: c.total,
+        invoiceCount: c.count,
+      }
+    })
 }
 
 export function computeSalesMetrics(
@@ -367,20 +406,7 @@ export function computeSalesMetrics(
     ? Math.round(((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100)
     : thisMonthTotal > 0 ? 100 : 0
 
-  const customerMap = new Map<string, { name: string; phone: string; total: number; count: number }>()
-  for (const inv of thisMonthInvoices) {
-    const key = inv.customerPhone || inv.customerName
-    if (!customerMap.has(key)) {
-      customerMap.set(key, { name: inv.customerName, phone: inv.customerPhone, total: 0, count: 0 })
-    }
-    const entry = customerMap.get(key)!
-    entry.total += inv.total
-    entry.count++
-  }
-  const topCustomers = Array.from(customerMap.values())
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5)
-    .map(c => ({ name: c.name, phone: c.phone, totalAmount: c.total, invoiceCount: c.count }))
+  const topCustomers = buildTopCustomers(thisMonthInvoices)
 
   const productMap = new Map<string, { name: string; qty: number; revenue: number }>()
   for (const inv of thisMonthInvoices) {
@@ -398,7 +424,7 @@ export function computeSalesMetrics(
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5)
 
-  const weeklyBreakdown = buildWeeklyBreakdown(thisMonthInvoices)
+  const weeklyBreakdown = buildRangeBreakdown(thisMonthInvoices, thisMonth)
 
   return {
     thisMonth: thisMonthTotal,
@@ -414,39 +440,40 @@ export function computeSalesMetrics(
 }
 
 export function buildRangeBreakdown(invoices: Invoice[], range: DateRange): WeeklyData[] {
-  const start = new Date(range.start)
+  const DAY_MS = 1000 * 60 * 60 * 24
+  const start = new Date(range.start) // app-wide convention: YYYY-MM-DD parses as UTC midnight
   const end = new Date(range.end)
-  const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  const totalDays = Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1
+  if (totalDays <= 0) return []
 
-  if (totalDays <= 31) {
-    const firstDay = new Date(range.start)
-    const filtered = invoices.filter(inv => {
-      const d = new Date(inv.createdAt)
-      return d >= firstDay && d <= end
-    })
-    return buildWeeklyBreakdown(filtered, range)
-  }
-
-  const numPeriods = Math.min(6, Math.ceil(totalDays / 7))
+  const numPeriods = Math.min(6, Math.max(2, Math.ceil(totalDays / 7)))
   const periodDays = Math.ceil(totalDays / numPeriods)
-  const labels: string[] = totalDays <= 90
-    ? Array.from({ length: numPeriods }, (_, i) => `Week ${i + 1}`)
-    : Array.from({ length: numPeriods }, (_, i) => {
-        const pStart = new Date(start.getTime() + i * periodDays * 24 * 60 * 60 * 1000)
-        return pStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-      })
+  const fmtDay = (d: Date) => d.getUTCDate()
+  const fmtMonth = (d: Date) => d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' })
 
   return Array.from({ length: numPeriods }, (_, i) => {
-    const pStart = new Date(start.getTime() + i * periodDays * 24 * 60 * 60 * 1000)
-    const pEnd = new Date(start.getTime() + (i + 1) * periodDays * 24 * 60 * 60 * 1000 - 1)
+    const pStart = new Date(start.getTime() + i * periodDays * DAY_MS)
+    const pEndExclusive = new Date(start.getTime() + Math.min((i + 1) * periodDays, totalDays) * DAY_MS)
+    const pEnd = new Date(pEndExclusive.getTime() - 1)
+
     const periodInvoices = invoices.filter(inv => {
-      const d = new Date(inv.createdAt)
-      return d >= pStart && d <= pEnd
+      const d = new Date(inv.createdAt).getTime()
+      return d >= pStart.getTime() && d < pEndExclusive.getTime()
     })
+
+    const sameMonth = pStart.getUTCMonth() === pEnd.getUTCMonth() && pStart.getUTCFullYear() === pEnd.getUTCFullYear()
+    const label = sameMonth
+      ? `${fmtDay(pStart)}–${fmtDay(pEnd)} ${fmtMonth(pStart)}`
+      : `${fmtDay(pStart)} ${fmtMonth(pStart)} – ${fmtDay(pEnd)} ${fmtMonth(pEnd)}`
+
     return {
-      week: labels[i],
+      week: label,
       sales: periodInvoices.reduce((s, inv) => s + inv.total, 0),
       count: periodInvoices.length,
+      range: {
+        start: pStart.toISOString().slice(0, 10),
+        end: pEnd.toISOString().slice(0, 10),
+      },
     }
   })
 }
@@ -470,20 +497,7 @@ export function computeSalesMetricsForRange(
     ? Math.round(((total - prevTotal) / prevTotal) * 100)
     : total > 0 ? 100 : 0
 
-  const customerMap = new Map<string, { name: string; phone: string; total: number; count: number }>()
-  for (const inv of rangeInvoices) {
-    const key = inv.customerPhone || inv.customerName
-    if (!customerMap.has(key)) {
-      customerMap.set(key, { name: inv.customerName, phone: inv.customerPhone, total: 0, count: 0 })
-    }
-    const entry = customerMap.get(key)!
-    entry.total += inv.total
-    entry.count++
-  }
-  const topCustomers = Array.from(customerMap.values())
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 5)
-    .map(c => ({ name: c.name, phone: c.phone, totalAmount: c.total, invoiceCount: c.count }))
+  const topCustomers = buildTopCustomers(rangeInvoices)
 
   const productMap = new Map<string, { name: string; qty: number; revenue: number }>()
   for (const inv of rangeInvoices) {
