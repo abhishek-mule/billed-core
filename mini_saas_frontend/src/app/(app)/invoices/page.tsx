@@ -79,7 +79,7 @@ export default function InvoicesPage() {
   // ── server-side sales data for fallback ──
   const [serverTodaySales, setServerTodaySales] = useState(0)
   useEffect(() => {
-    fetch("/api/recovery/summary", { credentials: "include" })
+    fetch("/api/recovery/queue", { credentials: "include" })
       .then(async r => {
         if (!r.ok) return
         const data = await r.json()
@@ -164,51 +164,102 @@ export default function InvoicesPage() {
     [invoices]
   )
 
+  // ── helpers ──
+  function invId(i: Invoice): string {
+    return i.invoiceNumber || (i as any).number || 'INV-' + i.id.slice(0, 6).toUpperCase()
+  }
+  function invDate(s?: string | null): string {
+    const d = s ? new Date(s) : new Date()
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  function invDateShort(s?: string | null): string {
+    const d = s ? new Date(s) : new Date()
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+  }
+  function invStatus(s?: string): string {
+    const m: Record<string, string> = { paid: 'Paid', partial: 'Partial', overdue: 'Overdue', unpaid: 'Unpaid', open: 'Unpaid' }
+    return m[s?.toLowerCase() || ''] || s || 'Unpaid'
+  }
+  function amountRs(n?: number): string {
+    return 'Rs. ' + Math.round(n || 0).toLocaleString('en-IN')
+  }
+
   // ── export ──
   const exportCSV = () => {
     try {
-      const headers = ["Invoice #", "Date", "Customer Name", "Phone", "Total Amount (INR)", "Status"]
+      const header = ['#', 'Date', 'Customer', 'Amount (INR)', 'Status']
       const rows = filtered.map(i => [
-        i.invoiceNumber || (i as any).number || ('INV-' + i.id.slice(0, 6).toUpperCase()),
-        new Date(i.createdAt).toLocaleDateString("en-IN"),
-        `"${(i.customerName || 'Walk-In Customer').replace(/"/g, '""')}"`,
-        i.customerPhone || '',
-        i.total || 0,
-        i.status,
+        invId(i),
+        invDate(i.createdAt),
+        (i.customerName || 'Walk-In Customer').replace(/\s+\d+$/, ''),
+        'Rs. ' + Math.round(i.total || 0).toLocaleString('en-IN'),
+        invStatus(i.status),
       ])
-      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n")
-      const encodedUri = encodeURI(csvContent)
-      const link = document.createElement("a")
-      link.setAttribute("href", encodedUri)
-      link.setAttribute("download", `BillZo_Invoices_${new Date().toISOString().slice(0, 10)}.csv`)
+      const csvContent = "data:text/csv;charset=utf-8," + [
+        header.join(','),
+        ...rows.map(row =>
+          row.map(f => (f.includes(',') || f.includes('"')) ? '"' + f.replace(/"/g, '""') + '"' : f).join(',')
+        ),
+      ].join('\n')
+      const link = document.createElement('a')
+      link.setAttribute('href', encodeURI(csvContent))
+      link.setAttribute('download', `BillZo_Invoices_${new Date().toISOString().slice(0, 10)}.csv`)
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
     } catch (err) {
-      setError(getErrorMessage(err, "Export failed"))
+      setError(getErrorMessage(err, 'Export failed'))
     }
   }
 
   const exportPDF = async () => {
     try {
-      const { default: JSPDF } = await import("jspdf")
-      const { default: autoTable } = await import("jspdf-autotable")
-      const doc = new JSPDF()
-      doc.text("Invoices Report", 14, 15)
+      const { default: JSPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const STATUS_COLOR: Record<string, [number, number, number]> = {
+        Paid: [22, 163, 74], Partial: [234, 179, 8], Overdue: [220, 38, 38], Unpaid: [148, 163, 184],
+      }
+      const doc = new JSPDF({ orientation: filtered.length > 20 ? 'landscape' : 'p' })
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Invoices Report', 14, 15)
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(120)
+      doc.text(
+        `${filtered.length} invoice${filtered.length !== 1 ? 's' : ''} \u2022 Generated ${invDate()}`,
+        14, 21,
+      )
       autoTable(doc, {
-        startY: 20,
-        head: [["ID", "Date", "Customer", "Amount", "Status"]],
+        startY: 25,
+        head: [['ID', 'Date', 'Customer', 'Amount', 'Status']],
         body: filtered.map(i => [
-          i.invoiceNumber || (i as any).number || i.id.slice(0, 8),
-          new Date(i.createdAt).toLocaleDateString(),
-          i.customerName,
-          formatINR(i.total),
-          i.status,
+          invId(i),
+          invDate(i.createdAt),
+          i.customerName || 'Walk-In Customer',
+          amountRs(i.total),
+          invStatus(i.status),
         ]),
+        styles: { fontSize: 8, cellPadding: 2.5, overflow: 'linebreak', font: 'helvetica' },
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 26 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+          4: { cellWidth: 20 },
+        },
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.column.index === 4) {
+            const c = STATUS_COLOR[data.cell.raw as string]
+            if (c) { data.cell.styles.textColor = c; data.cell.styles.fontStyle = 'bold' }
+          }
+        },
       })
-      doc.save("Invoices_Export.pdf")
+      doc.save(`BillZo_Invoices_${new Date().toISOString().slice(0, 10)}.pdf`)
     } catch (err) {
-      setError(getErrorMessage(err, "Export failed"))
+      setError(getErrorMessage(err, 'Export failed'))
     }
   }
 
@@ -451,47 +502,54 @@ export default function InvoicesPage() {
               const badge = getStatusBadge(inv)
               const risk = getRisk(inv)
               const outstanding = getOutstanding(inv)
-                  const displayName = (inv.customerName || 'Walk-In Customer').replace(/\s+\d+$/, '')
-                  const displayInvNo = inv.invoiceNumber || (inv as any).number || ('INV-' + inv.id.slice(0, 6).toUpperCase())
-                  return (
-                    <Link
-                      key={inv.id}
-                      href={`/invoices/${inv.id}`}
-                      className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-primary/30 transition-colors group"
-                    >
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
-                        {displayName.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-foreground truncate">{displayName}</span>
-                          {inv.customerPhone && (
-                            <span className="text-[12px] text-muted-foreground font-mono">{inv.customerPhone}</span>
-                          )}
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${badge.cls}`}>
-                            {badge.label}
-                          </span>
-                          {risk && (
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${risk.cls}`}>
-                              {risk.label}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="text-[11px] text-muted-foreground font-medium">{displayInvNo}</span>
-                      <span className="text-[10px] text-muted-foreground/40">&middot;</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
+              const displayName = (inv.customerName || 'Walk-In Customer').replace(/\s+\d+$/, '')
+              const displayInvNo = inv.invoiceNumber || (inv as any).number || ('INV-' + inv.id.slice(0, 6).toUpperCase())
+              return (
+                <Link
+                  key={inv.id}
+                  href={`/invoices/${inv.id}`}
+                  title={inv.id}
+                  className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3 hover:border-primary/30 transition-colors group"
+                >
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+                    {displayName.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {/* Row 1: ID · Date · Due */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-foreground font-semibold font-mono" title={inv.id}>
+                        {displayInvNo}
                       </span>
                       <span className="text-[10px] text-muted-foreground/40">&middot;</span>
-                      <span className="text-[11px] text-muted-foreground">Due {inv.dueAt ? new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : '—'}</span>
-                      {inv.paymentMode && (inv.status === "paid" || inv.status === "partial") && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {invDateShort(inv.createdAt)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/40">&middot;</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Due {inv.dueAt ? invDateShort(inv.dueAt) : '—'}
+                      </span>
+                      {inv.paymentMode && (inv.status === 'paid' || inv.status === 'partial') && (
                         <>
                           <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                           <span className="text-[11px] text-muted-foreground font-medium capitalize">{inv.paymentMode}</span>
                         </>
                       )}
-                      {inv.status !== "paid" && outstanding !== inv.total && (
+                    </div>
+                    {/* Row 2: Customer · status badge · risk · outstanding */}
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground truncate">{displayName}</span>
+                      {inv.customerPhone && (
+                        <span className="text-[12px] text-muted-foreground font-mono">{inv.customerPhone}</span>
+                      )}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                      {risk && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${risk.cls}`}>
+                          {risk.label}
+                        </span>
+                      )}
+                      {inv.status !== 'paid' && outstanding !== inv.total && (
                         <>
                           <span className="text-[10px] text-muted-foreground/40">&middot;</span>
                           <span className="text-[11px] text-outstanding font-medium tabular-nums">{formatINR(outstanding)} due</span>

@@ -12,6 +12,7 @@ import { RecoveryBadge } from "@/components/billzo/RecoveryBadge";
 import { formatINR } from "@/lib/utils";
 import { getCookie } from "@/lib/cookies";
 import { scheduleBackgroundSync } from "@/lib/billzo/sync";
+import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar";
 
 const statusStyle: Record<string, string> = {
   synced: "bg-success-soft text-success",
@@ -197,16 +198,28 @@ export default function InvoiceDetailPage() {
 
   const savePhoneAndSend = async () => {
     const phone = missingPhone.trim();
-    if (!phone) return;
+    if (!phone || !invoice?.customerId) return;
     setSendingWA(true);
     setWaError('');
     try {
-      const now = new Date().toISOString();
-      await db().invoices.update(invoice.id, { customerPhone: phone, updatedAt: now });
-      if (invoice.customerId) {
-        await db().customers.update(invoice.customerId, { phone, updatedAt: now });
+      const res = await fetch('/api/customers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ id: invoice.customerId, phone }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setWaError(errData.error || 'Could not save phone number to your account');
+        setSendingWA(false);
+        return;
       }
-      setInvoice((prev: any) => prev ? { ...prev, customerPhone: phone } : prev);
+      const data = await res.json();
+      const savedPhone = data?.customer?.phone || phone;
+      const now = new Date().toISOString();
+      await db().invoices.update(invoice.id, { customerPhone: savedPhone, updatedAt: now });
+      await db().customers.update(invoice.customerId, { phone: savedPhone, updatedAt: now });
+      setInvoice((prev: any) => prev ? { ...prev, customerPhone: savedPhone } : prev);
       scheduleBackgroundSync();
     } catch (err: any) {
       setWaError(err.message);
@@ -354,8 +367,35 @@ export default function InvoiceDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-5">
+        <div className="h-5 w-20 bg-muted animate-pulse rounded" />
+        <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+          <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+          <div className="h-10 w-36 bg-muted animate-pulse rounded" />
+          <div className="flex gap-2">
+            <div className="h-6 w-16 bg-muted animate-pulse rounded-full" />
+            <div className="h-6 w-14 bg-muted animate-pulse rounded-full" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+          <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 bg-muted animate-pulse rounded-full" />
+            <div className="space-y-1.5">
+              <div className="h-3.5 w-28 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <div className="h-3 w-14 bg-muted animate-pulse rounded" />
+          <div className="h-12 bg-muted animate-pulse rounded-xl" />
+          <div className="h-10 bg-muted animate-pulse rounded-xl" />
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+          <div className="h-3 w-28 bg-muted animate-pulse rounded" />
+          <div className="h-40 bg-muted animate-pulse rounded" />
+        </div>
       </div>
     );
   }
@@ -441,9 +481,14 @@ export default function InvoiceDetailPage() {
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Customer</div>
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-sm font-semibold">
-            {invoice.customerName?.charAt(0)}
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={getDiceBearAvatarUrl(invoice.customerName || 'Walk-In Customer')}
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-full object-cover bg-muted/20 shrink-0"
+          />
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm">{invoice.customerName}</div>
             {invoice.customerPhone && (

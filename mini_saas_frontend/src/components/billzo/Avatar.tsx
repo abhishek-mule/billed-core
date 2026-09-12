@@ -2,10 +2,18 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { Style, Avatar as DiceBearAvatar } from '@dicebear/core'
+import glyphsDef from '@dicebear/styles/glyphs.json' with { type: 'json' }
+import shapesDef from '@dicebear/styles/shapes.json' with { type: 'json' }
+
+const STYLES = {
+  glyphs: new Style(glyphsDef),
+  shapes: new Style(shapesDef),
+} as const
 
 export function getDiceBearAvatarUrl(seed: string, style: 'glyphs' | 'shapes' = 'glyphs'): string {
-  const safeSeed = encodeURIComponent(seed.trim() || 'BillZo')
-  return `https://api.dicebear.com/10.x/${style}/svg?seed=${safeSeed}`
+  const safeSeed = (seed || 'BillZo').trim()
+  return new DiceBearAvatar(STYLES[style], { seed: safeSeed }).toDataUri()
 }
 
 export function BrandAvatar({
@@ -19,17 +27,32 @@ export function BrandAvatar({
   className?: string
   size?: number
 }) {
-  const [error, setError] = useState(false)
+  const [logoError, setLogoError] = useState(false)
+  const [avatarError, setAvatarError] = useState(false)
   const initial = ((name || 'B').trim()[0] || 'B').toUpperCase()
 
-  if (logo && !error) {
+  if (logo && !logoError) {
     return (
       <img
         src={logo}
         alt={name || 'logo'}
         width={size}
         height={size}
-        onError={() => setError(true)}
+        onError={() => setLogoError(true)}
+        className={cn('rounded-full object-cover shrink-0 bg-muted/20', className)}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+
+  if (!avatarError) {
+    return (
+      <img
+        src={getDiceBearAvatarUrl(name || 'BillZo', 'glyphs')}
+        alt={name || 'avatar'}
+        width={size}
+        height={size}
+        onError={() => setAvatarError(true)}
         className={cn('rounded-full object-cover shrink-0 bg-muted/20', className)}
         style={{ width: size, height: size }}
       />
