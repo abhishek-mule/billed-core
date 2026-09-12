@@ -307,23 +307,33 @@ export default function InvoiceSendPage() {
   const defaultMessage = buildDefaultMessage()
   const messageToSend = customMessage && customMessage.trim() ? customMessage.trim() : defaultMessage
 
-  const buildPdfData = (): InvoiceData => {
+  const buildPdfData = async (): Promise<InvoiceData> => {
     const inv = invoice!
-    const itemsForPdf = inv.items.map(i => {
+    const itemRows = await db().invoiceItems.where("invoiceId").equals(inv.id).toArray()
+    const productIds = itemRows.map(r => r.productId).filter((p): p is string => Boolean(p))
+    const productUnits = new Map<string, string | undefined>()
+    if (productIds.length) {
+      const prods = await db().products.bulkGet(productIds)
+      prods.forEach(p => { if (p && p.unit) productUnits.set(p.id, p.unit) })
+    }
+    const itemsForPdf = inv.items.map((i, idx) => {
       const lineTotal = i.price * i.qty
       const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal
-      return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gstRate, taxable }
+      const row = itemRows[idx]
+      return { name: i.name, hsn: i.hsn, qty: i.qty, price: i.price, gstRate: i.gstRate, taxable, unit: row?.productId ? productUnits.get(row.productId) : undefined }
     })
     const subtotal = itemsForPdf.reduce((s, i) => s + i.taxable, 0)
     return {
       invoiceNumber: inv.invoiceNumber || inv.id,
       date: new Date(inv.createdAt).toLocaleDateString('en-IN'),
+      createdAtIso: inv.createdAt,
       customerName: inv.customerName,
       customerPhone: inv.customerPhone || undefined,
       items: itemsForPdf,
       subtotal,
       tax: inv.total - subtotal,
       total: inv.total,
+      amountReceived: inv.paidAmount,
       businessName: tenantData?.name || getCookie('bz_tenant_name') || 'My Shop',
       businessPhone: tenantData?.phone,
       businessEmail: tenantData?.email,
@@ -335,17 +345,19 @@ export default function InvoiceSendPage() {
       upiId: tenantData?.upiId,
       whiteLabel: tenantData?.whiteLabel,
       placeOfSupply: tenantData?.gstin ? tenantData.gstin.slice(0, 2) : undefined,
+      paymentTerms: tenantData?.paymentTerms || undefined,
+      invoiceFooter: tenantData?.invoiceFooter || undefined,
       documentType: inv.documentType || 'tax_invoice',
     }
   }
 
   const downloadPdf = async () => {
-    const pdfData = buildPdfData()
+    const pdfData = await buildPdfData()
     await downloadInvoicePDF(pdfData)
   }
 
   const printPdf = async () => {
-    const pdfData = buildPdfData()
+    const pdfData = await buildPdfData()
     await printInvoicePDF(pdfData)
   }
 
@@ -1471,7 +1483,7 @@ export default function InvoiceSendPage() {
               <button
                 onClick={async () => {
                   setShowNoPhoneSheet(false)
-                  const pdfData = buildPdfData()
+                  const pdfData = await buildPdfData()
                   const doc = await generateInvoicePDF(pdfData)
                   const blob = (doc as any).output('blob')
                   const url = URL.createObjectURL(blob)
