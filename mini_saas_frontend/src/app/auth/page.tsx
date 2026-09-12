@@ -3,7 +3,25 @@
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, Lock, ArrowRight } from "lucide-react"
+import { Loader2, Mail, IndianRupee, Zap, Clock, Users, TrendingUp, Lock, ArrowRight, ExternalLink } from "lucide-react"
+
+// ── Email provider → inbox URL, so "Open Email" jumps to the right mailbox ──
+function inboxUrlFor(email: string): string {
+  const domain = (email.split("@")[1] || "").trim().toLowerCase()
+  const providers: Array<[string[], string]> = [
+    [["gmail.com", "googlemail.com"], "https://mail.google.com/mail/u/0/#inbox"],
+    [["yahoo.com", "yahoo.in", "ymail.com"], "https://mail.yahoo.com"],
+    [["outlook.com", "hotmail.com", "live.com", "msn.com"], "https://outlook.live.com/mail/"],
+    [["icloud.com", "me.com"], "https://www.icloud.com/mail/"],
+    [["protonmail.com", "proton.me"], "https://mail.proton.me"],
+    [["zoho.com", "zoho.in"], "https://mail.zoho.com"],
+    [["fastmail.com", "fastmail.fm"], "https://app.fastmail.com"],
+  ]
+  const provider = providers.find(([domains]) => domains.includes(domain))
+  if (provider) return provider[1]
+  // Fallback: Gmail owns the largest share — still gives one-click access.
+  return "https://mail.google.com/mail/u/0/#inbox"
+}
 
 // ── Fonts ──
 // Fraunces: a warm, editorial display serif — carries the "ledger / paper" personality.
@@ -139,6 +157,16 @@ function MagicLinkForm() {
               <p className="text-[11px] text-info/60 font-body mt-1">Sent to {email}</p>
             </div>
           </div>
+          <a
+            href={inboxUrlFor(email)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group w-full py-3 bg-info hover:bg-info text-white rounded-sm text-sm font-body font-semibold flex items-center justify-center gap-2 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_14px_rgba(37,99,235,0.28)]"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open Email
+            <ArrowRight className="h-3.5 w-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+          </a>
           <button
             onClick={() => { setSent(false); setEmail("") }}
             className="w-full py-2.5 border border-border text-muted-foreground rounded-sm text-sm font-body font-medium hover:bg-muted hover:text-foreground transition-colors"
