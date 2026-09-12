@@ -145,17 +145,17 @@ async function main() {
     await sql.begin(async (tx) => {
       await tx`
         INSERT INTO recovery_cases (
-          id, tenant_id, customer_id, status,
+          id, tenant_id, customer_id,
           recovery_state_v2, engagement_state_v2, next_action_type, attention_score,
           version, invoice_count, open_invoice_count, overdue_invoice_count,
           disputed_invoice_count, promised_invoice_count,
           total_outstanding, total_overdue,
           last_activity_at, updated_at
         ) VALUES (
-          ${caseId}, ${tenantId}, ${customerId}, ${state},
-          ${sql.unsafe(`'${state}'::recovery_state_v2`)},
-          ${sql.unsafe(`'${engagement}'::engagement_state_v2`)},
-          ${sql.unsafe(`'${nextAction}'::recovery_next_action`)},
+          ${caseId}, ${tenantId}, ${customerId},
+          ${state},
+          ${engagement},
+          ${nextAction},
           ${attentionScore},
           1, ${invoices.length}, ${openCount}, ${overdueCount},
           ${disputedCount}, 0,
@@ -178,17 +178,20 @@ async function main() {
           updated_at = EXCLUDED.updated_at
       `
 
-      // Insert backfill event
+      // Insert backfill event — payload JSONB shape, matching production schema
       await tx`
         INSERT INTO recovery_case_events (
-          case_id, event_type, to_recovery_state, to_engagement_state,
-          reason, trigger
+          case_id, event_type, payload
         ) VALUES (
           ${caseId}, 'backfill',
-          ${sql.unsafe(`'${state}'::recovery_state_v2`)},
-          ${sql.unsafe(`'${engagement}'::engagement_state_v2`)},
-          ${`Backfill: ${invoices.length} invoice(s), ₹${totalOutstanding} outstanding, state=${state}, customers: ${customerNames}`},
-          ${sql.json({ invoiceCount: invoices.length, totalOutstanding })}
+          ${sql.json({
+            from_recovery_state: null,
+            to_recovery_state: state,
+            from_engagement_state: null,
+            to_engagement_state: engagement,
+            reason: `Backfill: ${invoices.length} invoice(s), ₹${totalOutstanding} outstanding, state=${state}, customers: ${customerNames}`,
+            trigger: { invoiceCount: invoices.length, totalOutstanding },
+          })}
         )
       `
     })

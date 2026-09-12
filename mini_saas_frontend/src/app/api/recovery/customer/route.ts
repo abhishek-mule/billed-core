@@ -5,7 +5,6 @@ import { verifyRequest } from '@/lib/billzo/api-middleware'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { estimateRecoverable } from '@/lib/billzo/recovery-read-model'
 import { buildRecoveryDecision } from '@/lib/billzo/recovery-decision'
-import { computeAutomationState } from '@/lib/billzo/recovery-evaluation'
 
 function arr_push(map: Map<string, any[]>, key: string, value: any) {
   const arr = map.get(key) || []
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest) {
     // Invoices (open / unpaid first) — single source of truth for amounts
     const { data: invoices } = await supabaseAdmin
       .from('invoices')
-      .select('id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, created_at, customer_name, recovery_stage, next_recovery_at, last_whatsapp_at')
+      .select('id, invoice_number, total, grand_total, paid_amount, outstanding_amount, status, due_date, created_at, customer_name')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false })
@@ -62,7 +61,7 @@ export async function GET(request: NextRequest) {
     // Collection actions (full plan)
     const { data: actions } = await supabaseAdmin
       .from('collection_actions')
-      .select('id, action_type, channel, template_name, status, scheduled_at, completed_at, trigger_type, invoice_ids, reason')
+      .select('id, action_type, channel, template_name, status, scheduled_at, completed_at, trigger_type, invoice_ids')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('scheduled_at', { ascending: true })
@@ -94,7 +93,7 @@ export async function GET(request: NextRequest) {
     // Promise history (payment_promises table if present)
     const { data: promises } = await supabaseAdmin
       .from('payment_promises')
-      .select('id, promise_date, promise_amount, status, created_at, note')
+      .select('id, promise_date, amount, status, created_at, notes')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false })
@@ -209,24 +208,6 @@ export async function GET(request: NextRequest) {
       : 0
     const promiseDate = rc?.promise_to_pay_date ?? null
 
-    // Worker's persisted automation lifecycle — what BillZo will do next,
-    // when, and what stops it (read-only projection; never a prediction).
-    const activePromiseForAutomation =
-      (promises || []).find((p: any) => p.status === 'active')?.promise_date ?? null
-    const automation = computeAutomationState({
-      custInvoices: invoices || [],
-      custActions: (actions || []).map((a: any) => ({
-        id: a.id,
-        action_type: a.action_type,
-        status: a.status,
-        scheduled_at: a.scheduled_at,
-        reason: a.reason || null,
-      })),
-      activePromiseDate: activePromiseForAutomation,
-      latestInbound: null,
-      outstanding,
-    })
-
     // Same estimate the dashboard uses — keeps per-customer "Expected today"
     // reconcilable with the aggregate "Today's Recovery Target".
     const { recoverableAmount, recoveryConfidence } = estimateRecoverable(
@@ -289,10 +270,10 @@ export async function GET(request: NextRequest) {
       promises: (promises || []).map((p: any) => ({
         id: p.id,
         promiseDate: p.promise_date,
-        amount: Number(p.promise_amount || 0),
+        amount: Number(p.amount || 0),
         status: p.status,
         createdAt: p.created_at,
-        note: p.note,
+        note: p.notes,
       })),
       communication: comm.map((c) => ({
         at: c.at,
@@ -302,7 +283,6 @@ export async function GET(request: NextRequest) {
         actionId: c.actionId,
       })),
       decision,
-      automation,
     })
   } catch (err: any) {
     console.error('[CustomerWorkspace] failed', err)

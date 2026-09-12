@@ -4,6 +4,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "start": "pnpm --filter billzo-worker start",
+    "gateway": "pnpm --filter billzo-worker gateway",
     "build:shared": "pnpm --filter @billzo/shared build",
     "build:worker": "pnpm --filter billzo-worker build",
     "build:frontend": "pnpm --filter mini_saas_frontend build",

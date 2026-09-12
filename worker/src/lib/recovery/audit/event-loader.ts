@@ -17,13 +17,12 @@ export async function loadInvoiceEvents(
     .select(`
       id,
       event_type,
-      trigger,
-      reason,
-      occurred_at,
-      case_id
+      payload,
+      case_id,
+      created_at
     `)
-    .eq('trigger->>invoiceId', invoiceId)
-    .order('occurred_at', { ascending: true });
+    .eq('payload->trigger->>invoiceId', invoiceId)
+    .order('created_at', { ascending: true });
     
   const { data: cases } = await supabaseAdmin
     .from('recovery_cases')
@@ -59,12 +58,13 @@ export async function loadInvoiceEvents(
 
   // Add case events first (they're the source of truth for state transitions)
   for (const e of caseEvents || []) {
-    const trigger = e.trigger as Record<string, unknown> || {};
+    const payload = (e.payload as Record<string, unknown>) || {};
+    const trigger = (payload.trigger as Record<string, unknown>) || {};
     const caseInfo = caseMap.get(e.case_id) || { tenant_id: tenantId, customer_id: '' };
     eventsMap.set(e.id, {
       type: e.event_type,
       id: e.id,
-      occurredAt: e.occurred_at,
+      occurredAt: e.created_at,
       invoiceId,
       customerId: caseInfo.customer_id,
       tenantId: caseInfo.tenant_id,
@@ -74,7 +74,7 @@ export async function loadInvoiceEvents(
       adjustmentType: trigger.adjustmentType !== undefined ? (trigger.adjustmentType as 'credit' | 'debit') : undefined,
       adjustmentAmount: trigger.adjustmentAmount !== undefined ? (trigger.adjustmentAmount as number) : undefined,
       reversalAmount: trigger.reversalAmount !== undefined ? (trigger.reversalAmount as number) : undefined,
-      rawPayload: trigger,
+      rawPayload: payload,
     });
   }
 

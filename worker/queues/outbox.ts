@@ -1,4 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
+import postgres from 'postgres'
 import { getRedis, createRedisConnection } from '../lib/redis'
 import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
@@ -14,19 +15,36 @@ import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelt
 import { EventType, generateEventSequence } from '@billzo/shared'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 // import { enqueueCognitionJob } from './cognition' // HALTED: Track 3
-import { tryHandleRecoveryCaseStateMachine } from '../src/lib/recovery/case-machine-handler'
+import { transitionCase, canHandleEvent } from '../src/lib/recovery/case-machine'
+import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
+import { buildTransitionEventRow, buildNoopEventRow, buildCaseUpsertRow } from '../src/lib/recovery/state-machine-writer'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import { ShadowProjection, initializeShadowProjection } from '../src/lib/recovery/shadow-projection'
 import { planRecoveryActions, computeTriggerType } from '../src/lib/recovery/recovery-planner'
 import type { PolicyStep } from '../src/lib/recovery/recovery-planner'
 import { attributabilityOf } from '../src/lib/recovery/attribution-truth'
-import { recordPromiseKeepIfHonored } from '../src/lib/recovery/promise-outcome-ledger'
+import { recordPromiseKeepIfHonored, recordBrokenPromisesLedger } from '../src/lib/recovery/promise-outcome-ledger'
 import { recordCallOutcome } from '../src/lib/recovery/call-outcome-ledger'
 import { recordPaymentOutcome } from '../src/lib/recovery/payment-outcome-ledger'
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
+
+// Recovery state-machine persistence uses postgres.js directly so the case upsert,
+// decision-log insert, and idempotency consumption are ATOMIC (single transaction).
+let _recoverySql: ReturnType<typeof postgres> | null = null
+
+function getRecoveryPostgres(): ReturnType<typeof postgres> | null {
+  const url = process.env.DATABASE_URL || process.env.AUTHORITY_DATABASE_URL
+  if (!url) return null
+  if (!_recoverySql) _recoverySql = postgres(url, { max: 1 })
+  return _recoverySql
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string })?.code === '23505'
+}
 
 // Phase 0 probe: per-entity last-seen sequence number for out-of-order detection
 const lastEntitySequence = new Map<string, number>()
@@ -444,8 +462,300 @@ async function tryHandleBaileysLifecycle(event: any): Promise<void> {
 // ============================================================
 // RECOVERY CASE STATE MACHINE — Canonical collection position
 // ============================================================
-// Extracted to ../src/lib/recovery/case-machine-handler (movable,
-// testable) with claim-first idempotency (B-05 race fix).
+// Drives the RecoveryCase truth spine from domain events.
+// Runs AFTER behavioral materialization (engagement computed)
+// but BEFORE cognition (pipeline reads fresh RecoveryCase state).
+//
+// Idempotency: every source event is tracked in
+// recovery_case_event_consumptions. Duplicate events are silently
+// skipped.
+
+async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
+  console.log('[StateMachine] Ingesting event:', event.type, event.entityId);
+  if (!canHandleEvent(event.type)) {
+    console.log('[StateMachine] Event type ignored:', event.type);
+    return;
+  }
+
+  const tenantId = event.tenantId
+  if (!tenantId) return
+
+  // Resolve customer_id: events MUST carry it in payload (E1: Event Sovereignty)
+  let customerId: string | undefined = event.payload?.customerId
+  if (!customerId) {
+    console.warn('[StateMachine] Event without customerId in payload — falling back to invoice lookup', { type: event.type, entityId: event.entityId, tenantId })
+    spineDiagnostics.missingCustomerId(event.type)
+    const invoiceId = event.entityId
+    if (!invoiceId) return
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('customer_id')
+      .eq('id', invoiceId)
+      .maybeSingle()
+    customerId = invoice?.customer_id
+  }
+  if (!customerId) return
+
+  // 2. Read current RecoveryCase for this (tenant, customer)
+  const { data: existing } = await supabaseAdmin
+    .from('recovery_cases')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', customerId)
+    .limit(1)
+    .single()
+
+  const current: CurrentCase | null = existing
+    ? {
+        id: existing.id,
+        tenantId: existing.tenant_id,
+        customerId: existing.customer_id,
+        invoiceCount: existing.invoice_count || 0,
+        openInvoiceCount: existing.open_invoice_count || 0,
+        overdueInvoiceCount: existing.overdue_invoice_count || 0,
+        disputedInvoiceCount: existing.disputed_invoice_count || 0,
+        promisedInvoiceCount: existing.promised_invoice_count || 0,
+        totalOutstanding: existing.total_outstanding || 0,
+        totalOverdue: existing.total_overdue || 0,
+        recoveryState: existing.recovery_state_v2 || 'active',
+        engagementState: existing.engagement_state_v2 || 'unseen',
+        nextActionType: existing.next_action_type || null,
+        nextActionDueAt: existing.next_action_due_at || null,
+        lastActivityAt: existing.last_activity_at || null,
+        promiseToPayDate: existing.promise_to_pay_date || null,
+        attentionScore: existing.attention_score || 0,
+        version: existing.version || 1,
+      }
+    : null
+
+  // 3. Check idempotency — each source event must produce exactly ONE decision-log row.
+  //    Hard-enforced by uq_recovery_case_events_source (unique partial on source_event_id).
+  const { data: existingEvent } = await supabaseAdmin
+    .from('recovery_case_events')
+    .select('id')
+    .eq('source_event_id', event.id)
+    .maybeSingle()
+  if (existingEvent) return // already processed
+
+  // 3b. Mark payment as processed when worker begins handling it
+  if (event.type === 'payment.completed' && event.payload?.paymentId) {
+    await supabaseAdmin
+      .from('payments')
+      .update({ lifecycle_status: 'processed', updated_at: new Date().toISOString() })
+      .eq('id', event.payload.paymentId)
+      .then(() => {}, () => {})
+  }
+
+  // 4. Build signal event for the state machine
+  const invoiceId = event.entityId || null
+  const signal: SignalEvent = {
+    type: event.type,
+    id: event.id,
+    tenantId,
+    customerId,
+    invoiceId,
+    amount: event.payload?.amount || event.payload?.total || null,
+    invoiceStatus: event.payload?.status || null,
+    dueDate: event.payload?.due_date || null,
+    reminderStage: event.payload?.reminderStage || event.payload?.stage || null,
+    deliveryStatus: event.payload?.deliveryStatus || event.payload?.status || null,
+    failureCount: event.payload?.failureCount || event.payload?.consecutive_failures || null,
+    merchantAction: event.payload?.merchantAction || event.payload?.reason || null,
+    snoozeDuration: event.payload?.snoozeDuration || null,
+    occurredAt: event.created_at || new Date().toISOString(),
+  }
+
+  // 5. Compute transition
+  // Phase 0 probe: detect non-deterministic states (handleMerchantSnoozed uses Date.now())
+  if (event.type === 'merchant.snoozed') {
+    spineDiagnostics.dateNowInDomain('case-machine:handleMerchantSnoozed')
+    spineDiagnostics.nonDeterministicUuid('case-machine:handleMerchantSnoozed')
+  }
+  const result = transitionCase(current, signal)
+  console.log('[StateMachine] Transition result:', { 
+    type: signal.type, 
+    resultExists: !!result, 
+    recoveryState: result?.recoveryState 
+  });
+  
+  const now = new Date().toISOString()
+  const sql = getRecoveryPostgres()
+  if (!sql) {
+    logger.error({ tenantId, eventId: event.id }, 'No DATABASE_URL — cannot persist recovery state machine outcome')
+    return
+  }
+
+  if (!result) {
+    // No-op transition (e.g., first/second reminder failure).
+    // Still record consumption + a no-op log row if there's a case, so re-processing
+    // is prevented AND the consumption FK (event_id → recovery_case_events.id) holds.
+    const currentId = current?.id
+    if (currentId) {
+      const logRowInput = buildNoopEventRow(current, { id: event.id, type: event.type })
+      try {
+        await sql.begin(async (tx) => {
+          const [logRow] = await tx`
+            INSERT INTO recovery_case_events (
+              case_id, event_type, payload, source_event_id, created_at
+            ) VALUES (
+              ${logRowInput.caseId},
+              ${logRowInput.eventType},
+              ${tx.json(logRowInput.payload as any)},
+              ${event.id},
+              ${now}
+            )
+            RETURNING id
+          `
+          await tx`
+            INSERT INTO recovery_case_event_consumptions (event_id, case_id, created_at)
+            VALUES (${logRow.id}, ${currentId}, ${now})
+          `
+        })
+      } catch (err: any) {
+        if (isUniqueViolation(err)) {
+          console.log('[StateMachine] Already consumed source event (no-op):', event.type, event.id)
+          return
+        }
+        logger.error({ tenantId, eventId: event.id, err: err?.message }, 'Failed to record no-op recovery event (rolled back)')
+      }
+    }
+    return
+  }
+
+  // 6. Upsert case row with new state
+  const caseId = current?.id || crypto.randomUUID()
+
+  console.log('[StateMachine] Upserting case:', caseId, 'to state:', result.recoveryState || current?.recoveryState);
+
+  try {
+    await sql.begin(async (tx) => {
+      // Upsert case row with new state (same columns/values the projection previously wrote)
+      const caseRow = buildCaseUpsertRow(result, current, caseId, tenantId, customerId, now)
+      await tx`
+        INSERT INTO recovery_cases (
+          id, tenant_id, customer_id,
+          recovery_state_v2, engagement_state_v2, next_action_type, next_action_due_at,
+          attention_score, version, promise_to_pay_date,
+          total_outstanding, total_overdue, open_invoice_count, overdue_invoice_count,
+          disputed_invoice_count, promised_invoice_count, invoice_count,
+          last_activity_at, updated_at
+        ) VALUES (
+          ${caseRow.id}, ${caseRow.tenant_id}, ${caseRow.customer_id},
+          ${caseRow.recovery_state_v2},
+          ${caseRow.engagement_state_v2},
+          ${caseRow.next_action_type},
+          ${caseRow.next_action_due_at},
+          ${caseRow.attention_score},
+          ${caseRow.version},
+          ${caseRow.promise_to_pay_date},
+          ${caseRow.total_outstanding},
+          ${caseRow.total_overdue},
+          ${caseRow.open_invoice_count},
+          ${caseRow.overdue_invoice_count},
+          ${caseRow.disputed_invoice_count},
+          ${caseRow.promised_invoice_count},
+          ${caseRow.invoice_count},
+          ${caseRow.last_activity_at},
+          ${caseRow.updated_at}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          tenant_id = EXCLUDED.tenant_id,
+          customer_id = EXCLUDED.customer_id,
+          recovery_state_v2 = EXCLUDED.recovery_state_v2,
+          engagement_state_v2 = EXCLUDED.engagement_state_v2,
+          next_action_type = EXCLUDED.next_action_type,
+          next_action_due_at = EXCLUDED.next_action_due_at,
+          attention_score = EXCLUDED.attention_score,
+          version = EXCLUDED.version,
+          promise_to_pay_date = EXCLUDED.promise_to_pay_date,
+          total_outstanding = EXCLUDED.total_outstanding,
+          total_overdue = EXCLUDED.total_overdue,
+          open_invoice_count = EXCLUDED.open_invoice_count,
+          overdue_invoice_count = EXCLUDED.overdue_invoice_count,
+          disputed_invoice_count = EXCLUDED.disputed_invoice_count,
+          promised_invoice_count = EXCLUDED.promised_invoice_count,
+          invoice_count = EXCLUDED.invoice_count,
+          last_activity_at = EXCLUDED.last_activity_at,
+          updated_at = EXCLUDED.updated_at
+      `
+
+      // 7. Insert recovery_case_event (append-only decision log)
+      const eventRow = buildTransitionEventRow(result, caseId)
+      const [logRow] = await tx`
+        INSERT INTO recovery_case_events (
+          case_id, event_type, payload, source_event_id, created_at
+        ) VALUES (
+          ${eventRow.caseId},
+          ${eventRow.eventType},
+          ${tx.json(eventRow.payload as any)},
+          ${event.id},
+          ${now}
+        )
+        RETURNING id
+      `
+
+      // 8. Record idempotency — consumption links the decision-log row, not the source event
+      await tx`
+        INSERT INTO recovery_case_event_consumptions (event_id, case_id, created_at)
+        VALUES (${logRow.id}, ${caseId}, ${now})
+      `
+    })
+  } catch (err: any) {
+    if (isUniqueViolation(err)) {
+      console.log('[StateMachine] Already consumed source event:', event.type, event.id)
+      return
+    }
+    logger.error({ tenantId, caseId, err: err?.message }, 'Failed to persist recovery case transition (rolled back)')
+    return
+  }
+  console.log('[StateMachine] Upsert + event + consumption committed for case:', caseId)
+
+  // 6b. Mark payment as projected when recovery case is updated
+  if (event.type === 'payment.completed' && event.payload?.paymentId) {
+    await supabaseAdmin
+      .from('payments')
+      .update({ lifecycle_status: 'projected', updated_at: new Date().toISOString() })
+      .eq('id', event.payload.paymentId)
+      .then(() => {}, () => {})
+  }
+
+  // 9. Write to payment_promises table for decision engine visibility
+  if (event.type === 'promise.made' && result.promiseToPayDate) {
+    // The attempt that prompted this promise, when the origin is known
+    // explicitly. Missing => untracked, never guessed from timestamps.
+    const triggeredByActionId = event.payload?.actionId || event.payload?.triggeredByActionId || null
+    await supabaseAdmin
+      .from('payment_promises')
+      .upsert({
+        tenant_id: tenantId,
+        customer_id: customerId,
+        invoice_id: event.payload?.invoiceId || invoiceId,
+        promise_date: result.promiseToPayDate,
+        amount: signal.amount || 0,
+        status: 'active',
+        notes: event.payload?.notes || null,
+        triggered_by_action_id: triggeredByActionId,
+      }, { onConflict: undefined, ignoreDuplicates: false })
+      .then(() => {}, () => {})
+  }
+  if (event.type === 'promise.broken') {
+    // Record promise_broken outcomes against the causal spine for every active
+    // promise (attempt unknown => UNKNOWN attribution, never timestamp-guessed).
+    await recordBrokenPromisesLedger({
+      tenantId,
+      customerId,
+      occurredAt: new Date().toISOString(),
+    })
+
+    await supabaseAdmin
+      .from('payment_promises')
+      .update({ status: 'broken' })
+      .eq('customer_id', customerId)
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+      .then(() => {}, () => {})
+  }
+}
 
 // ============================================================
 // SHADOW PROJECTION — Parallel financial truth verification
