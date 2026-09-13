@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { getAuthPayloadFromRequest } from './auth-jwt'
+import { getTokenFromRequest, getTenantFromRequest, resolveTenantIdentity } from './auth-jwt'
 import { buildTenantContext, resolveTenantForUser, type TenantContext } from './tenant-context'
 
 export interface VerifiedRequest extends NextRequest {
@@ -50,9 +50,14 @@ export async function verifyRequest(
   options?: { resolveContext?: boolean },
 ): Promise<VerifyResult> {
   try {
-    // Verify JWT from the httpOnly access token cookie
-    const payload = getAuthPayloadFromRequest(request)
-    if (!payload) {
+    // Single resolver: JWT is authoritative, cookie is cross-check + legacy
+    // fallback. Null means ambiguous/missing identity → 401 (no bypass path).
+    const identity = resolveTenantIdentity({
+      accessToken: getTokenFromRequest(request),
+      tenantCookie: getTenantFromRequest(request),
+      requireAccessToken: true,
+    })
+    if (!identity) {
       return {
         response: NextResponse.json(
           { error: 'Unauthorized: Invalid or expired session' },
@@ -61,19 +66,7 @@ export async function verifyRequest(
       }
     }
 
-    // Cross-check: ensure JWT tenantId matches the non-httpOnly cookie if both are set
-    const cookieTenantId = request.cookies.get('bz_tenant')?.value
-    if (payload.tenantId && cookieTenantId && payload.tenantId !== cookieTenantId) {
-      return {
-        response: NextResponse.json(
-          { error: 'Unauthorized: Tenant mismatch' },
-          { status: 401 }
-        ),
-      }
-    }
-
-    const tenantId = payload.tenantId || cookieTenantId || undefined
-    const userId = payload.userId
+    const { tenantId, userId } = identity
 
     // Resolve full TenantContext only when the route asks for it.
     if (options?.resolveContext && tenantId && userId) {

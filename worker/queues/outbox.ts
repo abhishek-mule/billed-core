@@ -1,4 +1,5 @@
 import { Worker, Job, Queue } from 'bullmq'
+import postgres from 'postgres'
 import { getRedis, createRedisConnection } from '../lib/redis'
 import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
@@ -10,12 +11,14 @@ import { sendPushNotification } from '../src/lib/billzo/notifications'
 import { TRANSPORT_PRECEDENCE } from '../src/lib/billzo/engagement'
 import { interpretProjectionDelta } from '../src/lib/billzo/observation-interpreter'
 import { materializeObservation } from '../src/lib/billzo/behavioral-materializer'
-import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta } from '@billzo/shared'
+import type { ProjectionTransportState, ProjectionDeliveryHealth, ProjectionDelta, RecoveryCaseTransition } from '@billzo/shared'
 import { EventType, generateEventSequence } from '@billzo/shared'
+import { emitNotification } from '../src/lib/billzo/notification-writer'
 import { tryHandleSendMessageIntent } from '../src/lib/billzo/send-message-handler'
 // import { enqueueCognitionJob } from './cognition' // HALTED: Track 3
 import { transitionCase, canHandleEvent } from '../src/lib/recovery/case-machine'
 import type { CurrentCase, SignalEvent } from '../src/lib/recovery/case-machine'
+import { buildTransitionEventRow, buildNoopEventRow, buildCaseUpsertRow } from '../src/lib/recovery/state-machine-writer'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { spineDiagnostics } from '../src/lib/spine-diagnostics'
 import { ShadowProjection, initializeShadowProjection } from '../src/lib/recovery/shadow-projection'
@@ -28,6 +31,21 @@ import { recordPaymentOutcome } from '../src/lib/recovery/payment-outcome-ledger
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
 const logger = createQueueLogger('outbox')
+
+// Recovery state-machine persistence uses postgres.js directly so the case upsert,
+// decision-log insert, and idempotency consumption are ATOMIC (single transaction).
+let _recoverySql: ReturnType<typeof postgres> | null = null
+
+function getRecoveryPostgres(): ReturnType<typeof postgres> | null {
+  const url = process.env.DATABASE_URL || process.env.AUTHORITY_DATABASE_URL
+  if (!url) return null
+  if (!_recoverySql) _recoverySql = postgres(url, { max: 1 })
+  return _recoverySql
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string })?.code === '23505'
+}
 
 // Phase 0 probe: per-entity last-seen sequence number for out-of-order detection
 const lastEntitySequence = new Map<string, number>()
@@ -431,6 +449,126 @@ async function tryHandleNotifications(event: any): Promise<void> {
 }
 
 // ============================================================
+// NOTIFICATION EMISSION — recovery + payment signals (Phase 2)
+// ============================================================
+// Signals are EVENT-keyed (dedupeKeyForEvent) so exactly-once is guaranteed
+// by UNIQUE(tenant_id, dedupe_key) in migration 095 — never by queue timing.
+// emitNotification() writes the record BEFORE attempting push (the center is
+// the source of truth; push failure can never delete or roll back a record).
+
+const ATTENTION_ACTION_TYPES = new Set(['send_reminder', 'follow_up_call', 'merchant_review', 'review_payment'])
+const AUTOMATION_ACTIVE_TYPES = new Set(['send_reminder', 'follow_up_call', 'review_payment'])
+
+async function getCustomerName(tenantId: string, customerId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('customers')
+    .select('name')
+    .eq('id', customerId)
+    .maybeSingle()
+  return (data as { name?: string } | null)?.name ?? null
+}
+
+// Payment lane: the generic "money in" fact. Only fires on payment.completed
+// (payment.reconciled would emit a second record for the same physical payment).
+async function emitPaymentReceivedNotification(event: any): Promise<void> {
+  if (event.type !== 'payment.completed') return
+  const tenantId = event.tenantId
+  const invoiceId = event.entityId
+  if (!tenantId || !invoiceId) return
+
+  try {
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('id, invoice_number, total, customers!inner(name)')
+      .eq('id', invoiceId)
+      .single()
+    const customerName = (invoice as any)?.customers?.name
+    if (!customerName) return
+
+    await emitNotification({
+      tenantId,
+      type: 'payment.received',
+      data: {
+        customerName,
+        amount: event.payload?.amount || invoice?.total || 0,
+        invoiceNumber: invoice?.invoice_number || undefined,
+        targetId: invoiceId,
+      },
+      eventId: event.id,
+    })
+  } catch (err: any) {
+    logger.error({ tenantId, invoiceId, err: err?.message }, 'Failed to emit payment.received notification')
+  }
+}
+
+// Recovery lane: state-machine facts, emitted AFTER the atomic transition commit.
+// promise_broken      → the promise fact
+// payment.completed   → recovery.payment_received ONLY when an automation was
+//                       actively live on the case (the "automation stopped" fact).
+//                       The generic money-in fact lives in the payment lane, so the
+//                       same underlying event never produces the same cognition twice.
+// attention transition→ recovery.needs_you when the case ENTERS a needs-you action.
+async function emitRecoveryNotifications(
+  event: any,
+  tenantId: string,
+  customerId: string,
+  current: CurrentCase | null,
+  result: RecoveryCaseTransition,
+): Promise<void> {
+  const customerName = (await getCustomerName(tenantId, customerId)) || 'Customer'
+  const overdue = result.financialState?.totalOverdue ?? 0
+
+  try {
+    if (event.type === 'promise.broken') {
+      await emitNotification({
+        tenantId,
+        type: 'recovery.promise_broken',
+        data: { customerName, amount: overdue, targetId: customerId },
+        eventId: event.id,
+      })
+    }
+
+    if (event.type === 'payment.completed') {
+      const wasAutomationActive =
+        !!current &&
+        current.recoveryState !== 'recovered' &&
+        current.engagementState !== 'snoozed' &&
+        !!current.nextActionType &&
+        AUTOMATION_ACTIVE_TYPES.has(current.nextActionType)
+      if (wasAutomationActive) {
+        await emitNotification({
+          tenantId,
+          type: 'recovery.payment_received',
+          data: {
+            customerName,
+            amount: event.payload?.amount || event.payload?.total || 0,
+            targetId: customerId,
+          },
+          eventId: event.id,
+        })
+      }
+    }
+
+    const enteredAttention =
+      !!result.nextActionType &&
+      ATTENTION_ACTION_TYPES.has(result.nextActionType) &&
+      result.nextActionType !== current?.nextActionType &&
+      event.type !== 'promise.broken'
+    if (enteredAttention) {
+      await emitNotification({
+        tenantId,
+        type: 'recovery.needs_you',
+        data: { customerName, amount: overdue, targetId: customerId },
+        eventId: event.id,
+      })
+    }
+  } catch (err: any) {
+    // Notification emission must NEVER break the committed state-machine outcome.
+    logger.error({ tenantId, customerId, eventId: event.id, err: err?.message }, 'Failed to emit recovery notifications')
+  }
+}
+
+// ============================================================
 // 5. BAILEYS LIFECYCLE — Socket management
 // ============================================================
 async function tryHandleBaileysLifecycle(event: any): Promise<void> {
@@ -511,16 +649,14 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
       }
     : null
 
-  // 3. Check idempotency
-  if (current?.id) {
-    const { data: consumed } = await supabaseAdmin
-      .from('recovery_case_event_consumptions')
-      .select('processed_at')
-      .eq('source_event_id', event.id)
-      .eq('case_id', current.id)
-      .single()
-    if (consumed) return // already processed
-  }
+  // 3. Check idempotency — each source event must produce exactly ONE decision-log row.
+  //    Hard-enforced by uq_recovery_case_events_source (unique partial on source_event_id).
+  const { data: existingEvent } = await supabaseAdmin
+    .from('recovery_case_events')
+    .select('id')
+    .eq('source_event_id', event.id)
+    .maybeSingle()
+  if (existingEvent) return // already processed
 
   // 3b. Mark payment as processed when worker begins handling it
   if (event.type === 'payment.completed' && event.payload?.paymentId) {
@@ -563,57 +699,140 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
     recoveryState: result?.recoveryState 
   });
   
+  const now = new Date().toISOString()
+  const sql = getRecoveryPostgres()
+  if (!sql) {
+    logger.error({ tenantId, eventId: event.id }, 'No DATABASE_URL — cannot persist recovery state machine outcome')
+    return
+  }
+
   if (!result) {
-    // No-op transition (e.g., first/second reminder failure)
-    // Still record consumption if there's a case to prevent re-processing
-    if (current?.id) {
-      await supabaseAdmin
-        .from('recovery_case_event_consumptions')
-        .insert({ source_event_id: event.id, case_id: current.id })
-        .then(() => {}, () => {})
+    // No-op transition (e.g., first/second reminder failure).
+    // Still record consumption + a no-op log row if there's a case, so re-processing
+    // is prevented AND the consumption FK (event_id → recovery_case_events.id) holds.
+    const currentId = current?.id
+    if (currentId) {
+      const logRowInput = buildNoopEventRow(current, { id: event.id, type: event.type })
+      try {
+        await sql.begin(async (tx) => {
+          const [logRow] = await tx`
+            INSERT INTO recovery_case_events (
+              case_id, event_type, payload, source_event_id, created_at
+            ) VALUES (
+              ${logRowInput.caseId},
+              ${logRowInput.eventType},
+              ${tx.json(logRowInput.payload as any)},
+              ${event.id},
+              ${now}
+            )
+            RETURNING id
+          `
+          await tx`
+            INSERT INTO recovery_case_event_consumptions (event_id, case_id, created_at)
+            VALUES (${logRow.id}, ${currentId}, ${now})
+          `
+        })
+      } catch (err: any) {
+        if (isUniqueViolation(err)) {
+          console.log('[StateMachine] Already consumed source event (no-op):', event.type, event.id)
+          return
+        }
+        logger.error({ tenantId, eventId: event.id, err: err?.message }, 'Failed to record no-op recovery event (rolled back)')
+      }
     }
     return
   }
 
   // 6. Upsert case row with new state
   const caseId = current?.id || crypto.randomUUID()
-  const now = new Date().toISOString()
-  
+
   console.log('[StateMachine] Upserting case:', caseId, 'to state:', result.recoveryState || current?.recoveryState);
 
-  const { error: upsertError } = await supabaseAdmin
-    .from('recovery_cases')
-    .upsert({
-      id: caseId,
-      tenant_id: tenantId,
-      customer_id: customerId,
-      // v2 state columns
-      recovery_state_v2: result.recoveryState || current?.recoveryState || 'active',
-      engagement_state_v2: result.engagementState || current?.engagementState || 'unseen',
-      next_action_type: result.nextActionType || null,
-      next_action_due_at: result.nextActionDueAt || null,
-      attention_score: result.attentionScore ?? current?.attentionScore ?? 0,
-      version: result.version,
-      promise_to_pay_date: result.promiseToPayDate ?? null,
-      // Financial state from state machine (single source of truth)
-      total_outstanding: result.financialState.totalOutstanding,
-      total_overdue: result.financialState.totalOverdue,
-      open_invoice_count: result.financialState.openInvoiceCount,
-      overdue_invoice_count: result.financialState.overdueInvoiceCount,
-      disputed_invoice_count: result.financialState.disputedInvoiceCount,
-      promised_invoice_count: result.financialState.promisedInvoiceCount,
-      invoice_count: result.financialState.invoiceCount,
-      // Activity
-      last_activity_at: now,
-      updated_at: now,
-    }, { onConflict: 'id' })
+  try {
+    await sql.begin(async (tx) => {
+      // Upsert case row with new state (same columns/values the projection previously wrote)
+      const caseRow = buildCaseUpsertRow(result, current, caseId, tenantId, customerId, now)
+      await tx`
+        INSERT INTO recovery_cases (
+          id, tenant_id, customer_id,
+          recovery_state_v2, engagement_state_v2, next_action_type, next_action_due_at,
+          attention_score, version, promise_to_pay_date,
+          total_outstanding, total_overdue, open_invoice_count, overdue_invoice_count,
+          disputed_invoice_count, promised_invoice_count, invoice_count,
+          last_activity_at, updated_at
+        ) VALUES (
+          ${caseRow.id}, ${caseRow.tenant_id}, ${caseRow.customer_id},
+          ${caseRow.recovery_state_v2},
+          ${caseRow.engagement_state_v2},
+          ${caseRow.next_action_type},
+          ${caseRow.next_action_due_at},
+          ${caseRow.attention_score},
+          ${caseRow.version},
+          ${caseRow.promise_to_pay_date},
+          ${caseRow.total_outstanding},
+          ${caseRow.total_overdue},
+          ${caseRow.open_invoice_count},
+          ${caseRow.overdue_invoice_count},
+          ${caseRow.disputed_invoice_count},
+          ${caseRow.promised_invoice_count},
+          ${caseRow.invoice_count},
+          ${caseRow.last_activity_at},
+          ${caseRow.updated_at}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          tenant_id = EXCLUDED.tenant_id,
+          customer_id = EXCLUDED.customer_id,
+          recovery_state_v2 = EXCLUDED.recovery_state_v2,
+          engagement_state_v2 = EXCLUDED.engagement_state_v2,
+          next_action_type = EXCLUDED.next_action_type,
+          next_action_due_at = EXCLUDED.next_action_due_at,
+          attention_score = EXCLUDED.attention_score,
+          version = EXCLUDED.version,
+          promise_to_pay_date = EXCLUDED.promise_to_pay_date,
+          total_outstanding = EXCLUDED.total_outstanding,
+          total_overdue = EXCLUDED.total_overdue,
+          open_invoice_count = EXCLUDED.open_invoice_count,
+          overdue_invoice_count = EXCLUDED.overdue_invoice_count,
+          disputed_invoice_count = EXCLUDED.disputed_invoice_count,
+          promised_invoice_count = EXCLUDED.promised_invoice_count,
+          invoice_count = EXCLUDED.invoice_count,
+          last_activity_at = EXCLUDED.last_activity_at,
+          updated_at = EXCLUDED.updated_at
+      `
 
-  if (upsertError) {
-    logger.error({ tenantId, caseId, err: upsertError.message }, 'Failed to upsert recovery case')
+      // 7. Insert recovery_case_event (append-only decision log)
+      const eventRow = buildTransitionEventRow(result, caseId)
+      const [logRow] = await tx`
+        INSERT INTO recovery_case_events (
+          case_id, event_type, payload, source_event_id, created_at
+        ) VALUES (
+          ${eventRow.caseId},
+          ${eventRow.eventType},
+          ${tx.json(eventRow.payload as any)},
+          ${event.id},
+          ${now}
+        )
+        RETURNING id
+      `
+
+      // 8. Record idempotency — consumption links the decision-log row, not the source event
+      await tx`
+        INSERT INTO recovery_case_event_consumptions (event_id, case_id, created_at)
+        VALUES (${logRow.id}, ${caseId}, ${now})
+      `
+    })
+  } catch (err: any) {
+    if (isUniqueViolation(err)) {
+      console.log('[StateMachine] Already consumed source event:', event.type, event.id)
+      return
+    }
+    logger.error({ tenantId, caseId, err: err?.message }, 'Failed to persist recovery case transition (rolled back)')
     return
-  } else {
-    console.log('[StateMachine] Upsert successful for case:', caseId);
   }
+  console.log('[StateMachine] Upsert + event + consumption committed for case:', caseId)
+
+  // 8b. Notification emission — AFTER the atomic commit; failures never roll back.
+  await emitRecoveryNotifications(event, tenantId, customerId, current, result)
 
   // 6b. Mark payment as projected when recovery case is updated
   if (event.type === 'payment.completed' && event.payload?.paymentId) {
@@ -623,30 +842,6 @@ async function tryHandleRecoveryCaseStateMachine(event: any): Promise<void> {
       .eq('id', event.payload.paymentId)
       .then(() => {}, () => {})
   }
-
-  // 7. Insert recovery_case_event (append-only decision log)
-  const { error: eventError } = await supabaseAdmin
-    .from('recovery_case_events')
-    .insert({
-      case_id: caseId,
-      event_type: result.event.eventType,
-      from_recovery_state: result.event.fromRecoveryState,
-      to_recovery_state: result.event.toRecoveryState,
-      from_engagement_state: result.event.fromEngagementState,
-      to_engagement_state: result.event.toEngagementState,
-      reason: result.event.reason,
-      trigger: result.event.trigger,
-    })
-
-  if (eventError) {
-    logger.error({ tenantId, caseId, err: eventError.message }, 'Failed to insert recovery case event')
-  }
-
-  // 8. Record idempotency
-  await supabaseAdmin
-    .from('recovery_case_event_consumptions')
-    .insert({ source_event_id: event.id, case_id: caseId })
-    .then(() => {}, () => {})
 
   // 9. Write to payment_promises table for decision engine visibility
   if (event.type === 'promise.made' && result.promiseToPayDate) {
@@ -847,6 +1042,11 @@ async function handlePaymentEvent(event: any): Promise<void> {
     amount: event.payload?.amount,
     provider: event.payload?.provider,
   })
+
+  // Notification emission — generic money-in fact (payment lane). The recovery
+  // "automation stopped" fact is emitted by the recovery state machine after its
+  // own commit; each is a distinct cognition for the same underlying event.
+  await emitPaymentReceivedNotification(event)
 }
 
 async function handleReminderEvent(event: any): Promise<void> {

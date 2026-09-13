@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     // Promise history (payment_promises table if present)
     const { data: promises } = await supabaseAdmin
       .from('payment_promises')
-      .select('id, promise_date, promise_amount, status, created_at, note')
+      .select('id, promise_date, amount, status, created_at, notes')
       .eq('tenant_id', tenantId)
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false })
@@ -270,10 +270,10 @@ export async function GET(request: NextRequest) {
       promises: (promises || []).map((p: any) => ({
         id: p.id,
         promiseDate: p.promise_date,
-        amount: Number(p.promise_amount || 0),
+        amount: Number(p.amount || 0),
         status: p.status,
         createdAt: p.created_at,
-        note: p.note,
+        note: p.notes,
       })),
       communication: comm.map((c) => ({
         at: c.at,

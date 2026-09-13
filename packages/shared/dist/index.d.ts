@@ -23,4 +23,5 @@ export * from './transport/index';
 export * from './system/index';
 export * from './scenarios/index';
 export * from './recovery/index';
+export * from './notifications/index';
 //# sourceMappingURL=index.d.ts.map

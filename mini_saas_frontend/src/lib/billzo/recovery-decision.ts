@@ -30,6 +30,7 @@ export type DecisionState =
   | 'remind'            // send a WhatsApp reminder
   | 'waiting'           // a reminder is in flight (sent/delivered/read) within waiting window
   | 'blocked_transport' // transport permanently failed (invalid number, template rejected, etc.)
+  | 'exhausted'         // merchant escalated — BillZo stopped automation, manual handling only
   | 'none'
 
 export type InvoiceDecision = {
@@ -53,7 +54,7 @@ export type RecoveryDecision = {
   generatedAt: string
 }
 
-interface DecisionRow {
+export interface DecisionRow {
   invoices: {
     id: string
     number: string | null
@@ -84,6 +85,9 @@ interface DecisionRow {
     at: string
     preview: string | null
   }[]
+  // RecoveryCase state fields — used to ground decisions in recorded state.
+  recoveryState?: string | null
+  nextActionType?: string | null
 }
 
 const fmt = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
@@ -229,6 +233,23 @@ export function buildRecoveryDecision(row: DecisionRow): RecoveryDecision {
       headline: 'Recovered',
       reason: 'All invoices paid.',
       targetInvoiceId: null,
+      invoices,
+      generatedAt: now,
+    }
+  }
+
+  // RECOVERY EXHAUSTED — the merchant escalated this case. BillZo stopped
+  // automated recovery (the state machine set next_action_type='merchant_review')
+  // and only manual follow-up remains. This is grounded in the RECORDED case
+  // state, never in quota UI heuristics. Disputed cases also derive
+  // 'merchant_review', so they are disambiguated by recovery_state.
+  if (row.nextActionType === 'merchant_review' && row.recoveryState !== 'disputed') {
+    const urgent = [...open].sort((a, b) => b.amount - a.amount)[0]
+    return {
+      state: 'exhausted',
+      headline: 'Handle manually',
+      reason: 'Merchant escalated this case — BillZo stopped automated recovery. Follow up personally (call / WhatsApp / visit).',
+      targetInvoiceId: urgent?.invoiceId || null,
       invoices,
       generatedAt: now,
     }

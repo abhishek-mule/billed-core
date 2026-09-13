@@ -27,6 +27,7 @@ const NAV_WORKSPACE = [
   { href: '/parties',        label: 'Customers', icon: Users       },
   { href: '/pulse',          label: 'Payments',  icon: Activity    },
   { href: '/cashflow',       label: 'Cashflow',  icon: TrendingUp  },
+  { href: '/notifications',  label: 'Notifications', icon: Bell    },
 ]
 
 const NAV_MANAGE = [
@@ -61,6 +62,42 @@ async function doLogout() {
   clearSession()
   window.localStorage.removeItem('tenantLogo')
   window.location.href = '/auth'
+}
+
+// Unread bell badge — count always comes from the server (/api/notifications/count).
+// Rechecks on mount, window focus, visibility change, and a 60s heartbeat.
+function useUnreadNotifications(pathname: string): number {
+  const [unread, setUnread] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchCount() {
+      try {
+        const res = await fetch('/api/notifications/count', { credentials: 'include' })
+        if (!res.ok) return
+        const json = await res.json()
+        if (!cancelled) setUnread(typeof json.unreadCount === 'number' ? json.unreadCount : 0)
+      } catch {
+        // ignore — badge stays stale until next poll
+      }
+    }
+
+    fetchCount()
+    const interval = setInterval(fetchCount, 60_000)
+    const onActive = () => fetchCount()
+    window.addEventListener('focus', onActive)
+    document.addEventListener('visibilitychange', onActive)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      window.removeEventListener('focus', onActive)
+      document.removeEventListener('visibilitychange', onActive)
+    }
+  }, [pathname])
+
+  return unread
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
@@ -134,13 +171,14 @@ function Sidebar({
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function TopBar({
-  title, onMobileMenu, onLogout, userName, logo,
+  title, onMobileMenu, onLogout, userName, logo, unreadCount,
 }: {
   title?: string
   onMobileMenu: () => void
   onLogout: () => void
   userName?: string
   logo?: string | null
+  unreadCount?: number
 }) {
   const [query, setQuery] = useState('')
   const [hint, setHint] = useState<string | null>(null)
@@ -189,8 +227,13 @@ function TopBar({
           {hint && <span className="bz-search-hint">{hint}</span>}
         </div>
 
-        <Link href="/pulse" className="bz-icon-btn" aria-label="Notifications">
+        <Link href="/notifications" className="bz-icon-btn" aria-label="Notifications">
           <Bell size={16} />
+          {!!unreadCount && (
+            <span className="bz-notif-badge" aria-label={`${unreadCount} unread notifications`}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </Link>
 
         <button className="bz-org-btn" onClick={onLogout} aria-label="Sign out">
@@ -390,7 +433,7 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
         <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} logo={tenantLogo} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} unreadCount={useUnreadNotifications(pathname)} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">

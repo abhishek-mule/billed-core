@@ -44,6 +44,7 @@ export const SUPPORTED_EVENTS = new Set([
   'customer.called',
   'merchant.snoozed',
   'merchant.payment_reported',
+  'merchant.escalated',
   'recovery.completed',
   'whatsapp.status.updated',
 ])
@@ -155,6 +156,8 @@ export function transitionCase(
       return handleMerchantSnoozed(base, signal, now)
     case 'merchant.payment_reported':
       return handlePaymentReported(base, signal, now)
+    case 'merchant.escalated':
+      return handleMerchantEscalated(base, signal, now)
     case 'recovery.completed':
       return handleRecoveryCompleted(base, signal, now)
     default:
@@ -192,8 +195,13 @@ function buildTransition(
     })
   }
 
-  // Derive next action
-  next.nextActionType = deriveNextAction(next)
+  // Derive next action — honor an explicit nextActionType from the handler
+  // (e.g. escalate → merchant_review, snooze → wait) instead of overriding it.
+  if (updates.nextActionType === undefined) {
+    next.nextActionType = deriveNextAction(next)
+  } else {
+    next.nextActionType = updates.nextActionType
+  }
 
   // Preserve explicit nextActionDueAt if set in updates (e.g. snooze)
   if (updates.nextActionDueAt === undefined) {
@@ -477,6 +485,23 @@ function handlePaymentReported(current: CurrentCase, signal: SignalEvent, now: s
     {},
     'transition',
     'Customer claims payment made — awaiting confirmation',
+    { signalId: signal.id, merchantAction: signal.merchantAction },
+    now,
+  )
+}
+
+function handleMerchantEscalated(current: CurrentCase, signal: SignalEvent, now: string): RecoveryCaseTransition {
+  // Escalation hands the case to the merchant: automated recovery stops
+  // (merchant_review is not in AUTOMATION_ACTIVE_TYPES) and re-entering it
+  // emits recovery.needs_you. Factual state is preserved.
+  return buildTransition(
+    current,
+    {
+      nextActionType: 'merchant_review',
+      nextActionDueAt: now,
+    },
+    'transition',
+    signal.merchantAction ? `Escalated for manual review: ${signal.merchantAction}` : 'Escalated by merchant for manual review',
     { signalId: signal.id, merchantAction: signal.merchantAction },
     now,
   )

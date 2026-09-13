@@ -102,6 +102,10 @@ frappe_docker/sites/
 # Claude Code
 .claude/
 
+# Cypress test artifacts
+cypress/screenshots/
+cypress/videos/
+
 # Kilo coding-agent local state
 .kilo/
 

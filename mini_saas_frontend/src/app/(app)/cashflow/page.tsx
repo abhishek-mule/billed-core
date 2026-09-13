@@ -5,14 +5,14 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ChevronDown, ChevronRight, Search, Loader2,
-  Users, AlertCircle, RefreshCw, TrendingUp,
-  BarChart3, Wallet, Clock, Bell, ArrowRight,
+  Users, RefreshCw, TrendingUp,
+  BarChart3, Wallet, Bell, ArrowRight,
   Calendar, IndianRupee, Zap,
 } from "lucide-react"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { getCookie } from "@/lib/cookies"
-import type { QueueApiSummary, QueueApiResponse, RecentEvent } from "@/lib/billzo/api-types"
+import type { QueueApiSummary, QueueApiResponse } from "@/lib/billzo/api-types"
 import { ErrorState } from "@/components/billzo/ErrorState"
 import { getErrorMessage } from "@/lib/billzo/ui-errors"
 
@@ -39,7 +39,7 @@ function recoveryProbability(days: number, _stage?: string): ProbLevel {
   return "low"
 }
 
-const probLabel: Record<ProbLevel, string> = { high: "High", medium: "Med", low: "Low" }
+const probLabel: Record<ProbLevel, string> = { high: "High", medium: "Medium", low: "Low" }
 
 /** Probability badge colors keyed on CollectionRisk tone. */
 const PROB_TONE: Record<ProbLevel, CollectionRiskTone> = {
@@ -73,6 +73,14 @@ const bucketDot: Record<AgingBucket, string> = {
   "30+": COLLECTION_RISK_TONE_CLASSES.danger.dot,
 }
 
+/** Left-accent color used on AR ledger cards, keyed by aging urgency. */
+const bucketAccent: Record<AgingBucket, string> = {
+  "1-7": "border-l-success",
+  "8-15": "border-l-warning",
+  "16-30": "border-l-warning",
+  "30+": "border-l-danger",
+}
+
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 function daysSince(dateStr?: string | null): number {
@@ -93,13 +101,13 @@ function getOutstanding(inv: any): number {
   return (inv.total || 0) - (inv.paidAmount || 0)
 }
 
-function fmtTime(iso: string) {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60000) return "just now"
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return `${Math.floor(diff / 86400000)}d ago`
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "?"
 }
 
 interface UpcomingReminder {
@@ -120,7 +128,6 @@ export default function CashflowPage() {
   const router = useRouter()
   const [invoices, setInvoices] = useState<any[]>([])
   const [summary, setSummary] = useState<QueueApiSummary | null>(null)
-  const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([])
   const [upcomingReminders, setUpcomingReminders] = useState<UpcomingReminder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -162,11 +169,9 @@ export default function CashflowPage() {
             pendingActions: 0, promiseSummary: { dueToday: 0, overdue: 0, upcoming: 0 },
             priorityCases: [],
           } as QueueApiSummary)
-          setRecentEvents([])
         } else {
           const data = recoveryRes as QueueApiResponse
           setSummary(data.summary)
-          setRecentEvents(data.recentEvents || [])
         }
       }
     } catch (err) {
@@ -259,6 +264,14 @@ export default function CashflowPage() {
     customerCount: groups.length,
   }
 
+  const todayCollected = summary?.totalCollectedToday || 0
+
+  const collectionRate = (() => {
+    if (!summary?.monthSales || summary.monthSales <= 0) return { pct: null as number | null, collected: 0 }
+    const collected = Math.max(0, summary.monthSales - totals.outstanding)
+    return { pct: Math.min(100, Math.round((collected / summary.monthSales) * 100)), collected }
+  })()
+
   const maxForecast = Math.max(...forecast.map(x => x.inflow), 1)
 
   const pendingReminders = upcomingReminders.filter(r => r.isPending)
@@ -268,18 +281,62 @@ export default function CashflowPage() {
 
   if (loading) {
     return (
-      <div className="px-4 lg:px-8 py-4 lg:py-6 max-w-5xl mx-auto space-y-3">
-        <div className="h-6 bg-muted animate-pulse rounded w-48" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
-          ))}
-        </div>
-        <div className="h-20 bg-muted animate-pulse rounded-lg" />
-        <div className="grid grid-cols-2 gap-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
-          ))}
+      <div className="min-h-screen bg-muted/30 pb-24 lg:pb-8">
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-4 lg:py-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1.5">
+              <div className="h-5 w-28 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-64 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-8 w-20 bg-muted animate-pulse rounded-lg" />
+              <div className="h-8 w-8 bg-muted animate-pulse rounded-lg" />
+            </div>
+          </div>
+          {/* Cash Position skeleton */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="h-11 bg-muted/40 border-b border-border" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="px-4 py-3 space-y-2">
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                  <div className="h-6 w-24 bg-muted animate-pulse rounded" />
+                  <div className="h-2.5 w-16 bg-muted animate-pulse rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Forecast + Monthly skeletons */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="h-11 bg-muted/40 border-b border-border" />
+                <div className="px-4 py-3.5 space-y-2">
+                  <div className="grid grid-cols-7 gap-1">
+                    {[...Array(7)].map((_, j) => (
+                      <div key={j} className="space-y-1.5">
+                        <div className="h-2.5 bg-muted animate-pulse rounded mx-auto w-6" />
+                        <div className="h-3 bg-muted animate-pulse rounded mx-auto w-8" />
+                        <div className="h-1 bg-muted animate-pulse rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Aging buckets skeleton */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />
+            ))}
+          </div>
+          {/* AR ledger skeleton */}
+          <div className="space-y-1.5">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-16 bg-muted animate-pulse rounded-xl" />
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -351,11 +408,13 @@ export default function CashflowPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border">
             <div className="px-4 py-3">
               <p className="text-[11px] text-muted-foreground font-medium">Collected Today</p>
-              <p className="text-xl font-bold tabular-nums tracking-tight text-success mt-0.5">
-                {formatINR(summary?.totalCollectedToday || 0)}
+              <p className={`text-xl font-bold tabular-nums tracking-tight mt-0.5 ${todayCollected > 0 ? 'text-success' : 'text-foreground'}`}>
+                {formatINR(todayCollected)}
               </p>
-              <p className="text-[10px] text-success mt-0.5 flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> via payments
+              <p className="text-[10px] mt-0.5 flex items-center gap-0.5" style={{ color: 'hsl(var(--muted-foreground))' }}>
+                {todayCollected > 0 ? (
+                  <><TrendingUp className="h-3 w-3" style={{ color: 'hsl(var(--success))' }} /> Payments received</>
+                ) : 'No payments recorded yet today'}
               </p>
             </div>
             <div className="px-4 py-3">
@@ -375,20 +434,19 @@ export default function CashflowPage() {
             <div className="px-4 py-3">
               <p className="text-[11px] text-muted-foreground font-medium">Collection Rate</p>
               <p className="text-xl font-bold tabular-nums tracking-tight text-foreground mt-0.5">
-                {summary?.monthSales
-                  ? Math.round(((summary.monthSales - totals.outstanding) / summary.monthSales) * 100)
-                  : 0}%
+                {collectionRate.pct != null ? `${collectionRate.pct}%` : "—"}
               </p>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-success transition-all"
-                  style={{
-                    width: `${summary?.monthSales
-                      ? Math.min(((summary.monthSales - totals.outstanding) / summary.monthSales) * 100, 100)
-                      : 0}%`
-                  }}
+                  className={`h-full rounded-full transition-all ${collectionRate.pct != null ? 'bg-success' : 'bg-foreground/10'}`}
+                  style={{ width: `${collectionRate.pct ?? 0}%` }}
                 />
               </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {collectionRate.pct != null
+                  ? `${formatINR(collectionRate.collected)} collected of ${formatINR(summary?.monthSales || 0)} billed`
+                  : "Not billed this month yet"}
+              </p>
             </div>
           </div>
         </div>
@@ -407,17 +465,20 @@ export default function CashflowPage() {
             <div className="px-4 py-3.5">
               <div className="grid grid-cols-7 gap-1">
                 {forecast.map((d, i) => (
-                  <div key={i} className="text-center">
-                    <p className="text-[10px] text-muted-foreground font-medium">{d.label}</p>
-                    <p className="text-[11px] font-semibold tabular-nums text-foreground mt-1">
+                  <div key={i} className={`text-center ${i === 0 ? 'relative' : ''}`}>
+                    <p className={`text-[10px] font-semibold ${i === 0 ? 'text-foreground' : 'text-muted-foreground'}`}>{d.label}</p>
+                    <p className={`text-[11px] font-semibold tabular-nums mt-1 ${d.inflow > 0 ? 'text-success' : 'text-muted-foreground/60'}`}>
                       {d.inflow > 0 ? formatINR(d.inflow) : "—"}
                     </p>
-                    <div className="mt-1.5 h-1 rounded-full bg-muted overflow-hidden">
+                    <div className="mt-1.5 h-1.5 rounded-full bg-muted/70 overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-foreground/70 transition-all"
-                        style={{ width: `${Math.min((d.inflow / maxForecast) * 100, 100)}%` }}
+                        className={`h-full rounded-full transition-all ${d.inflow > 0 ? 'bg-success' : 'bg-foreground/15'}`}
+                        style={{ width: d.inflow > 0 ? `${Math.min((d.inflow / maxForecast) * 100, 100)}%` : '10%' }}
                       />
                     </div>
+                    {i === 0 && (
+                      <div className="mx-auto mt-1 h-0.5 w-6 rounded-full bg-foreground/40" />
+                    )}
                   </div>
                 ))}
               </div>
@@ -493,18 +554,19 @@ export default function CashflowPage() {
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">{b.count} customers</p>
                   {b.total > 0 && (
-                    <div className="mt-2 h-1 rounded-full bg-muted flex overflow-hidden">
-                      {(["high", "medium", "low"] as ProbLevel[]).map(p => {
-                        const pct = b.total > 0 ? (b.prob[p] / b.total) * 100 : 0
-                        if (pct === 0) return null
-                        return (
+                    <div className="mt-2.5 pt-2 border-t border-border/70">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-muted-foreground">Share of outstanding</span>
+                        <span className="tabular-nums text-muted-foreground font-medium">
+                          {Math.max(0, Math.round((b.total / (totals.outstanding || 1)) * 100))}%
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full bg-muted/70 overflow-hidden">
                         <div
-                          key={p}
-                          className={`h-full ${COLLECTION_RISK_TONE_CLASSES[PROB_TONE[p]].dot}`}
-                          style={{ width: `${pct}%` }}
+                          className={`h-full rounded-full ${COLLECTION_RISK_TONE_CLASSES[BUCKET_TONE[bucket]].dot}`}
+                          style={{ width: `${Math.min((b.total / (totals.outstanding || 1)) * 100, 100)}%` }}
                         />
-                        )
-                      })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -540,7 +602,8 @@ export default function CashflowPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground truncate">{r.customerName}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {formatINR(r.amount)} · {r.stage}
+                      {formatINR(r.amount)}
+                      {r.invoiceNumber ? <> · Inv #{r.invoiceNumber}</> : null}
                       {r.nextRecoveryAt && ` · due ${new Date(r.nextRecoveryAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
                     </p>
                   </div>
@@ -562,30 +625,30 @@ export default function CashflowPage() {
         )}
 
         {/* ══════════════════════════════════════════
-            MONEY MOVEMENT (Activity)
+            ACTIVITY — link to the full feed
            ══════════════════════════════════════════ */}
-        {recentEvents.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3 px-0.5">
-              <Zap className="h-4 w-4 text-foreground" />
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</p>
-            </div>
-            <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
-              {recentEvents.slice(0, 6).map((evt, i) => (
-                <div key={i} className="flex items-start gap-3 px-4 py-2.5">
-                  <div className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                    evt.eventType === "transition" ? "bg-info" :
-                    evt.eventType === "backfill" ? "bg-warning" : "bg-muted-foreground/40"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-foreground truncate">{evt.reason}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{fmtTime(evt.occurredAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div>
+          <div className="flex items-center gap-2 mb-3 px-0.5">
+            <Zap className="h-4 w-4 text-foreground" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</p>
           </div>
-        )}
+          <Link
+            href="/recovery/timeline"
+            className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-card border border-border hover:bg-muted/60 transition-colors group"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Zap className="h-4 w-4" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-foreground">What happened recently in your business?</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Payments, reminders, promises and customer replies.</p>
+            </div>
+            <span className="text-[11px] font-medium text-primary shrink-0 flex items-center gap-0.5">
+              View activity
+              <ArrowRight className="h-3 w-3" />
+            </span>
+          </Link>
+        </div>
 
         {/* ══════════════════════════════════════════
             ACCOUNTS RECEIVABLE LEDGER
@@ -609,14 +672,14 @@ export default function CashflowPage() {
           ) : (
             <div className="space-y-1.5">
               {filtered.map(group => (
-                <div key={group.customerId} className="bg-card border border-border rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setExpandedCustomer(expandedCustomer === group.customerId ? null : group.customerId)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
-                  >
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                      {group.customerName.charAt(0)}
-                    </div>
+                <div key={group.customerId} className={`bg-card border border-l-[3px] border-border rounded-xl overflow-hidden ${bucketAccent[group.agingBucket]}`}>
+                    <button
+                      onClick={() => setExpandedCustomer(expandedCustomer === group.customerId ? null : group.customerId)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
+                        {initials(group.customerName)}
+                      </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-foreground truncate">{group.customerName}</span>
@@ -631,7 +694,10 @@ export default function CashflowPage() {
                         </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">
-                        {group.invoiceCount} invoice{group.invoiceCount !== 1 ? "s" : ""} · {group.daysSinceFirstDue}d overdue
+                        {group.invoiceCount} invoice{group.invoiceCount !== 1 ? "s" : ""}
+                        {group.daysSinceFirstDue === 0
+                          ? " · due today"
+                          : ` · ${group.daysSinceFirstDue}d overdue`}
                       </div>
                     </div>
                     <div className="text-right shrink-0 mr-1">
@@ -654,6 +720,10 @@ export default function CashflowPage() {
                     <div className="border-t border-border divide-y divide-border">
                       {group.invoices.map((inv: any) => {
                         const outstanding = getOutstanding(inv)
+                        const invDate = (s?: string) => {
+                          const d = s ? new Date(s) : new Date()
+                          return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                        }
                         return (
                           <Link
                             key={inv.id}
@@ -661,21 +731,25 @@ export default function CashflowPage() {
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors group"
                           >
                             <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-md text-[10px] font-bold ${
-                              inv.status === "overdue" ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"
+                              inv.status === "overdue"
+                                ? "bg-danger-soft text-danger"
+                                : inv.status === "partial"
+                                ? "bg-warning-soft text-warning"
+                                : "bg-info-soft text-info"
                             }`}>
-                              {inv.status === "overdue" ? "!" : "P"}
+                              {inv.status === "overdue" ? "!" : inv.status === "partial" ? "P" : "U"}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-[11px] font-semibold text-foreground truncate">
                                 {inv.invoiceNumber || inv.id.slice(0, 8)}
                               </div>
                               <div className="text-[10px] text-muted-foreground">
-                                {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                                {inv.dueAt && ` · due ${new Date(inv.dueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
+                                Billed {invDate(inv.createdAt)}
+                                {inv.dueAt && <> · due {invDate(inv.dueAt)}</>}
                               </div>
                             </div>
                             <div className="text-right shrink-0">
-                              <div className="text-xs font-semibold tabular-nums text-foreground">
+                              <div className={`text-xs font-semibold tabular-nums ${inv.status === "overdue" ? "text-danger" : "text-foreground"}`}>
                                 {formatINR(outstanding)}
                               </div>
                               {outstanding < inv.total && (

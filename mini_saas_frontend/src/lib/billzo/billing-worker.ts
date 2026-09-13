@@ -6,6 +6,7 @@ import {
   markEventCompleted,
   markEventFailed,
 } from './outbox'
+import { reconcileRecoveryCredits } from './recovery-credits'
 
 const MAX_ATTEMPTS = 5
 
@@ -34,6 +35,14 @@ export async function drainBillingOutbox(limit = 50): Promise<number> {
       await markEventFailed(ev.id, ev.attempts + 1, MAX_ATTEMPTS)
     }
   }
+
+  // Phase B: reconcile monthly recovery-credit allocations (idempotent, so it
+  // simply converges on every cron tick). Runs in the billing lane, which is
+  // worker-deploy-free by design.
+  await reconcileRecoveryCredits().catch((err) => {
+    console.error('[BillingWorker] recovery-credit reconcile failed', err)
+  })
+
   return billing.length
 }
 

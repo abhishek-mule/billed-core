@@ -27,6 +27,7 @@ const ACTIONS_WITH_OUTBOX_EVENT: Record<string, string> = {
   snooze: 'merchant.snoozed',
   mark_disputed: 'merchant.mark_disputed',
   mark_resolved: 'merchant.mark_closed',
+  escalate: 'merchant.escalated',
 }
 
 const VALID_ACTIONS = new Set([...Object.keys(ACTIONS_WITH_OUTBOX_EVENT), 'send_reminder', 'record_payment', 'schedule_reminder'])
@@ -797,6 +798,11 @@ export async function POST(request: NextRequest) {
 
       if (action === 'snooze') {
         outboxPayload.snoozeDuration = payload?.snoozeDays || 3
+      }
+
+      if (action === 'escalate') {
+        // Carry the merchant's note into the state-machine reason line.
+        outboxPayload.merchantAction = payload?.notes || payload?.merchantAction || 'Manual escalation'
       }
 
       await writeOutboxEvent({

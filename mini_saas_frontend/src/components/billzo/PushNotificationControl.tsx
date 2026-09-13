@@ -38,36 +38,31 @@ export function PushNotificationControl({ tenantId }: { tenantId: string }) {
   const handleTestPush = async () => {
     setBusy(true)
     setStatusMsg(null)
-    const title = '💰 Payment Received'
-    const body = 'Rajesh Traders paid ₹2,450 via UPI'
     try {
-      // Trigger native browser Notification banner directly
+      // Local banner for instant feedback (record + push are server-side).
       const { showLocalNotification } = await import('@/lib/billzo/notifications')
-      showLocalNotification(title, body)
+      showLocalNotification('Test notification', 'This is a test — if you can see this, notifications are working.')
 
-      const res = await fetch('/api/notify', {
+      // Record-first: POST /api/notifications/test creates the notification
+      // CENTER record (source of truth), fans out SSE, then pushes via FCM.
+      const res = await fetch('/api/notifications/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          body,
-          type: 'payment_received',
-          url: '/invoices',
-        }),
+        credentials: 'include',
       })
       const data = await res.json()
       if (res.ok && data.success) {
         if (data.simulated) {
-          setStatusMsg(`⚠️ Local banner shown, but NO server push — Firebase Admin not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON (and NEXT_PUBLIC_FIREBASE_VAPID_KEY) in Vercel, then redeploy, for real mobile push.`)
+          setStatusMsg(`⚠️ Notification added to your center, but NO server push — Firebase Admin not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON (and NEXT_PUBLIC_FIREBASE_VAPID_KEY) in Vercel, then redeploy, for real mobile push.`)
         } else if (typeof data.deliveredCount === 'number' && data.deliveredCount === 0) {
-          setStatusMsg(`⚠️ No devices delivered (${data.failedCount ?? 0} failed) — FCM tokens invalid/not registered. On your phone tap Re-register Device, grant permission, keep the app open.`)
+          setStatusMsg(`⚠️ Notification added to your center but not pushed — no devices delivered (${data.failedCount ?? 0} failed). On your phone tap Re-register Device, grant permission, keep the app open.`)
         } else if (typeof data.deliveredCount !== 'number' || data.deliveredCount <= 0) {
-          setStatusMsg(`⚠️ ${data.message || 'No registered devices found for this tenant.'} Tap Re-register Device on your phone to add one.`)
+          setStatusMsg(`⚠️ ${data.message || 'Notification added to the center. No registered devices found.'} Tap Re-register Device on your phone.`)
         } else {
-          setStatusMsg(`✅ Push sent! Delivered to ${data.deliveredCount} device(s). Check your phone lockscreen.`)
+          setStatusMsg(`✅ Notification added — pushed to ${data.deliveredCount} device(s). Check your notification center and phone lockscreen.`)
         }
       } else {
-        setStatusMsg(`⚠️ Test push output: ${data.error || data.message || 'No registered devices'}`)
+        setStatusMsg(`⚠️ Test push output: ${data.error || data.message || 'Failed to send test push'}`)
       }
     } catch (err: any) {
       setStatusMsg(`❌ Error: ${err.message || 'Failed to send test push'}`)

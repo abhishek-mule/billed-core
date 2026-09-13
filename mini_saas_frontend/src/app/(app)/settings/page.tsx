@@ -14,6 +14,7 @@ import { db } from "@/lib/billzo/db"
 import { clearAuthCookies } from "@/lib/cookies"
 import { getTenantId, clearSession } from "@/lib/billzo/tenant"
 import { PageShell } from "@/components/billzo/PageShell"
+import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar"
 
 
 type CategoryStatus = 'connected' | 'not_connected' | 'pending'
@@ -39,6 +40,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [shopAvatarError, setShopAvatarError] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -209,9 +211,20 @@ export default function SettingsPage() {
 
         {/* Shop identity banner */}
         <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-full bg-foreground text-background flex items-center justify-center text-base font-bold shrink-0">
-            {tenant?.name?.charAt(0) || 'S'}
-          </div>
+          {!shopAvatarError ? (
+            <img
+              src={getDiceBearAvatarUrl(tenant?.name || 'My Shop')}
+              alt=""
+              width={44}
+              height={44}
+              onError={() => setShopAvatarError(true)}
+              className="w-11 h-11 rounded-full object-cover bg-muted/20 shrink-0"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-bold shrink-0 border border-primary/20">
+              {(tenant?.name || 'S').charAt(0)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">{tenant?.name || 'My Shop'}</p>
             <p className="text-xs text-muted-foreground">{tenant?.phone || ''}{tenant?.plan ? ` · ${tenant.plan}` : ''}</p>

@@ -373,6 +373,23 @@ body {
 }
 .bz-icon-btn:hover { background: hsl(var(--secondary)); border-color: var(--bd2); color: var(--text); }
 
+.bz-notif-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: hsl(var(--danger));
+  color: hsl(var(--danger-foreground));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  box-shadow: 0 0 0 2px hsl(var(--card));
+}
+
 .bz-org-btn {
   display: flex;
   align-items: center;

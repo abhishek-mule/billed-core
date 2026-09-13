@@ -7,7 +7,8 @@ import { planInvoiceOnCreated } from '@/lib/recovery/client'
 import { getActiveSession, getTenantId } from './tenant'
 
 import { trackEvent, events } from './analytics'
-import { triggerWhatsAppNotification, triggerPushNotification } from './automation'
+import { triggerWhatsAppNotification } from './automation'
+import { collectInventoryReports, reportInventoryStock } from './inventory-report'
 import { logRecoveryActivity } from './recovery/activity'
 import type { RecoveryAttempt } from './types'
 import type {
@@ -233,6 +234,14 @@ export async function createQuickInvoice(customer: Customer, product: Product, q
 
     notifyChanged()
     scheduleBackgroundSync()
+
+    // Inventory transition report (server-authoritative), best-effort.
+    void reportInventoryStock({
+      productId: product.id,
+      productName: product.name,
+      stock: (product.stock || 0) - qty,
+      threshold: product.lowStockAt,
+    })
 
     // Event-driven recovery planning: invoice.created → planner → collection_actions.
     void planInvoiceOnCreated({
@@ -619,28 +628,10 @@ export async function handlePOSInvoice(
       });
     }
 
-    // 2. Low Stock Alerts
-    for (const m of appliedMovements) {
-      const product = cart.find(c => c.id === m.productId);
-      if (product && m.stockAfter <= product.lowStockAt) {
-        // Push notification to merchant
-        triggerPushNotification(session.tenantId, {
-          title: 'Low Stock Alert ⚠️',
-          body: `${product.name} is running low (${m.stockAfter} left). Reorder soon!`,
-          type: 'low_stock'
-        });
-
-        // WhatsApp alert to merchant
-        triggerWhatsAppNotification({
-          type: 'lowStock',
-          phone: session.phone || '', // Merchant's phone
-          shopName: tenantName,
-          itemName: product.name,
-          currentStock: m.stockAfter,
-          reorderLevel: product.lowStockAt
-        });
-      }
-    }
+    // 2. Inventory transitions — server-authoritative. POS only REPORTS
+    //    observed stock; the endpoint decides the transition and projects the
+    //    alert. Best-effort: never blocks or fails the sale.
+    await Promise.allSettled(collectInventoryReports(appliedMovements, cart).map((r) => reportInventoryStock(r)))
 
     if (method !== 'udhar') {
       trackEvent(session.tenantId, events.invoice_paid, { invoiceId, total, method })

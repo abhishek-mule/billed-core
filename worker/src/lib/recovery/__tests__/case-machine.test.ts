@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { transitionCase, CurrentCase } from '../case-machine'
+import { transitionCase, canHandleEvent, CurrentCase } from '../case-machine'
 import type { SignalEvent } from '../case-machine'
 
 function makeCase(overrides: Partial<CurrentCase> = {}): CurrentCase {
@@ -190,6 +190,38 @@ describe('transitionCase', () => {
       expect(result).not.toBeNull()
       const diff = new Date(result!.nextActionDueAt!).getTime() - before
       expect(diff).toBeGreaterThanOrEqual(6.5 * 86400000)
+    })
+
+    it('pauses automation via nextActionType=wait', () => {
+      const c = makeCase({ recoveryState: 'overdue', engagementState: 'unseen' })
+      const result = transitionCase(c, signal('merchant.snoozed'))
+      expect(result).not.toBeNull()
+      expect(result!.nextActionType).toBe('wait')
+      expect(result!.engagementState).toBe('snoozed')
+    })
+  })
+
+  describe('merchant.escalated', () => {
+    it('is a supported event', () => {
+      expect(canHandleEvent('merchant.escalated')).toBe(true)
+    })
+
+    it('preserves factual state and marks the case merchant_review', () => {
+      const c = makeCase({ recoveryState: 'overdue', engagementState: 'engaged', nextActionType: 'send_reminder' })
+      const result = transitionCase(c, signal('merchant.escalated'))
+      expect(result).not.toBeNull()
+      expect(result!.recoveryState).toBeUndefined()
+      expect(result!.engagementState).toBeUndefined()
+      expect(result!.nextActionType).toBe('merchant_review')
+      expect(result!.nextActionDueAt).not.toBeNull()
+    })
+
+    it('signals the merchant action note in the reason', () => {
+      const c = makeCase({ recoveryState: 'overdue' })
+      const result = transitionCase(c, signal('merchant.escalated', { merchantAction: 'Handling personally this week' }))
+      expect(result).not.toBeNull()
+      expect(result!.event.reason).toContain('Escalated for manual review')
+      expect(result!.event.reason).toContain('Handling personally this week')
     })
   })
 

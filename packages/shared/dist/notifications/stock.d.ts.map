@@ -1,0 +1,1 @@
+{"version":3,"file":"stock.d.ts","sourceRoot":"","sources":["../../src/notifications/stock.ts"],"names":[],"mappings":"AAcA,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,SAAS,CAAA;AAEhD,wBAAgB,cAAc,CAAC,KAAK,EAAE,MAAM,EAAE,SAAS,EAAE,MAAM,GAAG,iBAAiB,CAIlF;AAED,wBAAgB,iBAAiB,CAAC,IAAI,EAAE,iBAAiB,EAAE,IAAI,EAAE,iBAAiB,GAAG,OAAO,CAE3F;AAGD,eAAO,MAAM,iBAAiB,EAAE,iBAAiB,EAA4C,CAAA"}

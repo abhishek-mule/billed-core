@@ -40,4 +40,5 @@ __exportStar(require("./transport/index"), exports);
 __exportStar(require("./system/index"), exports);
 __exportStar(require("./scenarios/index"), exports);
 __exportStar(require("./recovery/index"), exports);
+__exportStar(require("./notifications/index"), exports);
 //# sourceMappingURL=index.js.map

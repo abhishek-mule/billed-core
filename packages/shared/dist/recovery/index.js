@@ -30,4 +30,5 @@ __exportStar(require("./feature-extractor"), exports);
 __exportStar(require("./learning"), exports);
 var learning_engine_1 = require("./learning-engine");
 Object.defineProperty(exports, "LearningEngine", { enumerable: true, get: function () { return learning_engine_1.LearningEngine; } });
+__exportStar(require("./credits"), exports);
 //# sourceMappingURL=index.js.map

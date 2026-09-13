@@ -179,9 +179,9 @@ export function useReportsData(): UseReportsDataReturn {
   }, [data.loading, data.invoices, data.plan, dateRange])
 
   const gst = useMemo<GSTReport>(() => {
-    if (data.loading || data.invoices.length === 0) {
-      return { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
-    }
+    const emptyGst: GSTReport = { totalSales: 0, outputGST: 0, inputGST: 0, netGST: 0, cgst: 0, sgst: 0, inputGstPurchaseCount: 0, invoiceCount: 0, hsnBreakdown: [], taxableAmount: 0 }
+    if (data.loading) return emptyGst
+    if (data.invoices.length === 0 && data.purchases.length === 0) return emptyGst
     return computeGSTReport(data.invoices, data.invoiceItems, data.purchases, dateRange)
   }, [data.loading, data.invoices, data.invoiceItems, data.purchases, dateRange])
 

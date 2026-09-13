@@ -153,13 +153,13 @@ export default function POSPage() {
   const handlePay = async (method: "upi" | "cash" | "udhar") => {
     if (submitting) return;
     setSubmitting(true);
-    setShowPay(false);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
     const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId, documentType);
 
     if (!result.success) {
       setSubmitting(false);
+      setShowPay(false);
       toast.error(result.error || "Failed to create invoice", {
         description: "Please check stock levels or try again.",
         duration: 4000,
@@ -203,9 +203,16 @@ export default function POSPage() {
       detail: { invoiceId, method, amount: invoiceTotal }
     }));
 
+    // Reset the sale for the next transaction
+    setSubmitting(false);
+    setCart([]);
+    setCustomer("Walk-in Customer");
+    setCustomerId("");
+    setCustomerPhone(undefined);
+
     // Navigate to invoice communication screen
     if (invoiceId) {
-      router.push(`/send/${invoiceId}`)
+      router.push(`/send/${invoiceId}?created=1`)
       return
     }
     setSuccess(inv);

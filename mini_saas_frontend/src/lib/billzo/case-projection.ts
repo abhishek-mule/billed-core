@@ -237,7 +237,7 @@ async function fetchPromises(tenantId: string, caseId: string): Promise<PromiseI
 
   const { data: promises } = await supabaseAdmin
     .from('payment_promises')
-    .select('id, promise_date, promise_amount, status, created_at, note')
+    .select('id, promise_date, amount, status, created_at, notes')
     .eq('tenant_id', tenantId)
     .eq('customer_id', rc.customer_id)
     .order('created_at', { ascending: false })
@@ -246,10 +246,10 @@ async function fetchPromises(tenantId: string, caseId: string): Promise<PromiseI
   return (promises || []).map((p: any) => ({
     id: p.id,
     date: p.promise_date,
-    amount: Number(p.promise_amount || 0),
+    amount: Number(p.amount || 0),
     status: p.status,
     createdAt: p.created_at,
-    note: p.note,
+    note: p.notes,
   }))
 }
 

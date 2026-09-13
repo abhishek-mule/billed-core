@@ -3,6 +3,12 @@ import { executeAction } from '../action-executor'
 import { supabaseAdmin } from '../../billzo/supabase-admin'
 import { sendWhatsAppMessage } from '../../../../lib/whatsapp-router'
 import { writeOutboxEvent } from '../../billzo/outbox'
+import {
+  reserveRecoveryCredit,
+  settleRecoveryCredit,
+  releaseRecoveryCredit,
+  isRecoveryCreditsEnabled,
+} from '../credit-ledger'
 
 vi.mock('../../billzo/supabase-admin', () => ({
   supabaseAdmin: { from: vi.fn() },
@@ -18,6 +24,15 @@ vi.mock('../../billzo/outbox', () => ({
 
 vi.mock('../../../../lib/queue-logger', () => ({
   createQueueLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+}))
+
+// Mock credit-ledger: defaults keep existing tests untouched (source='undefined'
+// or 'merchant' never reaches the credit path). Credit tests override these.
+vi.mock('../credit-ledger', () => ({
+  isRecoveryCreditsEnabled: vi.fn().mockResolvedValue(false),
+  reserveRecoveryCredit: vi.fn().mockResolvedValue({ reserved: false, reason: 'deferred_due_to_credits' }),
+  settleRecoveryCredit: vi.fn().mockResolvedValue({ settled: true }),
+  releaseRecoveryCredit: vi.fn().mockResolvedValue({ released: true }),
 }))
 
 interface Row {
@@ -84,7 +99,25 @@ beforeEach(() => {
     provider: 'meta',
     identity: { billzoMessageId: 'billzo_123' },
   })
+  ;(isRecoveryCreditsEnabled as any).mockResolvedValue(false)
+  ;(reserveRecoveryCredit as any).mockResolvedValue({ reserved: false, reason: 'deferred_due_to_credits' })
+  ;(settleRecoveryCredit as any).mockResolvedValue({ settled: true })
+  ;(releaseRecoveryCredit as any).mockResolvedValue({ released: true })
 })
+
+function creditChains(action: Row, tenantsData: Record<string, unknown> = {}) {
+  return makeChains({
+    tenants: { list: { data: { plan: 'pro', auto_recovery_enabled: true, recovery_credits_enabled: true, ...tenantsData }, error: null } },
+    collection_actions: { single: { data: action, error: null } },
+    invoices: {
+      list: { data: [{ id: 'inv_1', customer_id: 'cust_1' }], error: null },
+      single: { data: { id: 'inv_1', total: 5000, paid_amount: 0, status: 'unpaid', invoice_number: 'INV-1', due_at: new Date().toISOString() }, error: null },
+    },
+    customers: {
+      single: { data: { id: 'cust_1', customer_name: 'Rahul', phone: '9876543210', automation_mode: 'full_auto' }, error: null },
+    },
+  })
+}
 
 describe('executeAction — full automation path (worker reminders queue)', () => {
   it('executes an action already marked processing (Phase 3 fix)', async () => {
@@ -275,5 +308,58 @@ describe('executeAction — enforcement gate for automatic recovery', () => {
     const result = await executeAction('act_1')
     expect(result.status).toBe('completed')
     expect(sendWhatsAppMessage).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('executeAction — credit reservation gate (source=system, credits enabled)', () => {
+  it('defers at dispatch without sending when no credit can be reserved', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    creditChains(action)
+    ;(isRecoveryCreditsEnabled as any).mockResolvedValue(true)
+    ;(reserveRecoveryCredit as any).mockResolvedValue({ reserved: false, reason: 'deferred_due_to_credits' })
+
+    const result = await executeAction('act_1')
+    expect(result).toEqual({ status: 'skipped', reason: 'deferred_due_to_credits' })
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+    expect(reserveRecoveryCredit).toHaveBeenCalledWith({ tenantId: 'tenant_1', collectionActionId: 'act_1' })
+  })
+
+  it('reserves before send, settles after success, and never releases on success', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    creditChains(action)
+    ;(isRecoveryCreditsEnabled as any).mockResolvedValue(true)
+    ;(reserveRecoveryCredit as any).mockResolvedValue({ reserved: true, pool: 'included' })
+
+    const result = await executeAction('act_1')
+    expect(result.status).toBe('completed')
+    expect(sendWhatsAppMessage).toHaveBeenCalledTimes(1)
+    expect(settleRecoveryCredit).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'tenant_1', collectionActionId: 'act_1', reason: 'automated_action_completed' }),
+    )
+    expect(releaseRecoveryCredit).not.toHaveBeenCalled()
+  })
+
+  it('releases the reservation when the provider call fails, and defers on reservation error', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    creditChains(action)
+    ;(isRecoveryCreditsEnabled as any).mockResolvedValue(true)
+    ;(reserveRecoveryCredit as any).mockResolvedValue({ reserved: true, pool: 'purchased' })
+    ;(sendWhatsAppMessage as any).mockRejectedValue(new Error('meta 401'))
+
+    const result = await executeAction('act_1')
+    expect(result).toEqual(expect.objectContaining({ status: 'retry', error: 'meta 401' }))
+    expect(releaseRecoveryCredit).toHaveBeenCalledWith('act_1')
+    expect(settleRecoveryCredit).not.toHaveBeenCalled()
+  })
+
+  it('skips with already_billed when reservation reveals the action was already settled', async () => {
+    const action = baseAction({ status: 'scheduled', source: 'system' })
+    creditChains(action)
+    ;(isRecoveryCreditsEnabled as any).mockResolvedValue(true)
+    ;(reserveRecoveryCredit as any).mockResolvedValue({ reserved: false, reason: 'already_settled' })
+
+    const result = await executeAction('act_1')
+    expect(result).toEqual({ status: 'skipped', reason: 'already_billed' })
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 })

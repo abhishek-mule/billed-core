@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     // ── All collection actions for the customer set ──
     const { data: actions } = await supabaseAdmin
       .from('collection_actions')
-      .select('id, customer_id, action_type, channel, template_name, status, trigger_type, scheduled_at, completed_at, invoice_ids')
+      .select('id, customer_id, action_type, channel, template_name, status, trigger_type, scheduled_at, completed_at, invoice_ids, metadata')
       .eq('tenant_id', tenantId)
       .order('scheduled_at', { ascending: true })
       .limit(500)
@@ -171,6 +171,8 @@ export async function GET(request: NextRequest) {
         templateName: a.template_name,
         scheduledAt: a.scheduled_at,
         completedAt: a.completed_at,
+        deferredReason: a.metadata?.deferred_reason || null,
+        deferredAt: a.metadata?.deferred_at || null,
         reason,
         kind,
         _priority: priority(c, Number(c?.total_overdue || 0)),
@@ -182,6 +184,7 @@ export async function GET(request: NextRequest) {
     const promiseFollowup: any[] = []
     const scheduledLater: any[] = []
     const completedToday: any[] = []
+    const deferred: any[] = []
 
     for (const a of actions || []) {
       const c = caseByCustomer.get(a.customer_id)
@@ -197,6 +200,8 @@ export async function GET(request: NextRequest) {
 
       if (a.status === 'completed' || completedActionIds.has(a.id)) {
         completedToday.push(buildCard(a, 'completed'))
+      } else if (a.status === 'deferred') {
+        deferred.push(buildCard(a, 'deferred'))
       } else if (isCallCase && a.action_type === 'call' && a.status === 'scheduled') {
         needsCall.push(buildCard(a, 'call'))
       } else if (a.status === 'scheduled' && a.action_type === 'promise_followup' && !isFuture) {
@@ -213,7 +218,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sortByPriority = (arr: any[]) => arr.sort((x, y) => y._priority - x._priority)
-    ;[needsCall, sendReminder, promiseFollowup, scheduledLater, completedToday].forEach(sortByPriority)
+    ;[needsCall, sendReminder, promiseFollowup, scheduledLater, completedToday, deferred].forEach(sortByPriority)
 
     // Strip internal _priority before sending
     const clean = (arr: any[]) => arr.map(({ _priority, ...rest }) => rest)
@@ -227,6 +232,7 @@ export async function GET(request: NextRequest) {
       promiseFollowup: { items: clean(promiseFollowup), count: promiseFollowup.length, total: sectionMoney(promiseFollowup) },
       scheduledLater: { items: clean(scheduledLater), count: scheduledLater.length, total: sectionMoney(scheduledLater) },
       completedToday: { items: clean(completedToday), count: completedToday.length, total: sectionMoney(completedToday) },
+      deferred: { items: clean(deferred), count: deferred.length, total: sectionMoney(deferred) },
     }
 
     return NextResponse.json(result)

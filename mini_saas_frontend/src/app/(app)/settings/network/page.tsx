@@ -1,33 +1,61 @@
-"use client"
+import { cookies } from 'next/headers'
+import Link from 'next/link'
+import { Bell, ChevronLeft, Smartphone } from 'lucide-react'
+import { resolveTenantIdentity } from '@/lib/billzo/auth-jwt'
+import { NotificationPreferencesControl } from '@/components/billzo/NotificationPreferencesControl'
+import { PushNotificationControl } from '@/components/billzo/PushNotificationControl'
 
-import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
+export const dynamic = 'force-dynamic'
 
-export default function NetworkSettingsPage() {
+export default async function NetworkSettingsPage() {
+  const cookieStore = cookies()
+  const tenantId =
+    resolveTenantIdentity({
+      accessToken: cookieStore.get('bz_access')?.value,
+      tenantCookie: cookieStore.get('bz_tenant')?.value,
+      requireAccessToken: false,
+    })?.tenantId ?? null
+
   return (
     <div className="min-h-screen bg-muted/50 pb-8">
-      <div className="max-w-2xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-5">
-
-        <Link
-          href="/settings"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          Back to Settings
-        </Link>
-
-        <div className="bg-card border border-border rounded-lg p-8 text-center">
-          <div className="w-12 h-12 rounded-xl bg-info-soft flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0" />
-            </svg>
-          </div>
-          <h2 className="text-base font-semibold text-foreground">Network & Sync</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
-            Connection status, offline queue management, and sync health are coming soon.
-          </p>
+      <div className="mx-auto px-4 lg:px-8 py-5 lg:py-8 max-w-2xl space-y-5">
+        <div>
+          <Link
+            href="/settings"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            Back to Settings
+          </Link>
         </div>
 
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-info-soft text-info">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold text-foreground">Notifications</h1>
+            <p className="text-xs text-muted-foreground">
+              Choose what alerts you receive and how they reach you.
+            </p>
+          </div>
+        </div>
+
+        {!tenantId ? (
+          <div className="bg-card border border-danger rounded-lg p-6 text-center">
+            <Smartphone className="w-8 h-8 text-danger mx-auto mb-3" />
+            <p className="text-sm text-danger">No tenant session found. Please log in.</p>
+          </div>
+        ) : (
+          <>
+            {/* Permission nudge + device registration + test */}
+            <PushNotificationControl tenantId={tenantId} />
+
+            {/* In-app notification preferences (server is source of truth) */}
+            <NotificationPreferencesControl />
+          </>
+        )}
       </div>
     </div>
   )

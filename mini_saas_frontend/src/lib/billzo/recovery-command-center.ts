@@ -14,7 +14,7 @@ export type RecoveryCard = {
   outstanding: number
   invoiceCount: number
   maxOverdueDays: number
-  section: 'needs_you' | 'automated' | 'monitoring'
+  section: 'needs_you' | 'automated' | 'monitoring' | 'exhausted'
   state: RecoveryDecision['state']
   headline: string
   reason: string
@@ -38,11 +38,13 @@ export type RecoveryCommandCenter = {
     needsYou: number
     automated: number
     monitoring: number
+    exhausted: number
     totalOutstanding: number
   }
   needsYou: RecoveryCard[]
   billzoIsHandling: RecoveryCard[]
   monitoring: RecoveryCard[]
+  exhausted: RecoveryCard[]
   generatedAt: string
 }
 
@@ -53,11 +55,12 @@ const invoiceOutstanding = (i: any) =>
     ? Number(i.outstanding_amount)
     : Math.max(0, (Number(i.grand_total || i.total || 0)) - (Number(i.paid_amount) || 0))
 
-function sectionFor(state: RecoveryDecision['state']): 'needs_you' | 'automated' | 'monitoring' {
+function sectionFor(state: RecoveryDecision['state']): 'needs_you' | 'automated' | 'monitoring' | 'exhausted' {
   switch (state) {
     case 'blocked_phone': return 'needs_you'
     case 'call': return 'needs_you'
     case 'blocked_transport': return 'needs_you'
+    case 'exhausted': return 'exhausted'
     case 'remind': return 'automated'
     case 'waiting': return 'monitoring'
     case 'recovered': return 'monitoring'
@@ -78,6 +81,8 @@ function buildCTA(decision: RecoveryDecision, phone: string | null, customerId: 
       return { type: 'send_reminder' as const, label: 'Send reminder' }
     case 'waiting':
       return { type: 'view_details' as const, label: 'View details' }
+    case 'exhausted':
+      return { type: 'view_details' as const, label: 'View details' }
     case 'recovered':
       return { type: 'view_payment' as const, label: 'View payment' }
     default:
@@ -91,7 +96,7 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
   // ── Open cases ──
   const { data: cases } = await supabaseAdmin
     .from('recovery_cases')
-    .select('id, customer_id, total_outstanding')
+    .select('id, customer_id, total_outstanding, recovery_state_v2, engagement_state_v2, next_action_type, next_action_due_at')
     .eq('tenant_id', tenantId)
     .gt('total_outstanding', 0)
     .in('recovery_state_v2', ACTIVE_STATES)
@@ -100,12 +105,18 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
   const customerIds = [...new Set((cases || []).map((c: any) => c.customer_id).filter(Boolean))]
   if (customerIds.length === 0) {
     return {
-      summary: { totalCases: 0, needsYou: 0, automated: 0, monitoring: 0, totalOutstanding: 0 },
+      summary: { totalCases: 0, needsYou: 0, automated: 0, monitoring: 0, exhausted: 0, totalOutstanding: 0 },
       needsYou: [],
       billzoIsHandling: [],
       monitoring: [],
+      exhausted: [],
       generatedAt: now.toISOString(),
     }
+  }
+
+  const caseByCust = new Map<string, any>()
+  for (const c of cases || []) {
+    if (c.customer_id) caseByCust.set(c.customer_id, c)
   }
 
   const [customersRes, invoicesRes, actionsRes, promisesRes] = await Promise.all([
@@ -180,6 +191,7 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
     const cust = custMap.get(custId) || {}
     const custInvoices = invByCust.get(custId) || []
     if (custInvoices.length === 0) continue
+    const caseRow = caseByCust.get(custId) || {}
 
     const custActions = actionsByCust.get(custId) || []
     const deliveryByAction: Record<string, any> = {}
@@ -238,6 +250,8 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
       deliveryByAction,
       promises: custPromises,
       replies: inboundReplies,
+      recoveryState: caseRow.recovery_state_v2 ?? null,
+      nextActionType: caseRow.next_action_type ?? null,
     })
 
     const inbound = allWa.filter((w: any) => w.direction === 'inbound')
@@ -307,6 +321,7 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
   const needsYou = cards.filter(c => c.section === 'needs_you').sort(sortCards)
   const billzoIsHandling = cards.filter(c => c.section === 'automated').sort(sortCards)
   const monitoring = cards.filter(c => c.section === 'monitoring').sort(sortCards)
+  const exhausted = cards.filter(c => c.section === 'exhausted').sort(sortCards)
 
   const totalOutstanding = cards.reduce((s, c) => s + c.outstanding, 0)
 
@@ -316,11 +331,13 @@ export async function getRecoveryCommandCenter(tenantId: string): Promise<Recove
       needsYou: needsYou.length,
       automated: billzoIsHandling.length,
       monitoring: monitoring.length,
+      exhausted: exhausted.length,
       totalOutstanding,
     },
     needsYou,
     billzoIsHandling,
     monitoring,
+    exhausted,
     generatedAt: now.toISOString(),
   }
 }

@@ -216,15 +216,15 @@ export async function GET(request: NextRequest) {
         .gte('created_at', fmt(todayStart)),
       supabase
         .from('recovery_case_events')
-        .select(`reason, event_type, occurred_at, recovery_cases!inner(tenant_id)`)
+        .select(`payload, event_type, created_at, recovery_cases!inner(tenant_id)`)
         .eq('recovery_cases.tenant_id', tenantId)
-        .order('occurred_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(5),
       supabase
         .from('recovery_case_events')
         .select('case_id, recovery_cases!inner(tenant_id)')
         .eq('recovery_cases.tenant_id', tenantId)
-        .gte('occurred_at', fmt(todayStart))
+        .gte('created_at', fmt(todayStart))
         .limit(200),
       // Recent merchant-relevant updates (last 24h): payments, promises, read status
       supabase
@@ -368,9 +368,9 @@ export async function GET(request: NextRequest) {
 
     // ── Recent events ──
     const recentEvents = (eventsRes.data || []).map((e: any) => ({
-      reason: e.reason,
+      reason: e.payload?.reason,
       eventType: e.event_type,
-      occurredAt: e.occurred_at,
+      occurredAt: e.created_at,
     }))
 
     // ── NEW: Fetch priority cases (Udhar page shows all of them, so fetch generously) ──

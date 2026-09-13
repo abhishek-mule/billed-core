@@ -32,6 +32,15 @@ import {
 import { canSendReminder } from '../src/lib/recovery/decision-engine'
 import { getAutoRecoveryGate } from '../src/lib/recovery/enforcement'
 import { buildAttemptHistory, isExecutedAttempt, attemptMoment } from '../src/lib/recovery/attempt-history'
+import {
+  isRecoveryCreditsEnabled,
+  getRecoveryCreditBalances,
+  releaseStaleRecoveryCreditReservations,
+} from '../src/lib/recovery/credit-ledger'
+import {
+  recoveryCreditsExhausted,
+  RECOVERY_CREDITS_DEFERRED_REASON,
+} from '@billzo/shared'
 
 const logger = createQueueLogger('reminders')
 
@@ -1010,6 +1019,18 @@ function createEnqueueLock(): { redis: ReturnType<typeof getRedis>; ttl: number 
 
 export async function enqueueOverdueReminders(): Promise<number> {
   const now = new Date().toISOString()
+
+  // Release stale credit reservations that outlived their TTL (worker died
+  // mid-dispatch, job lost, etc.) before any scheduling decisions.
+  try {
+    const released = await releaseStaleRecoveryCreditReservations(new Date())
+    if (released > 0) {
+      logger.info({ count: released }, 'Released stale recovery credit reservations')
+    }
+  } catch (staleErr: any) {
+    logger.warn({ error: staleErr.message }, 'Stale reservation sweep failed (non-fatal)')
+  }
+
   let enqueued = 0
   let skippedLocked = 0
 
@@ -1047,8 +1068,67 @@ export async function enqueueOverdueReminders(): Promise<number> {
     return true
   })
 
+  // Phase B: recovery-credit gate. For credit-enabled tenants with zero
+  // spendable credits, due SYSTEM automation is DEFERRED (status='deferred' +
+  // metadata.deferred_reason = 'deferred_due_to_credits') — never cancelled.
+  // The scheduler only selects status='scheduled', so a later purchase or
+  // period reset does NOT silently re-fire deferred actions; merchants
+  // re-enable them explicitly (defer, never cancel; no auto-resume).
+  // Gate errors fail open (a transient DB hiccup never silently stops sends).
+  const creditGate = new Map<string, boolean>() // tenantId → exhausted
+  const creditTenantIds = [
+    ...new Set(
+      enqueueable
+        .filter((a: any) => a.source === 'system')
+        .map((a: any) => a.tenant_id)
+        .filter(Boolean),
+    ),
+  ]
+  await Promise.all(
+    creditTenantIds.map(async (tid) => {
+      try {
+        if (!(await isRecoveryCreditsEnabled(tid))) return
+        const balances = await getRecoveryCreditBalances(tid)
+        creditGate.set(tid, recoveryCreditsExhausted(balances))
+      } catch (err: any) {
+        logger.warn({ tenantId: tid, error: err.message }, 'Recovery-credit gate failed open')
+      }
+    }),
+  )
+
+  const deferredActions = enqueueable.filter(
+    (a: any) => a.source === 'system' && creditGate.get(a.tenant_id) === true,
+  )
+  if (deferredActions.length > 0) {
+    const deferredIds = deferredActions.map((a: any) => a.id)
+    const { data: withMeta } = await supabaseAdmin
+      .from('collection_actions')
+      .select('id, metadata')
+      .in('id', deferredIds)
+    const metaById = new Map((withMeta || []).map((r: any) => [r.id, r.metadata || {}]))
+    const deferredAt = new Date().toISOString()
+    for (const action of deferredActions) {
+      const existingMeta = metaById.get(action.id) || {}
+      await supabaseAdmin
+        .from('collection_actions')
+        .update({
+          status: 'deferred',
+          updated_at: deferredAt,
+          metadata: {
+            ...existingMeta,
+            deferred_reason: RECOVERY_CREDITS_DEFERRED_REASON,
+            deferred_at: deferredAt,
+          },
+        })
+        .eq('id', action.id)
+      logger.info({ actionId: action.id, tenantId: action.tenant_id }, 'Deferred — recovery credits exhausted')
+    }
+  }
+
   // Filter: attempt_count < max_attempts (Supabase doesn't support column comparison in lte easily)
-  const dueActions = enqueueable.filter((a: any) => (a.attempt_count || 0) < (a.max_attempts || 3))
+  const dueActions = enqueueable
+    .filter((a: any) => !(a.source === 'system' && creditGate.get(a.tenant_id) === true))
+    .filter((a: any) => (a.attempt_count || 0) < (a.max_attempts || 3))
 
   if (dueActions.length === 0) return 0
 

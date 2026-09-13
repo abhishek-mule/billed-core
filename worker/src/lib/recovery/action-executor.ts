@@ -10,6 +10,13 @@ import { writeOutboxEvent } from '../billzo/outbox'
 import { createQueueLogger } from '../../../lib/queue-logger'
 import { getAutoRecoveryGate } from './enforcement'
 import { billzoPlanOf, reminderMonthlyAllowance } from '@billzo/shared'
+import {
+  reserveRecoveryCredit,
+  settleRecoveryCredit,
+  releaseRecoveryCredit,
+  isRecoveryCreditsEnabled,
+} from './credit-ledger'
+import { RECOVERY_CREDITS_DEFERRED_REASON } from '@billzo/shared'
 
 const logger = createQueueLogger('action-executor')
 
@@ -109,6 +116,41 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
 
   const messageText = buildMessageText(action, invoice, customer)
 
+  // 4b. RESERVE RECOVERY CREDIT — before ANY dispatch, atomically claim one
+  //      credit (or refuse to send). Applies only to automated (source='system')
+  //      actions on credit-enabled tenants. Fail-closed: a reservation error
+  //      never sends unbilled automation — the action is DEFERRED instead and
+  //      the tenant can repurchase or re-arm. When nothing is spendable the
+  //      action is deferred (never cancelled, never sent, never auto-resumed).
+  //      The credit is settled only after a successful send and released on any
+  //      failure, so a send that fails never burns a credit.
+  let reservation: { pool: string } | null = null
+  if (action.source === 'system') {
+    if (await isRecoveryCreditsEnabled(action.tenant_id)) {
+      try {
+        const reserved = await reserveRecoveryCredit({
+          tenantId: action.tenant_id,
+          collectionActionId: action.id,
+        })
+        if (reserved.reserved) {
+          reservation = { pool: reserved.pool ?? 'purchased' }
+        } else if (reserved.reason === 'already_settled') {
+          // This action already billed in a previous run — refuse to re-send.
+          logger.warn({ actionId }, 'Action already billed — refusing to re-dispatch')
+          return { status: 'skipped', reason: 'already_billed' }
+        } else {
+          await deferActionForCredits(action, reserved.reason)
+          logger.info({ actionId, tenantId: action.tenant_id, reason: reserved.reason }, 'Deferred at dispatch — no recovery credit available')
+          return { status: 'skipped', reason: reserved.reason }
+        }
+      } catch (err: any) {
+        logger.warn({ actionId, tenantId: action.tenant_id, error: err.message }, 'Failed to reserve recovery credit — deferring action')
+        await deferActionForCredits(action, RECOVERY_CREDITS_DEFERRED_REASON)
+        return { status: 'skipped', reason: RECOVERY_CREDITS_DEFERRED_REASON }
+      }
+    }
+  }
+
   try {
     const sendResult = await sendWhatsAppMessage(
       action.tenant_id,
@@ -123,6 +165,24 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
         recoveryAttemptId: action.id,
       },
     )
+
+    // 4c. SETTLE RECOVERY CREDIT — the send SUCCEEDED, so the reserved credit is
+    //      converted into a real 'consumption' ledger entry. Exactly-once per
+    //      collection_action.id is enforced by the ledger's unique index, so a
+    //      crash between send and settle can never double-bill. A settle error
+    //      cannot roll back the completed send — the reservation stays 'active'
+    //      and is freed by the stale sweep (documented unbilled-action bound).
+    if (reservation) {
+      try {
+        await settleRecoveryCredit({
+          tenantId: action.tenant_id,
+          collectionActionId: action.id,
+          reason: 'automated_action_completed',
+        })
+      } catch (err: any) {
+        logger.warn({ actionId, tenantId: action.tenant_id, error: err.message }, 'Failed to settle recovery credit')
+      }
+    }
 
     // 5. WRITE AUDIT EVENT
     await writeActionEvent(action.id, 'sent', {
@@ -199,6 +259,18 @@ export async function executeAction(actionId: string): Promise<ExecutionResult> 
     return { status: 'completed', messageId: sendResult.messageId }
   } catch (err: any) {
     const errorMessage = err.message || 'unknown_error'
+
+    // 4d. RELEASE RECOVERY CREDIT — the send FAILED, so the reservation is
+    //      returned to the pool. A failed send never burns a credit. No-op when
+    //      the send actually succeeded but a later step threw (row is already
+    //      'settled' by then).
+    if (reservation) {
+      try {
+        await releaseRecoveryCredit(action.id)
+      } catch (releaseErr: any) {
+        logger.warn({ actionId, error: releaseErr.message }, 'Failed to release recovery credit reservation')
+      }
+    }
 
     // 5b. WRITE AUDIT EVENT
     await writeActionEvent(action.id, 'retry', {
@@ -378,6 +450,49 @@ async function writeActionEvent(actionId: string, eventType: string, payload: Re
       })
   } catch (err: any) {
     logger.error({ actionId, eventType, error: err.message }, 'Failed to write action event')
+  }
+}
+
+/**
+ * DEFER — mark an action deferred because no recovery credit was spendable.
+ * Never cancelled, never sent, never auto-resumed (resume is an explicit
+ * tenant action via POST /api/recovery/credits/resume). Loses the scheduled
+ * time so the scheduler cannot re-pick it; the audit trail keeps the history.
+ */
+async function deferActionForCredits(
+  action: ActionRow,
+  reason: string,
+): Promise<void> {
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from('collection_actions')
+      .select('metadata')
+      .eq('id', action.id)
+      .maybeSingle()
+    const existingMeta = (existing as { metadata?: Record<string, unknown> })?.metadata || {}
+    const deferredAt = new Date().toISOString()
+    await supabaseAdmin
+      .from('collection_actions')
+      .update({
+        status: 'deferred',
+        scheduled_at: null,
+        metadata: {
+          ...existingMeta,
+          deferred_reason: reason,
+          deferred_at: deferredAt,
+        },
+        updated_at: deferredAt,
+      })
+      .eq('id', action.id)
+    await writeActionEvent(action.id, 'deferred', {
+      reason,
+      message:
+        reason === RECOVERY_CREDITS_DEFERRED_REASON
+          ? 'Deferred — no recovery credit available at dispatch time. Repurchase credits or re-arm to re-enable.'
+          : reason,
+    })
+  } catch (err: any) {
+    logger.error({ actionId: action.id, error: err.message }, 'Failed to defer action for credits')
   }
 }
 

@@ -254,21 +254,52 @@ export function getAuthPayloadFromRequest(request: NextRequest): {
   return verifyAccessToken(token)
 }
 
+export interface TenantIdentity {
+  tenantId: string
+  userId: string
+}
+
+/**
+ * SINGLE verified-tenant resolver shared by API routes (verifyRequest) and
+ * server components (RSC pages). The verified access-token session is
+ * authoritative; the non-httpOnly `bz_tenant` cookie is used ONLY for the
+ * tenant-mismatch cross-check, or as a legacy fallback when
+ * `requireAccessToken` is false (pages — never for mutations). Rejecting
+ * ambiguity here (return null) means callers can never fall back to a bypass.
+ */
+export function resolveTenantIdentity(opts: {
+  accessToken?: string | null
+  tenantCookie?: string | null
+  requireAccessToken?: boolean
+}): TenantIdentity | null {
+  const payload = opts.accessToken ? verifyAccessToken(opts.accessToken) : null
+
+  if (opts.requireAccessToken && !payload) return null
+  if (payload?.tenantId && opts.tenantCookie && payload.tenantId !== opts.tenantCookie) return null
+
+  const tenantId = payload?.tenantId || opts.tenantCookie || null
+  if (!tenantId) return null
+
+  return { tenantId, userId: payload?.userId ?? '' }
+}
+
 export function getVerifiedTenantIdFromRequest(request: NextRequest): string | null {
-  const payload = getAuthPayloadFromRequest(request)
-  if (!payload) return null
-
-  // Cross-check: ensure JWT tenantId matches the non-httpOnly cookie if both are set
-  const cookieTenantId = request.cookies.get('bz_tenant')?.value
-  if (payload.tenantId && cookieTenantId && payload.tenantId !== cookieTenantId) return null
-
-  return payload.tenantId || cookieTenantId || null
+  return (
+    resolveTenantIdentity({
+      accessToken: getTokenFromRequest(request),
+      tenantCookie: getTenantFromRequest(request),
+      requireAccessToken: true,
+    })?.tenantId ?? null
+  )
 }
 
 export function getVerifiedUserIdFromRequest(request: NextRequest): string | null {
-  const payload = getAuthPayloadFromRequest(request)
-  if (!payload) return null
-  return payload.userId || null
+  const identity = resolveTenantIdentity({
+    accessToken: getTokenFromRequest(request),
+    tenantCookie: getTenantFromRequest(request),
+    requireAccessToken: true,
+  })
+  return identity?.userId || null
 }
 
 export { ACCESS_COOKIE, REFRESH_COOKIE }
