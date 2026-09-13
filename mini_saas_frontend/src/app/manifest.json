@@ -1,6 +1,11 @@
 {
   "name": "BillZo",
   "short_name": "BillZo",
+  "description": "Automate your daily cash recovery.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

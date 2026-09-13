@@ -193,6 +193,7 @@ function resolveCapabilities(
 ): CapabilityProvider[] {
   return capabilities.filter((c) => {
     if (intent.intentVersion < c.minIntentVersion || intent.intentVersion > c.maxIntentVersion) return false
+    if (!c.capabilityId.startsWith(intent.intentType)) return false
     return true
   })
 }

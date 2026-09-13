@@ -205,7 +205,7 @@ export async function sendNotification(event: NotificationEvent): Promise<void> 
     case "manual_attention_required":
       title = "📞 Action Required";
       body = `${event.data.count} customer${event.data.count > 1 ? "s" : ""} require your attention.`;
-      url = "/recovery/queue";
+      url = "/recovery";
       break;
     case "auto_recovery_paused":
       title = "⚠️ Auto Recovery Paused";
@@ -215,7 +215,7 @@ export async function sendNotification(event: NotificationEvent): Promise<void> 
     case "high_value_recovered":
       title = "🎉 Milestone Recovered";
       body = `₹${event.data.totalToday.toLocaleString("en-IN")} recovered today! (${event.data.milestoneName})`;
-      url = "/recovery/queue";
+      url = "/recovery";
       break;
   }
 

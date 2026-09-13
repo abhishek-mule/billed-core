@@ -225,7 +225,7 @@ async function insertSteps(
       policy_id: policy.policyId,
       trigger_type: step.triggerType,
       template_name: step.templateName,
-      channel: step.channel,
+      provider: step.channel,
       scheduled_at: scheduled.toISOString(),
       reason: `Policy ${policy.policyId} step ${step.sequence}`,
       metadata: { stepSequence: step.sequence, channel: step.channel },

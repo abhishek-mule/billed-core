@@ -510,10 +510,10 @@ export default function CaseWorkspacePage() {
           <div className="fixed inset-x-0 bottom-6 z-40 px-4 pointer-events-none">
             <div className="mx-auto max-w-md bg-foreground text-background rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
               <Link
-                href="/recovery/queue"
+                href="/recovery"
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
               >
-                <ArrowLeft size={15} /> Back to Queue
+                <ArrowLeft size={15} /> Back to Recovery
               </Link>
               <Link
                 href={`/recovery/timeline?caseId=${caseId}`}

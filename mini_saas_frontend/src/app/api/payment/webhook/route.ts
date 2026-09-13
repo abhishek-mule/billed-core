@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import Razorpay from 'razorpay'
 import { supabaseAdmin, getDeviceTokens } from '@/lib/billzo/supabase-admin'
 import { getFirebaseMessaging } from '@/lib/billzo/firebase-admin'
 import { type PlanType } from '@/lib/billzo/plan-limits'
@@ -9,10 +10,9 @@ import { processRazorpayPaymentWebhook } from '@/lib/billzo/reconciliation'
 import { submitIntent } from '@/lib/authority/transport'
 import { recordBillingEvent, publishSubscriptionChange } from '@/lib/billzo/billing-events'
 
-const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
-
 export async function POST(request: NextRequest) {
   try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET
     const body = await request.text()
     const signature = request.headers.get('x-razorpay-signature')
 
@@ -56,12 +56,12 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        const tenantId = payment.notes?.tenantId
-          || payment.notes?.tenant_id
-          || (await resolveTenantFromPayment(payment))
+        const tenantId = payment.order_id
+          ? await resolveTenantFromAuthoritativeOrder(payment.order_id)
+          : null
 
         if (!tenantId) {
-          console.log('[Webhook] Could not resolve tenantId for payment:', payment.id)
+          console.log('[Webhook] No authoritative tenant for payment:', payment.id)
           break
         }
 
@@ -443,34 +443,50 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function resolveTenantFromPayment(payment: any): Promise<string | null> {
+/**
+ * B-04: authoritative tenant resolution (fail-closed).
+ *
+ * Security contract:
+ *  - The ONLY trusted identity source is the Razorpay Order we created server-side
+ *    (orders/route.ts stamps `source: 'billzo_standard_checkout'` + invoiceId + tenantId).
+ *  - `payment.notes` is ignored entirely: a crafted checkout can override the
+ *    original order notes at capture time, so it is not a tenant authority.
+ *  - The Order must be bound to a real invoice owned by its tenant:
+ *    `order.notes.invoiceId` must resolve to an invoice whose tenant_id equals
+ *    `order.notes.tenantId`. A mismatched or missing invoice => NO tenant.
+ *  - Any failure (missing/invalid order, fetch error, wrong source, unbound
+ *    invoice) => null => the payment is NOT reconciled. No fallback to
+ *    contact/email/phone/notes.
+ */
+async function resolveTenantFromAuthoritativeOrder(orderId: string): Promise<string | null> {
+  const keyId = process.env.RAZORPAY_KEY_ID
+  const keySecret = process.env.RAZORPAY_KEY_SECRET
+  if (!keyId || !keySecret) return null
+
+  let order: any
   try {
-    if (payment.payment_link_id) {
-      const { data: invoice } = await supabaseAdmin
-        .from('invoices')
-        .select('tenant_id')
-        .eq('payment_link_id', payment.payment_link_id)
-        .single()
-
-      if (invoice?.tenant_id) return invoice.tenant_id
-    }
-
-    if (payment.contact) {
-      const { data: invoice } = await supabaseAdmin
-        .from('invoices')
-        .select('tenant_id')
-        .eq('customer_phone', payment.contact)
-        .in('status', ['unpaid', 'partial', 'overdue'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (invoice?.tenant_id) return invoice.tenant_id
-    }
+    const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
+    order = await razorpay.orders.fetch(orderId)
   } catch {
+    return null
   }
 
-  return null
+  const notes = order?.notes ?? {}
+  if (notes.source !== 'billzo_standard_checkout') return null
+
+  const tenantId = typeof notes.tenantId === 'string' && notes.tenantId ? notes.tenantId : null
+  const invoiceId = typeof notes.invoiceId === 'string' && notes.invoiceId ? notes.invoiceId : null
+  if (!tenantId || !invoiceId) return null
+
+  const { data: invoice } = await supabaseAdmin
+    .from('invoices')
+    .select('tenant_id')
+    .eq('id', invoiceId)
+    .single()
+
+  if (!invoice || invoice.tenant_id !== tenantId) return null
+
+  return tenantId
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

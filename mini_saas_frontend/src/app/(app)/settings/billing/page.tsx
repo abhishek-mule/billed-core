@@ -47,8 +47,8 @@ export default function BillingPage() {
         setNextBilling("28 Aug 2026")
 
         Promise.all([
-          fetch("/api/recovery/queue").then(r => r.json()).then(d => {
-            const amt = d?.recoveredThisMonth ?? d?.recoveredAttributed ?? null
+          fetch("/api/recovery/summary").then(r => r.json()).then(d => {
+            const amt = d?.summary?.recoveredThisMonth ?? d?.summary?.recoveredAttributed ?? null
             setRecovered(amt)
           }).catch(() => {}),
 

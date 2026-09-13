@@ -446,7 +446,7 @@ export function buildRangeBreakdown(invoices: Invoice[], range: DateRange): Week
   const totalDays = Math.floor((end.getTime() - start.getTime()) / DAY_MS) + 1
   if (totalDays <= 0) return []
 
-  const numPeriods = Math.min(6, Math.max(totalDays > 1 ? 2 : 1, Math.ceil(totalDays / 7)))
+const numPeriods = Math.min(6, Math.max(totalDays > 1 ? 2 : 1, Math.ceil(totalDays / 7)))
   const periodDays = Math.ceil(totalDays / numPeriods)
   const fmtDay = (d: Date) => d.getUTCDate()
   const fmtMonth = (d: Date) => d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' })

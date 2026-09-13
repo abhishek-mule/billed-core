@@ -771,7 +771,7 @@ export default function ReportsPage() {
         {/* ── TAX ── */}
         <Section>
           <SectionHeader icon={<FileText className="h-4 w-4" />} title="Tax" subtitle="GST summary" />
-          {gst.invoiceCount > 0 || gst.inputGstPurchaseCount > 0 ? (
+          {gst.invoiceCount > 0 ? (
             <>
               <MetricGrid>
                 <MetricCard label="Taxable Sales" value={formatINR(taxMetrics.taxableSales)} />

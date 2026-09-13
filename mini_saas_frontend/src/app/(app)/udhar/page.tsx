@@ -152,7 +152,7 @@ export default function UdharPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/recovery/queue", { credentials: "include" })
+      const res = await fetch("/api/recovery/summary", { credentials: "include" })
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       setRaw(await res.json())
     } catch (err) {
