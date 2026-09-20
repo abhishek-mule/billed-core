@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyRequest, validateJsonBody, validateRequired, errorResponse } from '@/lib/billzo/api-middleware'
+import { workerAuthHeaders } from '@/lib/billzo/worker-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,15 +25,23 @@ export async function POST(request: NextRequest) {
     const required = validateRequired(body, ['invoiceId'])
     if (!required.valid) return errorResponse('invoiceId is required', 400)
 
-    const workerRes = await fetch(`${WORKER_URL}/api/v1/recovery/override`, {
+    // B-01: worker requires inter-service HMAC — fail closed without the secret.
+    const workerPath = '/api/v1/recovery/override'
+    const workerBody = JSON.stringify({
+      invoiceId,
+      tenantId,
+      reason: reason || 'Merchant override',
+      warningAcked: warningAcked || false,
+    })
+    const authHeaders = workerAuthHeaders('POST', workerPath, workerBody)
+    if (!authHeaders) {
+      return NextResponse.json({ error: 'Worker not configured' }, { status: 503 })
+    }
+
+    const workerRes = await fetch(`${WORKER_URL}${workerPath}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        invoiceId,
-        tenantId,
-        reason: reason || 'Merchant override',
-        warningAcked: warningAcked || false,
-      }),
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: workerBody,
     })
 
     const data = await workerRes.json()

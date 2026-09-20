@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { verifyRequest, errorResponse, validateJsonBody } from '@/lib/billzo/api-middleware'
+import { workerAuthHeaders } from '@/lib/billzo/worker-auth'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 
 export const dynamic = 'force-dynamic'
@@ -315,13 +316,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fire-and-forget: trigger immediate reminder via worker
+    // Fire-and-forget: trigger immediate reminder via worker.
+    // B-01: worker requires inter-service HMAC — skip (loudly) without the secret.
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:10000'
-    fetch(`${workerUrl}/api/v1/recovery/trigger-reminder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId, tenantId }),
-    }).catch((err: any) => console.warn('[RecoveryCaseAPI] Trigger reminder failed:', err.message))
+    const triggerPath = '/api/v1/recovery/trigger-reminder'
+    const triggerBody = JSON.stringify({ invoiceId, tenantId })
+    const triggerAuth = workerAuthHeaders('POST', triggerPath, triggerBody)
+    if (!triggerAuth) {
+      console.warn('[RecoveryCaseAPI] Trigger reminder skipped: worker auth not configured')
+    } else {
+      fetch(`${workerUrl}${triggerPath}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...triggerAuth },
+        body: triggerBody,
+      }).catch((err: any) => console.warn('[RecoveryCaseAPI] Trigger reminder failed:', err.message))
+    }
 
     return NextResponse.json({ success: true })
   } catch (err: any) {

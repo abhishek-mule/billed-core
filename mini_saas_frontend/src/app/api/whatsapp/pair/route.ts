@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeOutboxEvent } from '@/lib/billzo/outbox'
 import { verifyRequest, errorResponse } from '@/lib/billzo/api-middleware'
+import { workerAuthHeaders } from '@/lib/billzo/worker-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,8 +52,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${workerUrl}/api/whatsapp/pair/${tenantId}`, {
+    // B-01: worker requires inter-service HMAC — fail closed without the secret.
+    const workerPath = `/api/whatsapp/pair/${tenantId}`
+    const authHeaders = workerAuthHeaders('GET', workerPath, '')
+    if (!authHeaders) {
+      return NextResponse.json({ status: 'waiting', connectionState: 'disconnected', health: null, error: 'Worker not configured' })
+    }
+    const res = await fetch(`${workerUrl}${workerPath}`, {
       signal: AbortSignal.timeout(10000),
+      headers: authHeaders,
     })
     if (!res.ok) {
       console.error('[WhatsApp/Pair] Worker returned', res.status)

@@ -35,6 +35,14 @@ import { getQrCode } from './stores/baileys-qr'
 import { getPairingCode } from './stores/baileys-pairing-code'
 import { getBaileysCreds } from './stores/baileys-auth'
 import { getBaileysState } from './stores/baileys-state'
+import {
+  getWorkerInternalSecret,
+  verifyWorkerRequest,
+  WORKER_SIGNATURE_HEADER,
+  WORKER_TIMESTAMP_HEADER,
+  WORKER_NONCE_HEADER,
+  type WorkerAuthFailure,
+} from './src/lib/worker-auth'
 
 async function getQueueHealth() {
   const connection = createRedisConnection()
@@ -50,8 +58,43 @@ async function getQueueHealth() {
   }
 }
 
-function startHealthServer(runtime: AuthorityRuntime) {
-  const port = parseInt(process.env.PORT || '10000', 10)
+const WORKER_AUTH_STATUS: Record<WorkerAuthFailure, number> = {
+  missing_secret: 503,
+  missing_credentials: 401,
+  stale: 401,
+  invalid_signature: 403,
+}
+
+/**
+ * B-01: inter-service HMAC guard for raw worker endpoints (fail-closed).
+ * Verifies x-billzo-* headers signed with WORKER_INTERNAL_SECRET.
+ * Returns true when the request was rejected (response already sent).
+ */
+function rejectUnauthenticated(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  body: string,
+): boolean {
+  const path = (req.url || '').split('?')[0]
+  const result = verifyWorkerRequest({
+    method: req.method || 'GET',
+    path,
+    body,
+    timestamp: req.headers[WORKER_TIMESTAMP_HEADER] as string | undefined,
+    nonce: req.headers[WORKER_NONCE_HEADER] as string | undefined,
+    signature: req.headers[WORKER_SIGNATURE_HEADER] as string | undefined,
+    secret: getWorkerInternalSecret(),
+  })
+  if (result.ok) return false
+  if (result.reason === 'missing_secret') {
+    console.error('[Worker] WORKER_INTERNAL_SECRET not configured — refusing request')
+  }
+  res.writeHead(WORKER_AUTH_STATUS[result.reason], { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ error: 'Unauthorized worker request' }))
+  return true
+}
+
+function startHealthServer(runtime: AuthorityRuntime) {  const port = parseInt(process.env.PORT || '10000', 10)
   const server = http.createServer(async (req, res) => {
     if (req.url === '/health') {
       try {
@@ -80,6 +123,8 @@ function startHealthServer(runtime: AuthorityRuntime) {
         startedAt: diag.startedAt,
       }))
     } else if (req.url?.startsWith('/api/whatsapp/pair/') && req.method === 'GET') {
+      // B-01: pairing codes/QRs are sensitive — require inter-service HMAC.
+      if (rejectUnauthenticated(req, res, '')) return
       const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
       const tenantId = req.url.slice('/api/whatsapp/pair/'.length)
       if (!tenantId) {
@@ -129,6 +174,8 @@ function startHealthServer(runtime: AuthorityRuntime) {
       let body = ''
       req.on('data', (chunk) => { body += chunk })
       req.on('end', async () => {
+        // B-01: state-changing endpoint — require inter-service HMAC.
+        if (rejectUnauthenticated(req, res, body)) return
         try {
           const payload = JSON.parse(body)
           const result = await applyOverride({
@@ -144,29 +191,16 @@ function startHealthServer(runtime: AuthorityRuntime) {
           res.end(JSON.stringify({ applied: false, error: e.message }))
         }
       })
-    } else if (req.method === 'POST' && req.url === '/api/v1/recovery/clear-override') {
-      let body = ''
-      req.on('data', (chunk) => { body += chunk })
-      req.on('end', async () => {
-        try {
-          const payload = JSON.parse(body)
-          const { clearOverride } = await import('./src/lib/recovery/override-handler')
-          await clearOverride(payload.invoiceId)
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ applied: true }))
-        } catch (e: any) {
-          res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ applied: false, error: e.message }))
-        }
-      })
     } else if (req.method === 'OPTIONS' && req.url === '/api/v1/recovery/trigger-reminder') {
-      res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' })
+      res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, x-billzo-signature, x-billzo-timestamp, x-billzo-nonce' })
       res.end()
     } else if (req.method === 'POST' && req.url === '/api/v1/recovery/trigger-reminder') {
       const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' }
       let body = ''
       req.on('data', (chunk) => { body += chunk })
       req.on('end', async () => {
+        // B-01: queue-injection endpoint — require inter-service HMAC.
+        if (rejectUnauthenticated(req, res, body)) return
         try {
           const { invoiceId, tenantId } = JSON.parse(body)
           if (!invoiceId || !tenantId) {
