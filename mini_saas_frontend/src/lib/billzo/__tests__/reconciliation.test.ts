@@ -31,6 +31,11 @@ function mockChain(terminal: Record<string, any> = {}) {
     lte: vi.fn(() => chain),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     update: vi.fn(() => chain),
+    // B-05a convergence guard terminal: resolves "row applied" by default so
+    // existing tests keep exercising the full pipeline.
+    or: vi.fn(() => ({
+      select: vi.fn().mockResolvedValue({ data: [{ id: 'guard_row' }], error: null }),
+    })),
     insert: vi.fn(() => ({
       select: vi.fn(() => ({
         single: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -186,8 +191,45 @@ describe('reconciliation', () => {
       expect(result.confidence).toBe(1.0)
     })
 
-    it('should return unmatched when no match found anywhere', async () => {
+    it('should return deduped no-op when the invoice is already at target state (B-05a)', async () => {
       const supabaseAdmin = await import('../supabase-admin')
+
+      const single = vi.fn()
+        .mockResolvedValueOnce({
+          data: { id: 'inv_deduped', total: 5000, paid_amount: 0, status: 'unpaid' },
+          error: null,
+        })
+
+      // Guard matches zero rows → already applied → skip ledger + events.
+      const or = vi.fn(() => ({
+        select: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }))
+
+      vi.mocked(supabaseAdmin.supabaseAdmin.from).mockReturnValue(
+        mockChain({ single, or })
+      )
+
+      const { reconcilePayment } = await import('../reconciliation')
+      const signal = {
+        amount: 5000,
+        currency: 'INR',
+        phone: null,
+        upiReference: null,
+        customerName: null,
+        provider: 'razorpay',
+        providerPaymentId: 'pay_mock_dedup',
+        paymentLinkId: 'plink_exact',
+        timestamp: new Date().toISOString(),
+        rawPayload: {},
+      }
+
+      const result = await reconcilePayment(signal, 'tenant_test_123')
+      expect(result.matched).toBe(true)
+      expect(result.invoiceId).toBe('inv_deduped')
+      expect(result.deduped).toBe(true)
+    })
+
+    it('should return unmatched when no match found anywhere', async () => {      const supabaseAdmin = await import('../supabase-admin')
 
       const single = vi.fn()
         .mockResolvedValueOnce({ data: null, error: null })

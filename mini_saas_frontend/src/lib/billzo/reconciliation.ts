@@ -30,6 +30,7 @@ export interface PaymentReconciliationResult {
   matchType: 'payment_link' | 'exact' | 'fuzzy' | null
   confidence: number
   invoice: Record<string, unknown> | null
+  deduped?: boolean
 }
 
 export interface PaymentSignalSource {
@@ -157,6 +158,42 @@ async function matchByPaymentLink(
 }
 
 /**
+ * B-05a: single-statement convergence guard for invoice payment application.
+ * Same shape as the `invoice.mark_paid` capability guard — a duplicate
+ * submission for an already-applied state matches zero rows and becomes an
+ * idempotent no-op (INFO, no throw), so the caller skips the ledger insert
+ * and event emissions entirely. Distinct concurrent payments serialize on the
+ * row lock; the ledger trigger remains the amount anchor.
+ */
+export async function applyInvoicePaymentGuarded(args: {
+  invoiceId: string
+  tenantId: string
+  paidAmount: number
+  status: string
+}): Promise<{ applied: boolean }> {
+  const { invoiceId, tenantId, paidAmount, status } = args
+  if (!Number.isFinite(paidAmount) || !/^[a-z_]+$/.test(status)) {
+    throw new Error('[Reconciliation] Guarded payment apply called with invalid target state')
+  }
+  const now = new Date().toISOString()
+  const { data, error } = await supabaseAdmin
+    .from('invoices')
+    .update({ status, paid_amount: paidAmount, updated_at: now, sync_status: 'pending' })
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId)
+    .or(`paid_amount.is.null,paid_amount.neq.${paidAmount},status.is.null,status.neq.${status}`)
+    .select('id')
+  if (error) {
+    // Fail open toward processing: a guard outage must never silently drop a
+    // payment. Duplicates stay absorbed downstream (ledger unique + capability
+    // guard); the route logs and the provider retries.
+    console.error('[Reconciliation] Guarded payment apply failed, proceeding:', error.message)
+    return { applied: true }
+  }
+  return { applied: (data?.length ?? 0) > 0 }
+}
+
+/**
  * Finalize reconciliation: update invoice, emit events, record attribution.
  */
 async function finalizeReconciliation(
@@ -174,6 +211,24 @@ async function finalizeReconciliation(
   const newPaidAmount = currentPaid + incomingAmount
   const invoiceTotal = Number(invoice.total || invoice.grand_total || incomingAmount)
   const newStatus = newPaidAmount >= invoiceTotal ? 'paid' : 'partial'
+  const confidence = matchType === 'payment_link' ? 1.0 : matchType === 'exact' ? 0.95 : 0.7
+
+  // B-05a: convergence gate — if the invoice is already at the computed target
+  // state (duplicate delivery), skip the intent, ledger insert, and event
+  // emissions entirely. Single-statement: no race window.
+  const guard = await applyInvoicePaymentGuarded({
+    invoiceId,
+    tenantId,
+    paidAmount: newPaidAmount,
+    status: newStatus,
+  })
+  if (!guard.applied) {
+    console.log('[Reconciliation] Idempotent no-op — invoice already at target state:', {
+      invoiceId,
+      matchType,
+    })
+    return { matched: true, invoiceId, matchType, confidence, invoice, deduped: true }
+  }
 
   const intentResult = await submitIntent({
     intentId: crypto.randomUUID(),
@@ -253,7 +308,7 @@ async function finalizeReconciliation(
     matched: true,
     invoiceId,
     matchType,
-    confidence: matchType === 'payment_link' ? 1.0 : matchType === 'exact' ? 0.95 : 0.7,
+    confidence,
     invoice,
   }
 }

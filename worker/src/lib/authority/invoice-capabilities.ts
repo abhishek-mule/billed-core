@@ -24,14 +24,31 @@ export const invoiceMarkPaid: CapabilityProvider = {
   execute: async (intent) => {
     const { invoiceId, status, paidAmount } = intent.payload as any
     const t0 = performance.now()
-    const { error } = await supabaseAdmin
+    const targetStatus = typeof status === 'string' && /^[a-z_]+$/.test(status) ? status : 'paid'
+    const targetPaid = Number(paidAmount ?? 0)
+    if (!Number.isFinite(targetPaid)) {
+      return { success: false, error: 'paidAmount must be a finite number', executionLatencyMs: performance.now() - t0 }
+    }
+    // B-05a: single-statement convergence guard. Duplicate submissions for an
+    // already-applied state match zero rows and become an INFO no-op instead of
+    // a re-write (no false downstream effects). Distinct concurrent payments
+    // serialize on the row lock; the ledger trigger remains the amount anchor.
+    // Tenant scoping is mandatory — never apply cross-tenant.
+    const { data, error } = await supabaseAdmin
       .from('invoices')
-      .update({ status: status ?? 'paid', paid_amount: paidAmount ?? 0, updated_at: now(), sync_status: 'pending' })
+      .update({ status: targetStatus, paid_amount: targetPaid, updated_at: now(), sync_status: 'pending' })
       .eq('id', invoiceId)
+      .eq('tenant_id', intent.tenantId)
+      .or(`paid_amount.is.null,paid_amount.neq.${targetPaid},status.is.null,status.neq.${targetStatus}`)
+      .select('id')
     if (error) {
       return { success: false, error: error.message, executionLatencyMs: performance.now() - t0 }
     }
-    return { success: true, data: { invoiceId }, executionLatencyMs: performance.now() - t0 }
+    const applied = (data?.length ?? 0) > 0
+    if (!applied) {
+      console.log(`[invoice.mark_paid] Idempotent no-op — ${invoiceId} already at target state`)
+    }
+    return { success: true, data: { invoiceId, applied }, executionLatencyMs: performance.now() - t0 }
   },
   semanticNormalizer: (p) => ({ invoiceId: p.invoiceId, status: p.status }),
 }
