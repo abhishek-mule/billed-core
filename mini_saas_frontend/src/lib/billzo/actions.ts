@@ -466,7 +466,8 @@ export async function handlePOSInvoice(
   customerPhone: string,
   method: 'upi' | 'cash' | 'udhar',
   customerId?: string,
-  documentType?: DocumentType
+  documentType?: DocumentType,
+  dueAtOverride?: string | null
 ): Promise<ActionResult> {
   if (cart.length === 0) {
     return { success: false, error: 'Cart is empty. Add items before billing.' }
@@ -488,6 +489,12 @@ export async function handlePOSInvoice(
   const invPrefix = documentType === 'bill' ? 'BILL' : 'INV'
   const invoiceNumber = `${invPrefix}-${fy}-${String(nextCounter).padStart(6, '0')}`
 
+  // Due date: merchant terms — udhar defaults 30d (distributor wedge), paid invoices due now.
+  const dueAt = dueAtOverride
+    ? new Date(dueAtOverride).toISOString()
+    : method === 'udhar'
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      : current
   const invoice: Invoice & { paymentMode?: string } = {
     id: invoiceId,
     tenantId: session.tenantId,
@@ -499,7 +506,7 @@ export async function handlePOSInvoice(
     status: method === 'udhar' ? 'unpaid' : 'paid',
     invoiceNumber,
     documentType: documentType || 'tax_invoice',
-    dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    dueAt,
     createdAt: current,
     updatedAt: current,
     syncStatus: 'pending',

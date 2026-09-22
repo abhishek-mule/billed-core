@@ -1,3 +1,9 @@
+# BillZo Sprint Roadmap — ARCHIVED (historical log through Sprint G)
+
+> Historical record only. Sprint statuses and counts (e.g. test totals) below
+> are frozen at time of writing and are **not current truth**.
+> For current reality see [`docs/known-reality.md`](../known-reality.md).
+
 # BillZo Sprint Roadmap
 
 ## Sprint C — Merchant Override API ✓

@@ -10,7 +10,7 @@
 
 import postgres from 'postgres'
 import { EntityQueue } from './entity-queue'
-import { supabaseAdmin } from '../billzo/supabase-admin'
+import { claimOutboxEvent, markEventCompleted, markEventFailed } from '../billzo/outbox'
 
 const entityQueue = new EntityQueue()
 
@@ -58,23 +58,20 @@ export class OutboxListener {
   private async handleNotification(payload: string): Promise<void> {
     const eventId = payload.trim()
 
-    const { data: event, error } = await supabaseAdmin
-      .from('outbox')
-      .select('*')
-      .eq('id', eventId)
-      .maybeSingle()
-
-    if (error || !event) {
-      console.error(`[OutboxListener] Failed to fetch event ${eventId}: ${error?.message ?? 'not found'}`)
-      return
-    }
+    // B-05b: the push path claims through the same atomic gate as the poll
+    // path. Losers (already claimed/completed/failed) drop silently here —
+    // this is what stops the systematic push+poll double-processing.
+    const event = await claimOutboxEvent(eventId)
+    if (!event) return
 
     await entityQueue.enqueue(event, async (evt) => {
       if (!this.processEvent) return
       try {
         await this.processEvent(evt)
+        await markEventCompleted(evt.id)
       } catch (err: any) {
         console.error(`[OutboxListener] Event ${evt.id} processing failed: ${err.message}`)
+        await markEventFailed(evt.id, (evt.attempts || 0) + 1)
       }
     })
   }

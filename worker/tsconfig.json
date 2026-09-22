@@ -12,12 +12,19 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@billzo/shared": ["./node_modules/@billzo/shared/dist/index.d.ts"],
+      "@billzo/shared/*": ["./node_modules/@billzo/shared/dist/*"]
+    }
   },
   "include": ["./**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
-    "scripts/staging-recovery-credits-verify.ts"
+    "scripts/staging-recovery-credits-verify.ts",
+    "scripts/staging-escalations-verify.ts",
+    "scripts/staging-webhook-inbox-verify.ts"
   ]
 }

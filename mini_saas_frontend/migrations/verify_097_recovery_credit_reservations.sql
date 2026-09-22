@@ -61,8 +61,10 @@ BEGIN
     WHERE t.relname = 'recovery_credit_reservations'
       AND c.conname LIKE 'recovery_credit_reservations_%_check'
   LOOP
-    IF v NOT LIKE '%any (pool = ANY (ARRAY[''included''::text, ''purchased''::text]))%'
-       AND v NOT LIKE '%any (status = ANY (ARRAY[''active''::text, ''settled''::text, ''released''::text]))%' THEN
+    -- Shape-insensitive: assert the pool check lists both pools and the status
+    -- check lists all three states (pg_get_constraintdef paren layout varies).
+    IF v NOT LIKE '%''included''::text%''purchased''::text%'
+       AND v NOT LIKE '%''active''::text%''settled''::text%''released''::text%' THEN
       RAISE EXCEPTION 'UNEXPECTED CHECK: %', v;
     END IF;
   END LOOP;

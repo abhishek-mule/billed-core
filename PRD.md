@@ -134,21 +134,21 @@ BillZo converts this fragmented workflow into a structured recovery system.
 
 # 5. Target Market
 
-## 5.1 Primary ICP
+## 5.1 Primary ICP — Wedge (Pilot)
 
-Businesses with:
+Pilot wedge is narrow by design. BillZo wins one segment deep before ten shallow.
 
-- recurring B2B invoices
-- delayed payments
-- 10–1,000+ active customers
-- frequent WhatsApp communication
-- UPI/bank payments
-- owner-led or small finance teams
+**Wedge:** B2B distributors & wholesalers with:
 
-### Highest-priority segments
+- recurring B2B invoices (30–100 open at any time)
+- delayed payments 30–90 days, trust-based collection
+- 10–1,000+ active customers, repeat buyers
+- owner-led + one accountant/operator, WhatsApp-primary
 
-1. Distributors
-2. Wholesalers
+Why this wedge: highest overdue density, repeat-customer history makes evidence moat compound, WA delivery observable, collection rate is a known KPI (not invented category). Search demand exists: `Vyapar outstanding`, `Tally overdue`.
+
+### Secondary segments (post-pilot, gated)
+
 3. Small manufacturers
 4. B2B service providers
 5. Agencies
@@ -157,6 +157,8 @@ Businesses with:
 8. Coaching/tuition businesses
 9. Professional services
 10. Local suppliers
+
+Do not build segment-specific flows until wedge shows `>60% with recoveredThisMonth >0` and `Week4 retention >40%`.
 
 ---
 
@@ -743,23 +745,14 @@ Rule:
 
 ---
 
-# 23. Attribution Rules
+# 23. Attribution Rules — Pilot Simplification
 
-BillZo must distinguish:
+Pilot ships **VERIFIED / UNKNOWN only**. `CANDIDATE` is investigation-only and never product-facing.
 
-### VERIFIED
+- **VERIFIED:** `recovery_attempt_id` chain proves causality (`collection_actions.id → whatsapp_events → recovery_outcomes`).
+- **UNKNOWN:** event happened, causality unproven — show as `Payment to review`, not `Recovered by BillZo`.
 
-Explicit identity proves the event belongs to the recovery attempt.
-
-### UNKNOWN
-
-The event happened but causality cannot be proven.
-
-### CANDIDATE
-
-Internal investigation state only.
-
-`candidate` must never appear as a product-facing causal claim.
+Full taxonomy (`CANDIDATE/VERIFIED/UNKNOWN`) is infrastructure rigor; pilot keeps `UNKNOWN` as non-credit to avoid over-engineering before 50 merchants. No AI attribution until `VERIFIED rate >70%`.
 
 ---
 
@@ -1221,91 +1214,42 @@ The Pass 2 fix should therefore target **atomicity**, not merely duplicate-recor
 
 ---
 
-# 42. Payment Webhook Security
+# 42. Payment Webhook Security — SPOOF VECTOR FIXED
 
-The B-04 audit established a weaker tenant-resolution path:
+B-04 `payment.notes.tenantId` is merchant-settable, multi-tenant-adjacent — textbook spoof vector.
 
-```text
-payment.notes.tenantId
-```
+**Fix shipped:** Tenant-resolution anchors to server-authoritative `subscriptions`/`invoices` row (`subscriptions.id` must match `payment.notes.subscriptionId` or `payment.invoice_id` → `invoices.tenant_id`). `notes.tenantId` is hint only, never authority; mismatch → `WARN` + block, legacy rows with missing subscription get loud `WARN` but no auto-mint.
 
-is merchant-set metadata.
-
-Although the tested exploit is not equivalent to arbitrary customer-controlled injection, tenant resolution should still prefer **server-authoritative payment/invoice records** over client/merchant metadata wherever possible.
-
-Principle:
-
-> **Metadata can assist lookup; it must not become the authority for financial ownership when authoritative server state exists.**
+Principle: **Metadata assists lookup; never authority for financial ownership.**
 
 ---
 
-# 43. Worker Security
+# 43. Worker Security — LIVE LIABILITY, NOT CONDITIONAL
 
-The B-01 audit remains conditional.
+B-01 is **P0**. Worker mutation endpoints (reminder send, payment attribution) move money/state. “Conditional on reachability” was audit language — product treats as open until proven private-network-only.
 
-Worker mutation endpoints currently appear unauthenticated.
-
-Final severity depends on reachability.
-
-Required topology evidence:
-
-```text
-Internet
-   ↓
-Reverse proxy?
-   ↓
-Worker:10000
-   ↓
-Mutation endpoint
-```
-
-or:
-
-```text
-Vercel
-   ↓
-Private network
-   ↓
-Worker
-```
-
-Only the runtime evidence determines whether this becomes P0.
+**Fix already shipped:** `WORKER_INTERNAL_SECRET` HMAC required on all `worker/queues/reminders.ts` and `send-message-handler.ts` mutations, `503` if unset, `401/403` on bad signature. Topology `Vercel → Private network → Worker:10000` must be evidenced per deploy (header `X-Forwarded-For`, peer IP, `X-BillZo-Signature`). Do not ship any P1 feature until this is `verified` in `known-reality.md`.
 
 ---
 
-# 44. Subscription Model
+# 44. Subscription Model — Pilot Simple, Scale Hybrid Later
 
-BillZo can eventually use a hybrid model:
+**Pilot (0–50 paying): single tier to avoid confusion for non-technical owner.**
 
-### Base subscription
+```text
+Pilot: ₹600/month — unlimited manual + 30 auto-reminders/month included, then pay-per-reminder
+WA Business API per-conversation passed through (Meta cost, shown upfront)
+```
 
-Example:
+This is the only tier until `50 paid × 90d retention` proven. Do not build 4-tier ladder before rung one retains.
 
-**₹600/month**
+### Post-pilot hybrid (gated)
 
-Provides the core recovery platform.
-
-### Reminder credits
-
-Separate consumption-based allowance.
-
-This creates an important business rule:
+Base `₹600` + reminder credits as separate allowance. Rule stays:
 
 > **Subscription validity and reminder-credit availability are independent constraints.**
 
-If credits are exhausted while subscription remains active:
-
-```text
-BillZo remains usable
-       ↓
-Invoices/payments/history accessible
-       ↓
-Automated reminders paused
-       ↓
-Merchant can purchase/add credits
-```
-
-Do not disable the entire product.
+If credits exhausted while subscription active: BillZo remains usable for invoices/payments/history, auto-reminders pause, manual actions allowed.
 
 ---
 
@@ -1329,58 +1273,49 @@ This preserves product utility while monetizing the high-value action.
 
 # 46. Pricing Philosophy
 
-Do not price primarily around:
-
-- number of screens
-- AI features
-- storage
-- generic accounting features
-
-Price around:
+Do not price primarily around screens/AI/storage. Price around:
 
 > **Value recovered / collection activity enabled.**
 
-Potential model:
+Post-pilot potential ladder (gated behind retention):
 
 ```text
-Free
-↓
-Starter
-↓
-Recovery
-↓
-Growth
+Free → Starter → Recovery → Growth
 ```
 
-with optional reminder-credit expansion.
+Founder must prove Starter retains 90d before building ladder. WhatsApp cost is always pass-through and disclosed before `₹600`.
 
 ---
 
-# 47. Onboarding
+# 47. Onboarding — Truthful Timeline
 
-Target onboarding time:
+**Truth:**
 
-> **<10 minutes to first recovery case**
+> **<10 min to first *imported* recovery case. 48h to first *auto* WhatsApp send while Meta verifies.**
+
+WA Business verification is 24–48h; claiming 10min to send is a lie that kills pilot trust. Pilot motion is founder/CA 1-hr sit-in, not self-serve.
 
 Flow:
 
 ```text
 Sign up
- ↓
+  ↓
 Business setup
- ↓
-Import/create invoices
- ↓
-Connect WhatsApp
- ↓
-Review recovery queue
- ↓
-Send first reminder
- ↓
-Observe outcome
+  ↓
+Import/create invoices (10 min wedge)
+  ↓
+Connect WhatsApp (request) + collect opt-ins
+  ↓
+Review recovery queue (imported cases visible)
+  ↓
+Fallback: Direct WA / Call / UPI link until verified
+  ↓
+Verified → Send first *BillZo* reminder (tracked)
+  ↓
+Observe outcome (waiting window 1d/3d)
 ```
 
-The user should reach the first useful action quickly.
+Sales motion for 20–50 pilot: **founder + CA/accountant channel, 1hr on-site per merchant**. No ads, no self-serve fantasy. First-value moment is still `First recovered rupee` but T-0 is import, not send.
 
 ---
 
@@ -1809,53 +1744,37 @@ This allows BillZo to identify where recovery fails.
 
 ---
 
-# 64. Moat
+# 64. Moat — Compounds Only If Retention > Churn
 
-The moat is **not**:
+The moat is **not**: UI, WA, UPI, dashboards, decision trees, generic AI.
 
-- UI
-- WhatsApp integration
-- UPI
-- dashboards
-- decision trees
-- generic AI
+Long-term moat is:
 
-The long-term moat is:
+> **Evidence-grade customer-specific recovery history (months/years).**
 
-> **Evidence-grade customer-specific recovery history.**
+But churn kills data moats. If SME churns at 4mo without ROI, moat never matures.
 
-If BillZo can reliably establish:
+**Retention hypothesis (must prove in pilot):**
+`Week4 retention >40%` via `recoveredThisMonth>0` on day 7–14. Wedge (distributors) has repeat buyers, so each month adds new invoices to recover — success shrinks old overdue but NRR grows via new invoices + expansion. Moat compounds only on top of `₹600` base retention, not reminder-credit consumption (which shrinks when you succeed).
 
-```text
-Customer
-   ↓
-Debt
-   ↓
-Action
-   ↓
-Response
-   ↓
-Outcome
-```
-
-over months/years, BillZo develops a dataset competitors cannot easily reproduce.
-
-That creates the possibility of:
-
-- better recovery decisions
-- better customer-specific timing
-- better communication strategy
+If BillZo can reliably establish `Customer→Debt→Action→Response→Outcome` for the *same customer over 3+ cycles*, then:
+- better timing (customer pays Tue vs Fri)
+- better channel (WA vs call)
+- cashflow prediction
+- credit decision support (partner, never own balance sheet)
 - cashflow prediction
 - credit decision support
 - partner-led financial products
 
 ---
 
-# 65. Fintech Expansion Strategy
+# 65. Fintech Expansion Strategy — GATED, NOT IN PILOT
 
-BillZo should not become a lender prematurely.
+BillZo should not become a lender prematurely. This section is **vision, not roadmap** and is explicitly gated.
 
-Recommended progression:
+**Gate:** `50 paying wedge merchants × 90 days × recoveredThisMonth>0` + RBI counsel review. Until gate, do not build, hire, or pitch lending.
+
+When gated, progression is:
 
 ```text
 Receivables SaaS
@@ -1868,14 +1787,14 @@ Recovery Intelligence
        ↓
 Consent-based Receivables Data
        ↓
-Credit Decision Support
+Credit Decision Support (partner model only)
        ↓
-Partner-led Lending / Factoring / TReDS
+Partner-led Lending / Factoring / TReDS (partner balance sheet)
        ↓
-Potential regulated financial institution
+Potential regulated financial institution (separate licensed entity)
 ```
 
-The data asset should mature before taking balance-sheet risk.
+Non-negotiable: no balance-sheet risk, no NBFC, no factoring without gate. Ashneer test: boring loop first, sexy adjacent later.
 
 ---
 
@@ -1896,6 +1815,43 @@ Especially for:
 - customer identity
 - tenant identity
 - recovery outcomes
+
+---
+
+# 66.1 WhatsApp Consent — End-Customer, Not Just Merchant
+
+Unattended sending requires **explicit end-customer opt-in** recorded per `customers.phone + opt_in_at + source` (`recovery-evaluation.ts: opt_in` check). Merchant consent alone is insufficient for Meta audit.
+
+Flow: `Merchant imports customer → BillZo sends opt-in template → customer replies YES → opt_in=true → automated reminders allowed`. Without `opt_in`, decision degrades to `blocked_phone` / manual `call`. This protects merchant’s WA number from ban. `Direct WA (bypass)` is always manual and not counted as BillZo attempt.
+
+---
+
+# 66.2 DPDP Act — Consent & Retention
+
+BillZo stores `phone, payment history, behavioral pattern (e.g., pays after WA)` per tenant. Required:
+
+- **Consent:** merchant confirms they have customer consent to store/process phone for collection; BillZo logs `tenant_id, customer_id, consent_at`.
+- **Retention:** `whatsapp_events` 180d, `recovery_outcomes` 365d, then anonymized. Customer `DELETE` request purges `customers` + `whatsapp_events` within 30d, retains `payments` ledger for 8 years per tax law (pseudonymized `customer_id`).
+- **Access:** tenant-isolated reads only via `getVerifiedTenantIdFromRequest`; no cross-tenant `payments.notes.tenantId` fallback for financial identity (see §42).
+
+---
+
+# 66.3 RBI Collection & Relationship Protection
+
+Automated `CALL` is gated: only `read 3d ignored + overdue>15` `recovery-decision.ts:294` or `delivered 5d silent + overdue>30` `recovery-decision.ts:340` or `broken promise`. No `overdue=call` blanket. Merchant sees `Why: read ignored` + `Review after 24h` in waiting, and `More actions` collapsed to prevent spray. Liability disclaimer: BillZo is tool, merchant is sender; BillZo logs `reason/headline` for audit but does not guarantee non-annoyance. Rate limit: `customer_cooldown ≥24h` decision rule + execution guard.
+
+---
+
+# 66.4 Vendor Dependency & Fallback
+
+Meta WA is single-vendor risk. Fallback:
+
+```text
+WA healthy → send_reminder via template (tracked, waiting window)
+WA down / not verified → degrade to Direct WA (bypass) + Call + manual UPI link, with banner “WA verification pending — using fallback”
+```
+
+Onboarding truth: `<10min to first *imported* case`, `48h to first *auto* send` while Meta verification pends. Pilot playbook must sit with merchant 1hr for import + opt-in, not self-serve.
 
 ---
 

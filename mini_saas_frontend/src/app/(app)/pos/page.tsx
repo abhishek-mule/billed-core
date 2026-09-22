@@ -37,6 +37,7 @@ export default function POSPage() {
   const searchParams = useSearchParams();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState<string>("Walk-in Customer");
   const [customerId, setCustomerId] = useState<string>("");
@@ -48,6 +49,7 @@ export default function POSPage() {
   const [showCart, setShowCart] = useState(false);
   const [success, setSuccess] = useState<POSSuccessResult | null>(null);
   const [documentType, setDocumentType] = useState<'tax_invoice' | 'bill'>('tax_invoice');
+  const [dueDays, setDueDays] = useState(30);
   const [tenantData, setTenantData] = useState<Tenant | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -61,6 +63,12 @@ export default function POSPage() {
     setTenantId(activeTenantId);
     db().tenants.get(activeTenantId).then(t => setTenantData(t ?? null));
   }, []);
+
+  // Debounce product search for 10k-item stores
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const { data: products, loading: productsLoading, error: productsError } = useLiveQueryState<any[]>(
     async () => {
@@ -97,10 +105,11 @@ export default function POSPage() {
   const loadError = productsError || customersError;
 
   const filtered = useMemo(
-    () => products.filter((p) => p.name?.toLowerCase().includes(query.toLowerCase())),
-    [query, products],
+    () => products.filter((p) => p.name?.toLowerCase().includes(debouncedQuery.toLowerCase())),
+    [debouncedQuery, products],
   );
 
+  // Preview only — server grand_total/tax_total is canonical. Uses MRP-inclusive split; exclusive would be line*rate/100.
   const totalMrp = cart.reduce((s, i) => s + i.salePrice * i.qty, 0);
   const itemTaxDetails = cart.map(i => {
     const lineTotal = i.salePrice * i.qty;
@@ -152,10 +161,18 @@ export default function POSPage() {
 
   const handlePay = async (method: "upi" | "cash" | "udhar") => {
     if (submitting) return;
+    // Walk-in udhar without phone will be blocked_phone forever — warn merchant now
+    if (method === 'udhar' && (!customerId || customer === "Walk-in Customer") && !customerPhone) {
+      toast.error("Add customer phone for Udhar — required for WhatsApp recovery", { description: "Walk-in without phone will never appear in Recovery. Pick a party or add phone.", duration: 4000 });
+      setShowPay(false);
+      setShowCustomer(true);
+      return;
+    }
     setSubmitting(true);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(80);
 
-    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId, documentType);
+    const dueAtOverride = method === 'udhar' ? new Date(Date.now() + dueDays * 24 * 60 * 60 * 1000).toISOString() : null;
+    const result = await handlePOSInvoice(cart, customer, customerPhone || "", method, customerId, documentType, dueAtOverride);
 
     if (!result.success) {
       setSubmitting(false);
@@ -402,6 +419,16 @@ export default function POSPage() {
                 Bill
               </button>
             </div>
+            <div className="flex items-center gap-2 rounded-xl border border-input px-3 py-2.5">
+              <span className="text-xs font-medium text-muted-foreground shrink-0">Due in</span>
+              <div className="flex gap-1.5 ml-auto">
+                {[15, 30, 45, 60].map(d => (
+                  <button key={d} onClick={() => setDueDays(d)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${dueDays===d ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border text-muted-foreground hover:bg-muted'}`}>{d}d</button>
+                ))}
+              </div>
+              <span className="text-[11px] text-muted-foreground">· Udhar only</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground px-1">Preview totals use MRP-inclusive GST; server grand_total is canonical.</p>
             {submitting ? (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />

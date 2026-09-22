@@ -281,6 +281,10 @@ export function canSendReminder(
   rules.push(r13)
 
   // ── Rule 14: Customer cooldown — never send more than once per 24h ──
+  // NOTE: this is a Layer A business decision rule, NOT the execution-level
+  // duplicate guard in the reminders worker (24h invoice+stage send check).
+  // The rule decides desirability; the guard enforces at-most-once execution
+  // against stale/concurrent evidence. Keep both. See ADR-005.
   const hoursSinceLast = input.reminderHistory?.hoursSinceLastCustomerReminder ?? 99
   const customerCooldownOk = hoursSinceLast >= 24
   const r14: DecisionRuleResult = {

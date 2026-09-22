@@ -211,6 +211,8 @@ async function finalizeReconciliation(
   const newPaidAmount = currentPaid + incomingAmount
   const invoiceTotal = Number(invoice.total || invoice.grand_total || incomingAmount)
   const newStatus = newPaidAmount >= invoiceTotal ? 'paid' : 'partial'
+  // Rule-evaluation confidence for the match tier (NOT a calibrated success
+  // probability — see the confidence contract in decision-engine-types.ts).
   const confidence = matchType === 'payment_link' ? 1.0 : matchType === 'exact' ? 0.95 : 0.7
 
   // B-05a: convergence gate — if the invoice is already at the computed target

@@ -7,6 +7,7 @@ import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { createQueueLogger } from '../lib/queue-logger'
 import { EventType, DEFAULT_OPERATING_HOURS } from '@billzo/shared'
 import { emitEvent, emitRecoveryReminderSent } from '../src/lib/billzo/events'
+import { claimSendMarker } from '../src/lib/billzo/send-marker'
 import type { InternalAuthorityClient } from '../src/lib/authority/internal-authority'
 import { executeAction } from '../src/lib/recovery/action-executor'
 import { generateCorrelationId } from '../src/lib/billzo/idempotency'
@@ -601,6 +602,10 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
 
         // ── Send-time guard: idempotency check ──
         // Has this invoice+stage already been sent in the last 24 hours?
+        // NOTE: this is an execution-level safety guard, NOT the Layer A
+        // business rule (decision-engine `customer_cooldown ≥ 24h`). The two
+        // look similar but protect different things — do not merge or delete
+        // one assuming it duplicates the other. See ADR-005.
         const { data: existingSend } = await supabaseAdmin
           .from('whatsapp_events')
           .select('id')
@@ -626,6 +631,19 @@ export function createRemindersWorker(authority?: InternalAuthorityClient) {
         if (!freshInvoice || freshInvoice.status === 'paid' || (freshInvoice.outstanding_amount ?? freshInvoice.total ?? 0) <= 0) {
           logger.warn({ invoiceId, status: freshInvoice?.status }, 'Send skipped — invoice no longer outstanding')
           return { skipped: true, reason: 'invoice_paid_or_zero', invoiceId, stage }
+        }
+
+        // B-05b Step 1: pre-execution send-marker, same guard as the outbox
+        // transport lane. Keyed by BullMQ job id: stable across retries of THIS
+        // job, distinct across re-enqueues. Closes the lock-expiry/Redis-outage
+        // hole in the 60s customer lock + 24h-check above (both check-then-act).
+        const marker = await claimSendMarker({
+          key: `send:executed:reminder-job:${job.id}`,
+          tenantId,
+        })
+        if (marker === 'duplicate') {
+          logger.warn({ invoiceId, stage, jobId: job.id }, 'Duplicate reminder send suppressed (job already executed)')
+          return { skipped: true, reason: 'duplicate_job_execution', invoiceId, stage }
         }
 
         // Canonical recovery attempt. This is deliberately created before any

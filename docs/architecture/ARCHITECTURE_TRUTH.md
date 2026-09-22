@@ -1,5 +1,11 @@
 # BillZo System Architecture & Constitution
 
+> **Scope note (2026-09-20):** the "Transport: Baileys" line in §1 below describes
+> the worker's adapter-registry design era. The binding **production launch**
+> decision is Gupshup-only — see `../adr/ADR-001-gupshup-inbound-auth.md`.
+> The worker retains multi-adapter transport code (Baileys/Meta/Gupshup); which
+> provider is production-active is decided by ADR, not by this file.
+
 ## Core Objective
 Prove the **First Rupee Recovery** through a **Causal Truth Engine**.
 

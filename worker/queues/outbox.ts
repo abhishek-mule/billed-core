@@ -1,9 +1,8 @@
 import { Worker, Job, Queue } from 'bullmq'
 import postgres from 'postgres'
 import { getRedis, createRedisConnection } from '../lib/redis'
-import { pollOutboxEvents, markEventProcessing, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
+import { pollOutboxEvents, claimOutboxEvent, markEventCompleted, markEventFailed, writeOutboxEvent } from '../src/lib/billzo/outbox'
 import { supabaseAdmin } from '../src/lib/billzo/supabase-admin'
-import { withLock } from '../lib/lock'
 import { logWorkerEvent, logWorkerError } from '../lib/logging'
 import { createQueueLogger } from '../lib/queue-logger'
 import { startBaileysSocket, disconnectBaileys } from '../lib/baileys-socket'
@@ -73,50 +72,46 @@ export function createOutboxWorker(authority?: InternalAuthorityClient) {
         for (const event of events) {
           const eventStartTime = Date.now()
 
-          const lockKey = `outbox:${event.id}`
-          const result = await withLock(lockKey, 30000, async () => {
-            await markEventProcessing(event.id)
+          // B-05b: the atomic DB claim is the sole execution authority.
+          // Lost races skip silently here; the fragile Redis lock is bypassed
+          // (lock expiry mid-processing could double-claim; the claim cannot).
+          const claimed = await claimOutboxEvent(event.id)
+          if (!claimed) continue
 
-            try {
-              await processOutboxEvent(event)
-              await markEventCompleted(event.id)
+          try {
+            await processOutboxEvent(claimed)
+            await markEventCompleted(claimed.id)
 
-              const duration = Date.now() - eventStartTime
-              logWorkerEvent({
-                event_id: event.id,
-                tenant_id: event.tenantId,
-                entity_id: event.entityId,
-                correlation_id: event.correlationId,
-                queue_name: 'outbox',
-                attempt: event.attempts,
-                status: 'success',
-                duration_ms: duration,
-                timestamp: new Date().toISOString(),
-                level: 'info',
-                message: `Processed event: ${event.type}`,
-              })
+            const duration = Date.now() - eventStartTime
+            logWorkerEvent({
+              event_id: claimed.id,
+              tenant_id: claimed.tenantId,
+              entity_id: claimed.entityId,
+              correlation_id: claimed.correlationId,
+              queue_name: 'outbox',
+              attempt: claimed.attempts,
+              status: 'success',
+              duration_ms: duration,
+              timestamp: new Date().toISOString(),
+              level: 'info',
+              message: `Processed event: ${claimed.type}`,
+            })
+          } catch (err: any) {
+            const duration = Date.now() - eventStartTime
+            logWorkerError(err as Error, {
+              event_id: claimed.id,
+              tenant_id: claimed.tenantId,
+              entity_id: claimed.entityId,
+              queue_name: 'outbox',
+              attempt: claimed.attempts,
+              duration_ms: duration,
+              message: `Failed to process event: ${claimed.type}`,
+            })
 
-              return true
-            } catch (err: any) {
-              const duration = Date.now() - eventStartTime
-              logWorkerError(err as Error, {
-                event_id: event.id,
-                tenant_id: event.tenantId,
-                entity_id: event.entityId,
-                queue_name: 'outbox',
-                attempt: event.attempts,
-                duration_ms: duration,
-                message: `Failed to process event: ${event.type}`,
-              })
-
-              await markEventFailed(event.id, event.attempts + 1)
-              return false
-            }
-          })
-
-          if (result !== null) {
-            processed++
+            await markEventFailed(claimed.id, claimed.attempts + 1)
           }
+
+          processed++
         }
 
         return { processed }

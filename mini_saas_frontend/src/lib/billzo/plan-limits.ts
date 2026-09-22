@@ -12,9 +12,10 @@ export type Feature =
   | 'exports'
   | 'api'
   | 'multi_branch'
+  | 'escalation_pack'
 
 export interface PlanLimits {
-  reminders: number // -1 = unlimited
+  reminders: number // finite monthly cap (no unlimited recovery actions)
   branches: number // -1 = unlimited
   api: boolean
 }
@@ -36,7 +37,14 @@ export const PRO_MONTHLY_PRICE = 599
 
 export const FEATURES: Record<PlanType, readonly Feature[]> = {
   starter: ['manual_reminders'],
-  pro: ['manual_reminders', 'auto_recovery', 'recovery_queue', 'promise_tracking', 'cashflow_forecast'],
+  pro: [
+    'manual_reminders',
+    'auto_recovery',
+    'recovery_queue',
+    'promise_tracking',
+    'cashflow_forecast',
+    'escalation_pack',
+  ],
   business: [
     'manual_reminders',
     'auto_recovery',
@@ -47,6 +55,7 @@ export const FEATURES: Record<PlanType, readonly Feature[]> = {
     'exports',
     'api',
     'multi_branch',
+    'escalation_pack',
   ],
   enterprise: [
     'manual_reminders',
@@ -58,6 +67,7 @@ export const FEATURES: Record<PlanType, readonly Feature[]> = {
     'exports',
     'api',
     'multi_branch',
+    'escalation_pack',
   ],
 }
 

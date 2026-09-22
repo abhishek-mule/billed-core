@@ -323,7 +323,7 @@ async function handleStatusUpdate(webhookId: string, phoneNumberId: string, valu
     invoice_id: invoiceId,
     occurred_at: occurredAt,
     metadata,
-    conversation_id: conversation?.id || null,
+    conversation_id: conversation?.id || ('conv_' + (phone || 'unknown')),
     errors: status.errors ? JSON.stringify(status.errors) : null,
     created_at: now,
   }
@@ -457,6 +457,8 @@ async function handleInboundMessage(webhookId: string, phoneNumberId: string, va
   // ── 3. Insert whatsapp_events with real tenant_id ─────────────────────
   const row = {
     id: eventId,
+    billzo_message_id: eventId,
+    conversation_id: 'conv_' + (senderRaw || 'unknown'),
     tenant_id: resolvedTenantId || 'meta_webhook', // sentinel for unresolved
     provider_message_id: msg.id,
     phone: senderRaw,

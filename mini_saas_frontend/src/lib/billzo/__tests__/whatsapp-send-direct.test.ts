@@ -60,6 +60,7 @@ describe('sendDirectWhatsApp — Meta via shared TransportRegistry', () => {
   })
 
   it('resolves Meta provider from whatsapp_connections and sends', async () => {
+    let whatsappEventsInsert: any
     ;(supabaseAdmin.from as any).mockImplementation((table: string) => {
       if (table === 'whatsapp_connections') {
         return mockChain({
@@ -68,6 +69,11 @@ describe('sendDirectWhatsApp — Meta via shared TransportRegistry', () => {
             error: null,
           }),
         })
+      }
+      if (table === 'whatsapp_events') {
+        const chain = mockChain()
+        whatsappEventsInsert = chain.insert
+        return { ...chain, insert: whatsappEventsInsert }
       }
       return mockChain()
     })
@@ -85,8 +91,18 @@ describe('sendDirectWhatsApp — Meta via shared TransportRegistry', () => {
       to: '919371343891',
       text: 'Hello Rahul, reminder from BillZo.',
     }))
-    // event recorded into whatsapp_events
+    // event recorded into whatsapp_events; every NOT NULL column is supplied
     expect(supabaseAdmin.from).toHaveBeenCalledWith('whatsapp_events')
+    expect(whatsappEventsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        billzo_message_id: expect.any(String),
+        conversation_id: 'conv_919371343891',
+        tenant_id: 'tenant_1',
+        customer_id: 'cust_1',
+        occurred_at: expect.any(String),
+      }),
+    )
   })
 
   it('returns error when no provider can be resolved', async () => {

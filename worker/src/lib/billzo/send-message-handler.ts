@@ -1,6 +1,7 @@
 // authority:exempt event_transport — whatsapp provider pipeline
 import { supabaseAdmin } from './supabase-admin'
 import { writeOutboxEvent } from './outbox'
+import { claimSendMarker, releaseSendMarker } from './send-marker'
 import { sendWhatsAppMessage } from '../../../lib/whatsapp-router'
 import { generateStatementPdf, type StatementInvoice } from '../../../lib/statement-pdf'
 import { EventType } from '@billzo/shared'
@@ -175,6 +176,18 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
     finalMessage += `\n\n${personalNote.trim()}`
   }
 
+  // B-05b: pre-execution send guard (defense in depth). The outbox claim is the
+  // primary single-winner; this marker makes a claim miss unable to double-text
+  // a customer. At-most-once per outbox event: a crash between marker and send
+  // loses one reminder (re-planned by later cycles), strictly preferable to a
+  // duplicate dunning text.
+  const sendMarkerKey = `send:executed:outbox:${event.id}`
+  const marker = await claimSendMarker({ key: sendMarkerKey, tenantId })
+  if (marker === 'duplicate') {
+    console.log('[SendMessage] Duplicate send suppressed for outbox event:', event.id)
+    return
+  }
+
   const sendResult = await sendWhatsAppMessage(tenantId, `+${toNumber}`, finalMessage, {
     invoiceId: invoiceId || null,
     customerId,
@@ -249,8 +262,11 @@ export async function tryHandleSendMessageIntent(event: any): Promise<void> {
     idempotencyKey: `send:executed:${messageId}`,
   })
 
-  // Throw on failure so the outbox event is retried by markEventFailed
+  // Throw on failure so the outbox event is retried by markEventFailed.
+  // Compensate the send marker first: without this, the retry would see the
+  // marker and skip, losing the message forever.
   if (sendResult.error) {
+    await releaseSendMarker(sendMarkerKey)
     throw new Error(`WhatsApp send failed via ${sendResult.provider}: ${sendResult.error}`)
   }
 }

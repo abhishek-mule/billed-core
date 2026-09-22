@@ -240,28 +240,39 @@ export async function getHomeDecision(tenantId: string): Promise<HomeDecision> {
     focusCount++
   }
 
-  // Calculate high-level financial metrics
+  // Calculate high-level financial metrics — canonical sources.
+  // Outstanding: sum of ALL open invoices outstanding_amount (matches Recovery + Invoices list).
+  // Recovered this month: authoritative payments ledger (status=paid, Asia/Kolkata month), not invoices.
   const { data: allTenantInvoices } = await supabaseAdmin
     .from('invoices')
-    .select('grand_total, total, paid_amount, outstanding_amount, status, created_at')
+    .select('grand_total, total, paid_amount, outstanding_amount, status')
     .eq('tenant_id', tenantId)
     .limit(1000)
 
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   let totalOutstanding = 0
-  let recoveredThisMonth = 0
-
   for (const inv of allTenantInvoices || []) {
-    const invStatus = inv.status as string
-    if (invStatus !== 'paid' && invStatus !== 'cancelled') {
+    if ((inv.status as string) !== 'paid' && (inv.status as string) !== 'cancelled') {
       totalOutstanding += invoiceOutstanding(inv)
     }
-    if (invStatus === 'paid') {
-      const invDate = new Date(inv.created_at || 0)
-      if (invDate >= startOfMonth) {
-        recoveredThisMonth += Number(inv.grand_total || inv.total || 0)
-      }
-    }
+  }
+  // Merchant-local month: 00:00 IST on 1st
+  const monthStartIST = (() => {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).formatToParts(now)
+    const y = Number(parts.find(p => p.type === 'year')!.value)
+    const m = Number(parts.find(p => p.type === 'month')!.value)
+    return new Date(Date.UTC(y, m - 1, 1) - 19_800_000).toISOString()
+  })()
+  let recoveredThisMonth = 0
+  try {
+    const { data: monthPayments } = await supabaseAdmin
+      .from('payments')
+      .select('amount')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'paid')
+      .gte('created_at', monthStartIST)
+    recoveredThisMonth = (monthPayments || []).reduce((s: number, p: any) => s + (parseFloat(p.amount) || 0), 0)
+  } catch {
+    recoveredThisMonth = 0
   }
 
   const recoveryRate = totalOutstanding > 0

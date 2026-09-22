@@ -70,10 +70,11 @@ describe('plan-limits', () => {
   })
 
   describe('PLAN_LIMITS', () => {
-    it('starter allows 5 reminders, pro 500, business/enterprise unlimited', () => {
+    it('starter allows 5 reminders, pro 500, business/enterprise 750 (finite pilot cap)', () => {
       expect(PLAN_LIMITS.starter.reminders).toBe(5)
       expect(PLAN_LIMITS.pro.reminders).toBe(500)
-      expect(PLAN_LIMITS.business.reminders).toBe(UNLIMITED)
+      expect(PLAN_LIMITS.business.reminders).toBe(750)
+      expect(PLAN_LIMITS.enterprise.reminders).toBe(750)
     })
 
     it('business enables api and 5 branches', () => {
@@ -81,8 +82,8 @@ describe('plan-limits', () => {
       expect(PLAN_LIMITS.business.branches).toBe(5)
     })
 
-    it('enterprise is fully unlimited', () => {
-      expect(PLAN_LIMITS.enterprise.reminders).toBe(UNLIMITED)
+    it('enterprise reminders are finite; branches stay unlimited', () => {
+      expect(PLAN_LIMITS.enterprise.reminders === UNLIMITED).toBe(false)
       expect(PLAN_LIMITS.enterprise.branches).toBe(UNLIMITED)
       expect(PLAN_LIMITS.enterprise.api).toBe(true)
     })

@@ -1,5 +1,11 @@
 # BillZo Pilot Verification Runbook
 
+> **Provider-scope note (2026-09-20):** "Scenario A — BillZo-owned Meta" below
+> predates the binding launch decision: **Gupshup is the sole production
+> provider** — see `../adr/ADR-001-gupshup-inbound-auth.md`. Re-run this loop
+> against the Gupshup channel; treat Meta-specific setup (`META_*` env, WABA
+> boot) as historical unless a new ADR revisits the scope.
+
 > **Purpose:** Validate the complete recovery loop end-to-end with a real merchant, real
 > customer, real WhatsApp, and a real (test) payment — *before* writing any analytics code
 > or automating tests.

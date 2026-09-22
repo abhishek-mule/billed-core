@@ -41,7 +41,6 @@ export function UsagePill() {
         <span className="text-xs font-bold text-primary uppercase tracking-wide">
           {plan === 'business' ? 'Business' : 'Pro'} Plan
         </span>
-        <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">Unlimited</span>
       </div>
     );
   }

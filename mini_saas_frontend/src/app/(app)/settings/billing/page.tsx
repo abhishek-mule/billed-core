@@ -66,7 +66,7 @@ export default function BillingPage() {
 
   const limit = usageLimit
   const pct = limit > 0 ? Math.min(100, Math.round((usageCount / limit) * 100)) : 0
-  const remaining = limit > 0 ? Math.max(0, limit - usageCount) : -1
+  const remaining = Math.max(0, limit - usageCount)
 
   if (loading) {
     return (
@@ -155,17 +155,15 @@ export default function BillingPage() {
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <span className="text-sm font-bold text-foreground whitespace-nowrap">
-              {usageCount} / {limit > 0 ? limit : "∞"}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {remaining > 0
-              ? `${remaining} reminders left this month`
-              : remaining === 0
-              ? "Limit reached — upgrade for more capacity"
-              : "Unlimited reminders"}
-          </p>
+<span className="text-sm font-bold text-foreground whitespace-nowrap">
+                {usageCount} / {limit}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {remaining > 0
+                ? `${remaining} reminders left this month`
+                : "Limit reached — upgrade for more capacity"}
+            </p>
         </div>
 
         {/* Upgrade prompt */}

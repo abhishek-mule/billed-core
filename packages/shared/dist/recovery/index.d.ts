@@ -13,5 +13,6 @@ export * from './feature-extractor';
 export * from './learning';
 export { LearningEngine } from './learning-engine';
 export * from './credits';
+export * from './escalation';
 export type { LearningEngineInput, LearningEngineOutput, LearningEngineExplanation } from './learning-engine';
 //# sourceMappingURL=index.d.ts.map

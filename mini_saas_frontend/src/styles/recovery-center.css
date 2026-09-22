@@ -1535,6 +1535,66 @@
 }
 .rc-card-open:hover { color: hsl(var(--recovery)); }
 
+/* ─── Phase C: Escalation block on exhausted cards ─────────────────────── */
+.rc-card-escalation {
+  margin-top: 14px;
+  border-top: 1px dashed var(--bd);
+  padding-top: 12px;
+}
+.rc-esc {
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rc-esc--warn { background: hsl(var(--warning) / 0.08); border: 1px solid hsl(var(--warning) / 0.35); }
+.rc-esc--calm { background: hsl(var(--muted) / 0.3); border: 1px solid var(--bd); }
+.rc-esc--loading { justify-content: center; align-items: center; font-size: 12.5px; color: var(--muted-foreground); }
+.rc-esc--quiet { flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted-foreground); padding: 0; }
+.rc-esc-head { display: flex; align-items: flex-start; gap: 8px; }
+.rc-esc-ic {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: hsl(var(--warning) / 0.14); color: hsl(var(--warning));
+}
+.rc-esc--calm .rc-esc-ic { background: hsl(var(--success) / 0.14); color: hsl(var(--success)); }
+.rc-esc-head-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rc-esc-title { font-size: 13.5px; font-weight: 700; }
+.rc-esc-sub { font-size: 12px; color: var(--muted-foreground); text-transform: capitalize; }
+.rc-esc-refresh {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted-foreground); padding: 2px; line-height: 0;
+}
+.rc-esc-refresh:hover { color: var(--foreground); }
+.rc-esc-basis {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.rc-esc-basis li {
+  font-size: 12.5px; color: var(--foreground);
+  padding-left: 14px; position: relative;
+}
+.rc-esc-basis li::before {
+  content: '•'; position: absolute; left: 3px; color: hsl(var(--warning));
+}
+.rc-esc-effort { font-size: 12px; color: var(--muted-foreground); line-height: 1.4; }
+.rc-esc-pack {
+  border: 1px solid var(--bd); border-radius: 10px; padding: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: hsl(var(--background));
+}
+.rc-esc-pack-title { font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.rc-esc-pack-actions { display: flex; gap: 6px; }
+.rc-esc-pack-actions .cw-record-payment { padding: 7px 10px; font-size: 12px; flex: 0 0 auto; }
+.rc-esc-actions { display: flex; flex-direction: column; gap: 8px; }
+.rc-esc-actions .cw-record-payment { padding: 11px; font-size: 13.5px; }
+.rc-esc-row { display: flex; }
+.rc-esc-row--split { gap: 6px; }
+.rc-esc-row--split .cw-record-payment { flex: 1; padding: 8px 10px; font-size: 12.5px; }
+
 /* ─── Recovery Command Center: summary bar ──────────────────────────────────── */
 .rc-summary-bar {
   display: flex;
@@ -1809,3 +1869,296 @@
 
 
 
+/* ─── BillZo AI Intelligence Moat Banner ─────────────────────────────────── */
+.rc-moat-banner {
+  background: linear-gradient(135deg, hsl(230 85% 62% / 0.08) 0%, hsl(270 85% 62% / 0.08) 100%);
+  border: 1px solid hsl(240 70% 60% / 0.25);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.rc-moat-banner::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; width: 140px; height: 140px;
+  background: radial-gradient(circle, hsl(250 85% 65% / 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.rc-moat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rc-moat-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.rc-moat-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: #ffffff;
+}
+.rc-moat-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.rc-moat-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: hsl(var(--background) / 0.7);
+  border: 1px solid hsl(var(--border) / 0.6);
+  backdrop-filter: blur(8px);
+}
+.rc-moat-stat-ic {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: hsl(230 85% 62% / 0.12);
+  color: hsl(230 85% 58%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rc-moat-stat-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rc-moat-stat-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+.rc-moat-stat-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* ─── Search & Status Filters Bar ────────────────────────────────────────── */
+.rc-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+.rc-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.rc-search-ic {
+  position: absolute;
+  left: 12px;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+.rc-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 34px 0 38px;
+  border-radius: 10px;
+  border: 1px solid var(--bd);
+  background: hsl(var(--muted) / 0.3);
+  font-size: 13.5px;
+  color: var(--foreground);
+  transition: border-color .15s ease, background .15s ease;
+}
+.rc-search-input:focus {
+  outline: none;
+  border-color: hsl(var(--primary));
+  background: var(--background);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.12);
+}
+.rc-search-clear {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rc-search-clear:hover {
+  background: hsl(var(--muted));
+  color: var(--foreground);
+}
+
+.rc-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.rc-filter-pills::-webkit-scrollbar { display: none; }
+.rc-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--bd);
+  background: hsl(var(--muted) / 0.3);
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s ease;
+}
+.rc-filter-pill:hover {
+  background: hsl(var(--muted) / 0.6);
+  color: var(--foreground);
+}
+.rc-filter-pill--active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground, #fff));
+  border-color: hsl(var(--primary));
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.25);
+}
+.rc-filter-pill-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: hsl(var(--background) / 0.35);
+}
+
+/* ─── High-Contrast Status & Action Badges ───────────────────────────────── */
+.rc-badge-delivery {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.rc-badge-delivery--read {
+  background: hsl(210 90% 52% / 0.12);
+  color: hsl(210 90% 48%);
+}
+.rc-badge-delivery--delivered {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+}
+.rc-badge-delivery--failed {
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+}
+
+.rc-badge-promise {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: hsl(270 80% 60% / 0.12);
+  color: hsl(270 75% 50%);
+}
+
+.rc-btn-wa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: #25D366;
+  color: #ffffff;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity .15s ease, transform .1s ease;
+}
+.rc-btn-wa:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+/* ─── V2 Financial Summary — missing, now professional ───────────────────── */
+.rc-financial-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .rc-financial-summary { grid-template-columns: repeat(4, 1fr); }
+}
+.rc-financial-item {
+  background: var(--surface);
+  border: 1px solid var(--bd);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rc-financial-item:first-child {
+  border-color: hsl(var(--primary) / 0.22);
+  background: hsl(var(--primary) / 0.06);
+}
+.rc-financial-item:first-child .rc-financial-label { color: hsl(var(--primary)); }
+.rc-financial-label {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rc-financial-sub {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.2;
+}
+
+/* ─── Polish: header + card hierarchy for professional feel ──────────────── */
+.rc-page { gap: 18px; }
+.rc-header { align-items: center; }
+.rc-greeting { font-size: 20px; }
+.rc-card { border-radius: 16px; box-shadow: 0 1px 2px hsl(0 0% 0% / 0.04); }
+.rc-card:hover { box-shadow: 0 4px 16px hsl(0 0% 0% / 0.06); }
+.rc-block-head { margin-bottom: 2px; }
+.rc-block-head h2 { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+.rc-facts--grid { background: hsl(var(--muted) / 0.22); border-radius: 12px; padding: 10px 12px; }
+.rc-facts--grid dt { font-size: 10px; letter-spacing: 0.05em; }

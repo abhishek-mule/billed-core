@@ -3,8 +3,12 @@
 BillZo is a **reconstructive financial recovery engine** designed to synchronize truth between merchants, customers, and payment rails.
 
 ## Documentation Entry Points
-*   **[System Constitution](docs/architecture/ARCHITECTURE_TRUTH.md):** The core architectural invariants and dimensional truth model.
+*   **[AI Constitution](AGENTS.md):** Binding operating rules for AI agents (truth hierarchy, uncertainty protocol, done rule).
+*   **[Known Reality](docs/known-reality.md):** Verified operational snapshot (providers, gates, infra). Check its `Last verified` date; stale facts must be re-verified.
+*   **[Architecture Decisions](docs/adr/):** Binding ADRs (e.g. Gupshup auth, Postgres-canonical-truth).
+*   **[System Constitution](docs/architecture/ARCHITECTURE_TRUTH.md):** Core architectural invariants and dimensional truth model. Production transport scope is decided in ADR-001.
 *   **[Implementation Plan](docs/development/IMPLEMENTATION_PLAN.md):** The 45-day roadmap to the First Rupee Recovery Loop.
+*   **[Decisions Log](docs/development/DECISIONS.md):** Chronological decision history.
 
 ## Core Pillars
 1.  **Money Truth:** Immutable event ledger + pure reducer projection.
@@ -12,9 +16,10 @@ BillZo is a **reconstructive financial recovery engine** designed to synchronize
 3.  **Policy Engine:** Context-aware action gating (`canSendReminder`).
 
 ## Status
-*   **Backend:** Proven (Loop closed: Payment -> Attribution -> Recovered).
-*   **Infrastructure:** Stabilized on local Redis.
-*   **Next Step:** Implement Task 1.1 (Financial Reducer Hardening).
+*   **WhatsApp provider:** Gupshup (sole production provider; inbound auth = source-IP allowlisting — see `docs/adr/ADR-001-gupshup-inbound-auth.md`). Pre-GO checklist 15/19, drain OFF (see `docs/known-reality.md`).
+*   **Data:** Supabase Postgres is canonical (sessions/rate limits included); no local Redis required for the web app.
+*   **Auth:** Passwordless magic-link only.
+*   **Tests:** `pnpm test:frontend` (vitest) green; see `docs/known-reality.md` for the last verified counts.
 
 ## Running Locally
 

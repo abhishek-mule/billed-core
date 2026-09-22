@@ -119,11 +119,18 @@ export async function POST(request: NextRequest) {
       case 'order.paid': {
         const order = event.payload.order
         const notes = order?.notes || {}
-        const tenantId = notes.tenantId
         const plan = (notes.plan || 'pro') as PlanType
 
+        // B-04 residual: anchor the billing tenant to a server-created record —
+        // invoice-bound checkout orders first, then our subscription row.
+        // Never mint or move tenants from raw notes alone.
+        const tenantId =
+          (notes.source === 'billzo_standard_checkout' && notes.invoiceId
+            ? await resolveTenantFromAuthoritativeOrder(order?.id)
+            : null) || (await resolveSubscriptionTenant(notes, null))
+
         if (!tenantId) {
-          console.error('[Webhook] No tenantId in order notes')
+          console.error('[Webhook] No authoritative tenant for order:', order?.id)
           break
         }
 
@@ -160,7 +167,9 @@ export async function POST(request: NextRequest) {
             console.error('[Webhook] Authority rejected subscription update:', result.error)
           }
         } else {
-          // authority:fallback tenant.create — bootstrap tenant creation on first subscription
+          // authority:fallback tenant.create — bootstrap tenant creation on first
+          // subscription. Safe: tenantId above is anchored to our subscription
+          // row (or an invoice-bound order), never raw notes alone.
           await supabaseAdmin
             .from('tenants')
             .insert({
@@ -196,7 +205,8 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.activated': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        // B-04 residual: anchor to our subscription row, not raw notes.
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         const plan = (sub?.notes?.plan || 'pro') as PlanType
         if (!tenantId) break
 
@@ -239,7 +249,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.charged': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           await recordBillingEvent({
             tenantId,
@@ -260,7 +270,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.cancelled': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (!tenantId) break
 
         await recordBillingEvent({
@@ -302,7 +312,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.paused': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           await recordBillingEvent({
             tenantId,
@@ -339,7 +349,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.resumed': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           const result = await submitIntent({
             intentId: crypto.randomUUID(),
@@ -370,7 +380,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.halted': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           await recordBillingEvent({
             tenantId,
@@ -391,7 +401,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.pending': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           await recordBillingEvent({
             tenantId,
@@ -412,7 +422,7 @@ export async function POST(request: NextRequest) {
 
       case 'subscription.completed': {
         const sub = event.payload.subscription
-        const tenantId = sub?.notes?.tenantId
+        const tenantId = await resolveSubscriptionTenant(sub?.notes, sub?.id)
         if (tenantId) {
           await recordBillingEvent({
             tenantId,
@@ -441,6 +451,49 @@ export async function POST(request: NextRequest) {
     console.error('[Webhook] Processing error:', error)
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
   }
+}
+
+/**
+ * B-04 residual: authoritative tenant resolution for BILLING events
+ * (order.paid, subscription.*).
+ *
+ * The payment path above anchors to the Razorpay Order + invoice binding.
+ * Billing events anchor to OUR `subscriptions` row instead: `create-subscription`
+ * persists a pending row server-side and stamps `notes.subscriptionId` with our
+ * row id, so a matching local row proves the tenantId was server-associated.
+ * A dashboard-crafted subscription (or tampered notes) has no local row → null.
+ * Legacy subscriptions created before subscriptionId stamping fall back to notes
+ * with a loud warning (audited migration path, not silent trust).
+ */
+async function resolveSubscriptionTenant(
+  notes: any,
+  providerSubscriptionId?: string | null,
+): Promise<string | null> {
+  const claimedTenant =
+    typeof notes?.tenantId === 'string' && notes.tenantId ? notes.tenantId : null
+  const subscriptionId =
+    typeof notes?.subscriptionId === 'string' && notes.subscriptionId
+      ? notes.subscriptionId
+      : null
+
+  if (subscriptionId) {
+    const { data: row } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, tenant_id')
+      .eq('id', subscriptionId)
+      .single()
+    if (!row || (claimedTenant && row.tenant_id !== claimedTenant)) return null
+    return row.tenant_id as string
+  }
+
+  if (claimedTenant) {
+    console.warn(
+      '[Webhook] Billing event without local subscription anchor — legacy notes fallback:',
+      providerSubscriptionId || 'unknown',
+    )
+    return claimedTenant
+  }
+  return null
 }
 
 /**

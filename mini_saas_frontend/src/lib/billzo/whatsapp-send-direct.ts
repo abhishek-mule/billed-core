@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { createRedisClient } from './redis'
 import { TransportRegistry, MetaAdapter, GupshupAdapter, SimulationAdapter } from '@billzo/shared'
 import type { OutboundMessage } from '@billzo/shared'
-import { recordPilotEvent } from './whatsapp-server'
+import { whatsAppServer } from './whatsapp'
 
 function interpolate(text: string, vars: Record<string, string | number>): string {
   return text.replace(/\{\{(\d+)\}\}/g, (_, n) => String(vars[n] ?? ''))
@@ -209,6 +209,7 @@ async function recordEvent(
     await supabaseAdmin.from('whatsapp_events').insert({
       id: messageId,
       billzo_message_id: messageId,
+      conversation_id: 'conv_' + (cleanPhone || 'unknown'),
       tenant_id: tenantId,
       phone_number_id: phoneNumberId,
       invoice_id: options?.invoiceId || null,
@@ -228,7 +229,7 @@ async function recordEvent(
       error: sendOk ? null : 'Send failed',
     })
 
-    await recordPilotEvent({
+    await whatsAppServer.recordPilotEvent({
       tenantId,
       customerId,
       phoneNumberId,

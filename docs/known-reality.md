@@ -5,7 +5,7 @@
 > Never add an assumption here. If the `Last verified` date is old,
 > re-verify before trusting anything below.
 
-**Last verified:** 2026-09-20 (UTC)
+**Last verified:** 2026-09-23 (UTC)
 
 ## WhatsApp / Gupshup
 
@@ -91,6 +91,15 @@
 - `FACT` (verified 2026-09-20, code): there is no `components/ui` shadcn scaffold;
   repo convention is `src/components/billzo/*`, except the already-present
   `src/components/ui/sign-in.tsx` (+ `badge`, `button`, `table`, `customers-table`).
+
+## Financial truth — canonical outstanding (fixed 2026-09-23)
+
+- `FACT` (fixed 2026-09-23, code): **One outstanding definition → many views.** Canonical:
+  `outstanding = outstanding_amount ?? max(0, grand_total/total - paid_amount)` where `status NOT IN ('paid','cancelled')`, `tenant_id = current`, `limit 1000` (see scaling note). Used in `recovery-home.ts:243`, `recovery-command-center.ts:462`, `invoices/page.tsx:28`, `parties/page.tsx:70`, `cashflow/page.tsx:100`, `pulse/page.tsx:55`. Previously 5 divergent calculations.
+- `FACT` (fixed 2026-09-23): `TOTAL OUTSTANDING` (~31.7k) is all receivables; `IN RECOVERY` (~16.4k) is subset with `recovery_cases` `ACTIVE_STATES`. Not supposed to match — preserves `Home` vs `Recovery Focus` distinction.
+- `FACT` (fixed 2026-09-23): `Recovered this month` is **payments ledger** `payments WHERE status='paid' AND created_at >= IST monthStart (00:00 Asia/Kolkata = 18:30 UTC prev day)` `recovery-home.ts:252`, `recovery-command-center.ts:470` helper `monthStartIST`, not `invoices created_at`. Correctly attributes January invoice paid in September to September.
+- `FACT` (known limitation, not expanded now): `limit 1000` is correctness boundary — `sum(first 1000)` ≠ `total outstanding` if tenant >1000 open invoices. Next hardening: server-side `SUM(COALESCE(GREATEST(outstanding_amount,0), GREATEST(grand_total - paid_amount,0))) WHERE tenant_id=? AND status NOT IN ('paid','cancelled')` aggregate. Current `limit 1000` is intentional product boundary for pilot, not infinite scale.
+- `FACT` (vocabulary, locked): `Total Outstanding` = all unpaid, `In Recovery` = recovery_cases subset, `Recovered This Month` = ledger paid this IST month, `Overdue` = outstanding + dueDate < now, `Pending Udhar` = product-defined udhar outstanding — do not conflate.
 
 ## Current limitations
 

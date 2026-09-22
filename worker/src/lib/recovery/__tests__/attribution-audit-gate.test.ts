@@ -110,7 +110,7 @@ class FakeDb {
   }
 }
 
-// ── Q1–Q4 oracle, line-for-line mirrors of docs/phase-1.5-attribution-audit.md ──
+// ── Q1–Q4 oracle, line-for-line mirrors of docs/architecture/phase-1.5-attribution-audit.md ──
 function oracleQ1(db: FakeDb, invoiceId: string) {
   return (db.tables['recovery_outcomes'] || [])
     .filter((r) => r.outcome_type === 'payment' && r.invoice_id === invoiceId)

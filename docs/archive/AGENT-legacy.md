@@ -1,3 +1,15 @@
+# BillZo Agent Guide — ARCHIVED (superseded by `/AGENTS.md`)
+
+> **Do not follow this document.** It is preserved for history only.
+> The binding AI constitution is now [`/AGENTS.md`](../../AGENTS.md);
+> current reality is [`docs/known-reality.md`](../known-reality.md).
+> Durable frontend-discipline rules from the June-2026 audit live on in
+> [`docs/development/CODE_PATTERNS_GUIDE.md`](../development/CODE_PATTERNS_GUIDE.md).
+> Known-stale items below (do not trust): Baileys-as-scale-transport
+> (see ADR-001 — Gupshup is the sole launch provider), "bell wired to /pulse"
+> (current: `/notifications` with unread badge), per-session `AGENT.md` fix logs
+> (replaced by the AGENTS.md workflow + `docs/development/DECISIONS.md`).
+
 # BillZo Agent Guide
 
 ## Project Context

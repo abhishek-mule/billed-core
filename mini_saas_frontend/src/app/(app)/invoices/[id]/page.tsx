@@ -55,6 +55,7 @@ export default function InvoiceDetailPage() {
   const [recordPaymentSuccess, setRecordPaymentSuccess] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [recoveryDecision, setRecoveryDecision] = useState<any>(null);
 
   const id = params.id as string;
 
@@ -62,6 +63,22 @@ export default function InvoiceDetailPage() {
     loadInvoice();
     loadAttribution();
   }, [id]);
+
+  // Wire to authoritative decision engine — invoice CTA follows recovery Command Center, not local heuristic.
+  useEffect(() => {
+    if (!invoice?.customerId) return;
+    const ctrl = new AbortController();
+    fetch('/api/recovery/command-center', { credentials: 'include', signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const all = [...(data.needsYou||[]), ...(data.billzoIsHandling||[]), ...(data.monitoring||[]), ...(data.exhausted||[])]
+        const card = all.find((c:any) => c.customerId === invoice.customerId)
+        if (card) setRecoveryDecision(card);
+      })
+      .catch(()=>{});
+    return () => ctrl.abort();
+  }, [invoice?.customerId]);
 
   const loadInvoice = async () => {
     try {
@@ -86,7 +103,11 @@ export default function InvoiceDetailPage() {
               customerId: remoteData.customer_id || remoteData.customerId || '',
               customerName: remoteData.customer_name || 'Walk-In Customer',
               customerPhone: remoteData.customer_phone || remoteData.phone || '',
-              total: Number(remoteData.total || remoteData.grand_total || 0),
+              total: Number(remoteData.grand_total ?? remoteData.total ?? 0),
+              grand_total: remoteData.grand_total != null ? Number(remoteData.grand_total) : undefined,
+              subtotal: remoteData.subtotal != null ? Number(remoteData.subtotal) : undefined,
+              tax_total: remoteData.tax_total ?? remoteData.gst_total != null ? Number(remoteData.tax_total ?? remoteData.gst_total) : undefined,
+              paidAmount: remoteData.paid_amount != null ? Number(remoteData.paid_amount) : undefined,
               outstandingAmount: Number(remoteData.outstanding_amount ?? remoteData.total ?? 0),
               status: remoteData.status || 'unpaid',
               syncStatus: remoteData.sync_status || 'synced',
@@ -157,12 +178,37 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  function getOutstanding() {
+    if (!invoice) return 0
+    const t = Number((invoice as any).grand_total ?? invoice.total ?? 0)
+    return Math.max(0, Number((invoice as any).outstandingAmount ?? invoice.outstandingAmount ?? (t - (Number((invoice as any).paidAmount ?? invoice.paidAmount) || 0))))
+  }
+
   const sendWhatsApp = async (phoneOverride?: string) => {
     const phone = phoneOverride || invoice?.customerPhone;
     if (!phone) return
     setSendingWA(true)
     setWaError('')
     try {
+      // Ensure vars use outstanding + resolved payment link — prevents blank link rejection.
+      const isPaid = invoice?.status === 'paid'
+      let paymentUrl = invoice?.paymentLinkUrl || paymentLink || ''
+      if (!isPaid && !paymentUrl) {
+        // Generate on-demand if merchant never created one — show link instead of blank.
+        try {
+          const gen = await fetch('/api/payment/payment-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ invoiceId: invoice.id, amount: getOutstanding(), customerName: invoice.customerName, customerPhone: phone }),
+          })
+          const gdata = await gen.json().catch(() => ({}))
+          if (gen.ok && gdata.short_url) {
+            paymentUrl = gdata.short_url
+            setPaymentLink(paymentUrl)
+          }
+        } catch { /* link optional */ }
+      }
       const res = await fetch('/api/intents/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,12 +217,12 @@ export default function InvoiceDetailPage() {
           customerId: invoice.customerId,
           invoiceId: invoice.id,
           customerPhone: phone,
-          templateKey: paid ? 'receipt' : 'invoice',
+          templateKey: isPaid ? 'receipt' : 'invoice',
           vars: {
             '1': invoice.customerName,
-            '2': formatINR(total),
+            '2': formatINR(isPaid ? Number((invoice as any).grand_total ?? invoice.total ?? 0) : getOutstanding()),
             '3': invoice.invoiceNumber || invoice.id?.slice(-8) || '',
-            '4': invoice.paymentLinkUrl || '',
+            '4': paymentUrl || '',
           },
           personalNote: personalNote.trim() || undefined,
         }),
@@ -231,6 +277,8 @@ export default function InvoiceDetailPage() {
 
   const generatePaymentLink = async () => {
     if (!invoice || invoice.status === 'paid') return
+    const amount = getOutstanding()
+    if (amount <= 0) { setWaError('Nothing outstanding to collect'); return }
     setGenLinkLoading(true)
     try {
       const res = await fetch('/api/payment/payment-link', {
@@ -239,7 +287,7 @@ export default function InvoiceDetailPage() {
         credentials: 'include',
         body: JSON.stringify({
           invoiceId: invoice.id,
-          amount: total,
+          amount,
           customerName: invoice.customerName,
           customerPhone: invoice.customerPhone,
           purpose: `Invoice #${invoice.invoiceNumber || invoice.id?.slice(-8)} payment`,
@@ -409,15 +457,18 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const invoiceTotal = items.reduce((s, i) => s + i.price * i.qty, 0) || invoice.total;
+  // Canonical totals from server — client calc is fallback only (prevents MRP vs exclusive drift).
+  const serverTotal = Number((invoice as any).grand_total ?? invoice.total ?? 0)
+  const invoiceTotal = items.length ? items.reduce((s, i) => s + i.price * i.qty, 0) : serverTotal
+  const total = serverTotal > 0 ? serverTotal : invoiceTotal
   const itemsWithTax = items.map(i => {
     const lineTotal = i.price * i.qty;
     const taxable = i.gstRate ? Math.round(lineTotal * 100 / (100 + i.gstRate)) : lineTotal;
     return { ...i, taxable, gstAmount: lineTotal - taxable };
   });
-  const subtotal = itemsWithTax.reduce((s, i) => s + i.taxable, 0);
-  const tax = itemsWithTax.reduce((s, i) => s + i.gstAmount, 0);
-  const total = invoiceTotal;
+  // Prefer server-calculated breakdown when present, else fallback calc.
+  const subtotal = Number((invoice as any).subtotal ?? itemsWithTax.reduce((s, i) => s + i.taxable, 0))
+  const tax = Number((invoice as any).tax_total ?? (invoice as any).gst_total ?? itemsWithTax.reduce((s, i) => s + i.gstAmount, 0))
   const paid = invoice.status === "paid";
   const partial = invoice.status === "partial";
   const overdueDays = (() => {
@@ -528,14 +579,39 @@ export default function InvoiceDetailPage() {
           </div>
         ) : (
           <>
-            {/* Primary — the single recovery action */}
-            <button
-              onClick={() => setShowWAModal(true)}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-4 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
-            >
-              {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : hasPhone ? <MessageCircle className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
-              {hasPhone ? 'Send payment reminder' : 'Add phone number to send reminder'}
-            </button>
+            {/* Primary — single authoritative recovery action from decision engine */}
+            {recoveryDecision ? (
+              <>
+                <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs">
+                  <div className="font-bold text-foreground">{recoveryDecision.headline}</div>
+                  <div className="text-muted-foreground mt-0.5">{recoveryDecision.reason}</div>
+                  {recoveryDecision.state === 'waiting' && <div className="text-[11px] text-muted-foreground mt-1">Waiting window active — BillZo will re-evaluate after delivery.</div>}
+                </div>
+                {recoveryDecision.state === 'blocked_phone' ? (
+                  <button onClick={() => setShowWAModal(true)} className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 text-white px-4 py-4 text-sm font-bold hover:bg-amber-700 transition-colors shadow-sm"><Phone className="h-4 w-4" /> Add phone number</button>
+                ) : recoveryDecision.state === 'blocked_transport' ? (
+                  <div className="w-full flex items-center justify-center gap-2 rounded-xl bg-danger-soft border border-danger text-danger px-4 py-4 text-sm font-bold">Fix WhatsApp delivery — manual action required</div>
+                ) : recoveryDecision.state === 'call' ? (
+                  hasPhone ? <a href={`tel:${invoice.customerPhone}`} className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 text-white px-4 py-4 text-sm font-bold hover:bg-amber-700 shadow-sm"><Phone className="h-4 w-4" /> Call customer — recommended</a> : <button onClick={() => setShowWAModal(true)} className="w-full flex items-center justify-center gap-2 rounded-xl bg-amber-600 text-white px-4 py-4 text-sm font-bold">Add phone to call</button>
+                ) : recoveryDecision.state === 'waiting' ? (
+                  <button disabled className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-muted-foreground px-4 py-4 text-sm font-bold cursor-not-allowed">Monitoring — no action needed now</button>
+                ) : recoveryDecision.state === 'exhausted' ? (
+                  <div className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted border px-4 py-4 text-sm font-bold text-muted-foreground">Handle manually — BillZo paused</div>
+                ) : (
+                  <button onClick={() => setShowWAModal(true)} className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-4 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]">
+                    {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send payment reminder — BillZo recommended
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={() => setShowWAModal(true)}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-4 text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm active:scale-[0.98]"
+              >
+                {sendingWA ? <Loader className="h-4 w-4 animate-spin" /> : hasPhone ? <MessageCircle className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                {hasPhone ? 'Send payment reminder' : 'Add phone number to send reminder'}
+              </button>
+            )}
 
             {/* Secondary — payment link */}
             <button

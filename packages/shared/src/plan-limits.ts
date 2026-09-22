@@ -9,14 +9,17 @@ export type BillzoPlan = 'starter' | 'pro' | 'business' | 'enterprise'
 
 /**
  * Monthly recovery-reminder allowance per plan.
- * -1 = unlimited (higher tiers only; consumer tiers are finite
- * so the merchant never sees "unlimited WhatsApp").
+ *
+ * PILOT SAFETY CAP, NOT A FINAL COMMERCIAL ENTITLEMENT: Business and Enterprise
+ * have a finite allowance (750/mo), not unlimited. No plan advertises "unlimited"
+ * recovery actions; higher tiers buy more capacity, not infinity. Commercial
+ * entitlements are reassessed before go-live.
  */
 export const REMINDER_MONTHLY_ALLOWANCE: Record<BillzoPlan, number> = {
   starter: 5,
   pro: 500,
-  business: -1,
-  enterprise: -1,
+  business: 750,
+  enterprise: 750,
 }
 
 /** Normalize a DB/tenant plan string to a BillzoPlan (unknown → starter). */

@@ -86,6 +86,7 @@ export type Capability =
   | 'EXPORTS'
   | 'API'
   | 'MULTI_BRANCH'
+  | 'ESCALATION_PACK'
 
 const CAPABILITY_FEATURES: Record<Capability, Feature> = {
   MANUAL_REMINDERS: 'manual_reminders',
@@ -97,6 +98,7 @@ const CAPABILITY_FEATURES: Record<Capability, Feature> = {
   EXPORTS: 'exports',
   API: 'api' as Feature,
   MULTI_BRANCH: 'multi_branch' as Feature,
+  ESCALATION_PACK: 'escalation_pack' as Feature,
 }
 
 /** Returns the resolved capability set (true/false per capability) for a tenant. */

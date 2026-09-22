@@ -139,6 +139,7 @@ invoice.overdue
 | `recovery.completed` | merchant/system | Case resolved |
 | `recovery.overridden` | merchant | Merchant overrode plan |
 | `merchant.snoozed` | merchant | Merchant paused case |
+| `merchant.escalated` | merchant | Escalation pack authorize (Phase C, 099): merchant authorized the recovery case. Payload `{customerId, caseId, escalationId, merchantDecision, merchantNote, merchantAction}`. Emitted via the same outbox path as the command center; the worker case-machine sets `nextActionType=merchant_review` (automation holds until a later signal). Never writes `recovery_credit_ledger`/reservations. |
 | `merchant.flagged` | merchant | Merchant flagged account |
 | `merchant.marked_promise` | merchant | Merchant recorded promise |
 | `merchant.marked_disputed` | merchant | Merchant marked dispute |

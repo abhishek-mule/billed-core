@@ -223,6 +223,46 @@ describe('transitionCase', () => {
       expect(result!.event.reason).toContain('Escalated for manual review')
       expect(result!.event.reason).toContain('Handling personally this week')
     })
+
+    it('lifecycle: a full payment ends the merchant_review hold and resumes derived automation', () => {
+      const escalated = makeCase({
+        recoveryState: 'overdue',
+        engagementState: 'engaged',
+        nextActionType: 'send_reminder',
+        totalOutstanding: 12000,
+        totalOverdue: 12000,
+      })
+      const held = transitionCase(escalated, signal('merchant.escalated'))
+      expect(held!.nextActionType).toBe('merchant_review')
+
+      // Model the persisted case after escalation: recoveryState unchanged, review hold set.
+      const persistedAfterHold: CurrentCase = { ...escalated, nextActionType: 'merchant_review' }
+      const resumed = transitionCase(persistedAfterHold, signal('payment.completed', { amount: 12000 }))
+      expect(resumed).not.toBeNull()
+      expect(resumed!.recoveryState).toBe('recovered')
+      expect(resumed!.engagementState).toBeUndefined()
+      // Automation is no longer held: deriveNextAction yields 'wait' for recovered.
+      expect(resumed!.nextActionType).toBe('wait')
+      expect(resumed!.nextActionDueAt).toBeNull()
+    })
+
+    it('lifecycle: escalation never mutates credit ledger state or billing fields', () => {
+      const c = makeCase({
+        recoveryState: 'overdue',
+        engagementState: 'engaged',
+        totalOutstanding: 12000,
+        totalOverdue: 8000,
+        openInvoiceCount: 2,
+        overdueInvoiceCount: 1,
+      })
+      const result = transitionCase(c, signal('merchant.escalated'))
+      expect(result).not.toBeNull()
+      // Purely a workflow handover: no financial/accounting mutation.
+      expect(result!.financialState.totalOutstanding).toBe(12000)
+      expect(result!.financialState.totalOverdue).toBe(8000)
+      expect(result!.financialState.openInvoiceCount).toBe(2)
+      expect(result!.financialState.overdueInvoiceCount).toBe(1)
+    })
   })
 
   describe('merchant.payment_reported', () => {

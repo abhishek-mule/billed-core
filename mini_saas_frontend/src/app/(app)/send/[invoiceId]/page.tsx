@@ -1142,8 +1142,8 @@ export default function InvoiceSendPage() {
           <div className="flex items-center justify-between rounded-xl bg-secondary/40 border border-border px-3 py-2 text-xs text-muted-foreground">
             <span>Reminders this month</span>
             <span className="font-semibold text-foreground tabular-nums">
-              {quota.unlimited ? `${quota.used} · unlimited` : `${quota.used} / ${quota.limit}`}
-            </span>
+                {quota.used} / {quota.limit}
+              </span>
           </div>
         ) : null}
 

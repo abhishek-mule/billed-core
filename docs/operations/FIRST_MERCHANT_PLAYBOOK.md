@@ -1,5 +1,12 @@
 # FIRST_MERCHANT_PLAYBOOK.md
 
+> **Provider-scope note (2026-09-20):** this playbook was written assuming a
+> BillZo-owned **Meta Cloud API** channel. The binding launch decision is now
+> **Gupshup as sole production provider** — see `../adr/ADR-001-gupshup-inbound-auth.md`.
+> Meta-specific steps below (WABA/phone provisioning, `META_*` env) apply only if
+> that scope is ever revisited via a new ADR. Everything else in this playbook
+> (onboarding flow, first recovery loop) still stands.
+
 > **Purpose:** The operational manual for onboarding **Merchant #1** and running the first
 > real recovery loop. Rehearse this journey yourself *before* touching any more code or
 > running secret scans.

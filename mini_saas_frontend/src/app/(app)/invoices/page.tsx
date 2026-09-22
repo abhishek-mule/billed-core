@@ -26,7 +26,12 @@ function daysSince(s?: string | null): number {
 }
 
 function getOutstanding(inv: Invoice): number {
-  return (inv.total || 0) - (inv.paidAmount || 0)
+  const rawOutstanding = (inv as any).outstandingAmount ?? (inv as any).outstanding_amount
+  if (rawOutstanding != null && Number(rawOutstanding) > 0) return Number(rawOutstanding)
+  if (rawOutstanding != null && Number(rawOutstanding) === 0) return 0
+  const total = Number((inv as any).grand_total ?? inv.total ?? 0)
+  const paid = Number((inv as any).paid_amount ?? inv.paidAmount ?? 0)
+  return Math.max(0, total - paid)
 }
 
 function getStatusBadge(inv: Invoice) {
@@ -108,10 +113,16 @@ export default function InvoicesPage() {
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'unpaid' | 'paid'>('all')
 
+  const isOverdue = (inv: Invoice) => {
+    if (inv.status === 'paid' || (inv.status as string) === 'cancelled') return false
+    if (inv.status === 'overdue') return true
+    if (!inv.dueAt) return false
+    return new Date(inv.dueAt) < new Date() && getOutstanding(inv) > 0
+  }
   const filtered = useMemo(() => {
     const query = q.toLowerCase().trim()
     return invoices.filter(i => {
-      if (statusFilter === 'overdue' && i.status !== 'overdue') return false
+      if (statusFilter === 'overdue' && !isOverdue(i)) return false
       if (statusFilter === 'paid' && i.status !== 'paid') return false
       if (statusFilter === 'unpaid' && i.status === 'paid') return false
       if (!query) return true
@@ -126,7 +137,7 @@ export default function InvoicesPage() {
   const visible = filtered.slice(0, visibleCount)
   const hasMore = visibleCount < filtered.length
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q, statusFilter])
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [q, statusFilter, invoices.length])
 
   // ── revenue dashboard metrics ──
   const todaySales = useMemo(() => {
@@ -147,7 +158,8 @@ export default function InvoicesPage() {
   const collectionStats = useMemo(() => {
     const total = invoices.reduce((s, i) => s + i.total, 0)
     const paidAmt = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.total, 0)
-    const overdueAmt = invoices.filter(i => (i.status as string) !== "paid" && (i.status as string) !== "cancelled" && getOutstanding(i) > 0).reduce((s, i) => s + getOutstanding(i), 0)
+    // overdue = all outstanding excluding paid/cancelled/partial (partial shown separately to avoid double-count)
+    const overdueAmt = invoices.filter(i => (i.status as string) !== "paid" && (i.status as string) !== "cancelled" && (i.status as string) !== "partial" && getOutstanding(i) > 0).reduce((s, i) => s + getOutstanding(i), 0)
     const partialAmt = invoices.filter(i => i.status === "partial").reduce((s, i) => s + getOutstanding(i), 0)
     return { total, paidAmt, overdueAmt, partialAmt }
   }, [invoices])

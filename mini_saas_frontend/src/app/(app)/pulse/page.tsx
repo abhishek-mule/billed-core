@@ -53,7 +53,14 @@ function isYesterday(s: string) {
 }
 
 function getOutstanding(inv: any): number {
-  return (inv.total || 0) - (inv.paidAmount || 0)
+  const raw = inv.outstanding_amount ?? inv.outstandingAmount
+  if (raw != null && Number(raw) >= 0) {
+    const v = Number(raw)
+    if (!isNaN(v)) return Math.max(0, v)
+  }
+  const t = Number(inv.grand_total ?? inv.total ?? 0)
+  const p = Number(inv.paid_amount ?? inv.paidAmount ?? 0)
+  return Math.max(0, t - p)
 }
 
 // ── component ──

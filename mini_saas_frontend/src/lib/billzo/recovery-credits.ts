@@ -311,6 +311,19 @@ export async function recordRecoveryCreditRefund(
   order: RecoveryCreditOrder,
   reason = 'merchant_refund',
 ): Promise<{ ok: true } | { ok: true; alreadyRefunded: boolean } | { ok: false; reason: string }> {
+  // Idempotency FIRST: a refund replay finds the existing refund row and
+  // reports alreadyRefunded without touching the balance precondition, which
+  // would otherwise see purchased=0 post-refund and wrongly report
+  // credits_consumed (the exact-once refund unique index is the backstop).
+  const { data: existing } = await supabaseAdmin
+    .from('recovery_credit_ledger')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('entry_type', 'refund')
+    .eq('order_id', order.razorpay_order_id)
+    .maybeSingle()
+  if (existing) return { ok: true, alreadyRefunded: true }
+
   const before = await replayFullBalances(tenantId)
   if (before.purchased < order.credits) {
     return { ok: false, reason: 'credits_consumed' }

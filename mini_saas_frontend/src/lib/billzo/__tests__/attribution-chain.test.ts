@@ -6,10 +6,6 @@ vi.mock('@/lib/billzo/supabase-admin', () => ({
 vi.mock('@/lib/billzo/redis', () => ({
   createRedisClient: vi.fn(() => ({ exists: vi.fn().mockResolvedValue(0) })),
 }))
-vi.mock('@/lib/billzo/whatsapp-server', () => ({
-  resolveTenantByPhoneNumberId: vi.fn(async () => null),
-  recordPilotEvent: vi.fn(async () => {}),
-}))
 
 const sendMock = vi.fn()
 vi.mock('@billzo/shared', () => ({
@@ -25,7 +21,7 @@ vi.mock('@billzo/shared', () => ({
 }))
 
 import { sendDirectWhatsApp } from '../whatsapp-send-direct'
-import { updateDeliveryStatus, persistEchoWhatsAppEvent, resolveAttemptForMessageId, persistInboundWhatsAppEvent } from '@/app/api/whatsapp/webhook/route'
+import { whatsAppDomain } from '../whatsapp'
 import { supabaseAdmin } from '../supabase-admin'
 
 type Row = Record<string, any>
@@ -155,7 +151,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: ATTEMPT_ID, invoice_id: 'inv_1', customer_id: 'c1', provider_message_id: 'wamid_meta_001' },
     ])
 
-    await updateDeliveryStatus('t1', {
+    await whatsAppDomain.updateDeliveryStatus('t1', {
       id: 'wamid_meta_001',
       status: 'delivered',
       timestamp: '1700000000',
@@ -177,7 +173,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: ATTEMPT_ID, invoice_id: 'inv_1', customer_id: 'c1', provider_message_id: 'wamid_meta_001' },
     ])
 
-    await updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'read', timestamp: '1700000100' })
+    await whatsAppDomain.updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'read', timestamp: '1700000100' })
 
     const outcome = db.upserts['recovery_outcomes']?.[0]
     expect(outcome.outcome_type).toBe('customer_read')
@@ -187,7 +183,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
 
   it('A3/A4 — merchant echo resolves the attempt and links the outbound row', async () => {
     // provider echo of the sent message (msg.id is the provider receipt)
-    await persistEchoWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistEchoWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_meta_001',
       to: '919371343891',
       timestamp: '1700000000',
@@ -197,7 +193,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
     expect(echo.recovery_attempt_id).toBe(ATTEMPT_ID)
 
     // unresolved provider id → no attempt, no guess
-    await persistEchoWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistEchoWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_unknown',
       to: '919371343891',
       timestamp: '1700000001',
@@ -207,9 +203,9 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
   })
 
   it('resolveAttemptForMessageId — billzo id then provider receipt', async () => {
-    expect(await resolveAttemptForMessageId('bzm_1')).toBe(ATTEMPT_ID)
-    expect(await resolveAttemptForMessageId('wamid_meta_001')).toBe(ATTEMPT_ID)
-    expect(await resolveAttemptForMessageId('no_match')).toBe(null)
+    expect(await whatsAppDomain.resolveAttemptForMessageId('bzm_1')).toBe(ATTEMPT_ID)
+    expect(await whatsAppDomain.resolveAttemptForMessageId('wamid_meta_001')).toBe(ATTEMPT_ID)
+    expect(await whatsAppDomain.resolveAttemptForMessageId('no_match')).toBe(null)
   })
 
   it('NEGATIVE TEST — delivery without attempt identity never manufactures a verified outcome', async () => {
@@ -218,7 +214,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: null, invoice_id: 'inv_9', customer_id: 'c9', provider_message_id: 'wamid_unlinked' },
     ])
 
-    await updateDeliveryStatus('t1', {
+    await whatsAppDomain.updateDeliveryStatus('t1', {
       id: 'wamid_unlinked',
       status: 'delivered',
       timestamp: '1700000000',
@@ -233,7 +229,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: ATTEMPT_ID, invoice_id: 'inv_1', customer_id: 'c1', provider_message_id: 'wamid_meta_001' },
     ])
 
-    await persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_inbound_1',
       from: '919371343891',
       contextId: 'wamid_meta_001',
@@ -255,7 +251,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
 
   it('B1 — NEGATIVE: reply without a parent never becomes a verified outcome', async () => {
     // No context id at all — a cold inbound message with no provable parent.
-    await persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_inbound_2',
       from: '919371343891',
       timestamp: '1700000300',
@@ -273,7 +269,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
   })
 
   it('B1 — NEGATIVE: reply to an unresolvable provider id stays unknown', async () => {
-    await persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_inbound_3',
       from: '919371343891',
       contextId: 'wamid_no_match',
@@ -293,9 +289,9 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: ATTEMPT_ID, invoice_id: 'inv_1', customer_id: 'c1', provider_message_id: 'wamid_meta_001' },
     ])
 
-    await updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'delivered', timestamp: '1700000000' })
-    await updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'read', timestamp: '1700000100' })
-    await persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'delivered', timestamp: '1700000000' })
+    await whatsAppDomain.updateDeliveryStatus('t1', { id: 'wamid_meta_001', status: 'read', timestamp: '1700000100' })
+    await whatsAppDomain.persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_inbound_chain',
       from: '919371343891',
       contextId: 'wamid_meta_001',
@@ -321,7 +317,7 @@ describe('attribution chain — attempt → transport → webhook → outcome', 
       { tenant_id: 't1', recovery_attempt_id: ATTEMPT_ID, invoice_id: 'inv_1', customer_id: 'c1', provider_message_id: 'wamid_inbound_dup' },
     ])
 
-    await persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
+    await whatsAppDomain.persistInboundWhatsAppEvent('t1', { phone_number_id: 'pid_1' }, {
       id: 'wamid_inbound_dup',
       from: '919371343891',
       contextId: 'wamid_meta_001',

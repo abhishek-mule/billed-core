@@ -60,6 +60,12 @@ export interface CanSendReminderOutput {
   reasons: string[]
   overridden: boolean
   reminderId?: string
+  /**
+   * Rule-evaluation confidence (decision-state cleanliness): 1.0 when all
+   * rules pass, penalized per failing rule. This is NOT a calibrated
+   * probability of payment or recovery success and must never be displayed
+   * or consumed as ML/predictive confidence. See ADR-005.
+   */
   confidence: number
   rules: DecisionRuleResult[]
   rulesSnapshot: Record<string, boolean>

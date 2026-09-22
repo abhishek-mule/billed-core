@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { upsertWhatsAppConnection, recordPilotEvent } from '@/lib/billzo/whatsapp-server'
+import { whatsAppServer } from '@/lib/billzo/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json().catch(() => ({}))
       console.error('[WhatsAppCallback] Token exchange failed:', errorData)
-      await recordPilotEvent({
+      await whatsAppServer.recordPilotEvent({
         tenantId,
         eventKind: 'webhook_error',
         providerEventType: 'connect_token_exchange',
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     if (!waba_id || !phone_number_id) {
       console.error('[WhatsAppCallback] Missing WABA/phone ids in provider response')
-      await recordPilotEvent({
+      await whatsAppServer.recordPilotEvent({
         tenantId,
         eventKind: 'webhook_error',
         providerEventType: 'connect_missing_identifiers',
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Invalid response from Gupshup')}`)
     }
 
-    const connection = await upsertWhatsAppConnection({
+    const connection = await whatsAppServer.upsertWhatsAppConnection({
       tenantId,
       wabaId: waba_id,
       phoneNumberId: phone_number_id,
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!connection) {
-      await recordPilotEvent({
+      await whatsAppServer.recordPilotEvent({
         tenantId,
         eventKind: 'webhook_error',
         providerEventType: 'connect_persist_failed',
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent('Could not save connection')}`)
     }
 
-    await recordPilotEvent({
+    await whatsAppServer.recordPilotEvent({
       tenantId,
       phoneNumberId: phone_number_id,
       eventKind: 'connect',

@@ -1,20 +1,18 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Users, Phone, MessageSquare, Plus, Search, AlertTriangle,
-  UserPlus, Download, Upload, ArrowLeft, Clock, CreditCard,
-  CalendarDays, Receipt, MoreHorizontal, Wallet,
+  Users, Plus, Search, AlertTriangle, UserPlus, Download, Upload,
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { EmptyState } from "@/components/billzo/EmptyState"
 import { getDiceBearAvatarUrl } from "@/components/billzo/Avatar"
+import { CustomersTable } from "@/components/ui/customers-table"
 import { db } from "@/lib/billzo/db"
 import { formatINR } from "@/lib/utils"
 import { MerchantLanguage } from "@billzo/shared"
 import { getCookie } from "@/lib/cookies"
-import { toast } from "sonner"
 
 type Customer = {
   id: string
@@ -70,7 +68,14 @@ function getPartyType(c: Customer): 'customer' | 'supplier' {
 }
 
 function getOutstanding(inv: Invoice): number {
-  return (inv.total || 0) - (inv.paidAmount || 0)
+  const raw = (inv as any).outstandingAmount ?? (inv as any).outstanding_amount
+  if (raw != null && Number(raw) >= 0) {
+    const v = Number(raw)
+    if (!isNaN(v)) return Math.max(0, v)
+  }
+  const t = Number((inv as any).grand_total ?? inv.total ?? 0)
+  const p = Number((inv as any).paid_amount ?? inv.paidAmount ?? 0)
+  return Math.max(0, t - p)
 }
 
 function getOutstandingStatus(inv: Invoice): 'overdue' | 'due_soon' | 'clear' {
@@ -128,9 +133,8 @@ function FinancialHero({ totalReceivables, overdueAmount, activeParties }: {
   )
 }
 
-function PartyCard({ party, isSelected, onSelect }: {
+function PartyCard({ party, onSelect }: {
   party: PartyWithBalance
-  isSelected: boolean
   onSelect: () => void
 }) {
   const type = getPartyType(party)
@@ -143,11 +147,7 @@ function PartyCard({ party, isSelected, onSelect }: {
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left p-3 rounded-lg border transition-colors ${
-        isSelected
-          ? 'bg-muted border-border'
-          : 'bg-card border-border hover:border-border'
-      }`}
+      className="w-full text-left p-3 rounded-lg border border-border bg-card hover:border-border transition-colors"
     >
       <div className="flex items-start gap-3">
         <img src={getDiceBearAvatarUrl(party.name)} alt="" className="w-9 h-9 rounded-full shrink-0 mt-0.5 bg-muted/20" loading="lazy" />
@@ -177,170 +177,6 @@ function PartyCard({ party, isSelected, onSelect }: {
   )
 }
 
-function PartyDetail({ party, onBack }: {
-  party: PartyWithBalance
-  onBack?: () => void
-}) {
-  const router = useRouter()
-  const pendingInvoices = (party.invoices || [])
-    .filter(i => getOutstanding(i) > 0)
-    .sort((a, b) => new Date(a.dueAt || a.dueDate || a.createdAt).getTime() - new Date(b.dueAt || b.dueDate || b.createdAt).getTime())
-
-  const avgPaymentTime = useMemo(() => {
-    if (party.paymentCount === 0) return null
-    return '—'
-  }, [party.paymentCount])
-
-  return (
-    <div className="space-y-4">
-      {/* Back button (mobile) */}
-      {onBack && (
-        <button onClick={onBack} className="lg:hidden flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to customers
-        </button>
-      )}
-
-      {/* Party header */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <div className="flex items-start gap-4">
-          <img src={getDiceBearAvatarUrl(party.name)} alt="" className="w-12 h-12 rounded-full shrink-0 bg-muted/20" />
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-semibold text-foreground">{party.name}</h2>
-            <p className="text-sm text-muted-foreground">{party.phone}</p>
-            {party.gstin && (
-              <p className="text-xs text-muted-foreground">GST: {party.gstin}</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Action bar */}
-      <div className="flex gap-2">
-        {party.phone && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => window.open(`tel:${party.phone}`, '_blank')}
-          >
-            <Phone className="w-4 h-4 mr-1.5" /> {MerchantLanguage.customer.call}
-          </Button>
-        )}
-        {(party.whatsapp_number || party.phone) && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              const num = party.whatsapp_number || party.phone
-              window.open(`https://wa.me/${num?.replace(/[^0-9]/g, '')}`, '_blank')
-            }}
-          >
-            <MessageSquare className="w-4 h-4 mr-1.5" /> WhatsApp
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1"
-          onClick={() => router.push(`/parties/${party.id}`)}
-        >
-          <MoreHorizontal className="w-4 h-4 mr-1.5" /> {MerchantLanguage.customer.profile}
-        </Button>
-      </div>
-
-      {/* Financial Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-card border border-border rounded-lg p-3">
-          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Outstanding</p>
-          <p className="text-base font-semibold text-danger tabular-nums">{formatINR(party.outstanding)}</p>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-3">
-          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Total Sales</p>
-          <p className="text-base font-semibold text-foreground tabular-nums">{formatINR(party.totalSales)}</p>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-3">
-          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Avg Payment</p>
-          <p className="text-base font-semibold text-foreground tabular-nums">
-            {avgPaymentTime || '—'}
-          </p>
-        </div>
-      </div>
-
-      {/* Pending Invoices */}
-      <div className="bg-card border border-border rounded-lg">
-        <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium text-foreground">
-            {MerchantLanguage.customer.pendingInvoices} {pendingInvoices.length > 0 && `(${pendingInvoices.length})`}
-          </h3>
-        </div>
-        {pendingInvoices.length === 0 ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-muted-foreground">No pending invoices</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {pendingInvoices.map(inv => {
-              const status = getOutstandingStatus(inv)
-              return (
-                <div key={inv.id} className="px-4 py-3 flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {inv.invoiceNumber || `#${inv.id.slice(0, 8)}`}
-                      </p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[status]}`}>
-                        {STATUS_LABELS[status]}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Due {inv.dueAt || inv.dueDate ? new Date(inv.dueAt || inv.dueDate!).toLocaleDateString() : '—'} · {formatINR(getOutstanding(inv))}
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5 ml-3 flex-shrink-0">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = await fetch('/api/recovery/queue/actions', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              customerId: party.id,
-                              action: 'send_reminder',
-                              payload: { origin: 'parties' },
-                            }),
-                          })
-                          if (res.ok) {
-                            toast.success('Reminder sent to ' + party.name)
-                          } else {
-                            const d = await res.json().catch(() => ({}))
-                            toast.error(d.error || 'Failed to send reminder')
-                          }
-                        } catch {
-                          toast.error('Network error — could not send reminder')
-                        }
-                      }}
-                      className="text-xs px-2.5 py-1.5 rounded bg-muted border border-border text-muted-foreground hover:bg-muted font-medium"
-                    >
-                      Remind
-                    </button>
-                    <button
-                      onClick={() => router.push(`/pulse?payInvoice=${inv.id}`)}
-                      className="text-xs px-2.5 py-1.5 rounded bg-success-soft border border-border text-success hover:bg-success-soft/70 font-medium"
-                    >
-                      Pay
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export default function PartiesPage() {
   const router = useRouter()
@@ -350,7 +186,6 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
-  const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -381,7 +216,7 @@ export default function PartiesPage() {
     return () => window.removeEventListener("billzo:changed", load)
   }, [router])
 
-  // Compute parties with balances
+  // Compute parties with balances — canonical outstanding (outstanding_amount > total-paid fallback)
   const parties: PartyWithBalance[] = useMemo(() => {
     const invoiceMap = new Map<string, Invoice[]>()
     for (const inv of invoices) {
@@ -399,15 +234,15 @@ export default function PartiesPage() {
 
     return customers.map(c => {
       const invs = invoiceMap.get(c.id) || []
-      const outstanding = invs.reduce((s, i) => s + ((i.total || 0) - (i.paidAmount || 0)), 0)
-      const totalSales = invs.reduce((s, i) => s + (i.total || 0), 0)
+      const outstanding = invs.reduce((s, i) => s + getOutstanding(i), 0)
+      const totalSales = invs.reduce((s, i) => s + Number((i as any).grand_total ?? i.total ?? 0), 0)
       const overdueAmount = invs
         .filter(i => {
-          const o = (i.total || 0) - (i.paidAmount || 0)
+          const o = getOutstanding(i)
           const d = i.dueAt || i.dueDate
           return o > 0 && d && new Date(d) < new Date()
         })
-        .reduce((s, i) => s + ((i.total || 0) - (i.paidAmount || 0)), 0)
+        .reduce((s, i) => s + getOutstanding(i), 0)
 
       let paymentCount = 0
       let lastPaymentAt: string | null = null
@@ -443,29 +278,22 @@ export default function PartiesPage() {
     )
   }, [parties, q])
 
-  // Selected party
-  const selectedParty = useMemo(
-    () => parties.find(p => p.id === selectedPartyId) || null,
-    [parties, selectedPartyId]
-  )
-
-  // Financial aggregates
-  const totalReceivables = useMemo(
-    () => parties.reduce((s, p) => s + p.outstanding, 0),
-    [parties]
-  )
-  const totalPayables = useMemo(
-    () => parties.reduce((s, p) => s + p.overdueAmount, 0),
-    [parties]
-  )
-  const activeParties = useMemo(
-    () => parties.filter(p => p.outstanding > 0).length,
-    [parties]
-  )
-
-  const handleSelectParty = useCallback((id: string) => {
-    setSelectedPartyId(id)
-  }, [])
+  // Financial aggregates — canonical, matches Home/Recovery totalOutstanding (all open invoices, not just mapped parties).
+  const totalReceivables = useMemo(() => {
+    return invoices
+      .filter(i => (i.status as string) !== 'paid' && (i.status as string) !== 'cancelled')
+      .reduce((s, i) => s + getOutstanding(i), 0)
+  }, [invoices])
+  const totalPayables = useMemo(() => {
+    return invoices
+      .filter(i => {
+        const o = getOutstanding(i)
+        const d = (i as any).dueAt || (i as any).dueDate
+        return o > 0 && d && new Date(d) < new Date()
+      })
+      .reduce((s, i) => s + getOutstanding(i), 0)
+  }, [invoices])
+  const activeParties = useMemo(() => parties.filter(p => p.outstanding > 0).length, [parties])
 
   // Keyboard shortcut: / to focus search
   useEffect(() => {
@@ -485,15 +313,10 @@ export default function PartiesPage() {
       <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
           <div className="h-24 bg-card border border-border rounded-lg animate-pulse" />
-          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
-            <div className="space-y-2">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-20 bg-card border border-border rounded-lg animate-pulse" />
-              ))}
-            </div>
-            <div className="hidden lg:block">
-              <div className="h-96 bg-card border border-border rounded-lg animate-pulse" />
-            </div>
+          <div className="bg-card border border-border rounded-lg p-6 space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 bg-muted/60 rounded animate-pulse" />
+            ))}
           </div>
         </div>
       </div>
@@ -576,78 +399,70 @@ export default function PartiesPage() {
           </Button>
         </div>
 
-        {/* Master-Detail Layout (Desktop) / List (Mobile) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
-
-          {/* Left Panel — Party List */}
-          <div className="space-y-2">
-            {/* Mobile search + add */}
-            <div className="lg:hidden flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-                />
-              </div>
-              <button
-                onClick={() => router.push('/parties/add')}
-                className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Party count */}
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs text-muted-foreground font-medium">
-                {filtered.length} {filtered.length === 1 ? 'customer' : 'customers'}
-                {q && filtered.length !== parties.length && ` (of ${parties.length})`}
-              </p>
-            </div>
-
-            {/* Party list */}
-            {filtered.length === 0 ? (
-              <EmptyState
-                icon={<Search className="h-6 w-6" />}
-                title="No customers match your search"
+        {/* Desktop: customers table */}
+        <div className="hidden lg:block">
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={<Search className="h-6 w-6" />}
+              title="No customers match your search"
+            />
+          ) : (
+            <div className="bg-card border border-border rounded-lg">
+              <CustomersTable
+                customers={filtered}
+                onView={(id) => router.push(`/parties/${id}`)}
               />
-            ) : (
-              <div className="space-y-1.5 lg:max-h-[calc(100vh-320px)] lg:overflow-y-auto pr-1">
-                {filtered.map(party => (
-                  <PartyCard
-                    key={party.id}
-                    party={party}
-                    isSelected={selectedPartyId === party.id}
-                    onSelect={() => {
-                      if (window.innerWidth < 1024) {
-                        router.push(`/parties/${party.id}`)
-                      } else {
-                        handleSelectParty(party.id)
-                      }
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile: party list */}
+        <div className="lg:hidden space-y-2">
+          {/* Mobile search + add */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              />
+            </div>
+            <button
+              onClick={() => router.push('/parties/add')}
+              className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Right Panel — Selected Party Detail (Desktop only) */}
-          <div className="hidden lg:block">
-            {selectedParty ? (
-              <PartyDetail party={selectedParty} />
-            ) : (
-              <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center h-full flex flex-col items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-muted border border-border flex items-center justify-center mb-3">
-                  <Users className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <p className="text-sm text-muted-foreground">{MerchantLanguage.customer.selectACustomer}</p>
-              </div>
-            )}
+          {/* Party count */}
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs text-muted-foreground font-medium">
+              {filtered.length} {filtered.length === 1 ? 'customer' : 'customers'}
+              {q && filtered.length !== parties.length && ` (of ${parties.length})`}
+            </p>
           </div>
+
+          {/* Party list */}
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={<Search className="h-6 w-6" />}
+              title="No customers match your search"
+            />
+          ) : (
+            <div className="space-y-1.5">
+              {filtered.map(party => (
+                <PartyCard
+                  key={party.id}
+                  party={party}
+                  onSelect={() => router.push(`/parties/${party.id}`)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

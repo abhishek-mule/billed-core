@@ -118,8 +118,22 @@ async function makeScratchTenant(id: string, plan = 'pro'): Promise<void> {
   const now = new Date()
   const end = new Date(now.getTime() + 30 * 86400000)
 
-  // The ACTIVE SUBSCRIPTION is the authoritative period source the credits
-  // feature reads (never tenants). Insert it first and link tenants to it.
+  // Create the tenant FIRST — subscriptions.tenant_id is a real NOT NULL FK to
+  // tenants(id) (070), and in production a tenant exists before its
+  // subscription. Then insert the ACTIVE SUBSCRIPTION (the authoritative
+  // period source the credits feature reads — never tenants) and link it back.
+  const { error: tenantErr } = await supabaseAdmin.from('tenants').insert({
+    id,
+    company_name: 'Scratch Credit Validation',
+    phone: '',
+    email: `${id}@staging.invalid`,
+    plan,
+    recovery_credits_enabled: true,
+    subscription_state: 'active',
+    is_active: true,
+  })
+  if (tenantErr) throw new Error(`makeScratchTenant failed for ${id}: ${tenantErr.message}`)
+
   const { data: sub, error: subErr } = await supabaseAdmin
     .from('subscriptions')
     .insert({
@@ -133,18 +147,11 @@ async function makeScratchTenant(id: string, plan = 'pro'): Promise<void> {
     .single()
   if (subErr || !sub) throw new Error(`makeScratchTenant subscription failed for ${id}: ${subErr?.message ?? 'no id'}`)
 
-  const { error } = await supabaseAdmin.from('tenants').insert({
-    id,
-    company_name: 'Scratch Credit Validation',
-    phone: '',
-    email: `${id}@staging.invalid`,
-    plan,
-    recovery_credits_enabled: true,
-    subscription_id: sub.id,
-    subscription_state: 'active',
-    is_active: true,
-  })
-  if (error) throw new Error(`makeScratchTenant failed for ${id}: ${error.message}`)
+  const { error: linkErr } = await supabaseAdmin
+    .from('tenants')
+    .update({ subscription_id: sub.id })
+    .eq('id', id)
+  if (linkErr) throw new Error(`makeScratchTenant link failed for ${id}: ${linkErr.message}`)
 }
 
 async function main(): Promise<void> {
@@ -300,4 +307,10 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+main().then(
+  () => process.exit(process.exitCode ?? 0),
+  (err: any) => {
+    console.error('UNHANDLED:', err?.message || err)
+    process.exit(1)
+  },
+)

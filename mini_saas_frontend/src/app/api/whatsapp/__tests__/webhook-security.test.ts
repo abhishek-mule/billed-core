@@ -7,10 +7,6 @@ import crypto from 'crypto'
 
 async function loadRoute() {
   vi.resetModules()
-  vi.mock('@/lib/billzo/whatsapp-server', () => ({
-    resolveTenantByPhoneNumberId: vi.fn(async () => null),
-    recordPilotEvent: vi.fn(async () => {}),
-  }))
   vi.mock('@/lib/billzo/supabase-admin', () => ({
     supabaseAdmin: { from: vi.fn() },
   }))

@@ -96,7 +96,46 @@ export async function pollOutboxEvents(limit: number = 50): Promise<OutboxEvent[
 }
 
 /**
+ * B-05b: atomic single-winner claim for outbox consumption.
+ *
+ * Single statement: only a row still `pending` transitions to `processing`
+ * (with claim ownership). Zero rows returned means another consumer already
+ * claimed/completed it — drop silently, no retry, no error. This is the sole
+ * authority for execution truth; both the push listener and the poll worker
+ * must consume through here, never by fetching then acting.
+ */
+export function workerIdentity(): string {
+  return process.env.WORKER_ID || process.env.HOSTNAME || 'billzo-worker'
+}
+
+export async function claimOutboxEvent(eventId: string): Promise<OutboxEvent | null> {
+  const now = new Date().toISOString()
+  const { data, error } = await supabaseAdmin
+    .from('outbox')
+    .update({
+      status: 'processing',
+      claimed_at: now,
+      worker_id: workerIdentity(),
+    })
+    .eq('id', eventId)
+    .eq('status', 'pending')
+    .select('*')
+
+  if (error) {
+    console.error('[Outbox] Failed to claim event:', eventId, error.message)
+    return null
+  }
+
+  const rows = data || []
+  if (rows.length === 0) return null
+  return mapOutboxRow(rows[0])
+}
+
+/**
  * Mark an outbox event as processing.
+ *
+ * Legacy label (not a claim — unconditional). Kept for compatibility; new code
+ * must use claimOutboxEvent instead.
  */
 export async function markEventProcessing(eventId: string): Promise<boolean> {
   const { error } = await supabaseAdmin

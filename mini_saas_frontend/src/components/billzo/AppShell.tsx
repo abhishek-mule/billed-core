@@ -4,13 +4,13 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  Bell, Search, Home, Plus, Receipt, TrendingUp, Activity,
-  Users, Package, BarChart3, Settings, Menu,
-  LogOut, ChevronDown, WifiOff, Zap, CreditCard, Target,
+  Bell, Search, Home, Plus,
+  Users, Menu,
+  LogOut, ChevronDown, WifiOff, Zap, Activity,
 } from 'lucide-react'
 import { ProfileMenu } from './ProfileMenu'
-import { Button } from './Button'
 import { BrandAvatar } from './Avatar'
+import { SidebarNav, BILLZO_NAV_FLAT } from './SidebarNav'
 import { db } from '@/lib/billzo/db'
 import { clearAuthCookies } from '@/lib/cookies'
 import { clearSession } from '@/lib/billzo/tenant'
@@ -19,25 +19,9 @@ import '@/styles/app-shell.css'
 import { resolveQuickNav } from '@/lib/billzo/app-shell-search'
 
 // ─── Nav config ──────────────────────────────────────────────────────────────
-
-const NAV_WORKSPACE = [
-  { href: '/recovery', label: 'Recovery',  icon: Zap         },
-  { href: '/dashboard',      label: 'Home',      icon: Home        },
-  { href: '/invoices',       label: 'Invoices',  icon: Receipt     },
-  { href: '/parties',        label: 'Customers', icon: Users       },
-  { href: '/pulse',          label: 'Payments',  icon: Activity    },
-  { href: '/cashflow',       label: 'Cashflow',  icon: TrendingUp  },
-  { href: '/notifications',  label: 'Notifications', icon: Bell    },
-]
-
-const NAV_MANAGE = [
-  { href: '/products', label: 'Products', icon: Package  },
-  { href: '/reports',  label: 'Reports',  icon: BarChart3 },
-]
-
-const NAV_SYSTEM = [
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
+// Canonical nav lives in ./SidebarNav (BILLZO_NAV_GROUPS) so desktop sidebar
+// and mobile drawer can never drift apart. MOBILE_NAV stays separate: the
+// bottom bar is a 5-slot thumb layout, not the full nav.
 
 const MOBILE_NAV = [
   { href: '/recovery',  label: 'Recovery',  icon: Zap,          primary: false },
@@ -101,69 +85,21 @@ function useUnreadNotifications(pathname: string): number {
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
-
-function NavSection({
-  label, items, pathname,
-}: {
-  label: string
-  items: { href: string; label: string; icon: React.ElementType }[]
-  pathname: string
-}) {
-  return (
-    <div className="bz-nav-section">
-      <span className="bz-nav-section-label">{label}</span>
-      {items.map(({ href, label, icon: Icon }, idx) => {
-        const active = pathname.startsWith(href)
-        const isRecovery = label === 'Recovery'
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={cn('bz-nav-item', active && 'bz-nav-item--active', isRecovery && 'bz-nav-item--accent')}
-            aria-current={active ? 'page' : undefined}
-            style={{ '--i': idx } as React.CSSProperties}
-          >
-            <Icon size={16} strokeWidth={1.75} className="bz-nav-icon" />
-            <span className="bz-nav-label">{label}</span>
-          </Link>
-        )
-      })}
-    </div>
-  )
-}
+// Design lives in ./SidebarNav (clean, minimal, theme-aware). The <aside>
+// wrapper stays here so positioning (fixed, --sw width) keeps working.
 
 function Sidebar({
-  pathname, onLogout, userName, logo,
+  pathname, onLogout,
 }: {
   pathname: string
   onLogout: () => void
-  userName?: string
-  logo?: string | null
 }) {
   return (
     <aside className="bz-sidebar">
-      <div className="bz-sidebar-header">
-        <Link href="/dashboard" className="bz-logo" aria-label="BillZo home">
-          <img src="/logo.svg" alt="BillZo" className="bz-logo-img" />
-          <span className="bz-logo-text">BillZo</span>
-        </Link>
-      </div>
-
-      <nav className="bz-sidebar-nav">
-        <NavSection label="Workspace" items={NAV_WORKSPACE} pathname={pathname} />
-        <NavSection label="Manage"    items={NAV_MANAGE}    pathname={pathname} />
-        <NavSection label="System"    items={NAV_SYSTEM}    pathname={pathname} />
-      </nav>
-
-      <div className="bz-sidebar-footer">
-        <button className="bz-user-row" onClick={onLogout} title="Sign out">
-          <BrandAvatar name={userName || 'My Shop'} logo={logo} className="w-8 h-8" size={32} />
-          <div className="bz-user-info">
-            <span className="bz-user-name">{userName || 'My Shop'}</span>
-          </div>
-          <LogOut size={13} className="bz-logout-icon" />
-        </button>
-      </div>
+      <SidebarNav
+        pathname={pathname}
+        onLogout={onLogout}
+      />
     </aside>
   )
 }
@@ -263,7 +199,7 @@ function MobileDrawer({
     return () => { document.body.style.overflow = '' }
   }, [open])
 
-  const allNav = [...NAV_WORKSPACE, ...NAV_MANAGE, ...NAV_SYSTEM]
+  const allNav = BILLZO_NAV_FLAT
 
   return (
     <>
@@ -426,14 +362,16 @@ export function AppShell({ children, title }: { children: React.ReactNode; title
     return () => { if (timer) clearTimeout(timer) }
   }, [])
 
+  const unreadCount = useUnreadNotifications(pathname)
+
   return (
     <>
       <div className="bz-shell">
-        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} />
+        <Sidebar pathname={pathname} onLogout={() => setShowProfileMenu(true)} />
         <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} onLogout={() => setShowProfileMenu(true)} pathname={pathname} userName={userName} logo={tenantLogo} />
 
         <div className="bz-body">
-          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} unreadCount={useUnreadNotifications(pathname)} />
+          <TopBar title={title} onMobileMenu={() => setMobileOpen(true)} onLogout={() => setShowProfileMenu(true)} userName={userName} logo={tenantLogo} unreadCount={unreadCount} />
 
           {!isOnline && (
             <div className="bz-offline-bar" role="status">

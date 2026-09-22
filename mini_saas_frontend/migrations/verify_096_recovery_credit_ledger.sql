@@ -101,10 +101,14 @@ BEGIN
     RAISE EXCEPTION 'MISSING INDEX: %', v;
   END LOOP;
 
-  -- orders.razorpay_order_id is UNIQUE.
+  -- orders.razorpay_order_id is UNIQUE (column UNIQUE constraint → a unique
+  -- constraint entry in pg_constraint, not just any index on the column).
   IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes WHERE schemaname='public'
-      AND tablename='recovery_credit_orders' AND indexdef ILIKE '%razorpay_order_id%UNIQUE%'
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    WHERE t.relname = 'recovery_credit_orders'
+      AND c.conname = 'recovery_credit_orders_razorpay_order_id_key'
+      AND c.contype = 'u'
   ) THEN
     RAISE EXCEPTION 'MISSING UNIQUE: recovery_credit_orders.razorpay_order_id';
   END IF;
