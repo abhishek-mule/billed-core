@@ -117,6 +117,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({
     const params = new URLSearchParams(window.location.search)
     const code = params.get("code")
     const tokenHash = params.get("token_hash")
+    const err = params.get("error")
+    if (err) {
+      const desc = params.get("error_description") || ""
+      const decoded = desc ? decodeURIComponent(desc.replaceAll("+", " ")) : ""
+      setError(decoded || `Login failed: ${err}`)
+      window.history.replaceState(null, "", window.location.pathname)
+      return
+    }
     if (!code && !tokenHash) return
     // If Supabase sent a code to /auth instead of /auth/callback, handle it here
     setAutoLogin(true)
@@ -134,7 +142,9 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           window.history.replaceState(null, "", window.location.pathname)
           return
         }
-        window.location.href = data.redirectTo || "/dashboard"
+        // Ensure Set-Cookie flushed before middleware check
+        await new Promise((r) => setTimeout(r, 150))
+        window.location.replace(data.redirectTo || "/dashboard")
       })
       .catch(() => {
         setError("Could not finish login. Please try again.")
@@ -177,7 +187,8 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           setAutoLogin(false)
           return
         }
-        window.location.href = data.redirectTo || "/onboarding"
+        await new Promise((r) => setTimeout(r, 150))
+        window.location.replace(data.redirectTo || "/onboarding")
       } catch {
         setError("Could not finish login. Please try again.")
         setAutoLogin(false)

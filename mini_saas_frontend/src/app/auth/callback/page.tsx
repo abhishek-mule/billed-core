@@ -10,12 +10,15 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[2]) : null
 }
 
-function syncSessionToLocalStorage(userId: string) {
-  const tenantId = getCookie("bz_tenant")
-  const tenantName = getCookie("bz_tenant_name")
+function syncSessionToLocalStorage(userId: string, tenantId?: string | null, tenantName?: string | null) {
+  // Prefer API-returned tenant (already in data) over cookie read — cookie may not be flushed to document.cookie yet
+  const cookieTenantId = getCookie("bz_tenant")
+  const cookieTenantName = getCookie("bz_tenant_name")
+  const finalTenantId = tenantId || cookieTenantId
+  const finalTenantName = tenantName || cookieTenantName
   if (userId) localStorage.setItem("userId", userId)
-  if (tenantId) localStorage.setItem("tenantId", tenantId)
-  if (tenantName) localStorage.setItem("tenantName", tenantName)
+  if (finalTenantId) localStorage.setItem("tenantId", finalTenantId)
+  if (finalTenantName) localStorage.setItem("tenantName", finalTenantName)
 }
 
 function CallbackContent() {
@@ -50,9 +53,10 @@ function CallbackContent() {
           }
 
           console.log("[AuthCallback] Exchange success, userId:", data.userId)
-          syncSessionToLocalStorage(data.userId)
-
-          window.location.href = data.redirectTo || "/onboarding"
+          syncSessionToLocalStorage(data.userId, data.merchantId || data.tenantId, data.merchantName || data.tenantName)
+          // Small delay ensures Set-Cookie from fetch is flushed before next navigation's middleware check
+          await new Promise((r) => setTimeout(r, 150))
+          window.location.replace(data.redirectTo || "/onboarding")
           return
         } catch (e) {
           console.error("[AuthCallback] Exchange error:", e)
@@ -62,6 +66,14 @@ function CallbackContent() {
       }
 
       const hash = window.location.hash
+      if (hash.includes("error=")) {
+        const errParams = new URLSearchParams(hash.slice(1))
+        const errDesc = errParams.get("error_description") || errParams.get("error") || ""
+        const decoded = errDesc ? decodeURIComponent(errDesc.replaceAll("+", " ")) : ""
+        setError(decoded || "This login link is invalid or expired. Please request a new one.")
+        window.history.replaceState(null, "", window.location.pathname + window.location.search)
+        return
+      }
       if (hash.includes("access_token=")) {
         console.log("[AuthCallback] Hash-based flow detected")
         const params = new URLSearchParams(hash.slice(1))
@@ -86,14 +98,23 @@ function CallbackContent() {
             return
           }
 
-          syncSessionToLocalStorage(data.userId)
-
-          window.location.href = data.redirectTo || "/onboarding"
+          syncSessionToLocalStorage(data.userId, data.tenantId, data.tenantName)
+          await new Promise((r) => setTimeout(r, 150))
+          window.location.replace(data.redirectTo || "/onboarding")
           return
         } catch {
           setError("Could not finish login. Please try again.")
           return
         }
+      }
+
+      // Also handle Supabase error in query ?error=...&error_description=... (PKCE failure)
+      const err = searchParams?.get("error")
+      if (err) {
+        const desc = searchParams?.get("error_description") || ""
+        const decoded = desc ? decodeURIComponent(desc.replaceAll("+", " ")) : ""
+        setError(decoded || `Login failed: ${err}`)
+        return
       }
 
       setError("No login token found. Please click the link in your email again.")
