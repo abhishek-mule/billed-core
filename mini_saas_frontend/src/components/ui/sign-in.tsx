@@ -97,22 +97,63 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   testimonials = [],
   onSendMagicLink,
 }) => {
+  const [mounted, setMounted] = useState(false)
+  React.useEffect(() => setMounted(true), [])
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [autoLogin, setAutoLogin] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState("")
 
-  const [queryError, setQueryError] = useState(() => {
-    if (typeof window === "undefined") return ""
+  const [queryError, setQueryError] = useState("")
+  React.useEffect(() => {
     const key = new URLSearchParams(window.location.search).get("error")
-    if (!key) return ""
-    return ERROR_MESSAGES[key] || "Something went wrong. Please try again."
-  })
+    if (!key) { setQueryError(""); return }
+    setQueryError(ERROR_MESSAGES[key] || ERROR_MESSAGES[key.toLowerCase()] || `Error: ${key}` || "Something went wrong. Please try again.")
+  }, [])
+
+  // Handle magic link that lands on /auth with ?code= (PKCE) — forward to callback handler
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get("code")
+    const tokenHash = params.get("token_hash")
+    if (!code && !tokenHash) return
+    // If Supabase sent a code to /auth instead of /auth/callback, handle it here
+    setAutoLogin(true)
+    fetch("/api/auth/callback-exchange", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ code, tokenHash, type: params.get("type") }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setError(data.error || "This login link is invalid or expired. Please request a new one.")
+          setAutoLogin(false)
+          window.history.replaceState(null, "", window.location.pathname)
+          return
+        }
+        window.location.href = data.redirectTo || "/dashboard"
+      })
+      .catch(() => {
+        setError("Could not finish login. Please try again.")
+        setAutoLogin(false)
+      })
+  }, [])
 
   React.useEffect(() => {
     async function finishSupabaseHashLogin() {
       const hash = window.location.hash
+      // Supabase may redirect with #error=access_denied&error_description=... when link expired
+      if (hash.includes("error=")) {
+        const errParams = new URLSearchParams(hash.slice(1))
+        const errDesc = errParams.get("error_description") || errParams.get("error") || ""
+        const decoded = errDesc ? decodeURIComponent(errDesc.replaceAll("+", " ")) : ""
+        setError(decoded || ERROR_MESSAGES.invalid || "This login link is invalid or expired. Please request a new one.")
+        window.history.replaceState(null, "", window.location.pathname + window.location.search)
+        return
+      }
       if (!hash.includes("access_token=")) return
       window.history.replaceState(null, "", window.location.pathname + window.location.search)
       const params = new URLSearchParams(hash.slice(1))
@@ -179,7 +220,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   }
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col md:flex-row overflow-hidden md:overflow-hidden">
+    <div suppressHydrationWarning className="h-[100dvh] w-full flex flex-col md:flex-row overflow-hidden md:overflow-hidden">
       {/* Right column: magic-link form */}
       <section className="flex-1 md:order-2 flex items-center justify-center p-6 sm:p-8 overflow-y-auto">
         <div className="w-full max-w-md">
@@ -287,7 +328,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
               </form>
             )}
 
-            <p className="text-center text-[10px] text-muted-foreground/70 leading-relaxed">
+            <p suppressHydrationWarning className="text-center text-[10px] text-muted-foreground/70 leading-relaxed">
               By signing in, you agree to our{" "}
               <a href="#" className="text-primary hover:underline underline-offset-2">Terms of Service</a>
               {" "}and{" "}

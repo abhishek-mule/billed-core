@@ -37,7 +37,11 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const redirectTo = `${request.nextUrl.origin}/auth/callback`
+    // Use forwarded origin when behind Vercel proxy, fallback to nextUrl
+    const forwardedHost = request.headers.get('x-forwarded-host')
+    const forwardedProto = request.headers.get('x-forwarded-proto') || 'https'
+    const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : request.nextUrl.origin
+    const redirectTo = `${origin}/auth/callback`
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirectTo },
@@ -47,7 +51,17 @@ export async function POST(request: NextRequest) {
     const userAgent = request.headers.get('user-agent') || undefined
     await recordLoginEvent({ email, ip, userAgent, success: !error })
 
-    // Generic response — never reveal whether email is registered
+    if (error) {
+      console.error('[MagicLink] supabase signInWithOtp error:', error.message)
+      // Don't leak whether email exists — but surface actionable errors (rate limit, invalid email, provider down)
+      const isRateLimited = error.message?.toLowerCase().includes('rate limit')
+      if (isRateLimited) {
+        return NextResponse.json({ error: 'Too many requests. Please try again in a minute.' }, { status: 429 })
+      }
+      return NextResponse.json({ error: error.message || 'Failed to send magic link' }, { status: 400 })
+    }
+
+    // Generic success — do not reveal whether email is registered, but OTP succeeded
     return NextResponse.json({
       success: true,
       message: 'If an account exists, we have sent a login link.'
