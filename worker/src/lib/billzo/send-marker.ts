@@ -25,6 +25,7 @@ export async function claimSendMarker(args: {
   key: string
   tenantId: string
 }): Promise<SendMarkerResult> {
+  // authority:exempt idempotency_guard — pre-execution send-marker claim (at-most-once provider send)
   const { error } = await supabaseAdmin.from('processed_jobs').insert({
     idempotency_key: args.key,
     job_type: 'whatsapp_send',
@@ -47,6 +48,7 @@ export async function claimSendMarker(args: {
  * customer, so re-arming is safe). Never throws.
  */
 export async function releaseSendMarker(key: string): Promise<void> {
+  // authority:exempt idempotency_guard — best-effort release of claimed send-marker on provider failure
   await supabaseAdmin
     .from('processed_jobs')
     .delete()
