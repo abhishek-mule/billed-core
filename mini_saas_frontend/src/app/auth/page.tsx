@@ -2,14 +2,14 @@
 
 import { Suspense } from "react"
 import { SignInPage } from "@/components/ui/sign-in"
+import { Fraunces, Inter } from "next/font/google"
+
+const fraunces = Fraunces({ subsets: ["latin"], weight: ["400", "600", "700"], display: "swap", variable: "--font-display" })
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap", variable: "--font-body" })
 
 function FontFaces() {
-  return (
-    <style jsx global>{`
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&family=Inter:wght@400;500;600;700&display=swap');
-      .font-display { font-family: 'Fraunces', ui-serif, Georgia, serif; font-feature-settings: 'ss01' 1; }
-    `}</style>
-  )
+  // next/font handles @import via JS, no styled-jsx needed — keeps server/client consistent
+  return null
 }
 
 function LoginSkeleton() {
@@ -32,12 +32,12 @@ function LoginSkeleton() {
 
 export default function AuthPage() {
   return (
-    <div className="bg-background text-foreground">
+    <div className={`${fraunces.variable} ${inter.variable} bg-background text-foreground`} suppressHydrationWarning>
       <FontFaces />
       <Suspense fallback={<LoginSkeleton />}>
         <SignInPage
           title={
-            <span className="font-display font-semibold text-foreground tracking-tight">
+            <span className="font-display font-semibold text-foreground tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
               Welcome back
             </span>
           }
