@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getVerifiedTenantIdFromRequest } from '@/lib/billzo/auth-jwt'
-import { db } from '@/lib/billzo/db'
+import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
 import { normalizePhoneE164 } from '@/lib/billzo/auth-utils'
-import type { Customer, CustomerImportRow, BulkImportResult } from '@/lib/billzo/types'
+import type { CustomerImportRow, BulkImportResult } from '@/lib/billzo/types'
 
 export const dynamic = 'force-dynamic'
+
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
 
 function normalizePhone(phone: string): string | null {
   if (!phone) return null
@@ -17,13 +19,22 @@ function validateRow(row: CustomerImportRow): { valid: boolean; reason?: string 
   if (!row.phone?.trim()) return { valid: false, reason: 'Phone is required' }
   const phone = normalizePhone(row.phone)
   if (!phone) return { valid: false, reason: 'Invalid phone number format' }
-  if (row.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(row.gstin)) {
+  // Uppercase before test — matches single-create validateGSTIN behavior.
+  if (row.gstin?.trim() && !GSTIN_RE.test(row.gstin.trim().toUpperCase())) {
     return { valid: false, reason: 'Invalid GSTIN format' }
   }
   if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
     return { valid: false, reason: 'Invalid email format' }
   }
   return { valid: true }
+}
+
+function newCustomerId(): string {
+  return `cust_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function escapeCsv(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`
 }
 
 export async function POST(request: NextRequest) {
@@ -42,13 +53,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Maximum 500 customers per import' }, { status: 400 })
     }
 
-    const now = new Date().toISOString()
-    const existingCustomers = await db().customers.where('tenantId').equals(tenantId).toArray()
-    const phoneIndex = new Map(existingCustomers.map(c => [normalizePhone(c.phone), c]))
+    // ── P0: Postgres is canonical. Never touch IndexedDB/Dexie server-side. ──
+    const { data: existingCustomers, error: loadError } = await supabaseAdmin
+      .from('customers')
+      .select('id, customer_name, phone')
+      .eq('tenant_id', tenantId)
+
+    if (loadError) {
+      console.error('[BulkImport] Failed to load existing customers:', loadError.message)
+      return NextResponse.json({ error: 'Failed to read existing customers' }, { status: 500 })
+    }
+
+    const phoneIndex = new Map(
+      (existingCustomers || []).map((c: any) => [normalizePhone(c.phone || ''), c]),
+    )
+    // In-file dedup: without this, two same-phone rows in one payload both miss
+    // the pre-existing index and double-create (no DB unique constraint on phone).
+    const seenPhones = new Set<string>()
 
     const result: BulkImportResult = { created: 0, updated: 0, skipped: [], errors: [] }
-    const toCreate: Customer[] = []
-    const toUpdate: { id: string; updates: Partial<Customer> }[] = []
+    const toCreate: Record<string, any>[] = []
+    const toUpdate: { id: string; updates: Record<string, any>; row: CustomerImportRow }[] = []
+    const now = new Date().toISOString()
 
     for (const row of rows) {
       const validation = validateRow(row)
@@ -58,48 +84,73 @@ export async function POST(request: NextRequest) {
       }
 
       const phone = normalizePhone(row.phone)!
+      if (seenPhones.has(phone)) {
+        result.skipped.push({ row, reason: `Duplicate phone within this file: ${phone}` })
+        continue
+      }
+      seenPhones.add(phone)
+
       const existing = phoneIndex.get(phone)
 
       if (existing) {
         if (mode === 'skip') {
-          result.skipped.push({ row, reason: `Phone ${phone} already exists: ${existing.name}` })
+          result.skipped.push({ row, reason: `Phone ${phone} already exists: ${existing.customer_name}` })
         } else {
-          const updates: Partial<Customer> = {
-            name: row.name.trim(),
-            whatsapp_number: row.whatsapp_number ? (normalizePhone(row.whatsapp_number) ?? undefined) : undefined,
-            gstin: row.gstin?.trim() || undefined,
-            email: row.email?.trim() || undefined,
-            updatedAt: now,
-          }
-          toUpdate.push({ id: existing.id, updates })
-          result.updated++
+          toUpdate.push({
+            id: existing.id,
+            updates: {
+              customer_name: row.name.trim(),
+              email: row.email?.trim() || null,
+              gstin: row.gstin?.trim().toUpperCase() || null,
+              updated_at: now,
+            },
+            row,
+          })
         }
       } else {
-        const customer: Customer = {
-          id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          tenantId,
-          name: row.name.trim(),
+        // NOTE: whatsapp_number has no Postgres column (single-create also drops
+        // it) — intentionally not persisted. Columns mirror POST /api/customers.
+        toCreate.push({
+          id: newCustomerId(),
+          tenant_id: tenantId,
+          customer_name: row.name.trim(),
           phone,
-          whatsapp_number: row.whatsapp_number ? (normalizePhone(row.whatsapp_number) ?? undefined) : undefined,
-          gstin: row.gstin?.trim() || undefined,
-          email: row.email?.trim() || undefined,
+          email: row.email?.trim() || null,
+          gstin: row.gstin?.trim().toUpperCase() || null,
+          automation_mode: 'full_auto',
           opt_in: false,
-          defaultTone: 'hinglish',
-          invoiceCount: 0,
-          lastUsedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        }
-        toCreate.push(customer)
+          created_at: now,
+          updated_at: now,
+        })
         result.created++
       }
     }
 
-    if (toCreate.length > 0) await db().customers.bulkAdd(toCreate)
-    for (const { id, updates } of toUpdate) {
-      await db().customers.update(id, updates)
+    // Single-statement insert: atomic — a retry sees the rows as existing and
+    // skips them, so retries are idempotent (no duplicate customers).
+    if (toCreate.length > 0) {
+      const { error: insertError } = await supabaseAdmin.from('customers').insert(toCreate)
+      if (insertError) {
+        console.error('[BulkImport] Insert error:', insertError.message)
+        return NextResponse.json({ error: 'Failed to save imported customers' }, { status: 500 })
+      }
     }
 
+    for (const { id, updates, row } of toUpdate) {
+      const { error: updateError } = await supabaseAdmin
+        .from('customers')
+        .update(updates)
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+      if (updateError) {
+        console.error('[BulkImport] Update error:', updateError.message)
+        result.errors.push({ row, error: 'Failed to update existing customer' })
+      } else {
+        result.updated++
+      }
+    }
+
+    // Response contract preserved exactly — onboarding + parties/import consume it.
     return NextResponse.json({
       imported: result.created + result.updated,
       total: rows.length,
@@ -111,7 +162,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[BulkImport] Error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Import failed. Please try again.' }, { status: 500 })
   }
 }
 
@@ -120,15 +171,24 @@ export async function GET(request: NextRequest) {
     const tenantId = getVerifiedTenantIdFromRequest(request)
     if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const customers = await db().customers.where('tenantId').equals(tenantId).toArray()
+    const { data: customers, error } = await supabaseAdmin
+      .from('customers')
+      .select('customer_name, phone, email, gstin, opt_in')
+      .eq('tenant_id', tenantId)
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.error('[BulkImport] GET error:', error.message)
+      return NextResponse.json({ error: 'Failed to fetch customers' }, { status: 500 })
+    }
 
     const csvContent = [
       'Name,Phone,WhatsApp Number,GSTIN,Email,Opt-in',
-      ...customers.map(c =>
+      ...(customers || []).map((c: any) =>
         [
-          `"${c.name}"`,
-          c.phone,
-          c.whatsapp_number || '',
+          escapeCsv(c.customer_name || ''),
+          c.phone || '',
+          '',
           c.gstin || '',
           c.email || '',
           c.opt_in ? 'Yes' : 'No',
@@ -144,6 +204,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error('[BulkImport] GET error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: 'Export failed. Please try again.' }, { status: 500 })
   }
 }
