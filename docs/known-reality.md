@@ -64,6 +64,17 @@
 - `FACT` (verified 2026-09-20, code+fix): the `?error=` stuck-on-reload login bug
   (error-screen "Try again" preserved the query param and looped) is fixed —
   retry now clears local + query errors and strips the query string.
+- `FACT` (verified 2026-10-11, code+user-confirmed): root `/` is a client entry
+  (`mini_saas_frontend/src/app/page.tsx`) that forwards any magic-link params
+  (`?token_hash`/`?code`/`?error`, `#access_token`/`#error`) intact to
+  `/auth/callback`, else goes to `/auth`. Previously `/` did an unconditional
+  server `redirect('/auth')`, silently discarding token params when a link
+  landed on site root (Supabase Site-URL fallback) — user bounced to login
+  with no error. Supabase `signInWithOtp` uses default implicit flow
+  (auth-js 2.106.2 source: no PKCE challenge sent), so links carry
+  `token_hash`+`type`, verified server-side via `verifyOtp` in
+  `callback-exchange`. Every server exchange failure renders a visible error
+  screen — a *silent* return to login means params never reached exchange.
 
 ## Frappe / ERP (adjacent — not BillZo core)
 
