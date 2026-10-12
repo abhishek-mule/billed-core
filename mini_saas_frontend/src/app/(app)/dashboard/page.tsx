@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
-  AlertTriangle, RefreshCw, Phone, Send, UserPlus,
+  AlertTriangle, RefreshCw, Phone, UserPlus,
   ChevronRight, ArrowRight, Banknote, Receipt, TrendingUp, Zap,
-  CheckCircle2, X, Clock, Users, Target,
+  X, Users, Target, Plus, Sparkles,
 } from "lucide-react"
 import { PageShell } from "@/components/billzo/PageShell"
 import { Skeleton } from "@/components/billzo/Skeleton"
@@ -44,10 +44,13 @@ function LoadingSkeleton() {
   return (
     <PageShell>
       <div className="space-y-4 animate-pulse">
-        <Skeleton className="h-24 rounded-2xl" />
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-7 w-40 rounded-lg" />
+        <Skeleton className="h-44 rounded-3xl" />
+        <div className="grid grid-cols-2 gap-4">
+          <Skeleton className="h-28 rounded-2xl" />
+          <Skeleton className="h-28 rounded-2xl" />
+        </div>
+        <Skeleton className="h-36 rounded-2xl" />
       </div>
     </PageShell>
   )
@@ -71,6 +74,13 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
     </PageShell>
   )
 }
+
+const QUICK_ACTIONS = [
+  { href: "/pos", label: "New Bill", desc: "Bill a customer", icon: Plus, highlight: true },
+  { href: "/recovery", label: "Recovery", desc: "Work the queue", icon: Zap, highlight: false },
+  { href: "/invoices", label: "Invoices", desc: "All invoices", icon: Receipt, highlight: false },
+  { href: "/parties", label: "Customers", desc: "Manage parties", icon: Users, highlight: false },
+]
 
 export default function DashboardPage() {
   const [data, setData] = useState<HomeData | null>(null)
@@ -117,192 +127,260 @@ export default function DashboardPage() {
     return "Good evening"
   })()
 
-  const totalExceptions = exceptions.missingPhone + exceptions.brokenPromises + exceptions.failedReminders + exceptions.paymentToReview
+  const todayLabel = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  })
+
+  const exceptionRows = [
+    exceptions.missingPhone > 0 && {
+      icon: UserPlus,
+      text: `${exceptions.missingPhone} customer${exceptions.missingPhone > 1 ? "s" : ""} missing phone number`,
+    },
+    exceptions.brokenPromises > 0 && {
+      icon: X,
+      text: `${exceptions.brokenPromises} payment promise${exceptions.brokenPromises > 1 ? "s" : ""} broken`,
+    },
+    exceptions.failedReminders > 0 && {
+      icon: Phone,
+      text: `${exceptions.failedReminders} reminder${exceptions.failedReminders > 1 ? "s" : ""} failed to deliver`,
+    },
+    exceptions.paymentToReview > 0 && {
+      icon: Target,
+      text: `${exceptions.paymentToReview} possible payment${exceptions.paymentToReview > 1 ? "s" : ""} to review`,
+    },
+  ].filter(Boolean) as { icon: typeof Phone; text: string }[]
+
+  const isFresh = financial.totalOutstanding === 0 && financial.recoveredThisMonth === 0 && recoveryFocus.customerCount === 0
+  const clampedRate = Math.max(0, Math.min(100, Math.round(recoveryPerformance.rate)))
 
   return (
     <PageShell>
-      <div className="space-y-6 pb-8">
-        {/* Business overview header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="space-y-5 pb-8">
+        {/* ── Header ── */}
+        <div className="animate-element flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">
+            <p className="text-xs font-medium text-muted-foreground">{todayLabel}</p>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight mt-0.5">
               {greeting}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Here's how your money is doing
+              Here&apos;s how your money is doing
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-1">
             <Link
               href="/recovery"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold bg-card hover:bg-muted"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-full text-xs font-semibold bg-card hover:bg-muted transition-colors"
             >
               <Zap className={`h-3.5 w-3.5 ${autoEnabled ? "text-emerald-500" : "text-muted-foreground"}`} />
-              Recovery
+              {autoEnabled === null ? "..." : autoEnabled ? "Auto on" : "Auto off"}
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${autoEnabled ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-              {autoEnabled === null ? "..." : autoEnabled ? "On" : "Off"}
             </Link>
             <button
               onClick={load}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground bg-card hover:bg-muted"
+              aria-label="Refresh"
+              className="inline-flex items-center justify-center h-8 w-8 border border-border rounded-full text-muted-foreground bg-card hover:bg-muted transition-colors"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
             </button>
           </div>
         </div>
 
-        {/* Financial overview cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <Banknote size={14} />
-              <span className="uppercase tracking-wider font-semibold">Outstanding</span>
+        {/* ── Hero: outstanding ── */}
+        <section className="animate-element animate-delay-100 relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.14] via-card to-card p-5 sm:p-6">
+          <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-primary/10 blur-2xl" />
+          <div className="relative">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="grid h-7 w-7 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Banknote size={15} />
+              </span>
+              <span className="uppercase tracking-wider font-semibold">Total outstanding</span>
             </div>
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
+            <p className="mt-2 text-4xl font-bold tabular-nums tracking-tight text-foreground">
               {formatINR(financial.totalOutstanding)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">Total unpaid</p>
-          </div>
-
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <Send size={14} />
-              <span className="uppercase tracking-wider font-semibold">Recovery Focus</span>
-            </div>
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-              {formatINR(recoveryFocus.amount)}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatINR(financial.inRecovery)} in active recovery
+              {recoveryFocus.customerCount > 0 && (
+                <> · {recoveryFocus.customerCount} customer{recoveryFocus.customerCount !== 1 ? "s" : ""} need action</>
+              )}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">{recoveryFocus.customerCount} customer{recoveryFocus.customerCount !== 1 ? 's' : ''} need action</p>
+            {sections.needsYou > 0 ? (
+              <Link
+                href="/recovery"
+                className="mt-4 inline-flex w-full sm:w-auto items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                <Sparkles size={15} />
+                {sections.needsYou} need{sections.needsYou === 1 ? "s" : ""} you — take action
+                <ArrowRight size={15} />
+              </Link>
+            ) : (
+              <Link
+                href="/recovery"
+                className="mt-4 inline-flex w-full sm:w-auto items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                Open Recovery Center <ArrowRight size={15} />
+              </Link>
+            )}
           </div>
+        </section>
 
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <TrendingUp size={14} />
+        {/* ── Supporting stats ── */}
+        <div className="animate-element animate-delay-200 grid grid-cols-2 gap-3">
+          <div className="bg-card border border-border rounded-2xl p-4">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <TrendingUp size={13} className="text-success" />
               <span className="uppercase tracking-wider font-semibold">Recovered</span>
             </div>
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-success">
+            <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-success">
               {formatINR(financial.recoveredThisMonth)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">This month</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">This month</p>
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-4">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Target size={13} className="text-primary" />
+              <span className="uppercase tracking-wider font-semibold">In focus</span>
+            </div>
+            <p className="mt-1.5 text-xl font-bold tabular-nums tracking-tight text-foreground">
+              {formatINR(recoveryFocus.amount)}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {recoveryFocus.customerCount} customer{recoveryFocus.customerCount !== 1 ? "s" : ""} to act on
+            </p>
           </div>
         </div>
 
-        {/* Recovery performance */}
-        {recoveryFocus.customerCount > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-              <Zap size={14} />
-              <span className="uppercase tracking-wider font-semibold">Recovery Performance</span>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-baseline justify-between mb-1">
-                  <span className="text-lg font-bold text-foreground">{formatINR(recoveryPerformance.recovered)}</span>
-                  <span className="text-xs text-muted-foreground">recovered this month</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-success rounded-full transition-all"
-                    style={{ width: `${recoveryPerformance.rate}%` }}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm pt-2 border-t border-border">
-                <span className="text-muted-foreground">{recoveryFocus.customerCount} customers in recovery</span>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    {sections.automated} automated
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    {sections.monitoring} monitoring
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                    {sections.needsYou} need you
-                  </span>
-                </div>
-              </div>
+        {/* ── Getting started (fresh merchants) ── */}
+        {isFresh && (
+          <section className="animate-element animate-delay-200 rounded-2xl border border-dashed border-border bg-muted/40 p-5 text-center">
+            <p className="text-sm font-semibold text-foreground">You&apos;re all caught up 🎉</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Create your first bill or import customers to start tracking money.
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-2">
               <Link
-                href="/recovery"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity w-full justify-center"
+                href="/pos"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
               >
-                View Recovery Command Center <ArrowRight size={15} />
+                <Plus size={13} /> New Bill
+              </Link>
+              <Link
+                href="/parties/import"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border bg-card text-xs font-semibold hover:bg-muted transition-colors"
+              >
+                Import customers
               </Link>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Needs attention - exceptions */}
-        {totalExceptions > 0 && (
-          <div className="bg-danger-soft border border-danger/20 rounded-2xl p-5">
-            <div className="flex items-center gap-2 text-xs text-danger mb-3">
+        {/* ── Recovery performance ── */}
+        {recoveryFocus.customerCount > 0 && (
+          <section className="animate-element animate-delay-300 bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Zap size={14} className="text-primary" />
+                <span className="uppercase tracking-wider font-semibold">Recovery performance</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-success/10 text-success text-xs font-bold tabular-nums">
+                {clampedRate}%
+              </span>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-xl font-bold tabular-nums text-foreground">{formatINR(recoveryPerformance.recovered)}</span>
+              <span className="text-xs text-muted-foreground">recovered this month</span>
+            </div>
+            <div className="mt-2 h-2.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"
+                style={{ width: `${clampedRate}%` }}
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground border-t border-border pt-3">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                {sections.needsYou} need you
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                {sections.automated} automated
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                {sections.monitoring} monitoring
+              </span>
+            </div>
+          </section>
+        )}
+
+        {/* ── Needs attention ── */}
+        {exceptionRows.length > 0 && (
+          <section className="animate-element animate-delay-300 rounded-2xl border border-danger/25 bg-danger/[0.04] p-4">
+            <div className="flex items-center gap-2 text-xs text-danger px-1 pb-2">
               <AlertTriangle size={14} />
-              <span className="uppercase tracking-wider font-semibold">Needs Your Attention</span>
+              <span className="uppercase tracking-wider font-semibold">Needs your attention</span>
+              <span className="ml-auto px-1.5 py-0.5 rounded-full bg-danger/10 text-[11px] font-bold tabular-nums">
+                {exceptionRows.length}
+              </span>
             </div>
-            <div className="space-y-2">
-              {exceptions.missingPhone > 0 && (
-                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
-                  <UserPlus size={14} className="text-danger flex-shrink-0" />
-                  <span>{exceptions.missingPhone} customer{exceptions.missingPhone > 1 ? "s" : ""} missing phone number</span>
+            <div className="divide-y divide-danger/10">
+              {exceptionRows.map(({ icon: Icon, text }) => (
+                <Link
+                  key={text}
+                  href="/recovery"
+                  className="flex items-center gap-3 px-1 py-2.5 text-sm text-foreground hover:text-danger transition-colors group"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-danger/10 text-danger">
+                    <Icon size={15} />
+                  </span>
+                  <span className="flex-1">{text}</span>
+                  <ChevronRight size={15} className="text-muted-foreground group-hover:text-danger group-hover:translate-x-0.5 transition-all" />
                 </Link>
-              )}
-              {exceptions.brokenPromises > 0 && (
-                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
-                  <X size={14} className="text-danger flex-shrink-0" />
-                  <span>{exceptions.brokenPromises} payment promise{exceptions.brokenPromises > 1 ? "s" : ""} broken</span>
-                </Link>
-              )}
-              {exceptions.failedReminders > 0 && (
-                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
-                  <Phone size={14} className="text-danger flex-shrink-0" />
-                  <span>{exceptions.failedReminders} reminder{exceptions.failedReminders > 1 ? "s" : ""} failed to deliver</span>
-                </Link>
-              )}
-              {exceptions.paymentToReview > 0 && (
-                <Link href="/recovery" className="flex items-center gap-2 text-sm text-foreground hover:text-danger transition-colors">
-                  <Target size={14} className="text-danger flex-shrink-0" />
-                  <span>{exceptions.paymentToReview} possible payment{exceptions.paymentToReview > 1 ? "s" : ""} to review</span>
-                </Link>
-              )}
+              ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Quick links */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Link href="/invoices" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Receipt size={14} />
-              <span className="uppercase tracking-wider font-semibold">Invoices</span>
-            </div>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-sm font-semibold text-foreground">View invoices</span>
-              <ChevronRight size={15} className="text-muted-foreground" />
-            </div>
-          </Link>
-          <Link href="/cashflow" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Banknote size={14} />
-              <span className="uppercase tracking-wider font-semibold">Cashflow</span>
-            </div>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-sm font-semibold text-foreground">Understand business finances</span>
-              <ChevronRight size={15} className="text-muted-foreground" />
-            </div>
-          </Link>
-          <Link href="/parties" className="bg-card border border-border rounded-2xl p-4 hover:bg-muted transition-colors">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users size={14} />
-              <span className="uppercase tracking-wider font-semibold">Customers</span>
-            </div>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-sm font-semibold text-foreground">Manage customers</span>
-              <ChevronRight size={15} className="text-muted-foreground" />
-            </div>
-          </Link>
+        {/* ── Quick actions ── */}
+        <section className="animate-element animate-delay-400">
+          <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Quick actions
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {QUICK_ACTIONS.map(({ href, label, desc, icon: Icon, highlight }) => (
+              <Link
+                key={href}
+                href={href}
+                className={
+                  highlight
+                    ? "rounded-2xl bg-primary text-primary-foreground p-4 hover:bg-primary/90 transition-colors shadow-sm active:scale-[0.98]"
+                    : "rounded-2xl bg-card border border-border p-4 hover:bg-muted hover:border-primary/30 transition-all active:scale-[0.98]"
+                }
+              >
+                <span className={
+                  highlight
+                    ? "grid h-9 w-9 place-items-center rounded-xl bg-white/20"
+                    : "grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary"
+                }>
+                  <Icon size={17} />
+                </span>
+                <p className="mt-2.5 text-sm font-semibold">{label}</p>
+                <p className={highlight ? "text-[11px] text-primary-foreground/75" : "text-[11px] text-muted-foreground"}>{desc}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Secondary links ── */}
+        <div className="animate-element animate-delay-500 flex items-center justify-center gap-4 text-xs text-muted-foreground pt-1">
+          <Link href="/cashflow" className="hover:text-foreground transition-colors">Cashflow</Link>
+          <span aria-hidden="true">·</span>
+          <Link href="/pulse" className="hover:text-foreground transition-colors">Pulse</Link>
+          <span aria-hidden="true">·</span>
+          <Link href="/reports" className="hover:text-foreground transition-colors">Reports</Link>
         </div>
       </div>
     </PageShell>
