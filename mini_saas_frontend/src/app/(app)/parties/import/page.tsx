@@ -25,13 +25,19 @@ export default function ImportCustomersPage() {
 
   return (
     <div className="px-4 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/parties')} className="p-2 rounded-xl hover:bg-muted">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold">Import Customers</h1>
-          <p className="text-sm text-muted-foreground">Add multiple customers at once</p>
+      <div className="animate-element flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/parties')} aria-label="Back to customers" className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card hover:bg-muted transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Import Customers</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {state.contacts.length > 0
+                ? `${state.validCount} ready · ${state.duplicateCount} duplicates · ${state.invalidCount} invalid`
+                : 'Add multiple customers at once'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -156,20 +162,26 @@ export default function ImportCustomersPage() {
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">#</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Name</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Phone</th>
+                    {state.contacts.some(c => c.gstin) && (
+                      <th className="text-left px-4 py-3 font-semibold text-muted-foreground">GSTIN</th>
+                    )}
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {state.contacts.map((c, i) => (
-                    <tr key={i} className={`border-t ${c.isDuplicate ? 'bg-warning-soft' : ''}`}>
-                      <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
+                    <tr key={i} className={`border-t ${c.isDuplicate ? 'bg-warning-soft/60' : ''}`}>
+                      <td className="px-4 py-3 text-muted-foreground tabular-nums">{i + 1}</td>
                       <td className="px-4 py-3 font-medium">{c.name}</td>
-                      <td className="px-4 py-3">{formatPhoneDisplay(c.phone)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatPhoneDisplay(c.phone)}</td>
+                      {state.contacts.some(x => x.gstin) && (
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{c.gstin || '—'}</td>
+                      )}
                       <td className="px-4 py-3">
                         {c.isDuplicate ? (
-                          <span className="text-xs text-warning font-medium">Will skip (exists)</span>
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs text-warning font-semibold bg-warning-soft">Will skip (exists)</span>
                         ) : (
-                          <span className="text-xs text-success font-medium">Will import</span>
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs text-success font-semibold bg-success-soft">Will import</span>
                         )}
                       </td>
                     </tr>

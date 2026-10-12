@@ -32,9 +32,40 @@ export interface Contact {
   name: string
   phone: string
   whatsapp_number?: string
+  gstin?: string
   email?: string
   isDuplicate?: boolean
 }
+
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+
+/** Quote-aware CSV line splitter: handles "Sharma, Sons" and "" escapes. */
+export function splitCsvLine(line: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++ }
+        else inQuotes = false
+      } else cur += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      out.push(cur); cur = ''
+    } else cur += ch
+  }
+  out.push(cur)
+  return out.map(v => v.trim())
+}
+
+const NAME_ALIASES = ['name', 'customer name', 'customer_name', 'party', 'party name', 'party_name']
+const PHONE_ALIASES = ['phone', 'mobile', 'mobile number', 'contact', 'contact number', 'phone number', 'phone_number', 'tel']
+const WHATSAPP_ALIASES = ['whatsapp', 'whatsapp_number', 'whatsapp number', 'wa']
+const GSTIN_ALIASES = ['gstin', 'gst in', 'gst', 'gst_no', 'gst number']
+const EMAIL_ALIASES = ['email', 'e-mail', 'mail']
 
 
 export interface ImportState {
@@ -63,11 +94,22 @@ export function useContactImport() {
     setState(s => ({ ...s, loading: true }))
 
     try {
-      const res = await fetch('/api/customers', { credentials: 'include' })
-      if (!res.ok) throw new Error('Failed to fetch existing customers')
-      const { customers } = await res.json()
-
-      const existingPhones = new Set(customers.map((c: any) => c.phone))
+      // Paginate through ALL tenant customers — the default limit=100 caused
+      // false "Will import" for tenants with >100 customers.
+      const existingPhones = new Set<string>()
+      let offset = 0
+      let total = Infinity
+      while (offset < total) {
+        const res = await fetch(`/api/customers?limit=500&offset=${offset}`, { credentials: 'include' })
+        if (!res.ok) throw new Error('Failed to fetch existing customers')
+        const { customers, total: t } = await res.json()
+        for (const c of customers || []) {
+          if (c.phone) existingPhones.add(normalizePhone(String(c.phone)))
+        }
+        total = typeof t === 'number' ? t : (customers || []).length
+        offset += (customers || []).length
+        if (!customers || customers.length === 0) break
+      }
       const checked = toCheck.map(c => ({
         ...c,
         isDuplicate: existingPhones.has(c.phone),
@@ -176,66 +218,105 @@ export function useContactImport() {
     }
   }, [checkDuplicates])
 
+  /** Shared row pipeline for CSV and XLSX: header mapping + validation. */
+  const rowsToContacts = (header: string[], rows: string[][], label: string) => {
+    const norm = header.map(h => h.toLowerCase().trim())
+    const nameIdx = norm.findIndex(h => NAME_ALIASES.includes(h))
+    const phoneIdx = norm.findIndex(h => PHONE_ALIASES.includes(h))
+    const whatsappIdx = norm.findIndex(h => WHATSAPP_ALIASES.includes(h))
+    const gstinIdx = norm.findIndex(h => GSTIN_ALIASES.includes(h))
+    const emailIdx = norm.findIndex(h => EMAIL_ALIASES.includes(h))
+
+    if (nameIdx === -1 || phoneIdx === -1) {
+      setState(s => ({ ...s, loading: false, error: `${label} must have at least "Name" and "Phone" columns` }))
+      return
+    }
+
+    const contacts: Contact[] = []
+    const errors: string[] = []
+    const seenPhones = new Set<string>()
+
+    for (let i = 0; i < rows.length; i++) {
+      const vals = rows[i]
+      const name = (vals[nameIdx] || '').trim()
+      const phoneRaw = (vals[phoneIdx] || '').trim()
+      const normalizedPhone = normalizePhone(phoneRaw)
+
+      if (!name && !phoneRaw) continue
+
+      if (!name || !isValidPhone(phoneRaw)) {
+        errors.push(`Row ${i + 2}: ${!name ? 'Missing name' : 'Invalid phone'}`)
+        continue
+      }
+
+      // Never store a bare '+' — normalizePhone('') yields '+'.
+      const waRaw = whatsappIdx >= 0 ? (vals[whatsappIdx] || '').trim() : ''
+      const gstinRaw = gstinIdx >= 0 ? (vals[gstinIdx] || '').trim().toUpperCase() : ''
+      if (gstinRaw && !GSTIN_RE.test(gstinRaw)) {
+        errors.push(`Row ${i + 2}: Invalid GSTIN`)
+        continue
+      }
+
+      const contact: Contact = {
+        name,
+        phone: normalizedPhone,
+        whatsapp_number: waRaw ? normalizePhone(waRaw) : undefined,
+        gstin: gstinRaw || undefined,
+        email: emailIdx >= 0 && vals[emailIdx]?.trim() ? vals[emailIdx].trim() : undefined,
+      }
+      // Mark in-file duplicates in preview — server skips them on import.
+      if (seenPhones.has(normalizedPhone)) contact.isDuplicate = true
+      else seenPhones.add(normalizedPhone)
+      contacts.push(contact)
+    }
+
+    setState(s => ({
+      ...s,
+      contacts,
+      duplicateCount: 0,
+      validCount: contacts.length,
+      invalidCount: errors.length,
+      loading: false,
+      error: errors.length > 0 ? `Skipped ${errors.length} invalid rows: ${errors[0]}` : null,
+    }))
+    checkDuplicates(contacts)
+  }
+
   const parseCSV = useCallback(async (file: File) => {
     setState(s => ({ ...s, loading: true, error: null }))
 
     try {
-      const text = await file.text()
-      const lines = text.split('\n').filter(l => l.trim())
-      if (lines.length < 2) {
-        setState(s => ({ ...s, loading: false, error: 'CSV must have a header row and at least one data row' }))
-        return
-      }
+      const isXlsx = /\.xlsx?$/i.test(file.name)
+      let header: string[]
+      let rows: string[][]
 
-      const header = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''))
-      const nameIdx = header.findIndex(h => ['name', 'customer name', 'customer_name'].includes(h))
-      const phoneIdx = header.findIndex(h => ['phone', 'mobile', 'contact', 'phone number', 'phone_number', 'tel'].includes(h))
-      const whatsappIdx = header.findIndex(h => ['whatsapp', 'whatsapp_number', 'whatsapp number', 'wa'].includes(h))
-      const gstinIdx = header.findIndex(h => ['gstin', 'gst in', 'gst'].includes(h))
-      const emailIdx = header.findIndex(h => ['email', 'e-mail', 'mail'].includes(h))
-
-      if (nameIdx === -1 || phoneIdx === -1) {
-        setState(s => ({ ...s, loading: false, error: 'CSV must have at least "Name" and "Phone" columns' }))
-        return
-      }
-
-      const contacts: Contact[] = []
-      const errors: string[] = []
-
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
-        const name = (nameIdx >= 0 ? vals[nameIdx] : '') || ''
-        const phoneRaw = (phoneIdx >= 0 ? vals[phoneIdx] : '') || ''
-        const normalizedPhone = normalizePhone(phoneRaw)
-
-        if (!name && !phoneRaw) continue
-
-        if (!name || !isValidPhone(phoneRaw)) {
-          errors.push(`Row ${i + 1}: ${!name ? 'Missing name' : 'Invalid phone'}`)
-          continue
+      if (isXlsx) {
+        // Real Excel parsing — file picker accepts .xlsx, so honor it.
+        const XLSX = await import('xlsx')
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+        const sheet = wb.Sheets[wb.SheetNames[0]]
+        if (!sheet) throw new Error('Excel file has no readable sheet')
+        const aoa = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', raw: false }) as unknown as string[][]
+        const nonEmpty = aoa.filter(r => r.some(v => String(v ?? '').trim()))
+        if (nonEmpty.length < 2) {
+          setState(s => ({ ...s, loading: false, error: 'Excel must have a header row and at least one data row' }))
+          return
         }
-
-        contacts.push({
-          name,
-          phone: normalizedPhone,
-          whatsapp_number: whatsappIdx >= 0 ? normalizePhone(vals[whatsappIdx]) : undefined,
-          email: emailIdx >= 0 ? vals[emailIdx] : undefined,
-        })
+        header = nonEmpty[0].map(v => String(v ?? ''))
+        rows = nonEmpty.slice(1).map(r => r.map(v => String(v ?? '')))
+        rowsToContacts(header, rows, 'Excel')
+      } else {
+        // BOM-strip + CRLF-safe + quote-aware (Tally exports quote commas).
+        const text = (await file.text()).replace(/^\uFEFF/, '')
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        if (lines.length < 2) {
+          setState(s => ({ ...s, loading: false, error: 'CSV must have a header row and at least one data row' }))
+          return
+        }
+        header = splitCsvLine(lines[0])
+        rows = lines.slice(1).map(splitCsvLine)
+        rowsToContacts(header, rows, 'CSV')
       }
-
-      const validCount = contacts.length
-      const invalidCount = errors.length
-
-      setState(s => ({
-        ...s,
-        contacts,
-        duplicateCount: 0,
-        validCount,
-        invalidCount,
-        loading: false,
-        error: errors.length > 0 ? `Skipped ${errors.length} invalid rows: ${errors[0]}` : null,
-      }))
-      checkDuplicates(contacts)
     } catch (err: any) {
       setState(s => ({ ...s, loading: false, error: err.message }))
     }

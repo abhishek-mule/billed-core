@@ -169,6 +169,7 @@ export default function OnboardingPage() {
         name: c.name,
         phone: c.phone,
         whatsapp_number: c.whatsapp_number || c.phone,
+        gstin: c.gstin,
         email: c.email,
       }))
       const res = await fetch("/api/customers/bulk-import", {
@@ -178,7 +179,8 @@ export default function OnboardingPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Import failed")
-      setImportResult({ created: data.created || 0, skipped: data.skipped?.length, errors: data.errors?.length })
+      // API returns counts (numbers), not arrays — read them directly.
+      setImportResult({ created: data.created || 0, skipped: data.skipped ?? 0, errors: data.failed ?? 0 })
       trackEvent(tid, events.onboarding_completed, { step: "imported", customerCount: data.created || 0 })
       await finishOnboarding()
     } catch (err: any) {
