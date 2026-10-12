@@ -127,12 +127,51 @@ export async function POST(request: NextRequest) {
     }
 
     // Single-statement insert: atomic — a retry sees the rows as existing and
-    // skips them, so retries are idempotent (no duplicate customers).
+    // skips them, so sequential retries are idempotent (no duplicate customers).
     if (toCreate.length > 0) {
       const { error: insertError } = await supabaseAdmin.from('customers').insert(toCreate)
       if (insertError) {
-        console.error('[BulkImport] Insert error:', insertError.message)
-        return NextResponse.json({ error: 'Failed to save imported customers' }, { status: 500 })
+        if (insertError.code === '23505') {
+          // Lost a race with a concurrent writer (uq_customers_tenant_phone):
+          // converge per-row instead of failing the whole batch. A row that
+          // now exists is a safe skip, never a duplicate.
+          result.created = 0
+          for (const row of toCreate) {
+            const { data: raced } = await supabaseAdmin
+              .from('customers')
+              .select('id')
+              .eq('tenant_id', tenantId)
+              .eq('phone', row.phone)
+              .limit(1)
+            if (raced && raced.length > 0) {
+              result.skipped.push({
+                row: { name: row.customer_name, phone: row.phone },
+                reason: `Phone ${row.phone} already exists (concurrent import)`,
+              })
+              continue
+            }
+            const { error: singleError } = await supabaseAdmin.from('customers').insert(row)
+            if (singleError) {
+              if (singleError.code === '23505') {
+                result.skipped.push({
+                  row: { name: row.customer_name, phone: row.phone },
+                  reason: `Phone ${row.phone} already exists (concurrent import)`,
+                })
+              } else {
+                console.error('[BulkImport] Single-insert error:', singleError.message)
+                result.errors.push({
+                  row: { name: row.customer_name, phone: row.phone },
+                  error: 'Failed to save customer',
+                })
+              }
+            } else {
+              result.created++
+            }
+          }
+        } else {
+          console.error('[BulkImport] Insert error:', insertError.message)
+          return NextResponse.json({ error: 'Failed to save imported customers' }, { status: 500 })
+        }
       }
     }
 

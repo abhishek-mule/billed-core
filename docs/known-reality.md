@@ -112,6 +112,30 @@
 - `FACT` (known limitation, not expanded now): `limit 1000` is correctness boundary — `sum(first 1000)` ≠ `total outstanding` if tenant >1000 open invoices. Next hardening: server-side `SUM(COALESCE(GREATEST(outstanding_amount,0), GREATEST(grand_total - paid_amount,0))) WHERE tenant_id=? AND status NOT IN ('paid','cancelled')` aggregate. Current `limit 1000` is intentional product boundary for pilot, not infinite scale.
 - `FACT` (vocabulary, locked): `Total Outstanding` = all unpaid, `In Recovery` = recovery_cases subset, `Recovered This Month` = ledger paid this IST month, `Overdue` = outstanding + dueDate < now, `Pending Udhar` = product-defined udhar outstanding — do not conflate.
 
+## Customer import (P0, fixed 2026-10-12)
+
+- `FACT` (fixed 2026-10-12, code): `POST/GET /api/customers/bulk-import` persists
+  **exclusively via Postgres (`supabaseAdmin`)**, tenant-scoped by verified JWT.
+  Previously it called Dexie `db()`, which throws server-side — every import 500'd.
+  Sequential retries are idempotent (phone pre-check → skip; single-statement
+  atomic insert; in-file dedup). Response contract unchanged.
+- `FACT` (migration 103, tested on scratch Postgres 16 — NOT yet applied to
+  staging/prod): partial unique index `uq_customers_tenant_phone` on
+  `(tenant_id, phone)` excluding NULL/`''` (phoneless customers stay allowed,
+  cross-tenant same-phone allowed). Pre-step normalizes unambiguous
+  Indian-mobile formats to `+91XXXXXXXXXX`; international/garbage phones are
+  left byte-identical, never reinterpreted. True duplicates abort the migration
+  loudly — resolve via `verify_103` PART A (keep oldest, repoint dependents;
+  never blind-delete: dependents reference `customers(id)` with
+  `ON DELETE CASCADE`). API maps `23505` to safe skip, so concurrent imports
+  converge — proven: two simultaneous same-key transactions → loser gets
+  `23505` + rollback, exactly one row survives.
+- `UNKNOWN` (operator-pending): staging/prod duplicate audit (run `verify_103`
+  PART A first), migration-103 apply, and a staging concurrency run. Until
+  then the pipeline is **not** declared production-ready. Pre-existing gaps
+  untouched: no invoice/outstanding import, naive CSV parser, no Tally/Zoho
+  mapping, `whatsapp_number` not persisted (no Postgres column).
+
 ## Current limitations
 
 - Gate-17 empirical capture is operator-pending; no webhook-path code changes
