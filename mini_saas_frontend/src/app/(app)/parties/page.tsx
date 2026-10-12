@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   Users, Plus, Search, AlertTriangle, UserPlus, Download, Upload,
+  ChevronRight, Banknote,
 } from "lucide-react"
 import { Button } from "@/components/billzo/Button"
 import { EmptyState } from "@/components/billzo/EmptyState"
@@ -63,6 +64,9 @@ type PartyWithBalance = Customer & {
   lastPaymentAt: string | null
 }
 
+type PartyStatus = 'overdue' | 'due_soon' | 'clear'
+type StatusFilter = 'all' | PartyStatus
+
 function getPartyType(c: Customer): 'customer' | 'supplier' {
   return c.notes?.toLowerCase().includes('supplier') ? 'supplier' : 'customer'
 }
@@ -90,10 +94,17 @@ function getOutstandingStatus(inv: Invoice): 'overdue' | 'due_soon' | 'clear' {
   return 'clear'
 }
 
+function getPartyMaxStatus(party: PartyWithBalance): PartyStatus {
+  const invoices = party.invoices || []
+  if (invoices.some(i => getOutstandingStatus(i) === 'overdue')) return 'overdue'
+  if (invoices.some(i => getOutstandingStatus(i) === 'due_soon')) return 'due_soon'
+  return 'clear'
+}
+
 const STATUS_STYLES: Record<string, string> = {
-  overdue: 'bg-danger-soft text-danger border-border',
-  due_soon: 'bg-warning-soft text-warning border-border',
-  clear: 'bg-success-soft text-success border-border',
+  overdue: 'bg-danger-soft text-danger border-danger/30',
+  due_soon: 'bg-warning-soft text-warning border-warning/30',
+  clear: 'bg-success-soft text-success border-success/30',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -102,29 +113,40 @@ const STATUS_LABELS: Record<string, string> = {
   clear: 'Clear',
 }
 
+const FILTER_CHIPS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'overdue', label: 'Overdue' },
+  { key: 'due_soon', label: 'Due soon' },
+  { key: 'clear', label: 'Clear' },
+]
+
 function FinancialHero({ totalReceivables, overdueAmount, activeParties }: {
   totalReceivables: number
   overdueAmount: number
   activeParties: number
 }) {
   return (
-    <div className="bg-card border border-border rounded-lg p-4 lg:p-5">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
+    <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.12] via-card to-card p-5 lg:p-6">
+      <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-primary/10 blur-2xl" />
+      <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-5">
         <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.totalReceivables}</p>
-          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1.5">
+            <Banknote size={13} className="text-primary" />
+            <span className="uppercase tracking-wider font-semibold">{MerchantLanguage.customer.totalReceivables}</span>
+          </div>
+          <p className="text-2xl lg:text-3xl font-bold tabular-nums tracking-tight text-foreground">
             {formatINR(totalReceivables)}
           </p>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Overdue Amount</p>
-          <p className="text-xl lg:text-2xl font-semibold text-danger tabular-nums">
+        <div className="sm:border-l sm:border-border sm:pl-5">
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">Overdue Amount</p>
+          <p className="text-2xl lg:text-3xl font-bold tabular-nums tracking-tight text-danger">
             {formatINR(overdueAmount)}
           </p>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{MerchantLanguage.customer.activeCustomers}</p>
-          <p className="text-xl lg:text-2xl font-semibold text-foreground tabular-nums">
+        <div className="sm:border-l sm:border-border sm:pl-5">
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">{MerchantLanguage.customer.activeCustomers}</p>
+          <p className="text-2xl lg:text-3xl font-bold tabular-nums tracking-tight text-foreground">
             {activeParties}
           </p>
         </div>
@@ -138,38 +160,39 @@ function PartyCard({ party, onSelect }: {
   onSelect: () => void
 }) {
   const type = getPartyType(party)
-  const invoices = party.invoices || []
-  const overdueInvoices = invoices.filter(i => getOutstandingStatus(i) === 'overdue')
-  const maxStatus = overdueInvoices.length > 0 ? 'overdue'
-    : invoices.some(i => getOutstandingStatus(i) === 'due_soon') ? 'due_soon'
-    : 'clear'
+  const maxStatus = getPartyMaxStatus(party)
 
   return (
     <button
       onClick={onSelect}
-      className="w-full text-left p-3 rounded-lg border border-border bg-card hover:border-border transition-colors"
+      className={`group w-full text-left p-3.5 rounded-2xl border bg-card hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.99] ${
+        maxStatus === 'overdue' ? 'border-danger/25 border-l-4 border-l-danger' : 'border-border'
+      }`}
     >
-      <div className="flex items-start gap-3">
-        <img src={getDiceBearAvatarUrl(party.name)} alt="" className="w-9 h-9 rounded-full shrink-0 mt-0.5 bg-muted/20" loading="lazy" />
+      <div className="flex items-center gap-3">
+        <img src={getDiceBearAvatarUrl(party.name)} alt="" className="w-10 h-10 rounded-full shrink-0 bg-muted/20" loading="lazy" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <p className="font-medium text-foreground truncate">{party.name}</p>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-foreground truncate text-[15px]">{party.name}</p>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold bg-muted px-1.5 py-0.5 rounded">
               {type}
             </span>
           </div>
-          {party.phone && (
-            <p className="text-xs text-muted-foreground truncate">{party.phone}</p>
-          )}
-          <div className="flex items-center justify-between mt-1.5">
-            <p className={`text-sm font-semibold tabular-nums ${
+          <div className="flex items-center justify-between mt-1 gap-2">
+            <p className="text-xs text-muted-foreground truncate">
+              {party.phone || 'No phone'} · {party.invoiceCount} invoice{party.invoiceCount !== 1 ? 's' : ''}
+            </p>
+            <p className={`text-[15px] font-bold tabular-nums shrink-0 ${
               party.outstanding > 0 ? 'text-danger' : 'text-success'
             }`}>
               {formatINR(party.outstanding)}
             </p>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium border ${STATUS_STYLES[maxStatus]}`}>
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${STATUS_STYLES[maxStatus]}`}>
               {STATUS_LABELS[maxStatus]}
             </span>
+            <ChevronRight size={15} className="text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
           </div>
         </div>
       </div>
@@ -186,6 +209,7 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -267,16 +291,23 @@ export default function PartiesPage() {
     })
   }, [customers, invoices, payments])
 
-  // Filtered parties
+  // Filtered parties (search + status)
   const filtered = useMemo(() => {
-    if (!q.trim()) return parties
-    const query = q.toLowerCase()
-    return parties.filter(p =>
-      p.name.toLowerCase().includes(query) ||
-      p.phone?.toLowerCase().includes(query) ||
-      p.gstin?.toLowerCase().includes(query)
-    )
-  }, [parties, q])
+    const query = q.trim().toLowerCase()
+    return parties.filter(p => {
+      if (statusFilter !== 'all' && getPartyMaxStatus(p) !== statusFilter) return false
+      if (!query) return true
+      return p.name.toLowerCase().includes(query) ||
+        p.phone?.toLowerCase().includes(query) ||
+        p.gstin?.toLowerCase().includes(query)
+    })
+  }, [parties, q, statusFilter])
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<StatusFilter, number> = { all: parties.length, overdue: 0, due_soon: 0, clear: 0 }
+    for (const p of parties) counts[getPartyMaxStatus(p)]++
+    return counts
+  }, [parties])
 
   // Financial aggregates — canonical, matches Home/Recovery totalOutstanding (all open invoices, not just mapped parties).
   const totalReceivables = useMemo(() => {
@@ -311,11 +342,13 @@ export default function PartiesPage() {
   if (loading) {
     return (
       <div className="bg-muted/50 pb-8">
-        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
-          <div className="h-24 bg-card border border-border rounded-lg animate-pulse" />
-          <div className="bg-card border border-border rounded-lg p-6 space-y-2">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 bg-muted/60 rounded animate-pulse" />
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4 animate-pulse">
+          <div className="h-7 w-36 bg-muted rounded-lg" />
+          <div className="h-36 bg-card border border-border rounded-3xl" />
+          <div className="h-11 bg-card border border-border rounded-2xl" />
+          <div className="bg-card border border-border rounded-2xl p-4 space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-14 bg-muted/60 rounded-xl" />
             ))}
           </div>
         </div>
@@ -328,7 +361,7 @@ export default function PartiesPage() {
     return (
       <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-danger-soft rounded-lg p-6 text-center">
+          <div className="bg-card border border-danger-soft rounded-2xl p-8 text-center">
             <AlertTriangle className="w-8 h-8 text-danger mx-auto mb-3" />
             <p className="text-sm text-danger mb-4">{error}</p>
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
@@ -345,11 +378,11 @@ export default function PartiesPage() {
     return (
       <div className="bg-muted/50 pb-8">
         <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8">
-          <div className="bg-card border border-border rounded-lg p-8 lg:p-12 text-center">
-            <div className="w-14 h-14 rounded-full bg-muted border border-border flex items-center justify-center mx-auto mb-4">
-              <Users className="w-6 h-6 text-muted-foreground" />
+          <div className="animate-element bg-card border border-border rounded-3xl p-8 lg:p-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
+              <Users className="w-7 h-7 text-primary" />
             </div>
-            <h2 className="text-lg font-semibold text-foreground mb-2">{MerchantLanguage.customer.noCustomersYet}</h2>
+            <h2 className="text-xl font-bold text-foreground mb-2">{MerchantLanguage.customer.noCustomersYet}</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
               Start managing your business relationships. Import from your contacts or add a party manually.
             </p>
@@ -371,43 +404,79 @@ export default function PartiesPage() {
     <div className="bg-muted/50 pb-24">
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-5 lg:py-8 space-y-4">
 
-        {/* Financial Hero */}
-        <FinancialHero
-          totalReceivables={totalReceivables}
-          overdueAmount={totalPayables}
-          activeParties={activeParties}
-        />
-
-        {/* Search + Add (desktop) */}
-        <div className="hidden lg:flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              ref={searchRef}
-              type="text"
-              placeholder="Search by name, phone, or GST... (/)"
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-            />
+        {/* Header */}
+        <div className="animate-element flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Customers</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {parties.length} {parties.length === 1 ? 'party' : 'parties'}
+              {activeParties > 0 && <> · {activeParties} with balance due</>}
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => router.push('/parties/import')}>
-            <Upload className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.import}
-          </Button>
-          <Button size="sm" onClick={() => router.push('/parties/add')}>
-            <Plus className="w-4 h-4 mr-1.5" /> Add Customer
-          </Button>
+          <div className="hidden sm:flex items-center gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => router.push('/parties/import')}>
+              <Upload className="w-4 h-4 mr-1.5" /> {MerchantLanguage.common.import}
+            </Button>
+            <Button size="sm" onClick={() => router.push('/parties/add')}>
+              <Plus className="w-4 h-4 mr-1.5" /> Add Customer
+            </Button>
+          </div>
+        </div>
+
+        {/* Financial Hero */}
+        <div className="animate-element animate-delay-100">
+          <FinancialHero
+            totalReceivables={totalReceivables}
+            overdueAmount={totalPayables}
+            activeParties={activeParties}
+          />
+        </div>
+
+        {/* Search */}
+        <div className="animate-element animate-delay-200 relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder="Search by name, phone, or GST...  ( / )"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-2xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-all shadow-sm"
+          />
+        </div>
+
+        {/* Status filter chips */}
+        <div className="animate-element animate-delay-200 flex items-center gap-2 overflow-x-auto pb-1 -mx-4 px-4 lg:mx-0 lg:px-0">
+          {FILTER_CHIPS.map(({ key, label }) => {
+            const active = statusFilter === key
+            return (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`inline-flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 ${
+                  active
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-card text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                {label}
+                <span className={`tabular-nums ${active ? 'opacity-70' : 'opacity-60'}`}>
+                  {statusCounts[key]}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Desktop: customers table */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block animate-element animate-delay-300">
           {filtered.length === 0 ? (
             <EmptyState
               icon={<Search className="h-6 w-6" />}
-              title="No customers match your search"
+              title="No customers match your filters"
             />
           ) : (
-            <div className="bg-card border border-border rounded-lg">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               <CustomersTable
                 customers={filtered}
                 onView={(id) => router.push(`/parties/${id}`)}
@@ -417,43 +486,21 @@ export default function PartiesPage() {
         </div>
 
         {/* Mobile: party list */}
-        <div className="lg:hidden space-y-2">
-          {/* Mobile search + add */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={q}
-                onChange={e => setQ(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-              />
-            </div>
-            <button
-              onClick={() => router.push('/parties/add')}
-              className="w-9 h-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Party count */}
+        <div className="lg:hidden space-y-2 animate-element animate-delay-300">
           <div className="flex items-center justify-between px-1">
             <p className="text-xs text-muted-foreground font-medium">
               {filtered.length} {filtered.length === 1 ? 'customer' : 'customers'}
-              {q && filtered.length !== parties.length && ` (of ${parties.length})`}
+              {(q || statusFilter !== 'all') && filtered.length !== parties.length && ` (of ${parties.length})`}
             </p>
           </div>
 
-          {/* Party list */}
           {filtered.length === 0 ? (
             <EmptyState
               icon={<Search className="h-6 w-6" />}
-              title="No customers match your search"
+              title="No customers match your filters"
             />
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {filtered.map(party => (
                 <PartyCard
                   key={party.id}
@@ -470,7 +517,8 @@ export default function PartiesPage() {
       <div className="lg:hidden fixed bottom-32 right-4 z-10">
         <button
           onClick={() => router.push('/parties/add')}
-          className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+          aria-label="Add customer"
+          className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)] active:scale-95 transition-transform"
         >
           <Plus className="w-5 h-5" />
         </button>
