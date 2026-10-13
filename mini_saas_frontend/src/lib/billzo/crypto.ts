@@ -1,6 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-const UPI_SECRET = process.env.UPI_SIGNING_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev-secret-change-in-prod'
+function requireUpiSecret(): string {
+  const secret = process.env.UPI_SIGNING_SECRET
+  // Fail closed: falling back to the service-role key reuses a master key for
+  // payment-link signing, and a hardcoded dev secret makes links forgeable.
+  // Misconfiguration must surface loudly, never silently mint weak tokens.
+  if (!secret) throw new Error('[BillZo] UPI_SIGNING_SECRET env var is required')
+  return secret
+}
 
 export interface UpiTokenPayload {
   invoiceId: string
@@ -12,7 +19,7 @@ export interface UpiTokenPayload {
 
 export function signUpiToken(payload: UpiTokenPayload): string {
   const data = Buffer.from(JSON.stringify(payload)).toString('base64url')
-  const signature = createHmac('sha256', UPI_SECRET).update(data).digest('hex')
+  const signature = createHmac('sha256', requireUpiSecret()).update(data).digest('hex')
   return `${data}.${signature}`
 }
 
@@ -23,7 +30,7 @@ export function verifyUpiToken(token: string): UpiTokenPayload | null {
   const data = token.slice(0, dot)
   const signature = token.slice(dot + 1)
 
-  const expected = createHmac('sha256', UPI_SECRET).update(data).digest('hex')
+  const expected = createHmac('sha256', requireUpiSecret()).update(data).digest('hex')
   if (expected.length !== signature.length) return null
 
   try {

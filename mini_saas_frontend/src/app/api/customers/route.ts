@@ -31,13 +31,13 @@ export async function GET(request: NextRequest) {
     logApiAccess(request, tenantId, userId, 'list_customers')
 
     const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search') || ''
-    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
-    const offset = parseInt(searchParams.get('offset') || '0')
-
-    if (offset < 0) {
-      return errorResponse('Invalid offset', 400)
-    }
+    const rawSearch = searchParams.get('search') || ''
+    // Escape PostgREST LIKE wildcards so a search for "%" can't match everything.
+    const search = rawSearch.trim().replace(/[%_\\]/g, (m) => `\\${m}`)
+    const parsedLimit = parseInt(searchParams.get('limit') || '100', 10)
+    const parsedOffset = parseInt(searchParams.get('offset') || '0', 10)
+    const limit = Math.min(Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 100, 500)
+    const offset = Number.isFinite(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0
 
     let query = supabaseAdmin
       .from('customers')
@@ -184,12 +184,29 @@ export async function PATCH(request: NextRequest) {
     logApiAccess(request, tenantId, userId, 'update_customer')
 
     const dbUpdates: Record<string, any> = { updated_at: new Date().toISOString() }
-    if (updates.name) dbUpdates.customer_name = updates.name
-    if (updates.phone) dbUpdates.phone = normalizePhone(updates.phone)
-    if (updates.email) dbUpdates.email = updates.email
-    if (updates.gstin) dbUpdates.gstin = updates.gstin
-    if (updates.address) dbUpdates.billing_address = updates.address
-    if (updates.automationMode) dbUpdates.automation_mode = updates.automationMode
+    if (typeof updates.name === 'string' && updates.name.trim()) dbUpdates.customer_name = updates.name.trim()
+    if (typeof updates.phone === 'string' && updates.phone.trim()) {
+      const phoneValidation = validatePhone(updates.phone)
+      if (!phoneValidation.valid) return errorResponse(phoneValidation.error!, 400)
+      dbUpdates.phone = normalizePhone(updates.phone)
+    }
+    if (typeof updates.email === 'string' && updates.email.trim()) {
+      const emailValidation = validateEmail(updates.email)
+      if (!emailValidation.valid) return errorResponse(emailValidation.error!, 400)
+      dbUpdates.email = updates.email.trim()
+    }
+    if (typeof updates.gstin === 'string' && updates.gstin.trim()) {
+      const gstinValidation = validateGSTIN(updates.gstin)
+      if (!gstinValidation.valid) return errorResponse(gstinValidation.error!, 400)
+      dbUpdates.gstin = updates.gstin.trim().toUpperCase()
+    }
+    if (typeof updates.address === 'string') dbUpdates.billing_address = updates.address.trim() || null
+    if (updates.automationMode !== undefined) {
+      if (!['full_auto', 'manual', 'muted'].includes(updates.automationMode)) {
+        return errorResponse('Invalid automationMode', 400)
+      }
+      dbUpdates.automation_mode = updates.automationMode
+    }
     if (typeof updates.opt_in === 'boolean') {
       dbUpdates.opt_in = updates.opt_in
       dbUpdates.opt_in_at = updates.opt_in ? new Date().toISOString() : null
@@ -207,6 +224,9 @@ export async function PATCH(request: NextRequest) {
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
       }
+      if (error.code === '23505') {
+        return errorResponse('Another customer already uses this phone number', 409)
+      }
       throw new Error(error.message)
     }
 
@@ -219,20 +239,25 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const tenantId = getVerifiedTenantIdFromRequest(request)
-    if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Customer ID required' }, { status: 400 })
 
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('customers')
       .delete()
       .eq('id', id)
       .eq('tenant_id', tenantId)
+      .select('id')
 
     if (error) throw new Error(error.message)
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+    }
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('[CustomerAPI] DELETE error:', err)

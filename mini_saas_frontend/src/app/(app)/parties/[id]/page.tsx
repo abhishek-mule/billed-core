@@ -763,14 +763,14 @@ export default function PartyDetailPage() {
 
         {/* WhatsApp Modal */}
         {showWAModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true" aria-label="Send reminder">
             <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <h2 className="text-sm font-semibold text-foreground">
                   {customer.phone ? MerchantLanguage.payment.sendReminder : 'Add phone number'}
                 </h2>
-                <button onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }} className="p-1 rounded hover:bg-muted">
-                  <span className="text-muted-foreground text-lg leading-none">×</span>
+                <button onClick={() => { setShowWAModal(false); setWaError(""); setEditingMessage(""); setMissingPhone("") }} aria-label="Close dialog" className="p-1 rounded hover:bg-muted">
+                  <span className="text-muted-foreground text-lg leading-none" aria-hidden="true">×</span>
                 </button>
               </div>
               {customer.phone ? (

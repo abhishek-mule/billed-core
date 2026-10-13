@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 function getCookie(name: string) {
@@ -22,10 +22,17 @@ function syncSession(userId: string, merchantId: string, merchantName: string) {
 
 export default function AuthResolvePage() {
   const resolved = useRef(false)
+  const [error, setError] = useState("")
 
   useEffect(() => {
     if (resolved.current) return
     resolved.current = true
+
+    // Fail-visible: never leave the user on an infinite spinner. If the
+    // membership check hangs or every fallback misses, show an error.
+    const timeout = setTimeout(() => {
+      setError("Taking too long — please check your connection and try again.")
+    }, 15000)
 
     async function resolve() {
       const userId = getCookie("bz_user_id")
@@ -83,7 +90,29 @@ export default function AuthResolvePage() {
     }
 
     resolve()
+    return () => clearTimeout(timeout)
   }, [])
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center p-8 max-w-sm">
+          <p className="text-sm text-foreground font-medium mb-4">{error}</p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-all"
+            >
+              Try again
+            </button>
+            <a href="/auth" className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors">
+              Back to login
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

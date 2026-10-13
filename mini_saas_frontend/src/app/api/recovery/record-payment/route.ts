@@ -29,15 +29,17 @@ export async function POST(request: NextRequest) {
       return errorResponse(`Missing required fields: ${Object.keys(required.errors!).join(', ')}`, 400)
     }
 
-    if (!amount || amount <= 0 || typeof amount !== 'number') {
-      return errorResponse('amount must be a positive number', 400)
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      return errorResponse('amount must be a positive finite number', 400)
     }
 
     if (!VALID_SOURCES.includes(source)) {
       return errorResponse(`Invalid source. Must be one of: ${VALID_SOURCES.join(', ')}`, 400)
     }
 
-    // Resolve customerId — prefer explicit, fall back to invoice lookup
+    // Resolve customerId — prefer explicit, fall back to invoice lookup.
+    // The lookup is tenant-scoped: an invoice from another tenant must never
+    // resolve into this tenant's payment.
     let resolvedCustomerId = customerId
     if (!resolvedCustomerId) {
       const { supabaseAdmin } = await import('@/lib/billzo/supabase-admin')
@@ -45,8 +47,12 @@ export async function POST(request: NextRequest) {
         .from('invoices')
         .select('customer_id')
         .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
         .single()
       resolvedCustomerId = inv?.customer_id
+    }
+    if (!resolvedCustomerId) {
+      return errorResponse('customerId is required (invoice not found in your account)', 400)
     }
 
     const result = await recordPayment({

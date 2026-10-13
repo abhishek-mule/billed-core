@@ -11,7 +11,9 @@ import { drainBillingOutbox } from '@/lib/billzo/billing-worker'
 export async function POST(request: Request) {
   const secret = request.headers.get('x-billing-worker-key')
   const expected = process.env.BILLING_WORKER_KEY
-  if (expected && secret !== expected) {
+  // Fail closed: without a configured secret this route must refuse everyone.
+  // The old `if (expected && ...)` check let anyone drain billing when unset.
+  if (!expected || secret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

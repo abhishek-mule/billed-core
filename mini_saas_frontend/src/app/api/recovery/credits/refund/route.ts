@@ -33,7 +33,9 @@ const razorpay =
 export async function POST(request: NextRequest) {
   const secret = request.headers.get('x-billing-worker-key')
   const expected = process.env.BILLING_WORKER_KEY
-  if (expected && secret !== expected) {
+  // Fail closed: without a configured secret this route must refuse everyone —
+  // it triggers real provider refunds plus ledger writes.
+  if (!expected || secret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

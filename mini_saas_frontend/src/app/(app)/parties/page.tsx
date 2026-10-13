@@ -438,6 +438,7 @@ export default function PartiesPage() {
           <input
             ref={searchRef}
             type="text"
+            aria-label="Search customers by name, phone, or GST"
             placeholder="Search by name, phone, or GST...  ( / )"
             value={q}
             onChange={e => setQ(e.target.value)}
@@ -453,6 +454,7 @@ export default function PartiesPage() {
               <button
                 key={key}
                 onClick={() => setStatusFilter(key)}
+                aria-pressed={active}
                 className={`inline-flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 ${
                   active
                     ? 'bg-foreground text-background border-foreground'

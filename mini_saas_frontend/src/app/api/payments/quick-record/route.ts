@@ -24,11 +24,21 @@ export async function POST(request: NextRequest) {
     if (!customerId) {
       return NextResponse.json({ error: 'customerId is required' }, { status: 400 })
     }
-    if (!amount || amount <= 0) {
-      return NextResponse.json({ error: 'Valid amount is required' }, { status: 400 })
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: 'Valid finite amount is required' }, { status: 400 })
     }
 
-    const normalizedSource = PAYMENT_SOURCES.includes(source as any) ? source : 'cash'
+    // Unknown sources are rejected, never silently coerced — a typo'd source
+    // must not rewrite the books as cash. Absent source still defaults to cash
+    // (oldest client behavior for the POS quick-record path).
+    let normalizedSource: string
+    if (source === undefined || source === null || source === '') {
+      normalizedSource = 'cash'
+    } else if ((PAYMENT_SOURCES as readonly string[]).includes(source)) {
+      normalizedSource = source
+    } else {
+      return NextResponse.json({ error: `Invalid source. Must be one of: ${(PAYMENT_SOURCES as readonly string[]).join(', ')}` }, { status: 400 })
+    }
 
     // Resolve customer details and outstanding
     const { data: invoices } = await supabaseAdmin

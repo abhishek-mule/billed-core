@@ -19,23 +19,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large. Max 5MB.' }, { status: 400 })
     }
 
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif']
+    // SVG/GIF are excluded: SVG uploads are a stored-XSS vector (script
+    // executes when the public storage URL is opened directly), and the
+    // handler trusts client MIME without magic-byte checks.
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. PNG, JPEG, WebP, SVG, or GIF only.' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid file type. PNG, JPEG, or WebP only.' }, { status: 400 })
     }
 
-    const ext = file.type.split('/')[1] === 'svg+xml' ? 'svg' : file.type.split('/')[1]
+    const ext = file.type.split('/')[1]
     const fileName = `logos/${tenantId}/${crypto.randomUUID()}.${ext}`
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+
+    // Magic-byte check — client MIME is attacker-controlled, never trusted.
+    const isPng = buffer.length > 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    const isJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+    const isWebp = buffer.length > 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP'
+    if (!isPng && !isJpeg && !isWebp) {
+      return NextResponse.json({ error: 'File content does not match its image type.' }, { status: 400 })
+    }
 
     const { error: uploadError } = await supabaseAdmin
       .storage
       .from('merchant-assets')
       .upload(fileName, buffer, {
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       })
 
     if (uploadError) {

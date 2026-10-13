@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const tenantId = request.cookies.get('bz_tenant')?.value
-  if (!tenantId) {
-    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
-  }
+  const auth = await verifyRequest(request)
+  if (auth.response) return auth.response
+  const tenantId = auth.tenantId!
 
   const { data: tenant, error } = await supabaseAdmin
     .from('tenants')
@@ -27,10 +27,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = request.cookies.get('bz_tenant')?.value
-  if (!tenantId) {
-    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 })
-  }
+  const auth = await verifyRequest(request)
+  if (auth.response) return auth.response
+  const tenantId = auth.tenantId!
 
   const body = await request.json().catch(() => ({}))
   const { enabled, userName } = body

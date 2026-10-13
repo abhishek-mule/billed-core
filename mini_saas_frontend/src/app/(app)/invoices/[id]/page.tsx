@@ -711,7 +711,7 @@ export default function InvoiceDetailPage() {
           <div className="w-full max-w-md rounded-2xl border bg-card shadow-xl dark:shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="font-bold text-lg">{invoice.customerPhone ? 'Send via WhatsApp' : 'Add phone number'}</h2>
-              <button onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }} className="p-2 rounded-lg hover:bg-muted">
+              <button onClick={() => { setShowWAModal(false); setWaError(''); setMissingPhone(''); }} aria-label="Close dialog" className="p-2 rounded-lg hover:bg-muted">
                 ✕
               </button>
             </div>

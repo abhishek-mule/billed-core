@@ -5,6 +5,7 @@ import { submitIntent } from '@/lib/authority/transport'
 import { validatePaymentConfig } from '@/lib/billzo/payment/validators'
 import type { PaymentConfig } from '@/lib/billzo/payment/types'
 import crypto from 'crypto'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,10 +51,9 @@ async function handlePaymentSection(data: unknown, tenantId: string) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     const body = await validateJsonBody<{
       section: string

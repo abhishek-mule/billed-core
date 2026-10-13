@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,10 +9,9 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     // Return empty if Supabase not configured
     if (!supabaseUrl || !supabaseKey) {
@@ -56,10 +56,9 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ success: true })
@@ -81,10 +80,13 @@ export async function PATCH(request: NextRequest) {
     if (action === 'dismiss') {
       updates.situation_state = 'dismissed'
       updates.last_seen_at = new Date().toISOString()
+      // Tenant-scoped read: the unscoped version leaked other tenants'
+      // dismissal counts (cross-tenant oracle).
       const { data: cur } = await supabase
         .from('operational_situations')
         .select('dismissal_count')
         .eq('id', situationId)
+        .eq('tenant_id', tenantId)
         .single()
       updates.dismissal_count = (cur?.dismissal_count || 0) + 1
     } else if (action === 'snooze') {

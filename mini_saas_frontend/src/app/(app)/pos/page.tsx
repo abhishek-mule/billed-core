@@ -654,7 +654,7 @@ export default function POSPage() {
                   className="flex-1"
                   onClick={() => {
                     closeSuccess();
-                    router.push('/dashboard');
+                    router.push('/recovery');
                   }}
                 >
                   View Queue →

@@ -40,7 +40,9 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const auth = await verifyRequest(request)
   if (auth.response) return auth.response
-  const tenantId = request.nextUrl.searchParams.get('tenantId') || auth.tenantId
+  // The caller's own tenant only — a query-param override was a cross-tenant
+  // pairing-state disclosure primitive.
+  const tenantId = auth.tenantId
   if (!tenantId) {
     return errorResponse('tenantId required', 400)
   }
@@ -80,13 +82,12 @@ export async function DELETE(request: NextRequest) {
     if (auth.response) return auth.response
     const { tenantId } = auth
 
-    const body = await request.json().catch(() => ({}))
-    const { tenantId: targetTenant } = body
-
+    // The caller's own tenant only — a body-supplied targetTenant was a
+    // cross-tenant event-injection primitive.
     await writeOutboxEvent({
       idempotencyKey: `whatsapp:unpair:${tenantId}:${Date.now()}`,
       type: 'whatsapp.unpaired',
-      tenantId: targetTenant || tenantId!,
+      tenantId: tenantId!,
       entityId: null,
       payload: {},
       causationId: null,

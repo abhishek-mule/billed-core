@@ -161,8 +161,8 @@ export default function DashboardPage() {
         {/* ── Header ── */}
         <div className="animate-element flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-muted-foreground">{todayLabel}</p>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight mt-0.5">
+            <p suppressHydrationWarning className="text-xs font-medium text-muted-foreground">{todayLabel}</p>
+            <h1 suppressHydrationWarning className="text-2xl font-bold text-foreground tracking-tight mt-0.5">
               {greeting}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">

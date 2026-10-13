@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/billzo/supabase-admin'
-import { validateJsonBody } from '@/lib/billzo/api-middleware'
+import { validateJsonBody, verifyRequest } from '@/lib/billzo/api-middleware'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // Verified JWT is authoritative; the JS-readable bz_tenant cookie is a hint, never proof.
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     const { data, error } = await supabaseAdmin
       .from('tenants')
@@ -40,10 +40,9 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const tenantId = request.cookies.get('bz_tenant')?.value
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await verifyRequest(request)
+    if (auth.response) return auth.response
+    const tenantId = auth.tenantId!
 
     const body = await validateJsonBody(request)
     if (body.response) return body.response
