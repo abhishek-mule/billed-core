@@ -3,7 +3,7 @@
 // Constitutional debt acknowledged — requires Dexie→authority ingress architecture.
 import { db, notifyChanged } from './db'
 import { getTenantId } from './tenant'
-import type { QueueItem, Invoice, Payment, WhatsAppEvent, RecoveryCase, RecoveryAttribution } from './types'
+import type { QueueItem, Invoice, Payment, Product, InvoiceItem, WhatsAppEvent, RecoveryCase, RecoveryAttribution } from './types'
 
 const SYNC_PROXY = '/api/sync/proxy'
 
@@ -40,7 +40,7 @@ async function proxyReconcile(table: string, tenantId: string, since: string): P
 }
 
 const MAX_DELAY_MS = 10 * 60 * 1000
-const RECONCILE_TABLES = ['invoices', 'payments', 'customers', 'whatsapp_events', 'recovery_cases', 'recovery_attributions'] as const
+const RECONCILE_TABLES = ['invoices', 'payments', 'customers', 'products', 'invoice_items', 'whatsapp_events', 'recovery_cases', 'recovery_attributions'] as const
 const RECONCILE_CACHE_KEY = 'billzo_last_reconciled_at'
 
 function backoffMs(attempts: number) {
@@ -328,16 +328,18 @@ export async function reconcileFromServer() {
     if (error || !rows || rows.length === 0) continue
 
     for (const row of rows) {
-      if (row.updated_at > newestTs) newestTs = row.updated_at
+      // invoice_items is append-only (created_at only); other tables carry updated_at.
+      const rowTs = row.updated_at || row.created_at
+      if (rowTs > newestTs) newestTs = rowTs
 
-      const entityType = table === 'invoices' ? 'invoice' : table === 'payments' ? 'payment' : table === 'customers' ? 'customer' : table === 'whatsapp_events' ? 'whatsapp_event' : table === 'recovery_cases' ? 'recovery_case' : 'recovery_attribution'
+      const entityType = table === 'invoices' ? 'invoice' : table === 'payments' ? 'payment' : table === 'customers' ? 'customer' : table === 'products' ? 'product' : table === 'invoice_items' ? 'invoice_item' : table === 'whatsapp_events' ? 'whatsapp_event' : table === 'recovery_cases' ? 'recovery_case' : 'recovery_attribution'
       if (await hasPendingLocalChange(entityType, row.id)) {
         continue
       }
 
-      const dexieTable = table === 'invoices' ? db().invoices : table === 'payments' ? db().payments : table === 'customers' ? db().customers : table === 'whatsapp_events' ? db().whatsappEvents : table === 'recovery_cases' ? db().recoveryCases : db().recoveryAttributions
+      const dexieTable = table === 'invoices' ? db().invoices : table === 'payments' ? db().payments : table === 'customers' ? db().customers : table === 'products' ? db().products : table === 'invoice_items' ? db().invoiceItems : table === 'whatsapp_events' ? db().whatsappEvents : table === 'recovery_cases' ? db().recoveryCases : db().recoveryAttributions
       const existing = await dexieTable.get(row.id)
-      if (existing && 'updatedAt' in existing && (existing as any).updatedAt >= row.updated_at) continue
+      if (existing && 'updatedAt' in existing && (existing as any).updatedAt >= rowTs) continue
 
       if (table === 'invoices') {
         await db().invoices.put({
@@ -403,6 +405,36 @@ export async function reconcileFromServer() {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         })
+      } else if (table === 'products') {
+        await db().products.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          name: row.item_name || row.name || '',
+          barcode: row.barcode || undefined,
+          hsn: row.hsn_code || undefined,
+          gstRate: Number(row.gst_rate) || 0,
+          stock: Number(row.stock_quantity) || 0,
+          lowStockAt: Number(row.low_stock_at) || 10,
+          salePrice: Number(row.rate) || 0,
+          purchasePrice: Number(row.purchase_rate) || 0,
+          unit: row.unit || undefined,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        } satisfies Product)
+      } else if (table === 'invoice_items') {
+        await db().invoiceItems.put({
+          id: row.id,
+          tenantId: row.tenant_id,
+          invoiceId: row.invoice_id,
+          productId: row.product_id || undefined,
+          name: row.item_name || '',
+          qty: Number(row.quantity) || 0,
+          price: Number(row.rate) || 0,
+          gstRate: Number(row.gst_rate) || 0,
+          lineTotal: Number(row.amount) || 0,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at || row.created_at,
+        } satisfies InvoiceItem)
       } else if (table === 'whatsapp_events') {
         await db().whatsappEvents.put({
           id: row.id,

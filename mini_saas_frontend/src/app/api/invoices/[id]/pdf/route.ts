@@ -38,10 +38,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    const [{ data: items }, { data: customer }, { data: tenant }] = await Promise.all([
+    const [{ data: items, error: itemsError }, { data: customer }, { data: tenant }] = await Promise.all([
       supabase
         .from('invoice_items')
-        .select('name, qty, quantity, price, rate, gst_rate, line_total, total')
+        .select('item_name, quantity, rate, gst_rate, amount')
         .eq('invoice_id', invoiceId),
       invoice.customer_id
         ? supabase
@@ -56,6 +56,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         .eq('id', invoice.tenant_id)
         .maybeSingle(),
     ])
+
+    if (itemsError) {
+      console.error('[Invoice PDF] items query failed:', itemsError.message)
+    }
 
     const businessName = tenant?.company_name || 'BillZo'
     const customerName = customer?.customer_name || invoice.customer_name || 'Customer'
@@ -100,12 +104,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const rows = (items || []).map((item: any, index: number) => {
-      const qty = Number(item.qty ?? item.quantity ?? 1)
-      const rate = Number(item.price ?? item.rate ?? 0)
-      const lineTotal = Number(item.line_total ?? item.total ?? qty * rate)
+      const qty = Number(item.quantity ?? item.qty ?? 1)
+      const rate = Number(item.rate ?? item.price ?? 0)
+      const lineTotal = Number(item.amount ?? item.line_total ?? item.total ?? qty * rate)
       return [
         String(index + 1),
-        item.name || 'Item',
+        item.item_name || item.name || 'Item',
         String(qty),
         money(rate),
         `${Number(item.gst_rate || 0)}%`,

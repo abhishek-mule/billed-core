@@ -21,17 +21,32 @@ export async function GET(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    const { data: items } = await supabaseAdmin
+    // invoice_items is stored with Postgres column names (item_name, quantity,
+    // rate). Selecting legacy names (name/qty/price/hsn) made PostgREST fail
+    // the whole select and silently return zero items everywhere.
+    const { data: items, error: itemsError } = await supabaseAdmin
       .from('invoice_items')
-      .select('name, qty, price, hsn, gst_rate')
+      .select('item_name, quantity, rate, gst_rate')
       .eq('invoice_id', invoice.id)
+
+    if (itemsError) {
+      console.error('[Invoice GET] items query failed:', itemsError.message)
+    }
+
+    // Canonical read shape consumed by the invoice detail + pay pages.
+    const lineItems = (items || []).map((it: any) => ({
+      name: it.item_name,
+      qty: Number(it.quantity ?? 0),
+      price: Number(it.rate ?? 0),
+      gst_rate: Number(it.gst_rate ?? 0),
+    }))
 
     const tenantId = getVerifiedTenantIdFromRequest(request)
 
     if (tenantId && tenantId === invoice.tenant_id) {
       return NextResponse.json({
         ...invoice,
-        items: items || [],
+        items: lineItems,
       })
     }
 
@@ -59,7 +74,7 @@ export async function GET(
       upi_id: tenant?.upi_id || null,
       bank_details: tenant?.bank_details || null,
       payment_config: tenant?.payment_config || null,
-      items: items || [],
+      items: lineItems,
     })
   } catch (err: any) {
     console.error('[Invoice GET] Error:', err)

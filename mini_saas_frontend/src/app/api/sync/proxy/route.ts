@@ -84,12 +84,16 @@ export async function POST(request: NextRequest) {
         return errorResponse('Missing table or since', 400)
       }
 
+      // invoice_items is append-only and has no updated_at column; every other
+      // syncable table does. Filter/order on the table's real timestamp column.
+      const tsColumn = table === 'invoice_items' ? 'created_at' : 'updated_at'
+
       const { data, error } = await supabaseAdmin
         .from(table)
         .select('*')
         .eq('tenant_id', authTenantId)
-        .gt('updated_at', since)
-        .order('updated_at', { ascending: true })
+        .gt(tsColumn, since)
+        .order(tsColumn, { ascending: true })
         .limit(500)
 
       if (error) {
