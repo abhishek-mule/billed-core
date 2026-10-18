@@ -108,7 +108,6 @@ We identified and fixed **10 critical bugs** affecting user experience, system s
 **Why:** All secrets are exposed in git history
 - Razorpay keys
 - Sentry DSN
-- Gemini API key
 - Firebase keys
 - Email service keys
 

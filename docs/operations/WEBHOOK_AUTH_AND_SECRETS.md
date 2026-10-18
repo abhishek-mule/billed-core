@@ -113,7 +113,7 @@ the IP-allowlist contract when the change lands.
 
 Storage rule (holds today): **no secret values are committed** — git tracks only
 `.example` env files (`mini_saas_frontend/.env.example`, `mini_saas_frontend/.env.local.example`,
-`worker/.env.local.example`, `ocr_backend/.env.example`). Real values live only in the
+`worker/.env.local.example`). Real values live only in the
 deployment platform's secret store (Vercel env) and in git-ignored local dev files
 (`worker/.env.local`, `mini_saas_frontend/.env.local` — staging credentials; never paste into
 repo or chat, never into CI logs).

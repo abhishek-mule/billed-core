@@ -349,13 +349,11 @@ export async function sendReminder(invoice: Invoice): Promise<ActionResult> {
   let attempt: RecoveryAttempt
 
   try {
-    const { createRecoveryAttemptWithAI } = await import('./recovery')
-    attempt = await createRecoveryAttemptWithAI(invoice, invoice.recoveryStage, {
+    attempt = createRecoveryAttempt(invoice, invoice.recoveryStage, {
       language: 'hinglish',
       businessName: localStorage.getItem('tenantName') || 'BillZo',
     })
   } catch {
-    const { createRecoveryAttempt } = await import('./recovery')
     attempt = createRecoveryAttempt(invoice)
   }
 

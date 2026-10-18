@@ -10,6 +10,5 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: true
   protobufjs: true
-  tesseract.js: true
   core-js-pure: false
   sharp: set this to true or false

@@ -14,7 +14,7 @@ export default function PurchasesPage() {
     <div className="space-y-8">
       <BackLink href="/dashboard" label="Home" />
       <section>
-        <p className="text-sm text-muted-foreground">Scan supplier invoices, review OCR output, and update stock in one flow.</p>
+        <p className="text-sm text-muted-foreground">Track supplier bills and the stock they brought in, in one flow.</p>
       </section>
 
       <section className="space-y-4">

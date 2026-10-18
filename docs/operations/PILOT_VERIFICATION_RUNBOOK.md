@@ -384,4 +384,4 @@ L1   Manual runbook on real Meta + Razorpay test mode (Merchant #1)
 - [ ] Supabase **service-role** key
 - [ ] `JWT_SECRET`
 
-**Defer** (only if exposed externally): Gemini, Brevo, Firebase, VAPID, Meta token, Upstash, DB passwords.
+**Defer** (only if exposed externally): Brevo, Firebase, VAPID, Meta token, Upstash, DB passwords.

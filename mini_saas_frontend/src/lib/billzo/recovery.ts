@@ -30,75 +30,76 @@ export function buildRecoveryMessage(invoice: Invoice, stage: RecoveryStage) {
   return lines[stage]
 }
 
-const stageToTone: Record<RecoveryStage, 'soft' | 'nudge' | 'strong' | 'warning'> = {
+const toneForStage: Record<RecoveryStage, RecoveryAttempt['tone']> = {
   t0_soft: 'soft',
   t24_nudge: 'nudge',
   t72_strong: 'strong',
   t5_warning: 'warning',
 }
 
-export async function createRecoveryAttemptWithAI(
-  invoice: Invoice,
-  stage = invoice.recoveryStage,
-  options?: {
-    language?: 'hindi' | 'hinglish' | 'english'
-    pastPayments?: { amount: number; paidAt: string }[]
-    lastMessageRead?: boolean
-    businessName?: string
-  }
-): Promise<RecoveryAttempt> {
-  const current = new Date().toISOString()
-  const tone = stageToTone[stage]
-
-  const { generateSmartMessage } = await import('./gemini')
-
-  const daysOverdue = Math.max(0, Math.floor(
-    (new Date().getTime() - new Date(invoice.dueAt).getTime()) / (1000 * 60 * 60 * 24)
-  ))
-
-  const generated = await generateSmartMessage({
-    customerName: invoice.customerName,
-    amount: invoice.total - invoice.paidAmount,
-    invoiceDate: invoice.createdAt,
-    daysOverdue,
-    stage: tone,
-    language: options?.language || 'hinglish',
-    pastPayments: options?.pastPayments,
-    lastMessageRead: options?.lastMessageRead,
-    businessName: options?.businessName || 'BillZo',
-    invoiceId: invoice.id,
-  })
-
-  return {
-    id: uuid(),
-    tenantId: invoice.tenantId,
-    invoiceId: invoice.id,
-    stage,
-    tone,
-    message: generated.message,
-    pdfUrl: invoice.pdfUrl,
-    scheduledAt: current,
-    status: 'queued',
-    createdAt: current,
-    updatedAt: current,
-  }
+export interface RecoveryMessageOptions {
+  language?: 'hindi' | 'hinglish' | 'english'
+  businessName?: string
 }
 
-export function createRecoveryAttempt(invoice: Invoice, stage = invoice.recoveryStage): RecoveryAttempt {
-  const current = new Date().toISOString()
-  const toneByStage: Record<RecoveryStage, RecoveryAttempt['tone']> = {
-    t0_soft: 'soft',
-    t24_nudge: 'nudge',
-    t72_strong: 'strong',
-    t5_warning: 'warning',
+/**
+ * Deterministic, language-aware reminder text.
+ * Replaced the removed Gemini generation path (2026-10-19). The strings are
+ * byte-identical to what was already sent whenever the Gemini API key was
+ * missing or the API call failed — i.e. the previous built-in fallback.
+ */
+function buildLocalizedRecoveryMessage(
+  invoice: Invoice,
+  stage: RecoveryStage,
+  options: RecoveryMessageOptions,
+): string {
+  const amountStr = `Rs ${(invoice.total - invoice.paidAmount).toLocaleString('en-IN')}`
+  const { customerName } = invoice
+  const businessName = options.businessName || 'BillZo'
+  const language = options.language || 'hinglish'
+
+  const messages: Record<string, Record<string, string>> = {
+    soft: {
+      hindi: `नमस्ते ${customerName} ji, आपका ${amountStr} का भुगतान बकाया है। कृपया जल्द से जल्द भुगतान करें। - ${businessName}`,
+      hinglish: `Namaste ${customerName} ji, aapka ${amountStr} ka payment baaki hai. PDF ke saath details mein check karein. - ${businessName}`,
+      english: `Hi ${customerName}, a payment of ${amountStr} is pending. Please check the PDF for details. - ${businessName}`,
+    },
+    nudge: {
+      hindi: `${customerName} ji, ${amountStr} का भुगतान अभी भी बकाया है। कृपया आज ही भुगतान करें।`,
+      hinglish: `Hi ${customerName}, ${amountStr} abhi bhi baaki hai. Aaj hi payment karo yaar, please! 🙏 - ${businessName}`,
+      english: `Hi ${customerName}, a reminder that ${amountStr} is still pending. Please clear it today. - ${businessName}`,
+    },
+    strong: {
+      hindi: `${customerName} ji, ${amountStr} का भुगतान बहुत देर हो चुका है। कृपया अभी भुगतान करें।`,
+      hinglish: `${customerName}, ${amountStr} ka payment bahut late ho gaya yaar! Aaj hi karo, please. 🙏 - ${businessName}`,
+      english: `Dear ${customerName}, ${amountStr} payment is overdue. Please settle it now to avoid further follow-up. - ${businessName}`,
+    },
+    warning: {
+      hindi: `${customerName} ji, अंतिम रिमाइंडर: ${amountStr} बकाया है। कृपया तुरंत भुगतान करें।`,
+      hinglish: `${customerName} ji, last reminder! ${amountStr} baaki hai. Please aaj hi pay karo, kaafi ho gaya yaar 🙏 - ${businessName}`,
+      english: `Final reminder, ${customerName}: ${amountStr} is overdue. Please pay immediately to avoid escalation. - ${businessName}`,
+    },
   }
+
+  const tone = toneForStage[stage]
+  return messages[tone]?.[language] || messages[tone]?.hinglish || messages.soft.hinglish
+}
+
+export function createRecoveryAttempt(
+  invoice: Invoice,
+  stage = invoice.recoveryStage,
+  messageOptions?: RecoveryMessageOptions,
+): RecoveryAttempt {
+  const current = new Date().toISOString()
   return {
     id: uuid(),
     tenantId: invoice.tenantId,
     invoiceId: invoice.id,
     stage,
-    tone: toneByStage[stage],
-    message: buildRecoveryMessage(invoice, stage),
+    tone: toneForStage[stage],
+    message: messageOptions
+      ? buildLocalizedRecoveryMessage(invoice, stage, messageOptions)
+      : buildRecoveryMessage(invoice, stage),
     pdfUrl: invoice.pdfUrl,
     scheduledAt: current,
     status: 'queued',

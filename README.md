@@ -63,4 +63,4 @@ pnpm --filter mini_saas_frontend storybook   # Storybook on :6006
 
 ### Minimal Local Setup (no external services)
 
-For UI-only development, set `NEXT_PUBLIC_OCR_API_URL` to any dummy value and leave Razorpay/Supabase keys empty — the app will run in offline mode with mock data.
+For UI-only development, leave Razorpay/Supabase keys empty — the app will run in offline mode with mock data.

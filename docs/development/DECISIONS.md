@@ -14,6 +14,31 @@ If a decision is later reversed, add a `Reversed:` line instead of rewriting his
 
 ---
 
+## 2026-10-19 — Gemini/OCR removed from BillZo core; reminders use deterministic templates
+
+**Decision:** All Gemini API usage and OCR code is removed from BillZo core.
+Recovery reminder text now comes from deterministic language-aware templates in
+`lib/billzo/recovery.ts` (byte-identical to the former built-in fallback).
+Deleted: the five orphaned `api/ai/*` + `api/ocr/*` routes, `lib/billzo/{gemini,ocr,whatsapp-parser,whatsapp-actions}.ts`,
+the standalone `ocr_backend/` Python service, the `tesseract.js` dependency, and
+the two Gemini/OCR env keys. ERP-side Sarvam OCR (`provisioning_api`) untouched —
+different provider, adjacent system (ADR-003).
+
+**Why:** An audit showed every AI/OCR route had zero UI callers; the single live
+call site (recovery reminders) already shipped byte-identical fallback text
+whenever the key was missing or the call failed. Removing it eliminates an
+external API dependency, one client-exposed env key, and build-time bloat for
+no loss of shipped behavior.
+
+**Alternative:** Keep Gemini for reminder generation / keep orphaned routes for
+future use.
+
+**Chosen because:** Dead code that calls paid external APIs is a standing risk
+(supply chain, key leakage, silent cost); templates preserve the exact strings
+merchants already receive in the failure path.
+
+---
+
 ## 2026-09-20 — B-04 residual closed: billing webhooks anchored to local subscription row
 
 **Decision:** `order.paid` / `subscription.*` resolve tenants via our
