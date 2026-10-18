@@ -109,6 +109,16 @@ export async function POST(request: NextRequest) {
       return errorResponse('Could not normalize phone number', 400)
     }
 
+    if (whatsapp_number && typeof whatsapp_number === 'string' && whatsapp_number.trim()) {
+      const waValidation = validatePhone(whatsapp_number)
+      if (!waValidation.valid) {
+        return errorResponse(`WhatsApp number: ${waValidation.error!}`, 400)
+      }
+      if (!normalizePhone(whatsapp_number)) {
+        return errorResponse('Could not normalize WhatsApp number', 400)
+      }
+    }
+
     // Validate optional fields
     if (email) {
       const emailValidation = validateEmail(email)
@@ -136,9 +146,14 @@ export async function POST(request: NextRequest) {
         tenant_id: tenantId,
         customer_name: name.trim(),
         phone: normalizedPhone,
+        whatsapp_number:
+          whatsapp_number && typeof whatsapp_number === 'string' && whatsapp_number.trim()
+            ? normalizePhone(whatsapp_number)
+            : null,
         email: email?.trim() || null,
         gstin: gstin?.trim() || null,
         billing_address: address?.trim() || null,
+        notes: notes?.trim() || null,
         automation_mode: 'full_auto',
         opt_in: opt_in === true,
         opt_in_at: opt_in === true ? now : null,
@@ -189,6 +204,18 @@ export async function PATCH(request: NextRequest) {
       const phoneValidation = validatePhone(updates.phone)
       if (!phoneValidation.valid) return errorResponse(phoneValidation.error!, 400)
       dbUpdates.phone = normalizePhone(updates.phone)
+    }
+    if (typeof updates.whatsapp_number === 'string') {
+      if (updates.whatsapp_number.trim()) {
+        const waValidation = validatePhone(updates.whatsapp_number)
+        if (!waValidation.valid) return errorResponse(`WhatsApp number: ${waValidation.error!}`, 400)
+        dbUpdates.whatsapp_number = normalizePhone(updates.whatsapp_number)
+      } else {
+        dbUpdates.whatsapp_number = null
+      }
+    }
+    if (typeof updates.notes === 'string') {
+      dbUpdates.notes = updates.notes.trim() || null
     }
     if (typeof updates.email === 'string' && updates.email.trim()) {
       const emailValidation = validateEmail(updates.email)

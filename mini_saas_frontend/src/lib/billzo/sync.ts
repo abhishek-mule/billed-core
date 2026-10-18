@@ -87,7 +87,8 @@ function tableFor(item: QueueItem) {
   return tables[item.entity]
 }
 
-function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
+// Exported for regression tests — pure function, no side effects.
+export function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
   const payload = item.payload as Record<string, any>
 
   switch (item.entity) {
@@ -97,9 +98,13 @@ function serializeQueuePayload(item: QueueItem): Record<string, unknown> {
         tenant_id: payload.tenantId,
         customer_name: payload.name,
         phone: payload.phone,
+        whatsapp_number: payload.whatsapp_number ?? null,
         email: payload.email ?? null,
         gstin: payload.gstin ?? null,
         billing_address: payload.address ?? null,
+        notes: payload.notes ?? null,
+        opt_in: payload.opt_in === true,
+        opt_in_at: payload.opt_in === true ? (payload.opt_in_at ?? payload.updatedAt ?? null) : null,
         created_at: payload.createdAt,
         updated_at: payload.updatedAt,
       }

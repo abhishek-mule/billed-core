@@ -225,6 +225,7 @@ export default function PartyDetailPage() {
           id: customer.id,
           name: updatedName,
           phone: updatedPhone,
+          whatsapp_number: editForm.whatsapp_number.trim() || updatedPhone,
           email: updatedEmail,
           gstin: updatedGstin,
           address: updatedAddress,

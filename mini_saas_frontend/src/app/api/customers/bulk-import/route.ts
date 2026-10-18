@@ -100,6 +100,9 @@ export async function POST(request: NextRequest) {
             id: existing.id,
             updates: {
               customer_name: row.name.trim(),
+              whatsapp_number: row.whatsapp_number?.trim()
+                ? normalizePhone(row.whatsapp_number)
+                : null,
               email: row.email?.trim() || null,
               gstin: row.gstin?.trim().toUpperCase() || null,
               updated_at: now,
@@ -108,13 +111,14 @@ export async function POST(request: NextRequest) {
           })
         }
       } else {
-        // NOTE: whatsapp_number has no Postgres column (single-create also drops
-        // it) — intentionally not persisted. Columns mirror POST /api/customers.
         toCreate.push({
           id: newCustomerId(),
           tenant_id: tenantId,
           customer_name: row.name.trim(),
           phone,
+          whatsapp_number: row.whatsapp_number?.trim()
+            ? normalizePhone(row.whatsapp_number)
+            : null,
           email: row.email?.trim() || null,
           gstin: row.gstin?.trim().toUpperCase() || null,
           automation_mode: 'full_auto',

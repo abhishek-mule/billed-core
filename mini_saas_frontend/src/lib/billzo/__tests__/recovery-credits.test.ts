@@ -97,11 +97,13 @@ describe('reconcileRecoveryCredits (P0-1: subscriptions are the authoritative pe
   beforeEach(() => vi.clearAllMocks())
 
   it('allocates from the ACTIVE SUBSCRIPTION, not tenants, with precise snapshots', async () => {
+    const start = new Date(Date.now() - 5 * DAY).toISOString()
+    const end = new Date(Date.now() + 25 * DAY).toISOString()
     const sub = {
       id: 'sub_1',
       plan_code: 'pro',
-      current_period_start: '2026-09-13T00:00:00Z',
-      current_period_end: '2026-10-13T00:00:00Z',
+      current_period_start: start,
+      current_period_end: end,
     }
     mockSupabase({
       tenants: [{ id: 't1', plan: 'pro' }],
@@ -131,20 +133,22 @@ describe('reconcileRecoveryCredits (P0-1: subscriptions are the authoritative pe
   })
 
   it('expires the residual included balance at the boundary with truthful snapshots', async () => {
+    const start = new Date(Date.now() - 5 * DAY).toISOString()
+    const end = new Date(Date.now() + 25 * DAY).toISOString()
     const sub = {
       id: 'sub_1',
       plan_code: 'pro',
-      current_period_start: '2026-09-13T00:00:00Z',
-      current_period_end: '2026-10-13T00:00:00Z',
+      current_period_start: start,
+      current_period_end: end,
     }
     mockSupabase({
       tenants: [{ id: 't1', plan: 'pro' }],
       subscription: sub,
       // 12 leftover included credits created before the boundary + 40 purchased
       ledger: [
-        ledRow('included', 12, '2026-09-01T00:00:00Z'),
-        ledRow('included', -2, '2026-09-05T00:00:00Z'),
-        ledRow('purchased', 40, '2026-08-01T00:00:00Z'),
+        ledRow('included', 12, new Date(Date.now() - 20 * DAY).toISOString()),
+        ledRow('included', -2, new Date(Date.now() - 15 * DAY).toISOString()),
+        ledRow('purchased', 40, new Date(Date.now() - 30 * DAY).toISOString()),
       ],
     })
 
@@ -188,8 +192,8 @@ describe('reconcileRecoveryCredits (P0-1: subscriptions are the authoritative pe
       subscription: {
         id: 'sub_1',
         plan_code: 'pro',
-        current_period_start: '2026-09-13T00:00:00Z',
-        current_period_end: '2026-10-13T00:00:00Z',
+        current_period_start: new Date(Date.now() - 5 * DAY).toISOString(),
+        current_period_end: new Date(Date.now() + 25 * DAY).toISOString(),
       },
       ledger: [],
       allocationExists: true,
